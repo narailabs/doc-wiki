@@ -54,3 +54,46 @@ export function writeConfigYaml(
   fs.writeFileSync(p, yaml.dump(config));
   return p;
 }
+
+/**
+ * Create a fresh, empty edges.jsonl inside `tmpPath` and return its path.
+ * Mirrors the `edges_file` pytest fixture.
+ */
+export function makeEmptyEdgesFile(tmpPath: string): string {
+  const p = path.join(tmpPath, "edges.jsonl");
+  fs.writeFileSync(p, "");
+  return p;
+}
+
+/**
+ * Populate an edges.jsonl at `tmpPath/edges.jsonl` with the small fixture
+ * graph used by graph_ops tests, and return its path. Mirrors the
+ * `populated_edges` pytest fixture.
+ *
+ * Topology:
+ *   A -> B -> C -> D
+ *   A -> E -> D
+ *   E -> F
+ */
+export function makePopulatedEdgesFile(tmpPath: string): string {
+  const edges = [
+    { from: "A", to: "B", type: "extends", provenance: "EXTRACTED",
+      evidence: "", source_file: "", date: "2026-04-10" },
+    { from: "B", to: "C", type: "extends", provenance: "EXTRACTED",
+      evidence: "", source_file: "", date: "2026-04-10" },
+    { from: "C", to: "D", type: "extends", provenance: "EXTRACTED",
+      evidence: "", source_file: "", date: "2026-04-10" },
+    { from: "A", to: "E", type: "supports", provenance: "INFERRED",
+      evidence: "", source_file: "", date: "2026-04-10" },
+    { from: "E", to: "D", type: "extends", provenance: "EXTRACTED",
+      evidence: "", source_file: "", date: "2026-04-10" },
+    { from: "E", to: "F", type: "contradicts", provenance: "AMBIGUOUS",
+      evidence: "", source_file: "", date: "2026-04-10" },
+  ];
+  const p = path.join(tmpPath, "edges.jsonl");
+  fs.writeFileSync(
+    p,
+    edges.map((e) => JSON.stringify(e)).join("\n") + "\n",
+  );
+  return p;
+}
