@@ -1,0 +1,46 @@
+{
+  "skill_name": "wiki",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a new Python project at /tmp/test-project with some markdown docs in a docs/ folder. Initialize a documentation wiki for it with domain 'backend-services'.",
+      "expected_output": "Creates wiki directory scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/) and a valid wiki.config.yaml with domain set to 'backend-services'",
+      "files": [],
+      "expectations": [
+        "Runs init_wiki.py script to create directory scaffold",
+        "wiki.config.yaml is created with domain 'backend-services'",
+        "Directory scaffold includes wiki/, raw/, graph/, audit/, log/, outputs/",
+        ".wiki-ignore file is created",
+        "wiki/index.md, wiki/summaries.md, and wiki/overview.md are created",
+        "events.jsonl records the init operation"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Ingest the file /tmp/test-project/docs/architecture.md into my wiki at /tmp/test-wiki/. The file describes our authentication system using JWT tokens and session management.",
+      "expected_output": "Creates a wiki page about the authentication system with proper frontmatter, tags, and summary. Updates summaries.md and index.md.",
+      "files": [],
+      "expectations": [
+        "Source file is copied to raw/ directory",
+        "A wiki page is created with type 'concept' or 'summary'",
+        "Page frontmatter includes title, type, tags, sources, created, updated, summary",
+        "Tags are content-only concepts (e.g., 'jwt', 'authentication', 'session-management')",
+        "summaries.md is updated with the new page's summary",
+        "events.jsonl records the ingest operation"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I've ingested several docs into my wiki at /tmp/test-wiki/. Now query: 'how does authentication work in our system?'",
+      "expected_output": "Synthesized answer citing specific wiki pages, with inline links to sources",
+      "files": [],
+      "expectations": [
+        "Reads summaries.md first for progressive disclosure",
+        "Loads only the most relevant pages (not all pages)",
+        "Answer includes inline citations to wiki pages",
+        "Answer is archived to outputs/queries/",
+        "events.jsonl records the query operation"
+      ]
+    }
+  ]
+}
