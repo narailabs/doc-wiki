@@ -1,0 +1,29 @@
+name: prisma
+language: typescript
+description: "Prisma ORM for TypeScript/JavaScript"
+
+detection:
+  file_patterns: ["**/schema.prisma", "**/prisma/schema.prisma"]
+  markers:
+    - pattern: "^model\\s+\\w+"
+      type: entity_class
+    - pattern: "@@map"
+      type: table_mapping
+    - pattern: "@relation"
+      type: relationship
+
+entity_extraction:
+  class_pattern: "^model\\s+(\\w+)\\s*\\{"
+  table_pattern: "@@map\\s*\\(\\s*\"(\\w+)\"\\s*\\)"
+  column_pattern: "^\\s+(\\w+)\\s+\\w+"
+
+relationship_detection:
+  patterns:
+    - pattern: "@relation"
+      type: relationship
+    - pattern: "\\[\\]"
+      type: one_to_many
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: camel_case

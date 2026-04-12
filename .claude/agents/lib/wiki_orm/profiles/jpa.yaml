@@ -1,0 +1,35 @@
+name: jpa
+language: java
+description: "JPA/Hibernate ORM for Java/Spring Boot"
+
+detection:
+  file_patterns: ["**/*.java"]
+  markers:
+    - pattern: "@Entity"
+      type: entity_class
+    - pattern: "@Table"
+      type: table_mapping
+    - pattern: "extends JpaRepository"
+      type: repository
+    - pattern: "extends CrudRepository"
+      type: repository
+
+entity_extraction:
+  class_pattern: "(?:@Entity[\\s\\S]*?)class\\s+(\\w+)"
+  table_pattern: "@Table\\s*\\(\\s*name\\s*=\\s*\"(\\w+)\"(?:.*?schema\\s*=\\s*\"(\\w+)\")?"
+  column_pattern: "@Column\\s*\\(\\s*name\\s*=\\s*\"(\\w+)\""
+
+relationship_detection:
+  patterns:
+    - pattern: "@OneToMany"
+      type: one_to_many
+    - pattern: "@ManyToOne"
+      type: many_to_one
+    - pattern: "@ManyToMany"
+      type: many_to_many
+    - pattern: "@OneToOne"
+      type: one_to_one
+
+naming_conventions:
+  table_from_class: lower_case
+  column_from_field: snake_case
