@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "include": [".claude/**/*.ts"],
-  "exclude": ["node_modules", ".worktrees", "wiki-workspace", "**/*.test.ts", "**/tests/**", "**/tests/fixtures/**"]
+  "exclude": ["node_modules", ".worktrees", "wiki-workspace", "**/*.test.ts", "**/tests/**"]
 }
