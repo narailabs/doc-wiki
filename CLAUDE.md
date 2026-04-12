@@ -25,9 +25,9 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 | `mermaid_lint.py` | Validate Mermaid diagram syntax |
 | `security_check.py` | URL validation, path containment, input sanitization |
 
-### Agents (11) — `.claude/agents/`
+### Agents (10) — `.claude/agents/`
 
-**Source agents (7):** fetch and normalize content from external platforms.
+**Source agents (6):** fetch and normalize content from external platforms.
 
 | Agent | Platform |
 |-------|----------|
@@ -37,7 +37,6 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 | `wiki-notion-agent` | Notion pages and databases |
 | `wiki-gcp-agent` | GCP documentation and configs |
 | `wiki-aws-agent` | AWS documentation and configs |
-| `wiki-auth0-agent` | Auth0 tenant configuration |
 
 **Maintenance agents (2):** generate derived artifacts from wiki content.
 
