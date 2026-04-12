@@ -302,6 +302,15 @@ describe("TestShortestPath", () => {
     expect(p).toEqual([]);
   });
 
+  it("shortest_path_via_missing_node_returns_empty", () => {
+    // Documented TS divergence from Python: networkx raises NodeNotFound
+    // when --via is absent from the graph; the TS port returns [] instead.
+    // This test pins the current TS behavior so a future "fix" that throws
+    // requires an explicit contract update.
+    const p = shortestPath(populatedEdges, "A", "D", 6, "DOES_NOT_EXIST");
+    expect(p).toEqual([]);
+  });
+
   it("test_all_paths", () => {
     const paths = allPaths(populatedEdges, "A", "D", 5);
     expect(Array.isArray(paths)).toBe(true);

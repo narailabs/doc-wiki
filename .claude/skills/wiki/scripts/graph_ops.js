@@ -191,7 +191,15 @@ export function isolatedNodes(edgesPath, allPages) {
 }
 /** Build a directed graph from edges.jsonl, returning the graph plus a
  *  lookup from "from\u0000to" -> edge dict so we can reconstruct rich path
- *  output after BFS. */
+ *  output after BFS.
+ *
+ *  TRIP WIRE: shortest-path determinism depends on graphology iterating
+ *  `outboundNeighbors` in node-insertion order (matching NetworkX's
+ *  dict-of-dicts adjacency). If a future graphology version changes that,
+ *  tie-broken paths will diverge from Python. The `shortest_path_tie_break_*`
+ *  Vitest tests will flag the regression; address it by adding an explicit
+ *  alphabetical comparator before passing neighbors to the BFS/DFS.
+ */
 function buildGraph(edgesPath) {
     const edges = readAllEdges(edgesPath);
     const graph = new Graph({ type: "directed", allowSelfLoops: true });
