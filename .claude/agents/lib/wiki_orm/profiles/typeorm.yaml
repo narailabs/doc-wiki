@@ -1,0 +1,35 @@
+name: typeorm
+language: typescript
+description: "TypeORM for TypeScript/JavaScript"
+
+detection:
+  file_patterns: ["**/*.ts", "**/*.js"]
+  markers:
+    - pattern: "@Entity("
+      type: entity_class
+    - pattern: "@Column("
+      type: column_definition
+    - pattern: "@PrimaryGeneratedColumn("
+      type: primary_key
+    - pattern: "@JoinColumn("
+      type: join_column
+
+entity_extraction:
+  class_pattern: "(?:@Entity[\\s\\S]*?)class\\s+(\\w+)"
+  table_pattern: "@Entity\\s*\\(\\s*[\"']([\\w]+)[\"']\\s*\\)"
+  column_pattern: "@Column\\([^)]*\\)\\s*\\n?\\s*(\\w+)"
+
+relationship_detection:
+  patterns:
+    - pattern: "@OneToMany\\("
+      type: one_to_many
+    - pattern: "@ManyToOne\\("
+      type: many_to_one
+    - pattern: "@ManyToMany\\("
+      type: many_to_many
+    - pattern: "@OneToOne\\("
+      type: one_to_one
+
+naming_conventions:
+  table_from_class: snake_case
+  column_from_field: camel_case

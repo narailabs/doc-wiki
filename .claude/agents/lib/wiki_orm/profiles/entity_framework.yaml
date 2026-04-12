@@ -1,0 +1,35 @@
+name: entity_framework
+language: csharp
+description: "Entity Framework for C#/.NET"
+
+detection:
+  file_patterns: ["**/*.cs"]
+  markers:
+    - pattern: "[Table("
+      type: table_mapping
+    - pattern: "DbSet<"
+      type: entity_class
+    - pattern: ": DbContext"
+      type: context_class
+    - pattern: "[Column("
+      type: column_definition
+
+entity_extraction:
+  class_pattern: "public\\s+class\\s+(\\w+)(?:\\s*:\\s*(?!DbContext)\\w+)?"
+  table_pattern: "\\[Table\\s*\\(\\s*\"(\\w+)\"\\s*\\)\\]"
+  column_pattern: "\\[Column\\s*\\(\\s*\"(\\w+)\"\\s*\\)\\]"
+
+relationship_detection:
+  patterns:
+    - pattern: "\\[ForeignKey\\("
+      type: many_to_one
+    - pattern: "\\.HasMany\\("
+      type: one_to_many
+    - pattern: "\\.HasOne\\("
+      type: one_to_one
+    - pattern: "\\.WithMany\\("
+      type: many_to_many
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: pascal_case

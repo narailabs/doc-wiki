@@ -1,0 +1,35 @@
+name: activerecord
+language: ruby
+description: "ActiveRecord ORM for Ruby on Rails"
+
+detection:
+  file_patterns: ["**/app/models/**/*.rb", "**/*.rb"]
+  markers:
+    - pattern: "< ApplicationRecord"
+      type: entity_class
+    - pattern: "< ActiveRecord::Base"
+      type: entity_class
+    - pattern: "has_many"
+      type: relationship
+    - pattern: "belongs_to"
+      type: relationship
+
+entity_extraction:
+  class_pattern: "class\\s+(\\w+)\\s*<\\s*(?:ApplicationRecord|ActiveRecord::Base)"
+  table_pattern: "self\\.table_name\\s*=\\s*[\"'](\\w+)[\"']"
+  column_pattern: "t\\.(string|integer|text|boolean|datetime|decimal|float|references)\\s+:(\\w+)"
+
+relationship_detection:
+  patterns:
+    - pattern: "has_many"
+      type: one_to_many
+    - pattern: "belongs_to"
+      type: many_to_one
+    - pattern: "has_one"
+      type: one_to_one
+    - pattern: "has_and_belongs_to_many"
+      type: many_to_many
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: snake_case

@@ -102,6 +102,109 @@ class TestExtractDjango:
         assert "many_to_one" in rel_types
 
 
+class TestExtractTypeORM:
+    @pytest.fixture
+    def typeorm_profile(self):
+        return load_profile(str(PROFILES_DIR / "typeorm.yaml"))
+
+    @pytest.fixture
+    def typeorm_files(self):
+        fixtures = FIXTURES_DIR / "typeorm"
+        return {str(f): f.read_text() for f in fixtures.glob("*.ts")}
+
+    def test_finds_entity_classes(self, typeorm_profile, typeorm_files):
+        entities = extract_entities(typeorm_files, typeorm_profile)
+        class_names = [e.class_name for e in entities]
+        assert "User" in class_names
+        assert "Order" in class_names
+
+    def test_extracts_table_name(self, typeorm_profile, typeorm_files):
+        entities = extract_entities(typeorm_files, typeorm_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        assert user.table_name == "users"
+
+    def test_extracts_relationships(self, typeorm_profile, typeorm_files):
+        entities = extract_entities(typeorm_files, typeorm_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        rel_types = [r.type for r in user.relationships]
+        assert "one_to_many" in rel_types
+
+    def test_extracts_many_to_one(self, typeorm_profile, typeorm_files):
+        entities = extract_entities(typeorm_files, typeorm_profile)
+        order = [e for e in entities if e.class_name == "Order"][0]
+        rel_types = [r.type for r in order.relationships]
+        assert "many_to_one" in rel_types
+
+
+class TestExtractEntityFramework:
+    @pytest.fixture
+    def ef_profile(self):
+        return load_profile(str(PROFILES_DIR / "entity_framework.yaml"))
+
+    @pytest.fixture
+    def ef_files(self):
+        fixtures = FIXTURES_DIR / "entity_framework"
+        return {str(f): f.read_text() for f in fixtures.glob("*.cs")}
+
+    def test_finds_entity_classes(self, ef_profile, ef_files):
+        entities = extract_entities(ef_files, ef_profile)
+        class_names = [e.class_name for e in entities]
+        assert "User" in class_names
+
+    def test_extracts_table_name(self, ef_profile, ef_files):
+        entities = extract_entities(ef_files, ef_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        assert user.table_name == "users"
+
+    def test_extracts_columns(self, ef_profile, ef_files):
+        entities = extract_entities(ef_files, ef_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        col_names = [c.name for c in user.columns]
+        assert "username" in col_names
+
+    def test_extracts_relationships(self, ef_profile, ef_files):
+        entities = extract_entities(ef_files, ef_profile)
+        # The DbContext file contains .HasOne and .WithMany
+        all_rel_types = []
+        for e in entities:
+            all_rel_types.extend(r.type for r in e.relationships)
+        assert "one_to_one" in all_rel_types or "many_to_many" in all_rel_types
+
+
+class TestExtractActiveRecord:
+    @pytest.fixture
+    def ar_profile(self):
+        return load_profile(str(PROFILES_DIR / "activerecord.yaml"))
+
+    @pytest.fixture
+    def ar_files(self):
+        fixtures = FIXTURES_DIR / "activerecord"
+        return {str(f): f.read_text() for f in fixtures.glob("*.rb")}
+
+    def test_finds_entity_classes(self, ar_profile, ar_files):
+        entities = extract_entities(ar_files, ar_profile)
+        class_names = [e.class_name for e in entities]
+        assert "User" in class_names
+        assert "Order" in class_names
+
+    def test_infers_table_name(self, ar_profile, ar_files):
+        entities = extract_entities(ar_files, ar_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        assert user.table_name == "users"
+
+    def test_extracts_has_many(self, ar_profile, ar_files):
+        entities = extract_entities(ar_files, ar_profile)
+        user = [e for e in entities if e.class_name == "User"][0]
+        rel_types = [r.type for r in user.relationships]
+        assert "one_to_many" in rel_types
+
+    def test_extracts_belongs_to(self, ar_profile, ar_files):
+        entities = extract_entities(ar_files, ar_profile)
+        order = [e for e in entities if e.class_name == "Order"][0]
+        rel_types = [r.type for r in order.relationships]
+        assert "many_to_one" in rel_types
+
+
 class TestExtractEmpty:
     def test_no_entities_from_non_orm_code(self):
         profile = load_profile(str(PROFILES_DIR / "jpa.yaml"))
