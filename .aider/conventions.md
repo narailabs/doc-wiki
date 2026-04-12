@@ -44,7 +44,6 @@ Sub-agents at `.claude/agents/`:
 - `wiki-github-agent` -- GitHub wiki/discussions/boards
 - `wiki-notion-agent` -- Notion page fetching
 - `wiki-mermaid-agent` -- Mermaid diagram generation
-- `wiki-auth0-agent` -- Auth0 configuration
 - `wiki-claude-md-agent` -- CLAUDE.md maintenance
 
 ## Python Invocation
