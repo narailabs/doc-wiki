@@ -1,0 +1,30 @@
+{
+  "skill_name": "wiki-orm-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Detect and map the ORM entities in this Spring Boot project that uses JPA with PostgreSQL",
+      "expected_output": "Produces database-mapping.md with entity-table mapping, Mermaid ER diagram, and unmapped tables list",
+      "files": [],
+      "expectations": [
+        "Correctly identifies JPA @Entity classes",
+        "Maps @Table(name) to database table names",
+        "Detects @OneToMany and @ManyToOne relationships",
+        "Output includes a valid Mermaid erDiagram block",
+        "Generated markdown has proper frontmatter with type: entity"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I have a custom ORM that uses BaseModel classes with __table__ attributes. Help me create an ORM profile for it",
+      "expected_output": "Walks through Q&A and generates a custom YAML profile matching the ORM profile schema",
+      "files": [],
+      "expectations": [
+        "Asks about detection markers and patterns",
+        "Asks about entity-table naming conventions",
+        "Generates a valid YAML profile with required fields (name, language, detection, entity_extraction)",
+        "Profile can be loaded by the profile loader without errors"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+name: sqlalchemy
+language: python
+description: "SQLAlchemy ORM for Python"
+
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - pattern: "declarative_base()"
+      type: base_declaration
+    - pattern: "__tablename__"
+      type: table_mapping
+    - pattern: "Column("
+      type: column_definition
+
+entity_extraction:
+  class_pattern: "class\\s+(\\w+)\\s*\\(.*Base.*\\)"
+  table_pattern: "__tablename__\\s*=\\s*['\"]([\\w.]+)['\"]"
+  column_pattern: "(\\w+)\\s*=\\s*Column\\("
+
+relationship_detection:
+  patterns:
+    - pattern: "relationship\\("
+      type: relationship
+    - pattern: "ForeignKey\\("
+      type: foreign_key
+
+naming_conventions:
+  table_from_class: snake_case
+  column_from_field: snake_case

@@ -1,0 +1,31 @@
+name: django
+language: python
+description: "Django ORM"
+
+detection:
+  file_patterns: ["**/models.py", "**/models/**/*.py"]
+  markers:
+    - pattern: "models.Model"
+      type: entity_class
+    - pattern: "class Meta"
+      type: meta_class
+    - pattern: "db_table"
+      type: table_mapping
+
+entity_extraction:
+  class_pattern: "class\\s+(\\w+)\\s*\\(models\\.Model\\)"
+  table_pattern: "db_table\\s*=\\s*['\"]([\\w.]+)['\"]"
+  column_pattern: "(\\w+)\\s*=\\s*models\\."
+
+relationship_detection:
+  patterns:
+    - pattern: "models.ForeignKey"
+      type: many_to_one
+    - pattern: "models.ManyToManyField"
+      type: many_to_many
+    - pattern: "models.OneToOneField"
+      type: one_to_one
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: snake_case
