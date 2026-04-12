@@ -12,13 +12,13 @@ import * as path from "node:path";
 
 import { parseConfig, FileNotFoundError } from "../parse_config.js";
 import {
-  COMPILED_SCRIPTS_DIR,
+  SCRIPTS_DIR,
   makeTmpPath,
   cleanupTmpPath,
   writeConfigYaml,
 } from "./fixtures.js";
 
-const CLI = path.join(COMPILED_SCRIPTS_DIR, "parse_config.js");
+const CLI = path.join(SCRIPTS_DIR, "parse_config.js");
 
 function runCli(
   args: readonly string[],

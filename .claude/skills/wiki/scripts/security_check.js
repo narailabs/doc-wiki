@@ -53,17 +53,28 @@ function bestEffortRealpath(p) {
     const tail = [];
     let cur = abs;
     while (cur && cur !== path.dirname(cur)) {
-        if (fs.existsSync(cur)) {
+        // existsSync dereferences, so a broken or cyclic symlink returns false.
+        // Fall back to lstatSync (which doesn't dereference) to detect that the
+        // entry is actually a symlink so realpathSync can surface ELOOP.
+        let entryExists = fs.existsSync(cur);
+        if (!entryExists) {
             try {
-                const real = fs.realpathSync.native(cur);
-                if (tail.length === 0) {
-                    return real;
-                }
-                return path.join(real, ...tail.reverse());
+                fs.lstatSync(cur);
+                entryExists = true;
             }
             catch {
-                // fallthrough
+                // Path truly absent; continue walking up.
             }
+        }
+        if (entryExists) {
+            // Let realpath errors (e.g. ELOOP on symlink cycles) propagate. The
+            // outer try/catch in checkPathContainment converts them to false —
+            // fail-closed rather than silently treating a cycle as contained.
+            const real = fs.realpathSync.native(cur);
+            if (tail.length === 0) {
+                return real;
+            }
+            return path.join(real, ...tail.reverse());
         }
         tail.push(path.basename(cur));
         cur = path.dirname(cur);
