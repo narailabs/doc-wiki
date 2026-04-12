@@ -43,18 +43,87 @@ After running the script, create initial files:
 - `wiki/summaries.md` — enriched summary index (empty initially)
 - `wiki/overview.md` — evolving big-picture synthesis
 
-### /wiki-onboard — Ecosystem scaffolding (Q&A)
+### /wiki-onboard — Interactive onboarding Q&A
 
-Interactive setup that detects the codebase and configures the ecosystem. This is YOUR reasoning — not a script.
+Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.py` for config I/O and dispatches `wiki-orm-agent` and `wiki-db-agent` for detection.
 
-1. Scan the project for: `pom.xml`, `requirements.txt`, `package.json`, `Gemfile`, `*.csproj`, README, existing docs
-2. Detect ORM: look for entity definitions matching shipped ORM profiles (JPA, SQLAlchemy, Django, Prisma, TypeORM, Entity Framework, ActiveRecord)
-3. Detect database: connection strings, Docker Compose services, ORM config
-4. Ask the user about external sources: "Do you use Jira? Confluence? GCP? Notion?"
-5. Generate/update `wiki.config.yaml` with detected settings
-6. Offer to install PreToolUse always-on hooks for the current platform
+**Phase 1 — Auto-detect language/framework:**
 
-Read `references/operations.md` for the full onboarding flow.
+Scan the project root for build files and infer the stack:
+
+| Marker file | Detection |
+|---|---|
+| `pom.xml`, `build.gradle` | Java (Maven / Gradle) |
+| `requirements.txt`, `pyproject.toml`, `setup.py` | Python |
+| `package.json` | Node.js / TypeScript |
+| `Gemfile` | Ruby |
+| `*.csproj`, `*.sln` | .NET / C# |
+| `go.mod` | Go |
+| `Cargo.toml` | Rust |
+
+Present findings and ask user to confirm or correct.
+
+**Phase 2 — Detect ORM:**
+
+Dispatch `wiki-orm-agent` (via Agent tool) to scan for entity definitions matching shipped ORM profiles:
+
+- **JPA:** `@Entity`, `@Table`, `@Column` annotations in `.java`/`.kt` files
+- **SQLAlchemy:** `declarative_base()`, `Base = declarative_base()`, `mapped_column` in `.py` files
+- **Django:** `models.Model` subclasses in `models.py` / `models/` directories
+- **Prisma:** `schema.prisma` file with `model` definitions
+- **TypeORM:** `@Entity()`, `@Column()` decorators in `.ts` files
+- **Entity Framework:** `DbContext` subclasses, `[Table]` attributes in `.cs` files
+- **ActiveRecord:** `ApplicationRecord` or `ActiveRecord::Base` subclasses in `.rb` files
+
+Present detected ORM profile and entity count. Ask user to confirm.
+
+**Phase 3 — Detect database:**
+
+Dispatch `wiki-db-agent` (via Agent tool) to detect database engine from:
+
+- Docker Compose services (`docker-compose.yml`, `compose.yaml`): image names like `postgres:`, `mysql:`, `mongo:`
+- Connection strings in config files (`.env`, `application.properties`, `database.yml`, `settings.py`)
+- ORM config (e.g., `DATABASES` dict in Django, `spring.datasource.url` in Spring Boot)
+
+Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
+
+**Phase 4 — External services Q&A:**
+
+Ask the user about each external source integration:
+
+1. "Do you use **Jira** for issue tracking? If so, what project key(s)?"
+2. "Do you use **Confluence** for documentation? If so, what space key(s)?"
+3. "Do you use **GCP** (BigQuery, Cloud SQL, Pub/Sub)? Which services?"
+4. "Do you use **AWS** (RDS, DynamoDB, S3)? Which services?"
+5. "Do you use **Notion** for documentation or knowledge base?"
+6. "Do you use **GitHub** wikis, discussions, or project boards?"
+
+Enable corresponding source agents in config for each "yes" answer.
+
+**Phase 5 — Choose autonomy mode:**
+
+Present the four autonomy modes and ask user to choose:
+
+- **conservative** — ask before every write
+- **balanced** — auto-fix safe changes, ask for structural
+- **autonomous** — auto-fix everything, notify after
+- **auto** — choose per-operation based on risk score
+
+Default: `balanced`.
+
+**Phase 6 — Install hooks + scaffold:**
+
+1. Offer to install PreToolUse always-on hooks for the detected platform
+2. Generate/update `wiki.config.yaml` with all detected settings:
+   ```bash
+   python {skill_path}/scripts/parse_config.py --config <wiki-root>/wiki.config.yaml
+   ```
+3. If wiki scaffold does not exist, run `/wiki-init` automatically:
+   ```bash
+   python {skill_path}/scripts/init_wiki.py --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
+   ```
+
+**Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, and autonomy mode. Wiki scaffold created if it did not already exist.
 
 ### /wiki-ingest — Fetch + Extract + Compile
 

@@ -41,6 +41,32 @@
         "Answer is archived to outputs/queries/",
         "events.jsonl records the query operation"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up wiki for a Spring Boot + PostgreSQL project",
+      "expected_output": "Detects Java/Spring Boot stack with JPA ORM and PostgreSQL database, creates wiki.config.yaml and wiki scaffold",
+      "files": [],
+      "expectations": [
+        "Detects Java/Spring Boot from pom.xml or build.gradle",
+        "Detects JPA annotations (@Entity, @Table)",
+        "Configures database agent for PostgreSQL",
+        "Creates wiki.config.yaml with correct settings",
+        "Creates wiki scaffold via /wiki-init"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Set up wiki for a Django + MongoDB project",
+      "expected_output": "Detects Python/Django stack with Django ORM and MongoDB database, creates wiki.config.yaml and wiki scaffold",
+      "files": [],
+      "expectations": [
+        "Detects Python/Django from requirements.txt or pyproject.toml",
+        "Detects Django ORM (models.Model)",
+        "Configures database agent for MongoDB",
+        "Creates wiki.config.yaml with correct settings",
+        "Creates wiki scaffold via /wiki-init"
+      ]
     }
   ]
 }
