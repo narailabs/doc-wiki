@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
+import { pythonJsonDumps } from "./_json_py.js";
 
 const VALID_AUTONOMY_MODES: ReadonlySet<string> = new Set([
   "conservative",
@@ -126,48 +127,6 @@ export function parseConfig(configPath: string): WikiConfig {
   }
 
   return config;
-}
-
-/**
- * Serialize an object to JSON with Python's default json.dumps formatting
- * (including indent=2 which matches Node's JSON.stringify(obj, null, 2)
- * output for the shapes this script emits).
- */
-function pythonJsonDumps(obj: unknown, indent: number | null = null): string {
-  if (indent !== null) {
-    return JSON.stringify(obj, null, indent);
-  }
-  const raw = JSON.stringify(obj);
-  return insertPythonSeparators(raw);
-}
-
-function insertPythonSeparators(raw: string): string {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-    if (ch === undefined) continue;
-    out += ch;
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "," || ch === ":") {
-      out += " ";
-    }
-  }
-  return out;
 }
 
 interface ParsedArgs {

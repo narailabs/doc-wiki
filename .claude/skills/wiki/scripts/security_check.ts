@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pythonJsonDumps } from "./_json_py.js";
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
 
@@ -138,60 +139,6 @@ export function sanitizeLabel(label: string, maxLength: number = 256): string {
   // HTML-escape to prevent XSS
   cleaned = htmlEscape(cleaned);
   return cleaned;
-}
-
-/**
- * Serialize an object to JSON using Python's default json.dumps separators.
- * Python's json.dumps uses ", " and ": " by default; Node's JSON.stringify
- * uses "," and ":". This helper matches Python output byte-for-byte.
- */
-function pythonJsonDumps(
-  obj: unknown,
-  indent: number | null = null,
-): string {
-  if (indent !== null) {
-    // Python with indent uses ",\n" item-sep (newline implicit), ": " kv-sep.
-    // JSON.stringify with indent matches Python's format in practice.
-    return JSON.stringify(obj, null, indent);
-  }
-  // Compact form: need ", " and ": " separators
-  const raw = JSON.stringify(obj);
-  // Inject a space after each "," and ":" that is NOT inside a string.
-  return insertPythonSeparators(raw);
-}
-
-/**
- * Insert Python-style ", " and ": " separators into a JSON string produced
- * by JSON.stringify (which uses "," and ":"). Skips bytes inside string
- * literals so separators within quoted values are not touched.
- */
-function insertPythonSeparators(raw: string): string {
-  let out = "";
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-    if (ch === undefined) continue;
-    out += ch;
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "," || ch === ":") {
-      out += " ";
-    }
-  }
-  return out;
 }
 
 interface ParsedArgs {
