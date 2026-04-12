@@ -16,10 +16,14 @@
     "dev": "tsx"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.39",
     "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1"
   }
 }
