@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-jira-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Search Jira for all done issues in project WIKI using JQL",
+      "expectations": [
+        "Uses jql_search action with JQL containing project = WIKI and status = Done",
+        "Returns structured JSON with status, action, and data fields",
+        "Respects max_results cap"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Get details for Jira issue WIKI-42 including changelog",
+      "expectations": [
+        "Uses get_issue action with issue_key WIKI-42",
+        "Includes changelog in expand parameter",
+        "Returns issue key, summary, status, and assignee"
+      ]
+    }
+  ]
+}

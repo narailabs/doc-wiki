@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-auth0-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "List all Auth0 clients and their active connections",
+      "expectations": [
+        "Uses get_clients action to list applications",
+        "Uses get_connections action to list identity providers",
+        "Returns structured JSON with client names, types, and grant types"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find all Auth0 users with acme.com email addresses and list enabled rules",
+      "expectations": [
+        "Uses get_users action with q parameter email:*@acme.com",
+        "Uses get_rules action with enabled true",
+        "Redacts sensitive fields like client_secret and passwords"
+      ]
+    }
+  ]
+}

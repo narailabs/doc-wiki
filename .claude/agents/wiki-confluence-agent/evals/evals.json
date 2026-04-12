@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-confluence-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Search Confluence for pages about architecture in the DEV space",
+      "expectations": [
+        "Uses cql_search action with CQL containing space = DEV and text ~ architecture",
+        "Returns structured JSON with page titles, space keys, and versions",
+        "Respects max_results cap"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Fetch Confluence page 98765432 with body content and ancestors",
+      "expectations": [
+        "Uses get_page action with page_id 98765432",
+        "Includes body.storage and ancestors in expand parameter",
+        "Converts storage format body to markdown in output"
+      ]
+    }
+  ]
+}

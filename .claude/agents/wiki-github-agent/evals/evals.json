@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-github-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Get repository info and open bug issues for acme/backend on GitHub",
+      "expectations": [
+        "Uses repo_info action with owner acme and repo backend",
+        "Uses get_issues action with state open and labels including bug",
+        "Returns structured JSON with repo metadata and issue list"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Search for AuthService class in acme/backend repo and fetch the file",
+      "expectations": [
+        "Uses search_code action with query containing AuthService",
+        "Uses get_file action with the discovered file path",
+        "Validates file size before returning content"
+      ]
+    }
+  ]
+}
