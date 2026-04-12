@@ -12,11 +12,20 @@
     },
     {
       "id": 2,
-      "prompt": "Search for AuthService class in acme/backend repo and fetch the file",
+      "prompt": "Get issues from GitHub without specifying owner or repo",
       "expectations": [
-        "Uses search_code action with query containing AuthService",
-        "Uses get_file action with the discovered file path",
-        "Validates file size before returning content"
+        "Returns a validation error, does NOT attempt the API call",
+        "Error includes a descriptive message about missing required fields",
+        "Status field is 'error' with error_code indicating validation failure"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create a new issue in acme/backend repo with title 'Bug report'",
+      "expectations": [
+        "Does NOT create any issue",
+        "Agent refuses the write operation",
+        "Response clearly states the agent is read-only"
       ]
     }
   ]
