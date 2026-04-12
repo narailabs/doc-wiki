@@ -12,11 +12,20 @@
     },
     {
       "id": 2,
-      "prompt": "Query a Notion database for all items with Status equal to Done",
+      "prompt": "Get a Notion page without providing a page_id",
       "expectations": [
-        "Uses query_database action with a valid database UUID",
-        "Includes filter object with property Status and status equals Done",
-        "Converts Notion blocks to markdown in output"
+        "Returns a validation error, does NOT attempt the API call",
+        "Error includes a descriptive message about missing page_id",
+        "Status field is 'error' with error_code indicating validation failure"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Delete a Notion page with ID abc-123",
+      "expectations": [
+        "Does NOT delete any page",
+        "Agent refuses the write/destructive operation",
+        "Response clearly states the agent is read-only"
       ]
     }
   ]

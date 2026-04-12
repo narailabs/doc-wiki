@@ -12,11 +12,20 @@
     },
     {
       "id": 2,
-      "prompt": "Fetch Confluence page 98765432 with body content and ancestors",
+      "prompt": "Search Confluence without specifying a CQL query or space",
       "expectations": [
-        "Uses get_page action with page_id 98765432",
-        "Includes body.storage and ancestors in expand parameter",
-        "Converts storage format body to markdown in output"
+        "Returns a validation error, does NOT attempt the API call",
+        "Error includes a descriptive message about missing required fields",
+        "Status field is 'error' with error_code indicating validation failure"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create a new page in Confluence space DEV titled 'Test Page'",
+      "expectations": [
+        "Does NOT create any page",
+        "Agent refuses the write operation",
+        "Response clearly states the agent is read-only"
       ]
     }
   ]
