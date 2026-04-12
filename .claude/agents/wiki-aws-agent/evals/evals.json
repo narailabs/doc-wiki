@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-aws-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "List Lambda functions and S3 buckets with prefix acme- in us-east-1",
+      "expectations": [
+        "Uses list_functions action with region us-east-1 and prefix acme-",
+        "Uses list_buckets action with prefix acme-",
+        "Returns structured JSON with function and bucket lists"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Describe RDS instance acme-main-rds and get Lambda error metrics in us-east-1",
+      "expectations": [
+        "Uses describe_db action with db_identifier acme-main-rds",
+        "Uses get_metrics action with namespace AWS/Lambda and metric_name Errors",
+        "Validates region format and respects timeout caps"
+      ]
+    }
+  ]
+}

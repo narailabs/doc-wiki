@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-gcp-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "List all Cloud Run services and Pub/Sub topics in GCP project acme-prod-123",
+      "expectations": [
+        "Uses list_services action with project_id acme-prod-123",
+        "Uses list_topics action with project_id acme-prod-123",
+        "Returns structured JSON with service and topic lists"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Query the last 24 hours of ERROR-level logs from Cloud Run in acme-prod-123",
+      "expectations": [
+        "Uses query_logs action with severity>=ERROR filter",
+        "Sets hours to 24 and validates project_id format",
+        "Redacts sensitive data in log entries"
+      ]
+    }
+  ]
+}

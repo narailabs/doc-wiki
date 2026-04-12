@@ -1,0 +1,23 @@
+{
+  "skill_name": "wiki-notion-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Search Notion for pages about architecture decisions",
+      "expectations": [
+        "Uses search action with query architecture decisions",
+        "Sets filter_type to page to narrow results",
+        "Returns structured JSON with page titles, IDs, and URLs"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Query a Notion database for all items with Status equal to Done",
+      "expectations": [
+        "Uses query_database action with a valid database UUID",
+        "Includes filter object with property Status and status equals Done",
+        "Converts Notion blocks to markdown in output"
+      ]
+    }
+  ]
+}
