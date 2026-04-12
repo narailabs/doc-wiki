@@ -1,0 +1,180 @@
+# Wiki Operations — Detailed Specifications
+
+Reference for the wiki SKILL.md orchestrator. Read the section relevant to the current operation.
+
+## /wiki-onboard — Ecosystem Scaffolding
+
+### Codebase Detection
+
+Scan the project directory for these markers:
+
+| File/Pattern | Indicates |
+|---|---|
+| `pom.xml`, `build.gradle` | Java/Spring Boot |
+| `requirements.txt`, `pyproject.toml`, `setup.py` | Python |
+| `package.json` | Node.js/TypeScript |
+| `Gemfile` | Ruby |
+| `*.csproj`, `*.sln` | C#/.NET |
+| `go.mod` | Go |
+| `Cargo.toml` | Rust |
+| `docker-compose.yml` | Docker services (may reveal DB type) |
+| `README.md`, `docs/` | Existing documentation |
+
+### ORM Detection
+
+After identifying the language, look for ORM markers:
+
+| ORM | Language | Detection Pattern |
+|---|---|---|
+| JPA/Hibernate | Java | `@Entity`, `@Table`, `extends JpaRepository` |
+| SQLAlchemy | Python | `declarative_base()`, `__tablename__`, `Column()` |
+| Django ORM | Python | `models.Model`, `class Meta: db_table` |
+| Prisma | TypeScript | `schema.prisma` file with `model` blocks |
+| TypeORM | TypeScript | `@Entity()` decorator, `@Column()` |
+| Entity Framework | C# | `[Table("...")]`, `DbContext`, `DbSet<>` |
+| ActiveRecord | Ruby | `< ApplicationRecord`, `has_many`, `belongs_to` |
+
+If an ORM is detected, note the profile name. If unknown, ask the user.
+
+### Database Detection
+
+Look for:
+- Connection strings in config files (application.yml, .env, settings.py)
+- Docker Compose services (postgres, mysql, mongo, redis)
+- ORM config files (persistence.xml, alembic.ini, database.yml)
+
+### Q&A Flow
+
+Ask these in order (skip if already detected):
+
+1. "I detected [language/framework]. Is that correct?"
+2. "I found [ORM] annotations. Should I set up ORM mapping?"
+3. "I see a [database] in your Docker Compose. Should I configure the database agent for it?"
+4. "Do you use any of these external services? Jira, Confluence, GCP, Notion, AWS, GitHub"
+5. "Which autonomy mode? (balanced is recommended for interactive use)"
+6. "Should I install always-on hooks for Claude Code?"
+
+### Output
+
+Update or create `wiki.config.yaml` with detected settings. Run `/wiki-init` if the scaffold doesn't exist.
+
+---
+
+## /wiki-init — Bootstrap
+
+Run `init_wiki.py` to create the scaffold. Then:
+
+1. Create `wiki/index.md`:
+```markdown
+---
+title: "{wiki_name} — Index"
+type: index
+tags: []
+created: {today}
+updated: {today}
+summary: "Master catalog for {wiki_name}"
+---
+
+# {wiki_name}
+
+*No pages yet. Run `/wiki-ingest` to add content.*
+```
+
+2. Create `wiki/summaries.md`:
+```markdown
+# {wiki_name} — Summaries
+
+*Enriched summary index. Updated after every ingest.*
+```
+
+3. Create `wiki/overview.md`:
+```markdown
+---
+title: "{wiki_name} — Overview"
+type: summary
+tags: [{domain}]
+created: {today}
+updated: {today}
+summary: "Big-picture synthesis of {wiki_name}"
+---
+
+# Overview
+
+*This page evolves as content is added. It synthesizes the big picture.*
+```
+
+---
+
+## /wiki-ingest — Full Pipeline
+
+### Step-by-step
+
+1. **Dispatch detection**: Match source against dispatch rules in config. File paths → file agent. URLs → firecrawl. `db:` prefix → database agent. Unknown → ask user or LLM-decide based on autonomy mode.
+
+2. **Security check**: Run `security_check.py` for URLs. Check path containment for file paths.
+
+3. **Cache check**: Run `cache_manager.py check`. If cached and cache_version matches, skip extraction.
+
+4. **Extract**: For binary files, run `extract_binary.py`. For markdown/text, read directly.
+
+5. **Read fully**: Read the entire source. No skipping sections.
+
+6. **Surface takeaways**: Identify 3-5 key takeaways and an entity list (people, tools, concepts mentioned).
+
+7. **Cross-reference**: If multiple source agents are configured, dispatch them in parallel to gather additional context about the entities mentioned.
+
+8. **Compile**: Create wiki page(s). See `compilation.md` for rules.
+
+9. **Auto Mermaid**: If the source data has structure (DB entities, service architecture, request flows), generate Mermaid diagrams inline.
+
+10. **"How to Go Deeper"**: Generate section listing agent commands for live verification.
+
+11. **Update indexes**: Add to `wiki/index.md` and rebuild `wiki/summaries.md`.
+
+12. **Log**: Run `event_logger.py` with operation details.
+
+13. **Post-op hooks**: Run crosslink + tag-harmonize passes.
+
+### Frontmatter for raw sources
+
+Every file saved to `raw/` gets frontmatter tracking its origin:
+```yaml
+---
+source_url: https://blog.com/post       # or source_path for local files
+provider: file                           # which agent fetched it
+last_fetched: 2026-04-12
+checksum: sha256:abc123                  # for change detection
+---
+```
+
+---
+
+## /wiki-query — Summary-First Search
+
+### Progressive Disclosure
+
+1. Load `wiki/summaries.md` — ~50 tokens per page. This is the ONLY file loaded initially.
+2. Score each page summary against the question. Use semantic relevance, not keyword matching.
+3. Load full text of top 3-5 pages.
+4. Follow links from those pages up to 5 levels deep (configurable via `--depth`).
+5. Synthesize answer with `[inline citations](wiki/path/to/page.md)`.
+6. Note contradictions and gaps.
+7. Archive to `outputs/queries/{slug}.md`.
+
+### Token efficiency
+
+Log tokens used vs estimated full-corpus read. Report reduction ratio.
+
+---
+
+## /wiki-refresh — Re-fetch Sources
+
+1. Scan `raw/` frontmatter for `source_url` and `checksum`.
+2. Re-fetch each source using original provider.
+3. Compare new content hash against stored checksum.
+4. If changed: archive old version to `raw/history/`, update raw, re-compile affected wiki pages.
+5. If unchanged: skip.
+
+`--incremental`: Use `.wiki-cache/` to skip extraction if content hash matches. Only short-circuits extraction, never the source fetch.
+
+Default is force-full (re-extract everything). `--incremental` is the speed optimization.
