@@ -16,12 +16,12 @@ import {
   sanitizeLabel,
 } from "../security_check.js";
 import {
-  COMPILED_SCRIPTS_DIR,
+  SCRIPTS_DIR,
   makeTmpPath,
   cleanupTmpPath,
 } from "./fixtures.js";
 
-const CLI = path.join(COMPILED_SCRIPTS_DIR, "security_check.js");
+const CLI = path.join(SCRIPTS_DIR, "security_check.js");
 
 /** Run the compiled CLI; returns { stdout, stderr, status }. */
 function runCli(
@@ -121,6 +121,16 @@ describe("TestCheckPathContainment", () => {
     fs.symlinkSync(secret, link);
 
     expect(checkPathContainment(link, wikiRoot)).toBe(false);
+  });
+
+  it("symlink_cycle_fails_closed", () => {
+    const wikiRoot = path.join(tmpPath, "wiki-root");
+    fs.mkdirSync(wikiRoot);
+    const a = path.join(wikiRoot, "link-a");
+    const b = path.join(wikiRoot, "link-b");
+    fs.symlinkSync(b, a);
+    fs.symlinkSync(a, b);
+    expect(checkPathContainment(a, wikiRoot)).toBe(false);
   });
 });
 

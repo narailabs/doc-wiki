@@ -13,15 +13,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-/** Resolve the absolute path to the scripts directory (parent of tests/). */
+/** Resolve the absolute path to the scripts directory (parent of tests/).
+ *  Compiled .js files sit next to their .ts siblings, so the same path
+ *  works for both source imports and CLI invocations. */
 export const SCRIPTS_DIR = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   "..",
 );
-
-/** Resolve the absolute path to the compiled scripts directory. Each .js
- *  file sits next to its .ts sibling under scripts/. */
-export const COMPILED_SCRIPTS_DIR = SCRIPTS_DIR;
 
 /**
  * Create a fresh temp directory for a single test and return its path.
@@ -40,16 +38,6 @@ export function cleanupTmpPath(p: string): void {
   } catch {
     // best-effort
   }
-}
-
-/**
- * pytest `tmp_wiki` fixture: a path to a wiki-root directory inside a
- * temp directory. The caller is expected to create it or not, matching
- * the pytest semantics where `tmp_wiki` is just tmp_path/'wiki-root'
- * (not yet created on disk).
- */
-export function makeTmpWiki(tmpPath: string): string {
-  return path.join(tmpPath, "wiki-root");
 }
 
 /**
