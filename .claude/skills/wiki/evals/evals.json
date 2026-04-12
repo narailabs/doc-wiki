@@ -3,43 +3,49 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I have a new Python project at /tmp/test-project with some markdown docs in a docs/ folder. Initialize a documentation wiki for it with domain 'backend-services'.",
-      "expected_output": "Creates wiki directory scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/) and a valid wiki.config.yaml with domain set to 'backend-services'",
+      "prompt": "I have a new Python project at /tmp/test-project with some markdown docs in a docs/ folder. Initialize a documentation wiki for it with domain 'backend-services', ingest docs/architecture.md (about JWT auth and session management), and then query 'how does authentication work?'.",
+      "expected_output": "Creates wiki scaffold, ingests the architecture doc as a wiki page, and returns a synthesized answer citing the wiki page",
       "files": [],
       "expectations": [
         "Runs init_wiki.py script to create directory scaffold",
         "wiki.config.yaml is created with domain 'backend-services'",
         "Directory scaffold includes wiki/, raw/, graph/, audit/, log/, outputs/",
-        ".wiki-ignore file is created",
-        "wiki/index.md, wiki/summaries.md, and wiki/overview.md are created",
-        "events.jsonl records the init operation"
+        "Source file is copied to raw/ directory",
+        "A wiki page is created with proper frontmatter (title, type, tags, sources, created, updated, summary)",
+        "Tags are content-only concepts (e.g., 'jwt', 'authentication', 'session-management')",
+        "summaries.md is updated with the new page's summary",
+        "Query answer includes inline citations to wiki pages",
+        "Answer is archived to outputs/queries/",
+        "events.jsonl records init, ingest, and query operations"
       ]
     },
     {
       "id": 2,
-      "prompt": "Ingest the file /tmp/test-project/docs/architecture.md into my wiki at /tmp/test-wiki/. The file describes our authentication system using JWT tokens and session management.",
-      "expected_output": "Creates a wiki page about the authentication system with proper frontmatter, tags, and summary. Updates summaries.md and index.md.",
+      "prompt": "Run /wiki-lint on my wiki at /tmp/test-wiki/. It has pages with missing frontmatter fields and broken internal links. Fix all issues found.",
+      "expected_output": "Identifies lint violations (missing frontmatter, broken links), reports them, and applies fixes to the affected pages",
       "files": [],
       "expectations": [
-        "Source file is copied to raw/ directory",
-        "A wiki page is created with type 'concept' or 'summary'",
-        "Page frontmatter includes title, type, tags, sources, created, updated, summary",
-        "Tags are content-only concepts (e.g., 'jwt', 'authentication', 'session-management')",
-        "summaries.md is updated with the new page's summary",
-        "events.jsonl records the ingest operation"
+        "Runs lint_checks.py to detect violations",
+        "Reports missing frontmatter fields (title, type, tags, sources)",
+        "Reports broken internal links between wiki pages",
+        "Fixes missing frontmatter by adding required fields",
+        "Fixes broken links by updating paths or removing dead links",
+        "Re-runs lint to confirm zero remaining violations",
+        "events.jsonl records the lint and fix operations"
       ]
     },
     {
       "id": 3,
-      "prompt": "I've ingested several docs into my wiki at /tmp/test-wiki/. Now query: 'how does authentication work in our system?'",
-      "expected_output": "Synthesized answer citing specific wiki pages, with inline links to sources",
+      "prompt": "In my wiki at /tmp/test-wiki/, find the shortest path between the 'authentication' concept and the 'database-schema' concept. Show all intermediate pages.",
+      "expected_output": "Returns the shortest path through the relationship graph, listing each intermediate page and edge type",
       "files": [],
       "expectations": [
-        "Reads summaries.md first for progressive disclosure",
-        "Loads only the most relevant pages (not all pages)",
-        "Answer includes inline citations to wiki pages",
-        "Answer is archived to outputs/queries/",
-        "events.jsonl records the query operation"
+        "Runs graph_ops.py to query the relationship graph",
+        "Reads edges.jsonl for typed relationships",
+        "Returns ordered list of pages from authentication to database-schema",
+        "Shows edge types (supports, extends, etc.) between each pair",
+        "Shows provenance tags on each edge",
+        "Handles case where no path exists with a clear message"
       ]
     },
     {
