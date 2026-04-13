@@ -1,10 +1,7 @@
 /**
- * Tests for init_wiki.ts — ported from test_init_wiki.py.
- *
- * Every pytest `def test_*` is preserved as a Vitest `it()`. One extra
- * CLI-parity test shells out to the compiled init_wiki.js and confirms its
- * stdout matches the Python reference byte-for-byte — covering the "runs
- * twice, stdout identical, zero new files" idempotency contract.
+ * Tests for init_wiki.ts — originally ported from test_init_wiki.py and now
+ * the sole test source after Python removal. Covers the unit API and a CLI
+ * idempotency contract ("runs twice, stdout identical, zero new files").
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -16,7 +13,6 @@ import { initWiki, main } from "../init_wiki.js";
 import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "init_wiki.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "init_wiki.py");
 
 /** Mirrors the pytest `tmp_wiki` fixture: the path to a not-yet-created wiki
  *  root directory inside a fresh tmp dir. */
@@ -24,10 +20,9 @@ function tmpWiki(tmpPath: string): string {
   return path.join(tmpPath, "wiki-root");
 }
 
-/** Mirror `_run_init` helper from test_init_wiki.py — call main() the same way
- *  init_wiki.py's test harness does. The Python version passes argv with a
- *  fake program-name leading element and then slices it off, so we replicate
- *  the shape here for completeness. */
+/** Helper that invokes the unit `main()` entry point with argv shaped the
+ *  same way the CLI receives it (program-name leading element gets sliced
+ *  off internally). */
 function runInit(
   wikiPath: string,
   domain: string = "general",
@@ -245,15 +240,14 @@ describe("init_wiki — missing args", () => {
   });
 });
 
-// ── CLI parity with Python ──────────────────────────────────────────
+// ── CLI idempotency ─────────────────────────────────────────────────
 
 function runCli(
   bin: string,
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
-  const interpreter = bin.endsWith(".py") ? "python3" : "node";
   try {
-    const stdout = execFileSync(interpreter, [bin, ...args], {
+    const stdout = execFileSync("node", [bin, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -278,7 +272,7 @@ function runCli(
   }
 }
 
-describe("init_wiki CLI parity", () => {
+describe("init_wiki CLI idempotency", () => {
   let tmpPath: string;
   beforeEach(() => {
     tmpPath = makeTmpPath("init-wiki-cli-");
@@ -290,38 +284,11 @@ describe("init_wiki CLI parity", () => {
   /** Scrub the randomized wiki_root path out of stdout before comparing. */
   function scrub(stdout: string, wikiPath: string): string {
     // The path.resolve/realpath output differs per-run, so swap it for a
-    // placeholder. We resolve symlinks first so Python's and Node's outputs
-    // agree even on macOS (/tmp vs /private/tmp).
+    // placeholder. We resolve symlinks first so output is stable across
+    // runs even on macOS (/tmp vs /private/tmp).
     const real = fs.realpathSync(wikiPath);
     return stdout.split(real).join("REAL_ROOT");
   }
-
-  it("cli_first_run_matches_python", () => {
-    const pyTarget = path.join(tmpPath, "py");
-    const tsTarget = path.join(tmpPath, "ts");
-    fs.mkdirSync(pyTarget);
-    fs.mkdirSync(tsTarget);
-
-    const py = runCli(PY_CLI, [
-      "--path",
-      pyTarget,
-      "--domain",
-      "general",
-      "--name",
-      "My Wiki",
-    ]);
-    const ts = runCli(CLI, [
-      "--path",
-      tsTarget,
-      "--domain",
-      "general",
-      "--name",
-      "My Wiki",
-    ]);
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-    expect(scrub(ts.stdout, tsTarget)).toBe(scrub(py.stdout, pyTarget));
-  });
 
   it("cli_second_run_byte_identical_no_new_files", () => {
     const target = path.join(tmpPath, "wiki");
@@ -338,8 +305,8 @@ describe("init_wiki CLI parity", () => {
     // Idempotency: re-running the CLI leaves the filesystem untouched.
     expect(filesAfterSecond).toEqual(filesAfterFirst);
 
-    // Both runs emit a path-scrubbed stdout that only differs in the
-    // created_* arrays: first has entries, second has empty arrays.
+    // The second run emits a path-scrubbed stdout whose created_* arrays
+    // are empty (first run populated them, second has nothing to do).
     const scrubbedSecond = scrub(second.stdout, target);
     expect(scrubbedSecond).toContain('"created_dirs": []');
     expect(scrubbedSecond).toContain('"created_files": []');

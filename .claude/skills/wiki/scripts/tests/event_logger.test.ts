@@ -23,42 +23,12 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "event_logger.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "event_logger.py");
 
 function runCli(
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & {
-      status?: number;
-      stdout?: Buffer | string;
-      stderr?: Buffer | string;
-    };
-    return {
-      stdout:
-        typeof err.stdout === "string"
-          ? err.stdout
-          : (err.stdout?.toString("utf-8") ?? ""),
-      stderr:
-        typeof err.stderr === "string"
-          ? err.stderr
-          : (err.stderr?.toString("utf-8") ?? ""),
-      status: err.status ?? 1,
-    };
-  }
-}
-
-function runPython(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync("python3", [PY_CLI, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -313,25 +283,25 @@ describe("PythonIsoformatUtc", () => {
   });
 });
 
-// ── CLI parity against the Python reference ────────────────────────
+// ── CLI contract pins (Python-style JSON shape) ────────────────────
 //
-// These tests shell out to python3 AND node and diff stdout byte-for-byte.
-// Critical for catching float/int divergences (e.g. `0.0` vs `0`) that the
-// library-level unit tests do not surface.
+// These were once Python-reference parity tests. The Python side has been
+// retired, but the TS CLI still emits Python-style JSON (`0.0` for floats,
+// `0` for ints) because downstream consumers still parse the output with
+// Python's `json`. The assertions below pin that contract.
 
-describe("EventLoggerCLIParity", () => {
+describe("EventLoggerCLIShape", () => {
   let tmpPath: string;
 
   beforeEach(() => {
-    tmpPath = makeTmpPath("event-parity-");
+    tmpPath = makeTmpPath("event-cli-shape-");
   });
 
   afterEach(() => {
     cleanupTmpPath(tmpPath);
   });
 
-  /** Pre-populate the events.jsonl under `tmpPath/log/` with a fixed set
-   *  of events — shared across the parity tests below. */
+  /** Pre-populate the events.jsonl under `tmpPath/log/`. */
   function seedEvents(): void {
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
@@ -351,36 +321,27 @@ describe("EventLoggerCLIParity", () => {
     );
   }
 
-  it("cli_stats_empty_matches_python", () => {
-    // No events — stats must emit `total_cost_usd: 0.0` (not `0`). Flags the
-    // int/float divergence that `pyFloat` was introduced to paper over.
+  it("cli_stats_empty_emits_zero_float", () => {
+    // No events — stats must emit `total_cost_usd: 0.0` (not `0`).
     fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
     fs.writeFileSync(path.join(tmpPath, "log", "events.jsonl"), "");
-    const py = runPython(["stats", "--wiki-root", tmpPath]);
     const js = runCli(["stats", "--wiki-root", tmpPath]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    expect(js.stdout).toContain('"total_cost_usd": 0.0');
   });
 
-  it("cli_stats_populated_matches_python", () => {
+  it("cli_stats_populated_emits_non_zero_cost", () => {
     seedEvents();
-    const py = runPython(["stats", "--wiki-root", tmpPath]);
     const js = runCli(["stats", "--wiki-root", tmpPath]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(typeof data.total_cost_usd).toBe("number");
+    expect(data.total_cost_usd).toBeGreaterThan(0);
+    expect(data.total_ops).toBeGreaterThanOrEqual(4);
   });
 
-  it("cli_stats_since_iso_matches_python", () => {
+  it("cli_stats_since_iso_filters_older_events", () => {
     seedEvents();
-    const py = runPython([
-      "stats",
-      "--wiki-root",
-      tmpPath,
-      "--since",
-      "2026-04-09T00:00:00+00:00",
-    ]);
     const js = runCli([
       "stats",
       "--wiki-root",
@@ -388,19 +349,20 @@ describe("EventLoggerCLIParity", () => {
       "--since",
       "2026-04-09T00:00:00+00:00",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    // Only two events fall on or after 2026-04-09.
+    expect(data.total_ops).toBe(2);
   });
 
-  it("cli_stats_integer_ratios_matches_python", () => {
-    // Integer inputs trip a subtle Python int-vs-float rule:
+  it("cli_stats_integer_ratios_emit_python_style_numbers", () => {
+    // Integer inputs trip a subtle int-vs-float rule that the TS CLI
+    // preserves (the Python reference used to assert exact output):
     //   mean([2, 2])       === 2     (int)       → emit as `2`
     //   median([2, 2])     === 2.0   (even-len)  → emit as `2.0`
     //   median([2, 2, 3])  === 2     (odd-len)   → emit as `2`
     //   p95 (nearest-rank) === 2     (element)   → emit as `2`
-    // total_cost_usd and per_agent_cost remain always-float because Python
-    // initializes them with 0.0.
+    // total_cost_usd remains always-float because it is initialized at 0.0.
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
     const events = [
@@ -415,40 +377,9 @@ describe("EventLoggerCLIParity", () => {
       path.join(logDir, "events.jsonl"),
       events.map((e) => JSON.stringify(e)).join("\n") + "\n",
     );
-    const py = runPython(["stats", "--wiki-root", tmpPath]);
     const js = runCli(["stats", "--wiki-root", tmpPath]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
-  });
-
-  // ── Documented divergence: user-supplied floats on `log --details` ──
-  //
-  // When a caller passes `--details '{"cost_usd":0.0}'`, Python's json module
-  // preserves the numeric type ("cost_usd": 0.0) but Node's JSON.parse coerces
-  // `0.0` → `0` before we re-serialize, so the stored JSONL line differs. This
-  // test pins the current TS behavior so a "fix" in either direction requires
-  // a conscious contract change (and the corresponding update to this test).
-
-  it("cli_log_details_zero_float_is_documented_divergence", () => {
-    const py = runPython([
-      "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--details", '{"cost_usd": 0.0}',
-    ]);
-    fs.rmSync(path.join(tmpPath, "log"), { recursive: true, force: true });
-    const js = runCli([
-      "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--details", '{"cost_usd": 0.0}',
-    ]);
-    expect(py.status).toBe(0);
-    expect(js.status).toBe(0);
-    // Intentional divergence:
-    expect(py.stdout).toContain('"cost_usd": 0.0');
-    expect(js.stdout).toContain('"cost_usd": 0');
-    expect(js.stdout).not.toContain('"cost_usd": 0.0');
+    // total_cost_usd stays float even when the sum is an int.
+    expect(js.stdout).toMatch(/"total_cost_usd":\s*15\.0/);
   });
 });

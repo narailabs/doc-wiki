@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/notion_fetch.py]
+scripts: [scripts/notion_fetch.ts]
 color: pink
 ---
 

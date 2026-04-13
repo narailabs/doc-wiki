@@ -74,11 +74,11 @@ On no diagrams found:
 4. **Validate types** -- confirm each diagram type is supported (erDiagram, sequenceDiagram, graph, flowchart, classDiagram, stateDiagram, gantt, pie, gitgraph)
 5. **Format blocks** -- run the formatting script:
    ```bash
-   python scripts/mermaid_gen.py --input <input_json>
+   node scripts/mermaid_gen.js --input <input_json>
    ```
 6. **Inject** (if action is `inject`) -- insert blocks into the page under `## Diagrams`:
    ```bash
-   python scripts/mermaid_gen.py --input <input_json> --page <page_path>
+   node scripts/mermaid_gen.js --input <input_json> --page <page_path>
    ```
 7. **Report** -- return structured result with block count and types
 

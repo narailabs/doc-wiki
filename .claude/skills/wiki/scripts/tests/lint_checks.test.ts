@@ -1,9 +1,7 @@
 /**
- * Tests for lint_checks.ts — ported from test_lint_checks.py.
- *
- * Every pytest `def test_*` is preserved as a Vitest `it()`. CLI-parity
- * tests shell out to the compiled lint_checks.js and confirm stdout
- * matches the Python reference byte-for-byte.
+ * Tests for lint_checks.ts — originally ported from test_lint_checks.py.
+ * The Python parity comparisons were removed in Phase 9; what remains is
+ * the TypeScript-only unit + CLI suite.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -31,7 +29,6 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "lint_checks.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "lint_checks.py");
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -409,9 +406,8 @@ function runCli(
   bin: string,
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
-  const interpreter = bin.endsWith(".py") ? "python3" : "node";
   try {
-    const stdout = execFileSync(interpreter, [bin, ...args], {
+    const stdout = execFileSync("node", [bin, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -473,27 +469,4 @@ describe("TestLintChecksCLI", () => {
     }
   });
 
-  it("cli_full_lint_matches_python", () => {
-    const py = runCli(PY_CLI, ["--wiki-root", wiki]);
-    const ts = runCli(CLI, ["--wiki-root", wiki]);
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-    expect(ts.stdout).toBe(py.stdout);
-  });
-
-  it("cli_category_matches_python", () => {
-    const py = runCli(PY_CLI, [
-      "--wiki-root",
-      wiki,
-      "--category",
-      "broken_links",
-    ]);
-    const ts = runCli(CLI, [
-      "--wiki-root",
-      wiki,
-      "--category",
-      "broken_links",
-    ]);
-    expect(ts.stdout).toBe(py.stdout);
-  });
 });

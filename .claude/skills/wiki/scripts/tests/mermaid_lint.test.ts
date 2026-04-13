@@ -23,42 +23,12 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "mermaid_lint.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "mermaid_lint.py");
 
 function runCli(
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & {
-      status?: number;
-      stdout?: Buffer | string;
-      stderr?: Buffer | string;
-    };
-    return {
-      stdout:
-        typeof err.stdout === "string"
-          ? err.stdout
-          : (err.stdout?.toString("utf-8") ?? ""),
-      stderr:
-        typeof err.stderr === "string"
-          ? err.stderr
-          : (err.stderr?.toString("utf-8") ?? ""),
-      status: err.status ?? 1,
-    };
-  }
-}
-
-function runPython(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync("python3", [PY_CLI, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -332,47 +302,3 @@ describe("TestMermaidLintCLI", () => {
   });
 });
 
-// ── CLI parity against the Python reference ────────────────────────
-//
-// Shell out to both python3 and node with the same args and assert the
-// stdout matches byte-for-byte. These tests would catch a regex shift or
-// JSON-formatting drift that the library-level tests might miss.
-
-describe("MermaidLintCLIParity", () => {
-  let tmpPath: string;
-
-  beforeEach(() => {
-    tmpPath = makeTmpPath("mermaid-parity-");
-  });
-
-  afterEach(() => {
-    cleanupTmpPath(tmpPath);
-  });
-
-  it("cli_page_matches_python_valid", () => {
-    const page = makePageWithValidMermaid(tmpPath);
-    const py = runPython(["--page", page]);
-    const js = runCli(["--page", page]);
-    expect(py.status).toBe(0);
-    expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
-  });
-
-  it("cli_page_matches_python_invalid", () => {
-    const page = makePageWithInvalidMermaid(tmpPath);
-    const py = runPython(["--page", page]);
-    const js = runCli(["--page", page]);
-    expect(py.status).toBe(0);
-    expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
-  });
-
-  it("cli_wiki_root_matches_python", () => {
-    const wikiRoot = makeWikiWithPages(tmpPath);
-    const py = runPython(["--wiki-root", wikiRoot]);
-    const js = runCli(["--wiki-root", wikiRoot]);
-    expect(py.status).toBe(0);
-    expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
-  });
-});

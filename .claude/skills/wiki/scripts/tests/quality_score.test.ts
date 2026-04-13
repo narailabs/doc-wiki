@@ -22,7 +22,6 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "quality_score.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "quality_score.py");
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -455,9 +454,8 @@ function runCli(
   bin: string,
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
-  const interpreter = bin.endsWith(".py") ? "python3" : "node";
   try {
-    const stdout = execFileSync(interpreter, [bin, ...args], {
+    const stdout = execFileSync("node", [bin, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -512,31 +510,16 @@ describe("TestQualityScoreCLI", () => {
     expect(data.length).toBeGreaterThanOrEqual(5);
   });
 
-  it("cli_single_page_matches_python", () => {
-    const edges = makeEdgesFile(tmpPath);
-    const page = path.join(tmpPath, "wiki", "test.md");
-    writePage(page, fullFrontmatter(), new Array(200).fill("word").join(" "));
-    const py = runCli(PY_CLI, ["--page", page, "--edges", edges]);
-    const ts = runCli(CLI, ["--page", page, "--edges", edges]);
-    expect(ts.stdout).toBe(py.stdout);
-  });
-
-  it("cli_wiki_root_matches_python", () => {
-    const wiki = makeWikiWithPages(tmpPath);
-    const py = runCli(PY_CLI, ["--wiki-root", wiki]);
-    const ts = runCli(CLI, ["--wiki-root", wiki]);
-    expect(ts.stdout).toBe(py.stdout);
-  });
-
   it("cli_terrible_page_emits_float_zero", () => {
-    // Parity check for the pyFloat branch: clamped-to-0 quality must emit as
-    // "0.0" (Python float) not "0" (Python int).
+    // Previously a Python-parity check; retained as a TypeScript-only
+    // contract: clamped-to-0 quality must serialize as "0.0" (Python-style
+    // float) not "0" (int), so downstream Python consumers — if any — get
+    // the right JSON shape.
     const edges = makeEdgesFile(tmpPath);
     const page = path.join(tmpPath, "wiki", "terrible.md");
     writePage(page, { type: "concept" }, "Short.");
     const ts = runCli(CLI, ["--page", page, "--edges", edges]);
-    const py = runCli(PY_CLI, ["--page", page, "--edges", edges]);
-    expect(ts.stdout).toBe(py.stdout);
+    expect(ts.status).toBe(0);
     expect(ts.stdout).toContain('"quality": 0.0');
   });
 });

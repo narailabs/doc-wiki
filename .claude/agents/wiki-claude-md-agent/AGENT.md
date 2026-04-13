@@ -77,11 +77,11 @@ On update with no changes:
 2. **Scan project** -- detect submodules (directories with their own CLAUDE.md), wiki structure
 3. **Generate managed content** -- run the generation script:
    ```bash
-   python scripts/claude_md_gen.py --project-root <project_root> --wiki-root <wiki_root> [--submodule <path>]
+   node scripts/claude_md_gen.js --project-root <project_root> --wiki-root <wiki_root> [--submodule <path>]
    ```
 4. **Merge with existing** -- if action is `update`, preserve user sections outside markers:
    ```bash
-   python scripts/claude_md_gen.py --project-root <project_root> --wiki-root <wiki_root> --update <file>
+   node scripts/claude_md_gen.js --project-root <project_root> --wiki-root <wiki_root> --update <file>
    ```
 5. **Write output** -- write the final CLAUDE.md to disk
 6. **Report** -- return structured result with sections and submodule info

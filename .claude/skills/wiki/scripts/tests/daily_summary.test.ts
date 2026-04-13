@@ -20,7 +20,6 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "daily_summary.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "daily_summary.py");
 
 // ── Event fixture (mirrors `wiki_with_events` in conftest.py) ───────
 
@@ -261,9 +260,8 @@ function runCli(
   bin: string,
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
-  const interpreter = bin.endsWith(".py") ? "python3" : "node";
   try {
-    const stdout = execFileSync(interpreter, [bin, ...args], {
+    const stdout = execFileSync("node", [bin, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -312,62 +310,4 @@ describe("TestDailySummaryCLI", () => {
     expect(result.stdout).toContain(todayIso());
   });
 
-  it("cli_markdown_matches_python", () => {
-    // Run Python against a fresh copy to avoid cross-contamination.
-    const pyWiki = makeWikiWithEvents(tmpPath + "-py");
-    const tsWiki = makeWikiWithEvents(tmpPath + "-ts");
-
-    const py = runCli(PY_CLI, [
-      "--wiki-root",
-      pyWiki,
-      "--date",
-      "2026-04-12",
-    ]);
-    const ts = runCli(CLI, ["--wiki-root", tsWiki, "--date", "2026-04-12"]);
-
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-
-    const pyMd = fs.readFileSync(
-      path.join(pyWiki, "log", "daily", "2026-04-12.md"),
-      "utf-8",
-    );
-    const tsMd = fs.readFileSync(
-      path.join(tsWiki, "log", "daily", "2026-04-12.md"),
-      "utf-8",
-    );
-    expect(tsMd).toBe(pyMd);
-
-    cleanupTmpPath(tmpPath + "-py");
-    cleanupTmpPath(tmpPath + "-ts");
-  });
-
-  it("cli_empty_events_matches_python", () => {
-    const pyWiki = makeInitializedWiki(tmpPath + "-py2");
-    const tsWiki = makeInitializedWiki(tmpPath + "-ts2");
-
-    const py = runCli(PY_CLI, [
-      "--wiki-root",
-      pyWiki,
-      "--date",
-      "2026-04-12",
-    ]);
-    const ts = runCli(CLI, ["--wiki-root", tsWiki, "--date", "2026-04-12"]);
-
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-
-    const pyMd = fs.readFileSync(
-      path.join(pyWiki, "log", "daily", "2026-04-12.md"),
-      "utf-8",
-    );
-    const tsMd = fs.readFileSync(
-      path.join(tsWiki, "log", "daily", "2026-04-12.md"),
-      "utf-8",
-    );
-    expect(tsMd).toBe(pyMd);
-
-    cleanupTmpPath(tmpPath + "-py2");
-    cleanupTmpPath(tmpPath + "-ts2");
-  });
 });

@@ -1,8 +1,7 @@
 /**
- * Tests for cache_manager.ts — ported from test_cache_manager.py.
- *
- * Every pytest `def test_*` is preserved as a Vitest `it()`. CLI-parity
- * tests shell out to the compiled cache_manager.js via Node.
+ * Tests for cache_manager.ts — originally ported from test_cache_manager.py.
+ * After the Python removal, the Python parity assertions are gone; the
+ * TypeScript-only CLI exercises remain.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -26,7 +25,6 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "cache_manager.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "cache_manager.py");
 
 function runCli(
   args: readonly string[],
@@ -57,36 +55,7 @@ function runCli(
   }
 }
 
-function runPython(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync("python3", [PY_CLI, ...args], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & {
-      status?: number;
-      stdout?: Buffer | string;
-      stderr?: Buffer | string;
-    };
-    return {
-      stdout:
-        typeof err.stdout === "string"
-          ? err.stdout
-          : (err.stdout?.toString("utf-8") ?? ""),
-      stderr:
-        typeof err.stderr === "string"
-          ? err.stderr
-          : (err.stderr?.toString("utf-8") ?? ""),
-      status: err.status ?? 1,
-    };
-  }
-}
-
-/** Mirrors the `cache_wiki` pytest fixture — initialized wiki with cache
+/** Mirrors the original `cache_wiki` fixture — initialized wiki with cache
  *  version pre-set to "1". */
 function makeCacheWiki(tmpPath: string): string {
   const wikiRoot = makeInitializedWiki(tmpPath);
@@ -342,32 +311,26 @@ describe("TestCacheManagerCLI", () => {
   });
 });
 
-// ── CLI parity against the Python reference ────────────────────────
+// ── CLI smoke tests (TS-only) ───────────────────────────────────────
 //
-// Shell out to both python3 and node with the same args and assert the
-// stdout matches byte-for-byte. This is the strongest guarantee that the
-// SHA256 digest and JSON formatting stay aligned across the two ports.
+// These exercise the compiled cache_manager.js end-to-end and assert
+// stdout shape (JSON, hit/miss flags). Originally a parity comparison
+// against python3 cache_manager.py — the Python half was retired with
+// the Phase 9 cleanup, so we now just confirm the TS CLI behaves.
 
-describe("CacheManagerCLIParity", () => {
+describe("CacheManagerCLI", () => {
   let tmpPath: string;
 
   beforeEach(() => {
-    tmpPath = makeTmpPath("cache-parity-");
+    tmpPath = makeTmpPath("cache-cli-");
   });
 
   afterEach(() => {
     cleanupTmpPath(tmpPath);
   });
 
-  it("cli_check_miss_matches_python", () => {
+  it("cli_check_miss_returns_hit_false", () => {
     const wiki = makeCacheWiki(tmpPath);
-    const py = runPython([
-      "check",
-      "--wiki-root",
-      wiki,
-      "--content",
-      "hello world",
-    ]);
     const js = runCli([
       "check",
       "--wiki-root",
@@ -375,15 +338,13 @@ describe("CacheManagerCLIParity", () => {
       "--content",
       "hello world",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(data.hit).toBe(false);
   });
 
-  it("cli_store_then_check_matches_python", () => {
+  it("cli_store_then_check_returns_hit_true", () => {
     const wiki = makeCacheWiki(tmpPath);
-    // Store via TS, then check via both — the digest must be identical so
-    // the Python `check` command can see the entry the TS `store` wrote.
     runCli([
       "store",
       "--wiki-root",
@@ -393,13 +354,6 @@ describe("CacheManagerCLIParity", () => {
       "--metadata",
       '{"k":"v"}',
     ]);
-    const py = runPython([
-      "check",
-      "--wiki-root",
-      wiki,
-      "--content",
-      "hello world",
-    ]);
     const js = runCli([
       "check",
       "--wiki-root",
@@ -407,32 +361,25 @@ describe("CacheManagerCLIParity", () => {
       "--content",
       "hello world",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    // Both must report hit=true with identical metadata output.
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(data.hit).toBe(true);
+    // `store` attaches the current cache_version alongside caller metadata.
+    expect(data.metadata.k).toBe("v");
+    expect(data.metadata.cache_version).toBe("1");
   });
 
-  it("cli_version_matches_python", () => {
+  it("cli_version_reports_set_value", () => {
     const wiki = makeCacheWiki(tmpPath);
-    const py = runPython(["version", "--wiki-root", wiki]);
     const js = runCli(["version", "--wiki-root", wiki]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(data.version).toBe("1");
   });
 
-  it("cli_body_only_matches_python", () => {
+  it("cli_body_only_strips_frontmatter", () => {
     const wiki = makeCacheWiki(tmpPath);
     const content = "---\ntitle: x\n---\nbody only";
-    const py = runPython([
-      "check",
-      "--wiki-root",
-      wiki,
-      "--content",
-      content,
-      "--body-only",
-    ]);
     const js = runCli([
       "check",
       "--wiki-root",
@@ -441,8 +388,12 @@ describe("CacheManagerCLIParity", () => {
       content,
       "--body-only",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(data.hit).toBe(false);
+    // Hash should be of "body only" (frontmatter stripped). Confirm by
+    // comparing with the same digest computed via the public helper.
+    const expected = computeHash("body only");
+    expect(data.hash).toBe(expected);
   });
 });

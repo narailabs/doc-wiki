@@ -2,7 +2,7 @@
 
 ## Quality Score (0.0-1.0)
 
-Run `quality_score.py` to compute scores. Stored in page frontmatter as `quality: 0.82`.
+Run `quality_score.ts` (compiled to `quality_score.js` and invoked via `node`) to compute scores. Stored in page frontmatter as `quality: 0.82`.
 
 ### Content-level scoring
 
