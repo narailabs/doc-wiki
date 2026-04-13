@@ -37,7 +37,7 @@ export const FORMAT_MAP = {
  * Anything other than a not-found error is rethrown unchanged — we don't
  * want to swallow real import failures (syntax errors, etc.).
  */
-async function importOptional(modName) {
+async function importOptional(modName, installName) {
     try {
         // The `as unknown` round-trip is needed because callers know the shape
         // of each module via their own inline cast at the call site.
@@ -46,7 +46,14 @@ async function importOptional(modName) {
     catch (e) {
         const err = e;
         if (err.code === "ERR_MODULE_NOT_FOUND" || err.code === "MODULE_NOT_FOUND") {
-            throw new Error(`Missing optional dependency '${modName}'. Install with: npm install ${modName}`);
+            // The module specifier may include a subpath (e.g.
+            // "pdfjs-dist/legacy/build/pdf.mjs"); users need the base package name
+            // for `npm install`, not the subpath.
+            const pkgName = installName ??
+                (modName.startsWith("@")
+                    ? modName.split("/").slice(0, 2).join("/")
+                    : (modName.split("/")[0] ?? modName));
+            throw new Error(`Missing optional dependency '${pkgName}'. Install with: npm install ${pkgName}`);
         }
         throw e;
     }
