@@ -392,4 +392,63 @@ describe("EventLoggerCLIParity", () => {
     expect(js.status).toBe(0);
     expect(js.stdout).toBe(py.stdout);
   });
+
+  it("cli_stats_integer_ratios_matches_python", () => {
+    // Integer inputs trip a subtle Python int-vs-float rule:
+    //   mean([2, 2])       === 2     (int)       → emit as `2`
+    //   median([2, 2])     === 2.0   (even-len)  → emit as `2.0`
+    //   median([2, 2, 3])  === 2     (odd-len)   → emit as `2`
+    //   p95 (nearest-rank) === 2     (element)   → emit as `2`
+    // total_cost_usd and per_agent_cost remain always-float because Python
+    // initializes them with 0.0.
+    const logDir = path.join(tmpPath, "log");
+    fs.mkdirSync(logDir, { recursive: true });
+    const events = [
+      { ts: "2026-04-01T10:00:00+00:00", op: "ingest",
+        agent: "file", cost_usd: 5, reduction_ratio: 2 },
+      { ts: "2026-04-05T12:00:00+00:00", op: "ingest",
+        agent: "file", cost_usd: 5, reduction_ratio: 2 },
+      { ts: "2026-04-10T08:00:00+00:00", op: "ingest",
+        agent: "file", cost_usd: 5, reduction_ratio: 3 },
+    ];
+    fs.writeFileSync(
+      path.join(logDir, "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const py = runPython(["stats", "--wiki-root", tmpPath]);
+    const js = runCli(["stats", "--wiki-root", tmpPath]);
+    expect(py.status).toBe(0);
+    expect(js.status).toBe(0);
+    expect(js.stdout).toBe(py.stdout);
+  });
+
+  // ── Documented divergence: user-supplied floats on `log --details` ──
+  //
+  // When a caller passes `--details '{"cost_usd":0.0}'`, Python's json module
+  // preserves the numeric type ("cost_usd": 0.0) but Node's JSON.parse coerces
+  // `0.0` → `0` before we re-serialize, so the stored JSONL line differs. This
+  // test pins the current TS behavior so a "fix" in either direction requires
+  // a conscious contract change (and the corresponding update to this test).
+
+  it("cli_log_details_zero_float_is_documented_divergence", () => {
+    const py = runPython([
+      "log",
+      "--op", "ingest",
+      "--wiki-root", tmpPath,
+      "--details", '{"cost_usd": 0.0}',
+    ]);
+    fs.rmSync(path.join(tmpPath, "log"), { recursive: true, force: true });
+    const js = runCli([
+      "log",
+      "--op", "ingest",
+      "--wiki-root", tmpPath,
+      "--details", '{"cost_usd": 0.0}',
+    ]);
+    expect(py.status).toBe(0);
+    expect(js.status).toBe(0);
+    // Intentional divergence:
+    expect(py.stdout).toContain('"cost_usd": 0.0');
+    expect(js.stdout).toContain('"cost_usd": 0');
+    expect(js.stdout).not.toContain('"cost_usd": 0.0');
+  });
 });
