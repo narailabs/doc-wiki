@@ -1,5 +1,5 @@
 ---
-description: Documentation wiki skill -- routes /wiki-* commands to Python scripts
+description: Documentation wiki skill -- routes /wiki-* commands to TypeScript scripts
 alwaysApply: true
 ---
 
@@ -9,34 +9,34 @@ This project has a documentation wiki skill. Before searching the codebase with 
 
 ## Commands
 
-- `/wiki-init` -- Bootstrap wiki scaffold: `python3 .claude/skills/wiki/scripts/init_wiki.py --path <wiki-root> --domain "<domain>" --name "<name>"`
+- `/wiki-init` -- Bootstrap wiki scaffold: `node .claude/skills/wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
 - `/wiki-onboard` -- Interactive onboarding: detect language, ORM, database, external services, configure wiki
 - `/wiki-ingest` -- Fetch, extract, compile sources into wiki pages
 - `/wiki-query` -- Summary-first search: read `wiki/summaries.md`, score, load top pages, synthesize
-- `/wiki-lint` -- Health check: `python3 .claude/skills/wiki/scripts/lint_checks.py --wiki-root <wiki-root>`
+- `/wiki-lint` -- Health check: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root <wiki-root>`
 - `/wiki-fix` -- Quick corrections with diff preview
 - `/wiki-promote` -- Convert query answer from `outputs/queries/` to permanent wiki page
-- `/wiki-path` -- Shortest path: `python3 .claude/skills/wiki/scripts/graph_ops.py path --from "<a>" --to "<b>" --edges <wiki-root>/graph/edges.jsonl`
+- `/wiki-path` -- Shortest path: `node .claude/skills/wiki/scripts/graph_ops.js path --from "<a>" --to "<b>" --edges <wiki-root>/graph/edges.jsonl`
 - `/wiki-refresh` -- Re-fetch and update from original sources
-- `/wiki-stats` -- Token efficiency: `python3 .claude/skills/wiki/scripts/event_logger.py stats --wiki-root <wiki-root> --since 7d`
+- `/wiki-stats` -- Token efficiency: `node .claude/skills/wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d`
 
 ## Script Paths
 
-All Python scripts: `.claude/skills/wiki/scripts/`
+All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to `.js` siblings via `npm run build`.
 
 | Script | Purpose |
 |---|---|
-| `init_wiki.py` | Bootstrap wiki scaffold |
-| `parse_config.py` | Read/write `wiki.config.yaml` |
-| `cache_manager.py` | Content-hash cache for dedup |
-| `security_check.py` | URL validation and safety |
-| `extract_binary.py` | Binary file extraction |
-| `lint_checks.py` | Structural lint checks |
-| `quality_score.py` | Page quality scoring (0.0-1.0) |
-| `graph_ops.py` | Graph traversal and path queries |
-| `event_logger.py` | Operation logging and stats |
-| `mermaid_lint.py` | Mermaid diagram validation |
-| `daily_summary.py` | Daily summary generation |
+| `init_wiki.ts` | Bootstrap wiki scaffold |
+| `parse_config.ts` | Read/write `wiki.config.yaml` |
+| `cache_manager.ts` | Content-hash cache for dedup |
+| `security_check.ts` | URL validation and safety |
+| `extract_binary.ts` | Binary file extraction |
+| `lint_checks.ts` | Structural lint checks |
+| `quality_score.ts` | Page quality scoring (0.0-1.0) |
+| `graph_ops.ts` | Graph traversal and path queries |
+| `event_logger.ts` | Operation logging and stats |
+| `mermaid_lint.ts` | Mermaid diagram validation |
+| `daily_summary.ts` | Daily summary generation |
 
 ## Agent Paths
 
@@ -53,13 +53,13 @@ Sub-agents at `.claude/agents/`:
 - `wiki-mermaid-agent` -- Mermaid diagram generation
 - `wiki-claude-md-agent` -- CLAUDE.md maintenance
 
-## Python Invocation
+## Invocation
 
 ```bash
-python3 .claude/skills/wiki/scripts/<script>.py <args>
+node .claude/skills/wiki/scripts/<script>.js <args>
 ```
 
-Install dependencies: `pip install -r .claude/skills/wiki/scripts/requirements.txt`
+Install dependencies (Node 20 required): `npm install && npm run build`
 
 ## Post-Operation Hooks
 

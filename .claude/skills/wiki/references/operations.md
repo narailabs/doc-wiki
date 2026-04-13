@@ -62,7 +62,7 @@ Update or create `wiki.config.yaml` with detected settings. Run `/wiki-init` if 
 
 ## /wiki-init — Bootstrap
 
-Run `init_wiki.py` to create the scaffold. Then:
+Run `init_wiki.ts` (compiled to `init_wiki.js`, invoked via `node`) to create the scaffold. Then:
 
 1. Create `wiki/index.md`:
 ```markdown
@@ -111,11 +111,11 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 1. **Dispatch detection**: Match source against dispatch rules in config. File paths → file agent. URLs → firecrawl. `db:` prefix → database agent. Unknown → ask user or LLM-decide based on autonomy mode.
 
-2. **Security check**: Run `security_check.py` for URLs. Check path containment for file paths.
+2. **Security check**: Run `security_check.ts` (`node security_check.js`) for URLs. Check path containment for file paths.
 
-3. **Cache check**: Run `cache_manager.py check`. If cached and cache_version matches, skip extraction.
+3. **Cache check**: Run `cache_manager.ts` (`node cache_manager.js check`). If cached and cache_version matches, skip extraction.
 
-4. **Extract**: For binary files, run `extract_binary.py`. For markdown/text, read directly.
+4. **Extract**: For binary files, run `extract_binary.ts` (`node extract_binary.js`). For markdown/text, read directly.
 
 5. **Read fully**: Read the entire source. No skipping sections.
 
@@ -131,7 +131,7 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 11. **Update indexes**: Add to `wiki/index.md` and rebuild `wiki/summaries.md`.
 
-12. **Log**: Run `event_logger.py` with operation details.
+12. **Log**: Run `event_logger.ts` (`node event_logger.js`) with operation details.
 
 13. **Post-op hooks**: Run crosslink + tag-harmonize passes.
 

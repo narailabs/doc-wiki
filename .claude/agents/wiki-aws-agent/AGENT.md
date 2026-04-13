@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: sonnet
 tools: [Bash, Read]
-scripts: [scripts/aws_query.py]
+scripts: [scripts/aws_query.ts]
 color: gold
 ---
 

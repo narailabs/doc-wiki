@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/confluence_fetch.py]
+scripts: [scripts/confluence_fetch.ts]
 color: blue
 ---
 

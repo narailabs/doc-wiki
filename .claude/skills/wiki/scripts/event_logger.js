@@ -1,0 +1,406 @@
+#!/usr/bin/env node
+/**
+ * Event logger for the documentation wiki.
+ *
+ * Logs structured events to log/events.jsonl and computes aggregate statistics.
+ *
+ * Usage as a library:
+ *     import { logEvent, getStats } from "./event_logger.js";
+ *     logEvent("/path/to/wiki", "ingest", {source: "slides.pptx", cost_usd: 0.05});
+ *     const stats = getStats("/path/to/wiki", "2026-04-01T00:00:00+00:00");
+ *
+ * Usage as a script:
+ *     node event_logger.js log --op ingest --wiki-root /path --details '{"source":"slides.pptx"}'
+ *     node event_logger.js stats --wiki-root /path --since 7d
+ *
+ * This is a TypeScript port of event_logger.py; file output and CLI output
+ * match the Python reference byte-for-byte for the same inputs.
+ */
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { pyFloat, pythonJsonDumps, pythonJsonDumpsFloats } from "./_json_py.js";
+// ── Timestamp helpers ───────────────────────────────────────────────
+/**
+ * Produce a Python-compatible `datetime.now(timezone.utc).isoformat()`
+ * for the given date. Python's default isoformat:
+ *   - no microseconds when they are exactly 0 (`2026-04-12T10:30:00+00:00`)
+ *   - 6-digit microseconds otherwise (`2026-04-12T10:30:00.123456+00:00`)
+ *   - UTC offset rendered as `+00:00`, not `Z`
+ *
+ * JavaScript's `Date` has millisecond precision, so when microseconds are
+ * present we pad with 3 trailing zeros to produce 6 digits.
+ */
+export function pythonIsoformatUtc(d) {
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(d.getUTCDate()).padStart(2, "0");
+    const h = String(d.getUTCHours()).padStart(2, "0");
+    const mi = String(d.getUTCMinutes()).padStart(2, "0");
+    const se = String(d.getUTCSeconds()).padStart(2, "0");
+    const ms = d.getUTCMilliseconds();
+    if (ms === 0) {
+        // Mirror Python's omission of the microseconds component when it's zero.
+        return `${y}-${mo}-${da}T${h}:${mi}:${se}+00:00`;
+    }
+    const micros = String(ms).padStart(3, "0") + "000";
+    return `${y}-${mo}-${da}T${h}:${mi}:${se}.${micros}+00:00`;
+}
+/**
+ * Parse a Python-compatible ISO 8601 timestamp into epoch milliseconds.
+ * Accepts:
+ *   - "YYYY-MM-DDTHH:MM:SS[.ffffff][+HH:MM | -HH:MM | Z]"
+ *   - a naive form without offset (treated as local time, matching Python)
+ * Returns NaN for unparseable inputs so callers can detect errors.
+ */
+export function parsePythonIsoformat(s) {
+    // First try native Date parsing — handles most ISO-8601 inputs the same
+    // way Python does, including `Z` and `+00:00`. But Python accepts naive
+    // timestamps too, which Date() treats as local. That's acceptable since
+    // Python's fromisoformat() treats naive input as local-naive as well.
+    const t = Date.parse(s);
+    if (!Number.isNaN(t))
+        return t;
+    return NaN;
+}
+// ── Paths ───────────────────────────────────────────────────────────
+function _eventsPath(wikiRoot) {
+    const p = path.join(wikiRoot, "log", "events.jsonl");
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    return p;
+}
+// ── Logging ─────────────────────────────────────────────────────────
+/**
+ * Append a JSON-line event to `log/events.jsonl`.
+ *
+ * Auto-adds an ISO timestamp in the `ts` field.
+ * All keys from `details` are merged into the top-level entry.
+ *
+ * Returns the full logged entry dict.
+ */
+export function logEvent(wikiRoot, op, details) {
+    // Preserve Python's dict-literal key order: `ts` first, then `op`,
+    // then the merged `details` keys in insertion order.
+    const entry = {
+        ts: pythonIsoformatUtc(new Date()),
+        op,
+    };
+    for (const [k, v] of Object.entries(details)) {
+        entry[k] = v;
+    }
+    const p = _eventsPath(wikiRoot);
+    // Python uses json.dumps(entry) (default separators: ", " and ": ").
+    fs.appendFileSync(p, pythonJsonDumps(entry) + "\n");
+    return entry;
+}
+// ── Stats ───────────────────────────────────────────────────────────
+function _readEvents(wikiRoot, since = null) {
+    const p = _eventsPath(wikiRoot);
+    if (!fs.existsSync(p)) {
+        return [];
+    }
+    const sinceMs = since !== null && since !== undefined ? parsePythonIsoformat(since) : null;
+    const raw = fs.readFileSync(p, { encoding: "utf-8" });
+    const events = [];
+    for (const rawLine of raw.split("\n")) {
+        const line = rawLine.trim();
+        if (!line)
+            continue;
+        const entry = JSON.parse(line);
+        if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+            const entryTs = entry["ts"];
+            const entryMs = typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
+            if (!Number.isNaN(entryMs) && entryMs < sinceMs) {
+                continue;
+            }
+        }
+        events.push(entry);
+    }
+    return events;
+}
+/**
+ * Convert a relative duration like `'7d'` or `'24h'` to an ISO timestamp
+ * (relative to "now"). Falls back to returning the input unchanged when
+ * it does not match the `N[dhm]` shape, matching the Python helper.
+ */
+export function parseRelativeSince(sinceStr) {
+    const match = sinceStr.match(/^(\d+)([dhm])$/);
+    if (!match) {
+        return sinceStr;
+    }
+    const value = parseInt(match[1] ?? "0", 10);
+    const unit = match[2];
+    let deltaMs;
+    if (unit === "d") {
+        deltaMs = value * 86_400_000;
+    }
+    else if (unit === "h") {
+        deltaMs = value * 3_600_000;
+    }
+    else if (unit === "m") {
+        deltaMs = value * 60_000;
+    }
+    else {
+        return sinceStr;
+    }
+    return pythonIsoformatUtc(new Date(Date.now() - deltaMs));
+}
+/** Mean of a non-empty list of numbers (matches `statistics.mean`). */
+function mean(values) {
+    if (values.length === 0)
+        return 0;
+    let sum = 0;
+    for (const v of values)
+        sum += v;
+    return sum / values.length;
+}
+/**
+ * Median of a non-empty list of numbers (matches `statistics.median`).
+ * For even-length lists, returns the average of the two middle values.
+ * Accepts either a pre-sorted copy or an unsorted one (we sort internally).
+ */
+function median(values) {
+    if (values.length === 0)
+        return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const n = sorted.length;
+    const mid = Math.floor(n / 2);
+    if (n % 2 === 0) {
+        const lo = sorted[mid - 1] ?? 0;
+        const hi = sorted[mid] ?? 0;
+        return (lo + hi) / 2;
+    }
+    return sorted[mid] ?? 0;
+}
+/**
+ * Compute aggregate statistics from the event log.
+ *
+ * Returns a dict with:
+ *   total_ops: number
+ *   ops_by_type: { [op: string]: number }
+ *   total_cost_usd: number
+ *   reduction_ratio: { mean, p50, p95 } (only keys present when ratios > 0)
+ *   per_agent_cost: { [agent: string]: number }
+ */
+export function getStats(wikiRoot, since = null, opts = {}) {
+    const events = _readEvents(wikiRoot, since);
+    const opsByType = {};
+    let totalCost = 0.0;
+    const ratios = [];
+    const perAgentCost = {};
+    for (const e of events) {
+        const op = typeof e["op"] === "string" ? e["op"] : "unknown";
+        opsByType[op] = (opsByType[op] ?? 0) + 1;
+        const costVal = e["cost_usd"];
+        const cost = typeof costVal === "number" ? costVal : 0.0;
+        totalCost += cost;
+        if ("reduction_ratio" in e) {
+            const r = e["reduction_ratio"];
+            if (typeof r === "number")
+                ratios.push(r);
+        }
+        const agentVal = e["agent"];
+        if (typeof agentVal === "string" && agentVal) {
+            perAgentCost[agentVal] = (perAgentCost[agentVal] ?? 0) + cost;
+        }
+    }
+    // Reduction ratio statistics — only populated when we saw any ratios.
+    const ratioStats = {};
+    if (ratios.length > 0) {
+        const sortedRatios = [...ratios].sort((a, b) => a - b);
+        ratioStats["mean"] = mean(ratios);
+        ratioStats["p50"] = median(ratios);
+        // p95: nearest-rank method matching Python: idx = min(int(n*0.95), n-1)
+        let idx95 = Math.floor(sortedRatios.length * 0.95);
+        idx95 = Math.min(idx95, sortedRatios.length - 1);
+        ratioStats["p95"] = sortedRatios[idx95] ?? 0;
+    }
+    const result = {
+        total_ops: events.length,
+        ops_by_type: opsByType,
+        total_cost_usd: totalCost,
+        reduction_ratio: ratioStats,
+        per_agent_cost: perAgentCost,
+    };
+    if (opts.includeRatios) {
+        // Used by the CLI stats path to decide whether reduction_ratio fields
+        // should render as Python int or float. Strip before JSON output.
+        result["_ratios"] = ratios;
+    }
+    return result;
+}
+/**
+ * Hand-rolled argparse-equivalent for event_logger. Supports three
+ * invocation shapes matching the Python CLI:
+ *
+ *   node event_logger.js log --op ... --wiki-root ... --details '...'
+ *   node event_logger.js stats --wiki-root ... [--since ...]
+ *   node event_logger.js --op ... --wiki-root ... --details '...'   (bare fallback)
+ *
+ * The bare form is the Python CLI's legacy entrypoint — argparse's
+ * `parse_known_args` swallows the unknown positional and falls through to
+ * a second parser in main().
+ */
+function parseArgs(argv) {
+    const out = {};
+    if (argv.length === 0)
+        return out;
+    let i = 0;
+    const first = argv[0];
+    if (first === "-h" || first === "--help") {
+        out.help = true;
+        return out;
+    }
+    if (first === "log" || first === "stats") {
+        out.command = first;
+        i = 1;
+    }
+    while (i < argv.length) {
+        const a = argv[i];
+        if (a === undefined) {
+            i++;
+            continue;
+        }
+        if (a === "-h" || a === "--help") {
+            out.help = true;
+            i++;
+            continue;
+        }
+        let name;
+        let value;
+        if (a.startsWith("--")) {
+            const eq = a.indexOf("=");
+            if (eq >= 0) {
+                name = a.slice(2, eq);
+                value = a.slice(eq + 1);
+                i++;
+            }
+            else {
+                name = a.slice(2);
+                value = argv[i + 1];
+                i += 2;
+            }
+        }
+        else {
+            throw new Error(`unrecognized argument: ${a}`);
+        }
+        switch (name) {
+            case "op":
+                out.op = value ?? "";
+                break;
+            case "wiki-root":
+                out.wikiRoot = value ?? "";
+                break;
+            case "details":
+                out.details = value ?? "{}";
+                break;
+            case "since":
+                out.since = value ?? null;
+                break;
+            default:
+                throw new Error(`unrecognized argument: --${name}`);
+        }
+    }
+    return out;
+}
+const HELP_TEXT = `usage: event_logger.js [-h] {log,stats} ...
+
+Wiki event logger and stats tool.
+
+positional arguments:
+  {log,stats}
+    log                 Log an event
+    stats               Show aggregated stats
+
+options:
+  -h, --help            show this help message and exit
+`;
+export function main(argv = process.argv.slice(2)) {
+    let args;
+    try {
+        args = parseArgs(argv);
+    }
+    catch (e) {
+        process.stderr.write(`${e.message}\n`);
+        return 2;
+    }
+    if (args.help) {
+        process.stdout.write(HELP_TEXT);
+        return 0;
+    }
+    if (args.command === "stats") {
+        if (!args.wikiRoot) {
+            process.stderr.write("--wiki-root is required\n");
+            return 2;
+        }
+        const since = args.since !== null && args.since !== undefined
+            ? parseRelativeSince(args.since)
+            : null;
+        const result = getStats(args.wikiRoot, since, { includeRatios: true });
+        const ratios = result["_ratios"] ?? [];
+        delete result["_ratios"];
+        // total_cost_usd and per_agent_cost always render as Python floats
+        // because Python initializes them with 0.0 and accumulates via +=.
+        const perAgentWrapped = {};
+        for (const [k, v] of Object.entries(result["per_agent_cost"])) {
+            perAgentWrapped[k] = pyFloat(v);
+        }
+        // reduction_ratio fields are conditional: Python emits int when all
+        // input ratios were integers AND the aggregate is itself integer-valued.
+        // Median also renders as float for any even-count list because Python 3's
+        // `/` operator is true division (statistics.median uses `(a + b) / 2`).
+        const hasFloatRatio = ratios.some((v) => !Number.isInteger(v));
+        const ratioSrc = result["reduction_ratio"];
+        const ratioWrapped = {};
+        if ("mean" in ratioSrc) {
+            const v = ratioSrc["mean"];
+            ratioWrapped["mean"] =
+                hasFloatRatio || !Number.isInteger(v) ? pyFloat(v) : v;
+        }
+        if ("p50" in ratioSrc) {
+            const v = ratioSrc["p50"];
+            ratioWrapped["p50"] =
+                hasFloatRatio || ratios.length % 2 === 0 || !Number.isInteger(v)
+                    ? pyFloat(v)
+                    : v;
+        }
+        if ("p95" in ratioSrc) {
+            const v = ratioSrc["p95"];
+            // p95 uses nearest-rank selection: element returned as-is, so it's
+            // int when all inputs were int.
+            ratioWrapped["p95"] = hasFloatRatio ? pyFloat(v) : v;
+        }
+        const wrapped = {
+            ...result,
+            total_cost_usd: pyFloat(result["total_cost_usd"]),
+            reduction_ratio: ratioWrapped,
+            per_agent_cost: perAgentWrapped,
+        };
+        process.stdout.write(pythonJsonDumpsFloats(wrapped, 2) + "\n");
+        return 0;
+    }
+    if (args.command === "log") {
+        if (!args.op || !args.wikiRoot) {
+            process.stderr.write("--op and --wiki-root are required\n");
+            return 2;
+        }
+        const details = JSON.parse(args.details ?? "{}");
+        const entry = logEvent(args.wikiRoot, args.op, details);
+        process.stdout.write(pythonJsonDumps(entry, 2) + "\n");
+        return 0;
+    }
+    // Fallback: bare --op style (no subcommand)
+    if (args.op && args.wikiRoot) {
+        const details = JSON.parse(args.details ?? "{}");
+        const entry = logEvent(args.wikiRoot, args.op, details);
+        process.stdout.write(pythonJsonDumps(entry, 2) + "\n");
+        return 0;
+    }
+    process.stderr.write("--op and --wiki-root are required\n");
+    return 2;
+}
+// CLI entry point: run main() when this file is executed directly.
+const thisFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
+    process.exit(main());
+}

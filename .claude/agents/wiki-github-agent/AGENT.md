@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/github_fetch.py]
+scripts: [scripts/github_fetch.ts]
 color: green
 ---
 
