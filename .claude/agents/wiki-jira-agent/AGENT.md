@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/jira_fetch.py]
+scripts: [scripts/jira_fetch.ts]
 color: cyan
 ---
 

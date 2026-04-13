@@ -1,0 +1,115 @@
+/**
+ * audit.ts — Audit logging for wiki_db (JSONL format, non-failing).
+ *
+ * Mirrors `audit.py`:
+ *  - Module-level state holds `enabled`, `path`, and `session_id`.
+ *  - `enableAudit` / `disableAudit` toggle the state.
+ *  - `logQuery` / `logEvent` append a single JSON line each; errors are
+ *    swallowed so logging never raises into the caller.
+ *
+ * JSONL format parity: JSON.stringify uses compact separators (",", ":"),
+ * which matches Python's `json.dumps(record)` output byte-for-byte for
+ * dict+string+number payloads. Keys appear in insertion order in both
+ * languages.
+ */
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+// Module-level state
+const _state = {
+    enabled: false,
+    path: null,
+    sessionId: null,
+};
+/**
+ * Enable audit logging to `path` (JSONL file).
+ * If `sessionId` is not provided, a random 12-char hex string is generated.
+ */
+export function enableAudit(filePath, sessionId) {
+    _state.enabled = true;
+    _state.path = filePath;
+    _state.sessionId =
+        sessionId !== undefined && sessionId !== null
+            ? sessionId
+            // Python: secrets.token_hex(6) → 12 hex chars.
+            : crypto.randomBytes(6).toString("hex");
+}
+/** Disable audit logging and clear state. */
+export function disableAudit() {
+    _state.enabled = false;
+    _state.path = null;
+    _state.sessionId = null;
+}
+/** Append a JSON record to the audit file. Never raises.
+ *
+ *  Uses `pythonJsonDumps` so the line-byte layout (separators ", " / ": ")
+ *  matches Python's `json.dumps(record)` exactly — important for any
+ *  downstream consumer that byte-compares Python and Node audit logs.
+ */
+function _writeRecord(record) {
+    if (!_state.enabled || _state.path === null)
+        return;
+    try {
+        // fs.appendFileSync creates the file if missing but NOT parent dirs,
+        // matching Python's `open(path, "a")` semantics.
+        fs.appendFileSync(_state.path, pythonJsonDumps(record) + "\n", "utf-8");
+    }
+    catch {
+        // best-effort, same as Python's `except OSError: pass`
+    }
+}
+/**
+ * Python-compatible ISO-8601 UTC timestamp with trailing "Z".
+ *
+ * Python's `datetime.datetime.utcnow().isoformat() + "Z"` produces a
+ * format like `"2026-04-12T10:55:50.123456"` (microseconds) + `"Z"`.
+ * JS's `Date().toISOString()` yields `"2026-04-12T10:55:50.123Z"`
+ * (millisecond precision). Both are valid ISO-8601 so downstream parsers
+ * accept them; the test only checks for the key's presence.
+ */
+function _isoTimestamp() {
+    // Strip trailing Z that toISOString includes, then re-append to match
+    // Python's explicit `+ "Z"` composition.
+    const iso = new Date().toISOString();
+    return iso.endsWith("Z") ? iso : iso + "Z";
+}
+/** Log a query execution event. */
+export function logQuery(params) {
+    const record = {
+        event_type: "query",
+        timestamp: _isoTimestamp(),
+        session_id: _state.sessionId,
+        env: params.env,
+        query: params.query.slice(0, 2000),
+        status: params.status,
+        row_count: params.row_count,
+        execution_time_ms: params.execution_time_ms,
+    };
+    if (params.error !== undefined && params.error !== null) {
+        record["error"] = params.error;
+    }
+    if (params.context !== undefined && params.context !== null) {
+        record["context"] = params.context;
+    }
+    _writeRecord(record);
+}
+/** Log a non-query event (e.g. connect, schema_inspect). */
+export function logEvent(params) {
+    const record = {
+        event_type: params.event_type,
+        timestamp: _isoTimestamp(),
+        session_id: _state.sessionId,
+    };
+    if (params.details !== undefined && params.details !== null) {
+        record["details"] = params.details;
+    }
+    _writeRecord(record);
+}
+/** Internal: state snapshot exposed only for tests. */
+export function _auditState() {
+    return {
+        enabled: _state.enabled,
+        path: _state.path,
+        sessionId: _state.sessionId,
+    };
+}

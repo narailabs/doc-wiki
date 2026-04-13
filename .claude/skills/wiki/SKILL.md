@@ -6,25 +6,28 @@ description: |
 
 # Wiki Skill — Documentation Wiki Generator & Maintainer
 
-You are an orchestrator for a multi-skill documentation ecosystem. Your job is to route `/wiki-*` commands to the right combination of Python scripts and sub-agents, compile wiki pages from multiple sources, and maintain the wiki's quality over time.
+You are an orchestrator for a multi-skill documentation ecosystem. Your job is to route `/wiki-*` commands to the right combination of TypeScript scripts and sub-agents, compile wiki pages from multiple sources, and maintain the wiki's quality over time.
 
 ## How this works
 
 1. The user invokes a `/wiki-*` command (or describes what they want in natural language)
 2. You read `wiki.config.yaml` to understand the wiki's configuration
-3. You call Python scripts (via Bash) for deterministic operations
+3. You call TypeScript scripts (compiled to JavaScript, invoked via `node`) for deterministic operations
 4. You dispatch sub-agents (via Agent tool) for platform-specific source fetching
 5. You use your own reasoning for compilation, cross-referencing, and quality decisions
 6. Post-operation hooks (crosslink + tag-harmonize) run automatically after write operations
 
 ## Scripts location
 
-All Python scripts are at: `{skill_path}/scripts/`
+All TypeScript scripts live at: `{skill_path}/scripts/` and are compiled to `.js` siblings via `npm run build`.
 
-Before first use, install dependencies:
+Before first use, install dependencies and build:
 ```bash
-pip install -r {skill_path}/scripts/requirements.txt
+npm install
+npm run build
 ```
+
+Requires Node 20.
 
 ## Commands
 
@@ -33,7 +36,7 @@ pip install -r {skill_path}/scripts/requirements.txt
 Create the directory scaffold and initial configuration.
 
 ```bash
-python {skill_path}/scripts/init_wiki.py --path <wiki-root> --domain "<domain>" --name "<wiki-name>"
+node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<wiki-name>"
 ```
 
 This creates: `wiki/`, `raw/`, `graph/`, `audit/`, `log/`, `outputs/`, `.wiki-cache/`, `.wiki-ignore`, and a default `wiki.config.yaml`.
@@ -45,7 +48,7 @@ After running the script, create initial files:
 
 ### /wiki-onboard — Interactive onboarding Q&A
 
-Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.py` for config I/O and dispatches `wiki-orm-agent` and `wiki-db-agent` for detection.
+Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.ts` for config I/O and dispatches `wiki-orm-agent` and `wiki-db-agent` for detection.
 
 **Phase 1 — Auto-detect language/framework:**
 
@@ -116,11 +119,11 @@ Default: `balanced`.
 1. Offer to install PreToolUse always-on hooks for the detected platform
 2. Generate/update `wiki.config.yaml` with all detected settings:
    ```bash
-   python {skill_path}/scripts/parse_config.py --config <wiki-root>/wiki.config.yaml
+   node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
    ```
 3. If wiki scaffold does not exist, run `/wiki-init` automatically:
    ```bash
-   python {skill_path}/scripts/init_wiki.py --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
+   node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
    ```
 
 **Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, and autonomy mode. Wiki scaffold created if it did not already exist.
@@ -129,10 +132,10 @@ Default: `balanced`.
 
 Ingest sources into the wiki. The source can be a file, URL, folder, or pasted text.
 
-1. **Parse config:** `python {skill_path}/scripts/parse_config.py --config <wiki-root>/wiki.config.yaml`
-2. **Check cache:** `python {skill_path}/scripts/cache_manager.py check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/`
-3. **Extract** (if binary): `python {skill_path}/scripts/extract_binary.py --input <file> --output <raw-dir>/extracted/`
-4. **Security check:** `python {skill_path}/scripts/security_check.py --url <url>` (for URL sources)
+1. **Parse config:** `node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml`
+2. **Check cache:** `node {skill_path}/scripts/cache_manager.js check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/`
+3. **Extract** (if binary): `node {skill_path}/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/`
+4. **Security check:** `node {skill_path}/scripts/security_check.js --url <url>` (for URL sources)
 5. **Read the source fully** — no skipping sections
 6. **Surface 3-5 takeaways + entity list** — your reasoning
 7. **Cross-reference active agents** — if the config has source agents enabled, dispatch them in parallel via Agent tool to gather additional context
@@ -140,7 +143,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 9. **Auto-generate Mermaid diagrams** — if the source data is diagram-worthy (ER, sequence, topology)
 10. **Generate "How to Go Deeper" section** — from source frontmatter, list agent commands for live verification
 11. **Update indexes + summaries.md**
-12. **Log:** `python {skill_path}/scripts/event_logger.py --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`
+12. **Log:** `node {skill_path}/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`
 13. **Run post-operation hooks** (crosslink + tag-harmonize) — see below
 
 ### /wiki-query — Summary-first search + synthesis
@@ -154,14 +157,14 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 7. Archive answer to `outputs/queries/`
 8. Offer to promote to wiki page via `/wiki-promote`
 
-Log token efficiency: `python {skill_path}/scripts/event_logger.py --op query --wiki-root <wiki-root> --details '{"tokens_in": N, "tokens_out": M, "reduction_ratio": R}'`
+Log token efficiency: `node {skill_path}/scripts/event_logger.js --op query --wiki-root <wiki-root> --details '{"tokens_in": N, "tokens_out": M, "reduction_ratio": R}'`
 
 ### /wiki-lint — Health check + auto-heal
 
 Run structural checks via script, then LLM-driven checks yourself:
 
 ```bash
-python {skill_path}/scripts/lint_checks.py --wiki-root <wiki-root>
+node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
 ```
 
 The script reports: broken links, missing frontmatter, orphan pages, isolated nodes, code-ref drift, provenance completeness. Then YOU do: factual contradictions, stale content, terminology consistency, missing coverage, query absorption.
@@ -187,7 +190,7 @@ Re-fetch previously-ingested sources, diff against stored versions, re-compile c
 ### /wiki-path — Shortest-path query between concepts
 
 ```bash
-python {skill_path}/scripts/graph_ops.py path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
+node {skill_path}/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
 ```
 
 Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--via`, `--all-paths`.
@@ -195,7 +198,7 @@ Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--
 ### /wiki-stats — Token efficiency and cost metrics
 
 ```bash
-python {skill_path}/scripts/event_logger.py stats --wiki-root <wiki-root> --since 7d
+node {skill_path}/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d
 ```
 
 Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown.
@@ -214,7 +217,7 @@ Skip hooks with `--no-crosslink` or `--no-tag-harmonize` flags.
 
 After lint, compute quality scores:
 ```bash
-python {skill_path}/scripts/quality_score.py --wiki-root <wiki-root>
+node {skill_path}/scripts/quality_score.js --wiki-root <wiki-root>
 ```
 
 Scores each page 0.0-1.0 based on word count, frontmatter completeness, link density, tags, source citations, god-node degree bonus (+0.1), isolation penalty (-0.2).
