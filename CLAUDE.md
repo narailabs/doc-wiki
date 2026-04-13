@@ -1,29 +1,30 @@
 # doc-wiki
 
-Documentation wiki generator and maintainer. Runs entirely inside Claude Code as skills + agents + Python helper scripts.
+Documentation wiki generator and maintainer. Runs entirely inside Claude Code as skills + agents + TypeScript helper scripts.
 
 ## Architecture
 
 - **Main skill:** `.claude/skills/wiki/SKILL.md` — orchestrates all `/wiki-*` commands
 - **No standalone CLI** — all LLM calls go through Claude Code's session
+- **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Python scripts (11) — `.claude/skills/wiki/scripts/`
+### TypeScript scripts (11) — `.claude/skills/wiki/scripts/`
 
 Deterministic operations: hashing, parsing, graph ops, lint, security.
 
 | Script | Purpose |
 |--------|---------|
-| `init_wiki.py` | Scaffold wiki directory structure and config |
-| `parse_config.py` | Read and validate `wiki.config.yaml` |
-| `event_logger.py` | Append structured events to `events.jsonl` |
-| `graph_ops.py` | Relationship graph queries (paths, clusters, orphans) |
-| `lint_checks.py` | Frontmatter and link validation |
-| `quality_score.py` | Per-page and aggregate quality scoring |
-| `cache_manager.py` | Content-hash cache for incremental processing |
-| `daily_summary.py` | Generate daily digest of wiki changes |
-| `extract_binary.py` | Extract text from binary files (PDF, DOCX, etc.) |
-| `mermaid_lint.py` | Validate Mermaid diagram syntax |
-| `security_check.py` | URL validation, path containment, input sanitization |
+| `init_wiki.ts` | Scaffold wiki directory structure and config |
+| `parse_config.ts` | Read and validate `wiki.config.yaml` |
+| `event_logger.ts` | Append structured events to `events.jsonl` |
+| `graph_ops.ts` | Relationship graph queries (paths, clusters, orphans) |
+| `lint_checks.ts` | Frontmatter and link validation |
+| `quality_score.ts` | Per-page and aggregate quality scoring |
+| `cache_manager.ts` | Content-hash cache for incremental processing |
+| `daily_summary.ts` | Generate daily digest of wiki changes |
+| `extract_binary.ts` | Extract text from binary files (PDF, DOCX, etc.) |
+| `mermaid_lint.ts` | Validate Mermaid diagram syntax |
+| `security_check.ts` | URL validation, path containment, input sanitization |
 
 ### Agents (10) — `.claude/agents/`
 
@@ -59,6 +60,8 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 | `wiki_db` | Database agent with guard-rail policy (ALLOW / DENY / ESCALATE / PRESENT_ONLY) |
 | `wiki_orm` | ORM mapper with 7 profiles: SQLAlchemy, Django, JPA, Prisma, TypeORM, ActiveRecord, Entity Framework |
 
+ORM profile definitions ship as YAML files under `.claude/agents/lib/wiki_orm/profiles/*.yaml` and are loaded by the TypeScript mapper at runtime.
+
 ### Reference docs (5) — `.claude/skills/wiki/references/`
 
 | Document | Topic |
@@ -84,20 +87,34 @@ The wiki skill is accessible from multiple AI coding tools via wrapper files:
 
 Full v2 design: `/Users/narayan/research/doc-wiki/ideal-wiki-skill-report-v2.md`
 Implementation plan: `/Users/narayan/.claude/plans/reactive-toasting-tulip.md`
+Python-to-TypeScript migration plan: `/Users/narayan/.claude/plans/synthetic-leaping-truffle.md`
+
+## Setup
+
+Requires Node 20. Install and build once:
+
+```bash
+npm install
+npm run build
+```
 
 ## Testing
 
+All tests use Vitest.
+
 | Suite | Command |
 |-------|---------|
-| Wiki scripts | `python -m pytest .claude/skills/wiki/scripts/tests/` |
-| Database agent | `python -m pytest .claude/agents/lib/wiki_db/tests/` |
-| ORM mapper | `python -m pytest .claude/agents/lib/wiki_orm/tests/` |
-| CLAUDE.md gen | `python -m pytest .claude/agents/wiki-claude-md-agent/scripts/tests/` |
-| Mermaid gen | `python -m pytest .claude/agents/wiki-mermaid-agent/scripts/tests/` |
-| **Full suite** | `python -m pytest .claude/skills/wiki/scripts/tests/ .claude/agents/lib/wiki_db/tests/ .claude/agents/lib/wiki_orm/tests/ .claude/agents/wiki-claude-md-agent/scripts/tests/ .claude/agents/wiki-mermaid-agent/scripts/tests/` |
+| Wiki scripts | `npx vitest run .claude/skills/wiki/scripts/tests/` |
+| Database agent | `npx vitest run .claude/agents/lib/wiki_db/tests/` |
+| ORM mapper | `npx vitest run .claude/agents/lib/wiki_orm/tests/` |
+| CLAUDE.md gen | `npx vitest run .claude/agents/wiki-claude-md-agent/scripts/tests/` |
+| Mermaid gen | `npx vitest run .claude/agents/wiki-mermaid-agent/scripts/tests/` |
+| **Full suite** | `npm test` (alias for `vitest run`) |
+| Typecheck | `npm run typecheck` |
+| Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **336 tests passed, 15 skipped**.
+Current status: **393 tests passed (Vitest)**.
 
 ## Key conventions
 
@@ -107,3 +124,4 @@ Current status: **336 tests passed, 15 skipped**.
 - Content-only concept tags (no structural/temporal/metadata tags)
 - Security Baseline: URL validation, path containment, size/timeout caps, label sanitization
 - Guard-rail policy for database agent: ALLOW / DENY / ESCALATE / PRESENT_ONLY
+- No Python in this repo. To verify: `find . -name '*.py' -not -path './node_modules/*' -not -path './wiki-workspace/*' -not -path './.worktrees/*/node_modules/*'` should return only the ORM extractor fixture source files under `.claude/agents/lib/wiki_orm/tests/fixtures/{sqlalchemy,django}/` (input data read as text by TypeScript tests).

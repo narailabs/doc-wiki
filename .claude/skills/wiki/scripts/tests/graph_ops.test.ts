@@ -29,36 +29,12 @@ import {
 } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "graph_ops.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "graph_ops.py");
 
 function runCli(
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & {
-      status?: number;
-      stdout?: Buffer | string;
-      stderr?: Buffer | string;
-    };
-    return {
-      stdout: typeof err.stdout === "string" ? err.stdout : (err.stdout?.toString("utf-8") ?? ""),
-      stderr: typeof err.stderr === "string" ? err.stderr : (err.stderr?.toString("utf-8") ?? ""),
-      status: err.status ?? 1,
-    };
-  }
-}
-
-function runPython(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync("python3", [PY_CLI, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -346,7 +322,7 @@ describe("TestShortestPathTieBreak", () => {
     cleanupTmpPath(tmpPath);
   });
 
-  it("tie_break_matches_python", () => {
+  it("tie_break_picks_insertion_order_first_edge", () => {
     const edgesFile = path.join(tmpPath, "edges.jsonl");
     const edges = [
       { from: "A", to: "X", type: "extends", provenance: "EXTRACTED",
@@ -363,7 +339,8 @@ describe("TestShortestPathTieBreak", () => {
       edges.map((e) => JSON.stringify(e)).join("\n") + "\n",
     );
 
-    // Python's networkx picks A->X->D (X inserted first).
+    // Reproduces the original networkx tie-break: picks A->X->D because X
+    // was inserted before Y. graphology's BFS must match that order.
     const p = shortestPath(edgesFile, "A", "D");
     expect(p).toHaveLength(2);
     const first = p[0];
@@ -373,16 +350,6 @@ describe("TestShortestPathTieBreak", () => {
     expect(second).toBeDefined();
     expect(second?.to).toBe("D");
 
-    // CLI parity: stdout diff-clean against Python.
-    const pyOut = runPython([
-      "path",
-      "--edges",
-      edgesFile,
-      "--from",
-      "A",
-      "--to",
-      "D",
-    ]);
     const nodeOut = runCli([
       "path",
       "--edges",
@@ -392,15 +359,17 @@ describe("TestShortestPathTieBreak", () => {
       "--to",
       "D",
     ]);
-    expect(pyOut.status).toBe(0);
     expect(nodeOut.status).toBe(0);
-    expect(nodeOut.stdout).toBe(pyOut.stdout);
+    const parsed = JSON.parse(nodeOut.stdout);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].to).toBe("X");
+    expect(parsed[1].to).toBe("D");
   });
 });
 
-// ── CLI parity ──────────────────────────────────────────────────────
+// ── CLI smoke tests ────────────────────────────────────────────────
 
-describe("TestGraphOpsCLIParity", () => {
+describe("TestGraphOpsCLI", () => {
   let tmpPath: string;
   let edgesFile: string;
 
@@ -413,32 +382,23 @@ describe("TestGraphOpsCLIParity", () => {
     cleanupTmpPath(tmpPath);
   });
 
-  it("cli_degrees_matches_python", () => {
-    const py = runPython(["degrees", "--edges", edgesFile]);
+  it("cli_degrees_emits_json_object", () => {
     const js = runCli(["degrees", "--edges", edgesFile]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(typeof data).toBe("object");
+    expect(Object.keys(data).length).toBeGreaterThan(0);
   });
 
-  it("cli_god_nodes_matches_python", () => {
-    const py = runPython(["god-nodes", "--edges", edgesFile, "--top", "3"]);
+  it("cli_god_nodes_emits_top_n_array", () => {
     const js = runCli(["god-nodes", "--edges", edgesFile, "--top", "3"]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeLessThanOrEqual(3);
   });
 
-  it("cli_path_matches_python", () => {
-    const py = runPython([
-      "path",
-      "--edges",
-      edgesFile,
-      "--from",
-      "A",
-      "--to",
-      "D",
-    ]);
+  it("cli_path_emits_edge_list", () => {
     const js = runCli([
       "path",
       "--edges",
@@ -448,22 +408,14 @@ describe("TestGraphOpsCLIParity", () => {
       "--to",
       "D",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeGreaterThan(0);
   });
 
-  it("cli_path_no_result_matches_python", () => {
+  it("cli_path_no_result_returns_empty_array", () => {
     // F has no outgoing edges to A
-    const py = runPython([
-      "path",
-      "--edges",
-      edgesFile,
-      "--from",
-      "F",
-      "--to",
-      "A",
-    ]);
     const js = runCli([
       "path",
       "--edges",
@@ -473,23 +425,13 @@ describe("TestGraphOpsCLIParity", () => {
       "--to",
       "A",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(Array.isArray(data)).toBe(true);
+    expect(data).toHaveLength(0);
   });
 
-  it("cli_path_with_via_matches_python", () => {
-    const py = runPython([
-      "path",
-      "--edges",
-      edgesFile,
-      "--from",
-      "A",
-      "--to",
-      "D",
-      "--via",
-      "B",
-    ]);
+  it("cli_path_with_via_routes_through_waypoint", () => {
     const js = runCli([
       "path",
       "--edges",
@@ -501,9 +443,12 @@ describe("TestGraphOpsCLIParity", () => {
       "--via",
       "B",
     ]);
-    expect(py.status).toBe(0);
     expect(js.status).toBe(0);
-    expect(js.stdout).toBe(py.stdout);
+    const data = JSON.parse(js.stdout);
+    expect(Array.isArray(data)).toBe(true);
+    // Routing through B must mean B appears as a node in the path.
+    const nodes = new Set<string>(data.flatMap((e: { from: string; to: string }) => [e.from, e.to]));
+    expect(nodes.has("B")).toBe(true);
   });
 
   it("cli_add_writes_edge", () => {

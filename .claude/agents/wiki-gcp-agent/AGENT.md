@@ -9,7 +9,7 @@ type: source
 autonomy_level: supervised
 model: sonnet
 tools: [Bash, Read]
-scripts: [scripts/gcp_query.py]
+scripts: [scripts/gcp_query.ts]
 color: purple
 ---
 

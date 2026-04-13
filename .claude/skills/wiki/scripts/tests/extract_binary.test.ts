@@ -1,18 +1,10 @@
 /**
- * Tests for extract_binary.ts — ported from test_extract_binary.py.
- *
- * Every pytest `def test_*` is preserved as a Vitest `it()`. CLI-parity
- * tests shell out to the compiled extract_binary.js and confirm the
- * normalized stdout matches the Python reference for the same fixture.
- *
- * Generating PDF/DOCX/PPTX fixtures in pure JS is impractical: the upstream
- * `pdf-lib` / `docx` / `pptxgen` packages would balloon dev-deps for one
- * test file. We instead shell out to a small Python helper (the same libs
- * the source files use under the hood) — gated on availability so the
- * tests skip cleanly if Python or the optional libs aren't installed.
- *
- * The optional-dep tests for the Node side use Vitest's module mocking to
- * simulate `ERR_MODULE_NOT_FOUND` and assert the friendly error message.
+ * Tests for extract_binary.ts — originally ported from
+ * test_extract_binary.py. Post Phase 9 the Python-reference parity
+ * assertions are gone; the fixture-seeding subprocesses remain because
+ * generating PDF/DOCX/PPTX fixtures in pure JS would balloon dev-deps.
+ * Those subprocess helpers are gated on optional Python libraries via
+ * `skipIf`, so tests skip cleanly when Python or the libs are absent.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -23,7 +15,6 @@ import { extract, normalizeExtracted } from "../extract_binary.js";
 import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "extract_binary.js");
-const PY_CLI = path.join(SCRIPTS_DIR, "extract_binary.py");
 
 // ── Fixture generation ─────────────────────────────────────────────
 
@@ -275,9 +266,8 @@ function runCli(
   bin: string,
   args: readonly string[],
 ): { stdout: string; stderr: string; status: number } {
-  const interpreter = bin.endsWith(".py") ? "python3" : "node";
   try {
-    const stdout = execFileSync(interpreter, [bin, ...args], {
+    const stdout = execFileSync("node", [bin, ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -315,44 +305,6 @@ describe.skipIf(!HAS_FITZ)("TestExtractBinaryCLI", () => {
     const r = runCli(CLI, [p, "--format", "pdf"]);
     expect(r.status).toBe(0);
     expect(r.stdout.length).toBeGreaterThan(0);
-  });
-});
-
-// ── CLI parity (Node ↔ Python) ─────────────────────────────────────
-
-/** Apply normalizeExtracted on both sides so trailing-whitespace
- *  differences (Python's `print()` adds `\n`; ours doesn't add an extra
- *  one for empty bodies) don't masquerade as content drift. */
-function normalizeForParity(s: string): string {
-  return normalizeExtracted(s);
-}
-
-describe("ExtractBinaryParity", () => {
-  it.skipIf(!HAS_FITZ)("cli_pdf_matches_python", () => {
-    const p = makeSamplePdf(TMP);
-    const py = runCli(PY_CLI, [p]);
-    const ts = runCli(CLI, [p]);
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-    expect(normalizeForParity(ts.stdout)).toBe(normalizeForParity(py.stdout));
-  });
-
-  it.skipIf(!HAS_DOCX)("cli_docx_matches_python", () => {
-    const p = makeSampleDocx(TMP);
-    const py = runCli(PY_CLI, [p]);
-    const ts = runCli(CLI, [p]);
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-    expect(normalizeForParity(ts.stdout)).toBe(normalizeForParity(py.stdout));
-  });
-
-  it.skipIf(!HAS_PPTX)("cli_pptx_matches_python", () => {
-    const p = makeSamplePptx(TMP);
-    const py = runCli(PY_CLI, [p]);
-    const ts = runCli(CLI, [p]);
-    expect(py.status).toBe(0);
-    expect(ts.status).toBe(0);
-    expect(normalizeForParity(ts.stdout)).toBe(normalizeForParity(py.stdout));
   });
 });
 
