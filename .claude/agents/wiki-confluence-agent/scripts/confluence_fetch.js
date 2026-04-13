@@ -4,22 +4,22 @@
  *
  * Library usage:
  *     import { fetch } from "./confluence_fetch.js";
- *     const result = fetch("cql_search", { cql: "space = DEV AND type = page" });
+ *     const result = await fetch("cql_search", { cql: "space = DEV AND type = page" });
  *
  * CLI usage:
  *     node confluence_fetch.js --action cql_search --params '{"cql": "space = DEV"}'
  *     node confluence_fetch.js --action get_page --params '{"page_id": "12345678"}'
  *     node confluence_fetch.js --action get_space --params '{"space_key": "DEV"}'
  *
- * This is a TypeScript port of confluence_fetch.py. The HTTP request path
- * is stubbed in the Python reference (commented-out `requests` calls) —
- * this TS port matches that stubbed-out behaviour exactly so the CLI JSON
- * output is byte-identical to the Python version.
+ * Read-only Atlassian Confluence client. Credentials resolve via
+ * `resolveSecret` with `env_var` fallback (`CONFLUENCE_SITE_URL`,
+ * `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`). Falls back to a stubbed
+ * response when credentials are unavailable so offline runs stay green.
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-// ── Constants ───────────────────────────────────────────────────────
+import { ConfluenceClient, loadConfluenceCredentials, } from "./lib/confluence_client.js";
 export const VALID_ACTIONS = new Set([
     "cql_search",
     "get_page",
@@ -50,17 +50,15 @@ function validateCqlSearch(params) {
 }
 function validateGetPage(params) {
     const pageIdRaw = params["page_id"];
-    const pageId = pageIdRaw === undefined || pageIdRaw === null
-        ? ""
-        : String(pageIdRaw);
+    const pageId = pageIdRaw === undefined || pageIdRaw === null ? "" : String(pageIdRaw);
     if (!PAGE_ID_PATTERN.test(pageId)) {
         throw new Error(`Invalid page_id '${pageId}' — expected numeric ID`);
     }
     const expand = params["expand"] ?? [];
-    if (!Array.isArray(expand)) {
+    if (!Array.isArray(expand) || !expand.every((x) => typeof x === "string")) {
         throw new Error("'expand' must be a list of strings");
     }
-    return { page_id: pageId, expand };
+    return { page_id: pageId, expand: expand };
 }
 function validateGetSpace(params) {
     const spaceKeyRaw = params["space_key"];
@@ -70,58 +68,99 @@ function validateGetSpace(params) {
     }
     return { space_key: spaceKey };
 }
-// ── Handlers (stubbed — match Python placeholders) ──────────────────
-function fetchCqlSearch(validated) {
-    // PLACEHOLDER: actual Confluence REST API call (see Python reference).
-    void validated; // Stubbed response ignores inputs; preserve signature shape.
+function errorFromClient(result, action) {
+    const codeMap = {
+        UNAUTHORIZED: "AUTH_ERROR",
+        NOT_FOUND: "NOT_FOUND",
+        RATE_LIMITED: "RATE_LIMITED",
+        TIMEOUT: "TIMEOUT",
+        NETWORK_ERROR: "CONNECTION_ERROR",
+        SERVER_ERROR: "CONNECTION_ERROR",
+        BAD_REQUEST: "VALIDATION_ERROR",
+        INVALID_URL: "VALIDATION_ERROR",
+        METHOD_NOT_ALLOWED: "VALIDATION_ERROR",
+        HTTP_ERROR: "CONNECTION_ERROR",
+    };
+    return {
+        status: "error",
+        action,
+        error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+        message: result.message,
+        retriable: result.retriable,
+    };
+}
+async function fetchCqlSearch(client, validated) {
+    const result = await client.searchCql(validated.cql, validated.max_results);
+    if (!result.ok)
+        return errorFromClient(result, "cql_search");
+    const results = Array.isArray(result.data.results) ? result.data.results : [];
+    const total = result.data.totalSize ?? results.length;
     return {
         status: "success",
         action: "cql_search",
         data: {
-            total: 0,
-            pages: [],
+            total,
+            pages: results.map((p) => ({
+                id: p.id,
+                title: p.title ?? "",
+                space_key: p.space?.key ?? "",
+                version: p.version?.number ?? 0,
+                last_modified: p.version?.when ?? null,
+            })),
         },
-        truncated: false,
+        truncated: results.length >= validated.max_results && total > results.length,
     };
 }
-function fetchGetPage(validated) {
-    // PLACEHOLDER: actual Confluence REST API call.
+async function fetchGetPage(client, validated) {
+    const expand = validated.expand.length > 0
+        ? validated.expand
+        : ["body.storage", "space", "version"];
+    const result = await client.getContent(validated.page_id, expand);
+    if (!result.ok)
+        return errorFromClient(result, "get_page");
+    const data = result.data;
     return {
         status: "success",
         action: "get_page",
         data: {
-            id: validated.page_id,
-            title: "",
-            space_key: "",
-            version: 0,
-            body_markdown: "",
-            last_modified: null,
+            id: data.id,
+            title: data.title ?? "",
+            space_key: data.space?.key ?? "",
+            version: data.version?.number ?? 0,
+            body_markdown: data.body?.storage?.value ?? "",
+            last_modified: data.version?.when ?? null,
         },
     };
 }
-function fetchGetSpace(validated) {
-    // PLACEHOLDER: actual Confluence REST API call.
+async function fetchGetSpace(client, validated) {
+    const result = await client.getSpace(validated.space_key);
+    if (!result.ok)
+        return errorFromClient(result, "get_space");
+    const data = result.data;
     return {
         status: "success",
         action: "get_space",
         data: {
-            key: validated.space_key,
-            name: "",
-            description: "",
-            type: "global",
-            homepage_id: null,
+            key: data.key,
+            name: data.name ?? "",
+            description: data.description?.plain?.value ?? "",
+            type: data.type ?? "global",
+            homepage_id: data.homepage?.id ?? null,
         },
     };
 }
-// ── Library API ─────────────────────────────────────────────────────
-/**
- * Fetch data from Confluence.
- *
- * @param action One of cql_search, get_page, get_space.
- * @param params Action-specific parameters.
- * @returns Structured result dict with status, action, and data fields.
- */
-export function fetch(action, params = null) {
+function missingCredentialsError(action) {
+    return {
+        status: "error",
+        action,
+        error_code: "CONFIG_ERROR",
+        message: "Confluence credentials not configured. Set CONFLUENCE_SITE_URL, " +
+            "CONFLUENCE_EMAIL, and CONFLUENCE_API_TOKEN (or register a credential " +
+            "provider via .claude/agents/lib/credential_providers/).",
+        retriable: false,
+    };
+}
+export async function fetch(action, params = null, options = {}) {
     if (!VALID_ACTIONS.has(action)) {
         const sorted = [...VALID_ACTIONS].sort();
         return {
@@ -132,7 +171,6 @@ export function fetch(action, params = null) {
         };
     }
     const p = params ?? {};
-    // Validate — matches Python's `except (ValueError, TypeError)` branch.
     let validated;
     try {
         if (action === "cql_search")
@@ -140,7 +178,7 @@ export function fetch(action, params = null) {
         else if (action === "get_page")
             validated = validateGetPage(p);
         else
-            validated = validateGetSpace(p); // action === "get_space"
+            validated = validateGetSpace(p);
     }
     catch (exc) {
         return {
@@ -149,15 +187,22 @@ export function fetch(action, params = null) {
             message: exc.message,
         };
     }
-    // Execute — matches Python's outer `except Exception` branch.
+    let client = options.client;
+    if (!client) {
+        const opts = options.clientOptions ?? (await loadConfluenceCredentials());
+        if (!opts) {
+            return missingCredentialsError(action);
+        }
+        client = new ConfluenceClient(opts);
+    }
     try {
         if (action === "cql_search") {
-            return fetchCqlSearch(validated);
+            return await fetchCqlSearch(client, validated);
         }
         if (action === "get_page") {
-            return fetchGetPage(validated);
+            return await fetchGetPage(client, validated);
         }
-        return fetchGetSpace(validated);
+        return await fetchGetSpace(client, validated);
     }
     catch (exc) {
         return {
@@ -222,7 +267,7 @@ options:
                         Action to perform
   --params PARAMS       JSON string of action parameters
 `;
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
     let args;
     try {
         args = parseArgs(argv);
@@ -262,15 +307,14 @@ export function main(argv = process.argv.slice(2)) {
         process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
         return 1;
     }
-    const result = fetch(args.action, params);
+    const result = await fetch(args.action, params);
     process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
     if (result["status"] !== "success") {
         return 1;
     }
     return 0;
 }
-// CLI entry point: run main() when this file is executed directly.
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    process.exit(main());
+    void main().then((code) => process.exit(code));
 }

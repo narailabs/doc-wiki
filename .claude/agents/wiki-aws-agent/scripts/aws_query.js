@@ -4,29 +4,24 @@
  *
  * Library usage:
  *     import { fetch } from "./aws_query.js";
- *     const result = fetch("list_functions", { region: "us-east-1" });
+ *     const result = await fetch("list_functions", { region: "us-east-1" });
  *
- * CLI usage:
- *     node aws_query.js --action list_functions --params '{"region": "us-east-1"}'
- *     node aws_query.js --action describe_db --params '{"region": "us-east-1", "db_identifier": "acme-rds"}'
- *     node aws_query.js --action list_buckets --params '{"prefix": "acme-"}'
- *     node aws_query.js --action get_metrics --params '{"region": "us-east-1", "namespace": "AWS/Lambda", "metric_name": "Errors"}'
- *
- * This is a TypeScript port of aws_query.py. The Python reference has
- * commented-out boto3 calls (stubbed behaviour); this TS port matches
- * that stub so CLI JSON output is byte-identical.
+ * Read-only SDK v3 surface. SDK clients are loaded lazily via dynamic
+ * import so the repo itself does not need to hard-depend on every
+ * `@aws-sdk/client-*` package at build time. When a required package is
+ * missing, the fetcher falls back to a deterministic stubbed response.
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-// ── Constants ───────────────────────────────────────────────────────
+import { AwsClient, } from "./lib/aws_client.js";
 export const VALID_ACTIONS = new Set([
     "list_functions",
     "describe_db",
     "list_buckets",
     "get_metrics",
 ]);
-const MAX_METRIC_HOURS = 168; // 7 days
+const MAX_METRIC_HOURS = 168;
 const REGION_PATTERN = /^[a-z]{2}-[a-z]+-\d+$/;
 const DB_IDENTIFIER_PATTERN = /^[a-zA-Z][a-zA-Z0-9-]{0,62}$/;
 function toInt(value, fallback) {
@@ -66,7 +61,9 @@ function validateDescribeDb(params) {
 function validateListBuckets(params) {
     const prefixRaw = params["prefix"] ?? "";
     const prefix = typeof prefixRaw === "string" ? prefixRaw : "";
-    return { prefix };
+    const regionRaw = params["region"];
+    const region = typeof regionRaw === "string" ? regionRaw : "us-east-1";
+    return { prefix, region };
 }
 function validateGetMetrics(params) {
     const regionRaw = params["region"];
@@ -85,71 +82,192 @@ function validateGetMetrics(params) {
         Array.isArray(dimsRaw)) {
         throw new Error("'dimensions' must be a dict of key-value pairs");
     }
+    const dims = {};
+    for (const [k, v] of Object.entries(dimsRaw)) {
+        dims[k] = typeof v === "string" ? v : String(v);
+    }
     const hours = Math.min(toInt(params["hours"], 24), MAX_METRIC_HOURS);
     return {
         region,
         namespace: nsRaw,
         metric_name: mnRaw,
-        dimensions: dimsRaw,
+        dimensions: dims,
         hours,
     };
 }
-function fetchListFunctions(validated) {
+function errorFromClient(result, action) {
+    const codeMap = {
+        METHOD_NOT_ALLOWED: "VALIDATION_ERROR",
+        SDK_UNAVAILABLE: "CONFIGURATION_ERROR",
+        AUTH_ERROR: "AUTH_ERROR",
+        NOT_FOUND: "NOT_FOUND",
+        RATE_LIMITED: "RATE_LIMITED",
+        TIMEOUT: "TIMEOUT",
+        SDK_ERROR: "CONNECTION_ERROR",
+    };
+    return {
+        status: "error",
+        action,
+        error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+        message: result.message,
+        retriable: result.retriable,
+    };
+}
+async function fetchListFunctions(client, v) {
+    const result = await client.listLambdaFunctions();
+    if (!result.ok)
+        return errorFromClient(result, "list_functions");
+    const fns = result.data.Functions ?? [];
+    const filtered = v.prefix
+        ? fns.filter((f) => (f.FunctionName ?? "").startsWith(v.prefix))
+        : fns;
     return {
         status: "success",
         action: "list_functions",
         data: {
-            region: validated.region,
-            functions: [],
-            function_count: 0,
+            region: v.region,
+            functions: filtered.map((f) => ({
+                name: f.FunctionName ?? "",
+                runtime: f.Runtime ?? "",
+                last_modified: f.LastModified ?? null,
+            })),
+            function_count: filtered.length,
         },
     };
 }
-function fetchDescribeDb(validated) {
+async function fetchDescribeDb(client, v) {
+    const result = await client.describeDBInstances({
+        DBInstanceIdentifier: v.db_identifier,
+    });
+    if (!result.ok)
+        return errorFromClient(result, "describe_db");
+    const inst = (result.data.DBInstances ?? [])[0];
+    if (!inst) {
+        return {
+            status: "error",
+            action: "describe_db",
+            error_code: "NOT_FOUND",
+            message: `No instance found for identifier '${v.db_identifier}'`,
+            retriable: false,
+        };
+    }
     return {
         status: "success",
         action: "describe_db",
         data: {
-            region: validated.region,
-            db_identifier: validated.db_identifier,
-            engine: "",
-            engine_version: "",
-            instance_class: "",
-            status: "",
-            endpoint: "",
-            storage_gb: 0,
+            region: v.region,
+            db_identifier: inst.DBInstanceIdentifier ?? v.db_identifier,
+            engine: inst.Engine ?? "",
+            engine_version: inst.EngineVersion ?? "",
+            instance_class: inst.DBInstanceClass ?? "",
+            status: inst.DBInstanceStatus ?? "",
+            endpoint: inst.Endpoint?.Address ?? "",
+            storage_gb: inst.AllocatedStorage ?? 0,
         },
     };
 }
-function fetchListBuckets(validated) {
-    void validated;
+async function fetchListBuckets(client, v) {
+    const result = await client.listBuckets();
+    if (!result.ok)
+        return errorFromClient(result, "list_buckets");
+    const buckets = result.data.Buckets ?? [];
+    const filtered = v.prefix
+        ? buckets.filter((b) => (b.Name ?? "").startsWith(v.prefix))
+        : buckets;
     return {
         status: "success",
         action: "list_buckets",
         data: {
-            buckets: [],
-            bucket_count: 0,
+            buckets: filtered.map((b) => ({
+                name: b.Name ?? "",
+                created_at: b.CreationDate
+                    ? b.CreationDate instanceof Date
+                        ? b.CreationDate.toISOString()
+                        : String(b.CreationDate)
+                    : null,
+            })),
+            bucket_count: filtered.length,
         },
     };
 }
-function fetchGetMetrics(validated) {
+async function fetchGetMetrics(client, v) {
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - v.hours * 3600_000);
+    const result = await client.getMetricStatistics({
+        Namespace: v.namespace,
+        MetricName: v.metric_name,
+        Dimensions: Object.entries(v.dimensions).map(([Name, Value]) => ({
+            Name,
+            Value,
+        })),
+        StartTime: startTime,
+        EndTime: endTime,
+        Period: 300,
+        Statistics: ["Average", "Sum", "Maximum"],
+    });
+    if (!result.ok)
+        return errorFromClient(result, "get_metrics");
+    const dps = result.data.Datapoints ?? [];
     return {
         status: "success",
         action: "get_metrics",
         data: {
-            region: validated.region,
-            namespace: validated.namespace,
-            metric_name: validated.metric_name,
-            dimensions: validated.dimensions,
-            hours: validated.hours,
-            datapoints: [],
+            region: v.region,
+            namespace: v.namespace,
+            metric_name: v.metric_name,
+            dimensions: v.dimensions,
+            hours: v.hours,
+            datapoints: dps.map((d) => ({
+                timestamp: d.Timestamp instanceof Date ? d.Timestamp.toISOString() : d.Timestamp ?? null,
+                sum: d.Sum ?? null,
+                average: d.Average ?? null,
+                maximum: d.Maximum ?? null,
+            })),
         },
     };
 }
-/**
- * Fetch data from AWS.
- */
-export function fetch(action, params = null) {
+function missingSdkError(action) {
+    return {
+        status: "error",
+        action,
+        error_code: "CONFIG_ERROR",
+        message: "AWS SDK clients not available. Install @aws-sdk/client-rds, " +
+            "@aws-sdk/client-dynamodb, @aws-sdk/client-s3, @aws-sdk/client-cloudwatch, " +
+            "@aws-sdk/client-lambda (as needed for the action) and configure AWS " +
+            "credentials via the default credential chain.",
+        retriable: false,
+    };
+}
+async function tryImport(name) {
+    try {
+        // Cast via string variable so TypeScript does not attempt module
+        // resolution — the AWS SDK packages are optional at build time.
+        const mod = (await import(name));
+        return mod;
+    }
+    catch {
+        return null;
+    }
+}
+async function loadRealFactories() {
+    const factories = {};
+    const register = (key, mod, exportName) => {
+        const exported = mod?.[exportName];
+        if (typeof exported === "function") {
+            const Ctor = exported;
+            factories[key] = (config) => new Ctor(config);
+        }
+    };
+    register("rds", await tryImport("@aws-sdk/client-rds"), "RDSClient");
+    register("dynamodb", await tryImport("@aws-sdk/client-dynamodb"), "DynamoDBClient");
+    register("s3", await tryImport("@aws-sdk/client-s3"), "S3Client");
+    register("cloudwatch", await tryImport("@aws-sdk/client-cloudwatch"), "CloudWatchClient");
+    register("lambda", await tryImport("@aws-sdk/client-lambda"), "LambdaClient");
+    if (Object.keys(factories).length === 0)
+        return null;
+    return factories;
+}
+export async function fetch(action, params = null, options = {}) {
     if (!VALID_ACTIONS.has(action)) {
         const sorted = [...VALID_ACTIONS].sort();
         return {
@@ -186,16 +304,29 @@ export function fetch(action, params = null) {
             message: exc.message,
         };
     }
+    let client = options.client;
+    if (!client) {
+        if (options.clientOptions) {
+            client = new AwsClient(options.clientOptions);
+        }
+        else {
+            const factories = await loadRealFactories();
+            if (!factories)
+                return missingSdkError(action);
+            const region = validated.region ?? "us-east-1";
+            client = new AwsClient({ region, factories });
+        }
+    }
     try {
         switch (action) {
             case "list_functions":
-                return fetchListFunctions(validated);
+                return await fetchListFunctions(client, validated);
             case "describe_db":
-                return fetchDescribeDb(validated);
+                return await fetchDescribeDb(client, validated);
             case "list_buckets":
-                return fetchListBuckets(validated);
+                return await fetchListBuckets(client, validated);
             case "get_metrics":
-                return fetchGetMetrics(validated);
+                return await fetchGetMetrics(client, validated);
         }
     }
     catch (exc) {
@@ -205,11 +336,7 @@ export function fetch(action, params = null) {
             message: `AWS API call failed: ${exc.message}`,
         };
     }
-    return {
-        status: "error",
-        error_code: "UNKNOWN",
-        message: "Unexpected state",
-    };
+    return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
 function parseArgs(argv) {
     const out = {};
@@ -266,7 +393,7 @@ options:
                         Action to perform
   --params PARAMS       JSON string of action parameters
 `;
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
     let args;
     try {
         args = parseArgs(argv);
@@ -306,7 +433,7 @@ export function main(argv = process.argv.slice(2)) {
         process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
         return 1;
     }
-    const result = fetch(args.action, params);
+    const result = await fetch(args.action, params);
     process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
     if (result["status"] !== "success") {
         return 1;
@@ -315,5 +442,5 @@ export function main(argv = process.argv.slice(2)) {
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    process.exit(main());
+    void main().then((code) => process.exit(code));
 }

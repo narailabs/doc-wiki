@@ -4,23 +4,21 @@
  *
  * Library usage:
  *     import { fetch } from "./gcp_query.js";
- *     const result = fetch("list_services", { project_id: "acme-prod-123" });
+ *     const result = await fetch("list_services", { project_id: "acme-prod-123" });
  *
- * CLI usage:
- *     node gcp_query.js --action list_services --params '{"project_id": "acme-prod-123"}'
- *     node gcp_query.js --action describe_db --params '{"project_id": "acme-prod-123", "instance_id": "main-pg"}'
- *     node gcp_query.js --action list_topics --params '{"project_id": "acme-prod-123"}'
- *     node gcp_query.js --action query_logs --params '{"project_id": "acme-prod-123", "filter": "severity>=ERROR"}'
- *
- * This is a TypeScript port of gcp_query.py. The Python reference has
- * commented-out google-cloud-* calls (stubbed); this TS port matches that
- * stub so CLI JSON output is byte-identical.
+ * Uses Application Default Credentials by shelling out to `gcloud` / `bq`
+ * via `execFileSync`. When those binaries are unavailable, the fetcher
+ * falls back to a deterministic stubbed response.
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-
-// ── Constants ───────────────────────────────────────────────────────
+import {
+  GcpClient,
+  detectGcloudAvailable,
+  type GcpClientOptions,
+  type GcpResult,
+} from "./lib/gcp_client.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "list_services",
@@ -31,7 +29,7 @@ export const VALID_ACTIONS: ReadonlySet<string> = new Set([
 
 const MAX_RESULTS_DEFAULT = 100;
 const MAX_RESULTS_CAP = 1000;
-const MAX_LOG_HOURS = 168; // 7 days
+const MAX_LOG_HOURS = 168;
 
 const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 
@@ -61,17 +59,14 @@ function validateProjectId(projectId: string): string {
 interface ListServicesValidated {
   project_id: string;
 }
-
 interface DescribeDbValidated {
   project_id: string;
   instance_id: string;
   database: string;
 }
-
 interface ListTopicsValidated {
   project_id: string;
 }
-
 interface QueryLogsValidated {
   project_id: string;
   filter: string;
@@ -81,8 +76,7 @@ interface QueryLogsValidated {
 
 function validateListServices(params: Params): ListServicesValidated {
   const raw = params["project_id"];
-  const projectId = validateProjectId(typeof raw === "string" ? raw : "");
-  return { project_id: projectId };
+  return { project_id: validateProjectId(typeof raw === "string" ? raw : "") };
 }
 
 function validateDescribeDb(params: Params): DescribeDbValidated {
@@ -99,8 +93,7 @@ function validateDescribeDb(params: Params): DescribeDbValidated {
 
 function validateListTopics(params: Params): ListTopicsValidated {
   const raw = params["project_id"];
-  const projectId = validateProjectId(typeof raw === "string" ? raw : "");
-  return { project_id: projectId };
+  return { project_id: validateProjectId(typeof raw === "string" ? raw : "") };
 }
 
 function validateQueryLogs(params: Params): QueryLogsValidated {
@@ -132,70 +125,146 @@ function validateQueryLogs(params: Params): QueryLogsValidated {
   };
 }
 
-function fetchListServices(validated: ListServicesValidated): FetchResult {
+function errorFromClient<T>(
+  result: Extract<GcpResult<T>, { ok: false }>,
+  action: string,
+): FetchResult {
+  const codeMap: Record<string, string> = {
+    INVALID_PROJECT: "VALIDATION_ERROR",
+    INVALID_INSTANCE: "VALIDATION_ERROR",
+    INVALID_FILTER: "VALIDATION_ERROR",
+    FORBIDDEN_BINARY: "VALIDATION_ERROR",
+    FORBIDDEN_COMMAND: "VALIDATION_ERROR",
+    UNSAFE_ARG: "VALIDATION_ERROR",
+    WRITE_FORBIDDEN: "VALIDATION_ERROR",
+    EXEC_ERROR: "CONNECTION_ERROR",
+    TIMEOUT: "TIMEOUT",
+    PARSE_ERROR: "CONNECTION_ERROR",
+  };
+  return {
+    status: "error",
+    action,
+    error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+    message: result.message,
+    retriable: result.retriable,
+  };
+}
+
+async function fetchListServices(
+  client: GcpClient,
+  v: ListServicesValidated,
+): Promise<FetchResult> {
+  const result = await client.listServices(v.project_id);
+  if (!result.ok) return errorFromClient(result, "list_services");
   return {
     status: "success",
     action: "list_services",
     data: {
-      project_id: validated.project_id,
-      services: [],
-      service_count: 0,
+      project_id: v.project_id,
+      services: result.data.map((s) => ({
+        name: s.name ?? "",
+        title: s.config?.title ?? "",
+        state: s.state ?? "",
+      })),
+      service_count: result.data.length,
     },
   };
 }
 
-function fetchDescribeDb(validated: DescribeDbValidated): FetchResult {
+async function fetchDescribeDb(
+  client: GcpClient,
+  v: DescribeDbValidated,
+): Promise<FetchResult> {
+  const result = await client.describeSqlInstance(v.project_id, v.instance_id);
+  if (!result.ok) return errorFromClient(result, "describe_db");
+  const inst = result.data;
+  const [engine, version] = (inst.databaseVersion ?? "").split("_");
   return {
     status: "success",
     action: "describe_db",
     data: {
-      project_id: validated.project_id,
-      instance_id: validated.instance_id,
-      database: validated.database,
-      engine: "",
-      version: "",
-      tier: "",
-      region: "",
-      state: "",
+      project_id: v.project_id,
+      instance_id: v.instance_id,
+      database: v.database,
+      engine: (engine ?? "").toLowerCase(),
+      version: version ?? "",
+      tier: inst.settings?.tier ?? "",
+      region: inst.region ?? "",
+      state: inst.state ?? "",
       tables: [],
     },
   };
 }
 
-function fetchListTopics(validated: ListTopicsValidated): FetchResult {
+async function fetchListTopics(
+  client: GcpClient,
+  v: ListTopicsValidated,
+): Promise<FetchResult> {
+  const result = await client.listPubsubTopics(v.project_id);
+  if (!result.ok) return errorFromClient(result, "list_topics");
   return {
     status: "success",
     action: "list_topics",
     data: {
-      project_id: validated.project_id,
-      topics: [],
-      topic_count: 0,
+      project_id: v.project_id,
+      topics: result.data.map((t) => t.name ?? ""),
+      topic_count: result.data.length,
     },
   };
 }
 
-function fetchQueryLogs(validated: QueryLogsValidated): FetchResult {
+async function fetchQueryLogs(
+  client: GcpClient,
+  v: QueryLogsValidated,
+): Promise<FetchResult> {
+  const result = await client.queryLogs(
+    v.project_id,
+    v.filter,
+    v.hours,
+    v.max_results,
+  );
+  if (!result.ok) return errorFromClient(result, "query_logs");
   return {
     status: "success",
     action: "query_logs",
     data: {
-      project_id: validated.project_id,
-      filter: validated.filter,
-      hours: validated.hours,
-      entries: [],
-      entry_count: 0,
+      project_id: v.project_id,
+      filter: v.filter,
+      hours: v.hours,
+      entries: result.data.map((e) => ({
+        timestamp: e.timestamp ?? null,
+        severity: e.severity ?? "",
+        message: e.textPayload ?? "",
+      })),
+      entry_count: result.data.length,
     },
-    truncated: false,
+    truncated: result.data.length >= v.max_results,
   };
 }
 
-/**
- * Fetch data from GCP.
- */
-export function fetch(
+function missingGcloudError(action: string): FetchResult {
+  return {
+    status: "error",
+    action,
+    error_code: "CONFIG_ERROR",
+    message:
+      "gcloud CLI not available on PATH. Install Google Cloud SDK and " +
+      "authenticate with Application Default Credentials (gcloud auth " +
+      "application-default login).",
+    retriable: false,
+  };
+}
+
+export interface FetchOptions {
+  client?: GcpClient;
+  clientOptions?: GcpClientOptions;
+}
+
+export async function fetch(
   action: string,
   params: Params | null = null,
-): FetchResult {
+  options: FetchOptions = {},
+): Promise<FetchResult> {
   if (!VALID_ACTIONS.has(action)) {
     const sorted = [...VALID_ACTIONS].sort();
     return {
@@ -208,7 +277,6 @@ export function fetch(
   }
 
   const p: Params = params ?? {};
-
   let validated:
     | ListServicesValidated
     | DescribeDbValidated
@@ -239,16 +307,27 @@ export function fetch(
     };
   }
 
+  let client = options.client;
+  if (!client) {
+    if (options.clientOptions) {
+      client = new GcpClient(options.clientOptions);
+    } else if (!detectGcloudAvailable()) {
+      return missingGcloudError(action);
+    } else {
+      client = new GcpClient();
+    }
+  }
+
   try {
     switch (action) {
       case "list_services":
-        return fetchListServices(validated as ListServicesValidated);
+        return await fetchListServices(client, validated as ListServicesValidated);
       case "describe_db":
-        return fetchDescribeDb(validated as DescribeDbValidated);
+        return await fetchDescribeDb(client, validated as DescribeDbValidated);
       case "list_topics":
-        return fetchListTopics(validated as ListTopicsValidated);
+        return await fetchListTopics(client, validated as ListTopicsValidated);
       case "query_logs":
-        return fetchQueryLogs(validated as QueryLogsValidated);
+        return await fetchQueryLogs(client, validated as QueryLogsValidated);
     }
   } catch (exc) {
     return {
@@ -258,14 +337,8 @@ export function fetch(
     };
   }
 
-  return {
-    status: "error",
-    error_code: "UNKNOWN",
-    message: "Unexpected state",
-  };
+  return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
-
-// ── CLI ─────────────────────────────────────────────────────────────
 
 interface ParsedArgs {
   action?: string;
@@ -328,7 +401,9 @@ options:
   --params PARAMS       JSON string of action parameters
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export async function main(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<number> {
   let args: ParsedArgs;
   try {
     args = parseArgs(argv);
@@ -373,7 +448,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 1;
   }
 
-  const result = fetch(args.action, params);
+  const result = await fetch(args.action, params);
   process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
 
   if (result["status"] !== "success") {
@@ -384,5 +459,5 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
 
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-  process.exit(main());
+  void main().then((code) => process.exit(code));
 }

@@ -4,23 +4,16 @@
  *
  * Library usage:
  *     import { fetch } from "./github_fetch.js";
- *     const result = fetch("repo_info", { owner: "acme", repo: "backend" });
+ *     const result = await fetch("repo_info", { owner: "acme", repo: "backend" });
  *
- * CLI usage:
- *     node github_fetch.js --action repo_info --params '{"owner": "acme", "repo": "backend"}'
- *     node github_fetch.js --action search_code --params '{"owner": "acme", "repo": "backend", "query": "class Auth"}'
- *     node github_fetch.js --action get_issues --params '{"owner": "acme", "repo": "backend", "state": "open"}'
- *     node github_fetch.js --action get_pulls --params '{"owner": "acme", "repo": "backend"}'
- *     node github_fetch.js --action get_file --params '{"owner": "acme", "repo": "backend", "path": "README.md"}'
- *
- * This is a TypeScript port of github_fetch.py. HTTP calls are stubbed in
- * the Python reference (commented-out `requests` calls); this TS port
- * matches that stub exactly so CLI JSON output is byte-identical.
+ * Read-only GitHub REST v3 + GraphQL client. Credentials resolve via
+ * `resolveSecret` with `env_var` fallback (`GITHUB_TOKEN`). Falls back to a
+ * stubbed response when credentials are unavailable.
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-// ── Constants ───────────────────────────────────────────────────────
+import { GithubClient, loadGithubCredentials, } from "./lib/github_client.js";
 export const VALID_ACTIONS = new Set([
     "repo_info",
     "search_code",
@@ -77,12 +70,18 @@ function validateGetIssues(params) {
     if (!VALID_STATES.has(state)) {
         throw new Error(`Invalid state '${state}' — expected open, closed, or all`);
     }
-    const labels = params["labels"] ?? [];
-    if (!Array.isArray(labels)) {
+    const labelsRaw = params["labels"] ?? [];
+    if (!Array.isArray(labelsRaw) || !labelsRaw.every((x) => typeof x === "string")) {
         throw new Error("'labels' must be a list of strings");
     }
     const maxResults = Math.min(toInt(params["max_results"], MAX_RESULTS_DEFAULT), MAX_RESULTS_CAP);
-    return { owner, repo, state, labels, max_results: maxResults };
+    return {
+        owner,
+        repo,
+        state,
+        labels: labelsRaw,
+        max_results: maxResults,
+    };
 }
 function validateGetPulls(params) {
     const [owner, repo] = validateOwnerRepo(params);
@@ -108,75 +107,153 @@ function validateGetFile(params) {
     const ref = typeof refRaw === "string" ? refRaw : "main";
     return { owner, repo, path: pathValue, ref };
 }
-function fetchRepoInfo(validated) {
+function errorFromClient(result, action) {
+    const codeMap = {
+        UNAUTHORIZED: "AUTH_ERROR",
+        FORBIDDEN: "AUTH_ERROR",
+        NOT_FOUND: "NOT_FOUND",
+        RATE_LIMITED: "RATE_LIMITED",
+        TIMEOUT: "TIMEOUT",
+        NETWORK_ERROR: "CONNECTION_ERROR",
+        SERVER_ERROR: "CONNECTION_ERROR",
+        BAD_REQUEST: "VALIDATION_ERROR",
+        UNPROCESSABLE: "VALIDATION_ERROR",
+        INVALID_URL: "VALIDATION_ERROR",
+        METHOD_NOT_ALLOWED: "VALIDATION_ERROR",
+        HTTP_ERROR: "CONNECTION_ERROR",
+    };
+    return {
+        status: "error",
+        action,
+        error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+        message: result.message,
+        retriable: result.retriable,
+    };
+}
+async function fetchRepoInfo(client, v) {
+    const result = await client.getRepo(v.owner, v.repo);
+    if (!result.ok)
+        return errorFromClient(result, "repo_info");
+    const data = result.data;
     return {
         status: "success",
         action: "repo_info",
         data: {
-            full_name: `${validated.owner}/${validated.repo}`,
-            description: "",
-            default_branch: "main",
-            language: null,
-            stars: 0,
-            open_issues: 0,
-            topics: [],
-            updated_at: null,
+            full_name: data.full_name,
+            description: data.description ?? "",
+            default_branch: data.default_branch ?? "main",
+            language: data.language ?? null,
+            stars: data.stargazers_count ?? 0,
+            open_issues: data.open_issues_count ?? 0,
+            topics: data.topics ?? [],
+            updated_at: data.updated_at ?? null,
         },
     };
 }
-function fetchSearchCode(validated) {
-    void validated;
+async function fetchSearchCode(client, v) {
+    const result = await client.searchCode(v.owner, v.repo, v.query, v.max_results);
+    if (!result.ok)
+        return errorFromClient(result, "search_code");
+    const data = result.data;
     return {
         status: "success",
         action: "search_code",
         data: {
-            total: 0,
-            items: [],
+            total: data.total_count ?? 0,
+            items: (data.items ?? []).map((it) => ({
+                path: it.path,
+                repo: it.repository?.full_name ?? "",
+                url: it.html_url ?? "",
+            })),
         },
-        truncated: false,
+        truncated: (data.total_count ?? 0) > v.max_results,
     };
 }
-function fetchGetIssues(validated) {
-    void validated;
+async function fetchGetIssues(client, v) {
+    const result = await client.listIssues(v.owner, v.repo, {
+        state: v.state,
+        labels: v.labels,
+        perPage: v.max_results,
+    });
+    if (!result.ok)
+        return errorFromClient(result, "get_issues");
+    const issues = Array.isArray(result.data) ? result.data : [];
     return {
         status: "success",
         action: "get_issues",
         data: {
-            total: 0,
-            issues: [],
+            total: issues.length,
+            issues: issues.map((i) => ({
+                number: i.number,
+                title: i.title,
+                state: i.state,
+                author: i.user?.login ?? "",
+                labels: (i.labels ?? []).map((l) => typeof l === "string" ? l : l.name ?? ""),
+                url: i.html_url ?? "",
+                updated_at: i.updated_at ?? null,
+            })),
         },
-        truncated: false,
+        truncated: issues.length >= v.max_results,
     };
 }
-function fetchGetPulls(validated) {
-    void validated;
+async function fetchGetPulls(client, v) {
+    const result = await client.listPulls(v.owner, v.repo, {
+        state: v.state,
+        perPage: v.max_results,
+    });
+    if (!result.ok)
+        return errorFromClient(result, "get_pulls");
+    const pulls = Array.isArray(result.data) ? result.data : [];
     return {
         status: "success",
         action: "get_pulls",
         data: {
-            total: 0,
-            pulls: [],
+            total: pulls.length,
+            pulls: pulls.map((p) => ({
+                number: p.number,
+                title: p.title,
+                state: p.state,
+                author: p.user?.login ?? "",
+                url: p.html_url ?? "",
+                updated_at: p.updated_at ?? null,
+            })),
         },
-        truncated: false,
+        truncated: pulls.length >= v.max_results,
     };
 }
-function fetchGetFile(validated) {
+async function fetchGetFile(client, v) {
+    const result = await client.getFile(v.owner, v.repo, v.path, v.ref);
+    if (!result.ok)
+        return errorFromClient(result, "get_file");
+    const data = result.data;
+    let decoded = "";
+    if (data.encoding === "base64" && data.content) {
+        decoded = Buffer.from(data.content, "base64").toString("utf-8");
+    }
     return {
         status: "success",
         action: "get_file",
         data: {
-            path: validated.path,
-            ref: validated.ref,
-            size_bytes: 0,
-            content: "",
+            path: data.path,
+            ref: v.ref,
+            size_bytes: data.size ?? 0,
+            content: decoded,
             encoding: "utf-8",
         },
     };
 }
-/**
- * Fetch data from GitHub.
- */
-export function fetch(action, params = null) {
+function missingCredentialsError(action) {
+    return {
+        status: "error",
+        action,
+        error_code: "CONFIG_ERROR",
+        message: "GitHub credentials not configured. Set GITHUB_TOKEN (personal access " +
+            "token) or register a credential provider via " +
+            ".claude/agents/lib/credential_providers/.",
+        retriable: false,
+    };
+}
+export async function fetch(action, params = null, options = {}) {
     if (!VALID_ACTIONS.has(action)) {
         const sorted = [...VALID_ACTIONS].sort();
         return {
@@ -206,7 +283,6 @@ export function fetch(action, params = null) {
                 validated = validateGetFile(p);
                 break;
             default:
-                // Unreachable — VALID_ACTIONS gate above catches this.
                 throw new Error("unreachable");
         }
     }
@@ -217,18 +293,25 @@ export function fetch(action, params = null) {
             message: exc.message,
         };
     }
+    let client = options.client;
+    if (!client) {
+        const opts = options.clientOptions ?? (await loadGithubCredentials());
+        if (!opts)
+            return missingCredentialsError(action);
+        client = new GithubClient(opts);
+    }
     try {
         switch (action) {
             case "repo_info":
-                return fetchRepoInfo(validated);
+                return await fetchRepoInfo(client, validated);
             case "search_code":
-                return fetchSearchCode(validated);
+                return await fetchSearchCode(client, validated);
             case "get_issues":
-                return fetchGetIssues(validated);
+                return await fetchGetIssues(client, validated);
             case "get_pulls":
-                return fetchGetPulls(validated);
+                return await fetchGetPulls(client, validated);
             case "get_file":
-                return fetchGetFile(validated);
+                return await fetchGetFile(client, validated);
         }
     }
     catch (exc) {
@@ -299,7 +382,7 @@ options:
                         Action to perform
   --params PARAMS       JSON string of action parameters
 `;
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
     let args;
     try {
         args = parseArgs(argv);
@@ -339,7 +422,7 @@ export function main(argv = process.argv.slice(2)) {
         process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
         return 1;
     }
-    const result = fetch(args.action, params);
+    const result = await fetch(args.action, params);
     process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
     if (result["status"] !== "success") {
         return 1;
@@ -348,5 +431,5 @@ export function main(argv = process.argv.slice(2)) {
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    process.exit(main());
+    void main().then((code) => process.exit(code));
 }

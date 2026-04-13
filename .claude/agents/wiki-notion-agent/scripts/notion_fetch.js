@@ -4,22 +4,15 @@
  *
  * Library usage:
  *     import { fetch } from "./notion_fetch.js";
- *     const result = fetch("search", { query: "architecture", max_results: 25 });
+ *     const result = await fetch("search", { query: "architecture", max_results: 25 });
  *
- * CLI usage:
- *     node notion_fetch.js --action search --params '{"query": "architecture"}'
- *     node notion_fetch.js --action get_page --params '{"page_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}'
- *     node notion_fetch.js --action get_database --params '{"database_id": "..."}'
- *     node notion_fetch.js --action query_database --params '{"database_id": "...", "filter": {...}}'
- *
- * This is a TypeScript port of notion_fetch.py. The Python reference stubs
- * the HTTP request path — this TS port matches that stub so the CLI JSON
- * output is byte-identical to the Python version.
+ * Read-only Notion Public API client. Credentials resolve via
+ * `resolveSecret` with `env_var` fallback (`NOTION_TOKEN`).
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-// ── Constants ───────────────────────────────────────────────────────
+import { NotionClient, extractTitleFromPage, loadNotionCredentials, } from "./lib/notion_client.js";
 export const VALID_ACTIONS = new Set([
     "search",
     "get_page",
@@ -82,74 +75,121 @@ function validateQueryDatabase(params) {
     const dbFilterRaw = params["filter"];
     let dbFilter = null;
     if (dbFilterRaw !== undefined && dbFilterRaw !== null) {
-        if (typeof dbFilterRaw !== "object" ||
-            Array.isArray(dbFilterRaw)) {
+        if (typeof dbFilterRaw !== "object" || Array.isArray(dbFilterRaw)) {
             throw new Error("'filter' must be a dict (Notion filter object)");
         }
         dbFilter = dbFilterRaw;
     }
     const maxResults = Math.min(toInt(params["max_results"], MAX_RESULTS_DEFAULT), MAX_RESULTS_CAP);
+    return { database_id: dbId, filter: dbFilter, max_results: maxResults };
+}
+function errorFromClient(result, action) {
+    const codeMap = {
+        UNAUTHORIZED: "AUTH_ERROR",
+        FORBIDDEN: "AUTH_ERROR",
+        NOT_FOUND: "NOT_FOUND",
+        RATE_LIMITED: "RATE_LIMITED",
+        TIMEOUT: "TIMEOUT",
+        NETWORK_ERROR: "CONNECTION_ERROR",
+        SERVER_ERROR: "CONNECTION_ERROR",
+        BAD_REQUEST: "VALIDATION_ERROR",
+        UNPROCESSABLE: "VALIDATION_ERROR",
+        INVALID_URL: "VALIDATION_ERROR",
+        METHOD_NOT_ALLOWED: "VALIDATION_ERROR",
+        HTTP_ERROR: "CONNECTION_ERROR",
+    };
     return {
-        database_id: dbId,
-        filter: dbFilter,
-        max_results: maxResults,
+        status: "error",
+        action,
+        error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+        message: result.message,
+        retriable: result.retriable,
     };
 }
-function fetchSearch(validated) {
-    void validated;
+async function fetchSearch(client, v) {
+    const result = await client.search(v.query, v.filter_type || undefined, v.max_results);
+    if (!result.ok)
+        return errorFromClient(result, "search");
+    const results = Array.isArray(result.data.results) ? result.data.results : [];
     return {
         status: "success",
         action: "search",
         data: {
-            total: 0,
-            results: [],
+            total: results.length,
+            results: results.map((r) => ({
+                id: r.id,
+                object_type: "last_edited_time" in r && "properties" in r ? "page" : "database",
+            })),
         },
-        truncated: false,
+        truncated: Boolean(result.data.has_more),
     };
 }
-function fetchGetPage(validated) {
+async function fetchGetPage(client, v) {
+    const result = await client.getPage(v.page_id);
+    if (!result.ok)
+        return errorFromClient(result, "get_page");
+    const page = result.data;
     return {
         status: "success",
         action: "get_page",
         data: {
-            id: validated.page_id,
-            title: "",
-            parent_type: "",
-            last_edited: null,
-            properties: {},
+            id: page.id,
+            title: extractTitleFromPage(page),
+            parent_type: page.parent?.type ?? "",
+            last_edited: page.last_edited_time ?? null,
+            properties: page.properties ?? {},
             content_markdown: "",
         },
     };
 }
-function fetchGetDatabase(validated) {
+async function fetchGetDatabase(client, v) {
+    const result = await client.getDatabase(v.database_id);
+    if (!result.ok)
+        return errorFromClient(result, "get_database");
+    const db = result.data;
     return {
         status: "success",
         action: "get_database",
         data: {
-            id: validated.database_id,
-            title: "",
-            description: "",
-            properties: {},
-            is_inline: false,
+            id: db.id,
+            title: (db.title ?? []).map((t) => t.plain_text ?? "").join(""),
+            description: (db.description ?? []).map((t) => t.plain_text ?? "").join(""),
+            properties: db.properties ?? {},
+            is_inline: db.is_inline ?? false,
         },
     };
 }
-function fetchQueryDatabase(validated) {
+async function fetchQueryDatabase(client, v) {
+    const result = await client.queryDatabase(v.database_id, v.filter, v.max_results);
+    if (!result.ok)
+        return errorFromClient(result, "query_database");
+    const results = Array.isArray(result.data.results) ? result.data.results : [];
     return {
         status: "success",
         action: "query_database",
         data: {
-            database_id: validated.database_id,
-            total: 0,
-            results: [],
+            database_id: v.database_id,
+            total: results.length,
+            results: results.map((r) => ({
+                id: r.id,
+                title: extractTitleFromPage(r),
+                last_edited: r.last_edited_time ?? null,
+            })),
         },
-        truncated: false,
+        truncated: Boolean(result.data.has_more),
     };
 }
-/**
- * Fetch data from Notion.
- */
-export function fetch(action, params = null) {
+function missingCredentialsError(action) {
+    return {
+        status: "error",
+        action,
+        error_code: "CONFIG_ERROR",
+        message: "Notion credentials not configured. Set NOTION_TOKEN or register a " +
+            "credential provider via .claude/agents/lib/credential_providers/.",
+        retriable: false,
+    };
+}
+export async function fetch(action, params = null, options = {}) {
     if (!VALID_ACTIONS.has(action)) {
         const sorted = [...VALID_ACTIONS].sort();
         return {
@@ -186,16 +226,23 @@ export function fetch(action, params = null) {
             message: exc.message,
         };
     }
+    let client = options.client;
+    if (!client) {
+        const opts = options.clientOptions ?? (await loadNotionCredentials());
+        if (!opts)
+            return missingCredentialsError(action);
+        client = new NotionClient(opts);
+    }
     try {
         switch (action) {
             case "search":
-                return fetchSearch(validated);
+                return await fetchSearch(client, validated);
             case "get_page":
-                return fetchGetPage(validated);
+                return await fetchGetPage(client, validated);
             case "get_database":
-                return fetchGetDatabase(validated);
+                return await fetchGetDatabase(client, validated);
             case "query_database":
-                return fetchQueryDatabase(validated);
+                return await fetchQueryDatabase(client, validated);
         }
     }
     catch (exc) {
@@ -205,11 +252,7 @@ export function fetch(action, params = null) {
             message: `Notion API call failed: ${exc.message}`,
         };
     }
-    return {
-        status: "error",
-        error_code: "UNKNOWN",
-        message: "Unexpected state",
-    };
+    return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
 function parseArgs(argv) {
     const out = {};
@@ -266,7 +309,7 @@ options:
                         Action to perform
   --params PARAMS       JSON string of action parameters
 `;
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
     let args;
     try {
         args = parseArgs(argv);
@@ -306,7 +349,7 @@ export function main(argv = process.argv.slice(2)) {
         process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
         return 1;
     }
-    const result = fetch(args.action, params);
+    const result = await fetch(args.action, params);
     process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
     if (result["status"] !== "success") {
         return 1;
@@ -315,5 +358,5 @@ export function main(argv = process.argv.slice(2)) {
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    process.exit(main());
+    void main().then((code) => process.exit(code));
 }

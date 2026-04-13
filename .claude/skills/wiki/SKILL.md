@@ -146,6 +146,23 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 12. **Log:** `node {skill_path}/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`
 13. **Run post-operation hooks** (crosslink + tag-harmonize) — see below
 
+**Folder-source batches (checkpointing):** when the source is a folder (many files processed in a loop), use `scripts/checkpoint.ts` to make the batch resumable:
+
+```ts
+import { readCheckpoint, recordUnit, clearCheckpoint } from "{skill_path}/scripts/checkpoint.js";
+
+const cp = readCheckpoint(wikiRoot, "ingest");
+const done = new Set(cp?.completedIds ?? []);
+for (const file of files) {
+  if (done.has(file)) continue; // resume: skip already-processed units
+  // ... run steps 2–12 for this file ...
+  recordUnit(wikiRoot, "ingest", file);
+}
+clearCheckpoint(wikiRoot, "ingest");
+```
+
+The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If the batch is interrupted, re-running `/wiki-ingest <same-folder>` picks up where it stopped.
+
 ### /wiki-query — Summary-first search + synthesis
 
 1. Read `wiki/summaries.md` (one file, ~50 tokens per page)
@@ -186,6 +203,8 @@ Convert an archived query answer from `outputs/queries/` into a permanent wiki p
 ### /wiki-refresh — Re-fetch and update from original sources
 
 Re-fetch previously-ingested sources, diff against stored versions, re-compile changed pages.
+
+**Batch resumption:** use `scripts/checkpoint.ts` with opName `"refresh"` the same way `/wiki-ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation. See `/wiki-ingest` above for the pattern.
 
 ### /wiki-path — Shortest-path query between concepts
 

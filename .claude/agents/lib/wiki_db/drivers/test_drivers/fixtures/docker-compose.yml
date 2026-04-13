@@ -1,0 +1,98 @@
+# docker-compose.yml — optional live-integration fixture for Phase E drivers.
+#
+# This file is reference-only. CI does NOT invoke it. Operators who want
+# to run the `TEST_LIVE_*` gated blocks in `test_drivers/test_*.test.ts`
+# should `docker compose up -d <service>` from this directory, then export
+# the relevant env vars before `npx vitest run`.
+#
+# Quick-start examples:
+#   docker compose up -d postgres
+#   TEST_LIVE_PG=1 \
+#     TEST_PG_HOST=localhost TEST_PG_PORT=5432 \
+#     TEST_PG_USER=postgres TEST_PG_PASSWORD=postgres TEST_PG_DB=postgres \
+#     npx vitest run .claude/agents/lib/wiki_db/drivers/test_drivers/test_postgresql.test.ts
+#
+# Ports are chosen to match each engine's default so env-var overrides are
+# usually unnecessary. Data is in-memory (tmpfs) because these containers
+# are disposable.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: wikidb-postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mysql:
+    image: mysql:8.4
+    container_name: wikidb-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mysql
+    ports:
+      - "3306:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: wikidb-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong@Pass1"
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test:
+        - CMD
+        - /opt/mssql-tools18/bin/sqlcmd
+        - -S
+        - localhost
+        - -U
+        - sa
+        - -P
+        - "YourStrong@Pass1"
+        - -C
+        - -Q
+        - "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongodb:
+    image: mongo:7
+    container_name: wikidb-mongo
+    ports:
+      - "27017:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: wikidb-dynamo
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+    working_dir: /home/dynamodblocal
