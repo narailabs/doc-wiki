@@ -5,12 +5,16 @@
  * helper functions that Vitest tests can invoke inside beforeEach/beforeAll,
  * instead of as pytest's magic function-name auto-wiring.
  *
- * Phases extended incrementally:
- *  - Phase 1: security_check + parse_config
- *  - Phase 2: graph_ops
- *  - Phase 3: mermaid_lint, event_logger, cache_manager — adds
- *    `initializedWiki`, `wikiWithPages`, `wikiWithEvents`, and
- *    `makeMermaidPage{Valid,Invalid,NoMermaid}` helpers.
+ * Exports (extended per phase):
+ *  - `SCRIPTS_DIR` — absolute path to .claude/skills/wiki/scripts/
+ *  - `makeTmpPath` / `cleanupTmpPath` — pytest `tmp_path`-equivalent
+ *  - `writeConfigYaml` — write a dumped YAML config at tmpPath
+ *  - `makeEmptyEdgesFile` / `makePopulatedEdgesFile` — graph_ops fixtures
+ *  - `makeInitializedWiki` — scaffold a wiki root with the Python-expected tree
+ *  - `makeWikiWithPages` — initialized wiki plus sample pages for lint/mermaid
+ *
+ * Test-local seeders (one-shot event logs, per-test mermaid pages, etc.) live
+ * next to the tests that use them rather than in this shared module.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";

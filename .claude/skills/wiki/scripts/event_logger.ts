@@ -203,6 +203,7 @@ function median(values: readonly number[]): number {
 export function getStats(
   wikiRoot: string,
   since: string | null = null,
+  opts: { includeRatios?: boolean } = {},
 ): Record<string, unknown> {
   const events = _readEvents(wikiRoot, since);
 
@@ -242,13 +243,19 @@ export function getStats(
     ratioStats["p95"] = sortedRatios[idx95] ?? 0;
   }
 
-  return {
+  const result: Record<string, unknown> = {
     total_ops: events.length,
     ops_by_type: opsByType,
     total_cost_usd: totalCost,
     reduction_ratio: ratioStats,
     per_agent_cost: perAgentCost,
   };
+  if (opts.includeRatios) {
+    // Used by the CLI stats path to decide whether reduction_ratio fields
+    // should render as Python int or float. Strip before JSON output.
+    result["_ratios"] = ratios;
+  }
+  return result;
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────
@@ -372,23 +379,45 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       args.since !== null && args.since !== undefined
         ? parseRelativeSince(args.since)
         : null;
-    const result = getStats(args.wikiRoot, since);
-    // Wrap the known-float fields so integer-valued floats (e.g. initial 0.0)
-    // emit as `0.0`, matching Python's json.dumps on the same dict. Python's
-    // statistics.{mean,median} also return floats when inputs are floats —
-    // which is always true for reduction_ratio values loaded from JSON.
+    const result = getStats(args.wikiRoot, since, { includeRatios: true });
+    const ratios = (result["_ratios"] as number[]) ?? [];
+    delete result["_ratios"];
+
+    // total_cost_usd and per_agent_cost always render as Python floats
+    // because Python initializes them with 0.0 and accumulates via +=.
     const perAgentWrapped: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(
       result["per_agent_cost"] as Record<string, number>,
     )) {
       perAgentWrapped[k] = pyFloat(v);
     }
+
+    // reduction_ratio fields are conditional: Python emits int when all
+    // input ratios were integers AND the aggregate is itself integer-valued.
+    // Median also renders as float for any even-count list because Python 3's
+    // `/` operator is true division (statistics.median uses `(a + b) / 2`).
+    const hasFloatRatio = ratios.some((v) => !Number.isInteger(v));
+    const ratioSrc = result["reduction_ratio"] as Record<string, number>;
     const ratioWrapped: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(
-      result["reduction_ratio"] as Record<string, number>,
-    )) {
-      ratioWrapped[k] = pyFloat(v);
+    if ("mean" in ratioSrc) {
+      const v = ratioSrc["mean"] as number;
+      ratioWrapped["mean"] =
+        hasFloatRatio || !Number.isInteger(v) ? pyFloat(v) : v;
     }
+    if ("p50" in ratioSrc) {
+      const v = ratioSrc["p50"] as number;
+      ratioWrapped["p50"] =
+        hasFloatRatio || ratios.length % 2 === 0 || !Number.isInteger(v)
+          ? pyFloat(v)
+          : v;
+    }
+    if ("p95" in ratioSrc) {
+      const v = ratioSrc["p95"] as number;
+      // p95 uses nearest-rank selection: element returned as-is, so it's
+      // int when all inputs were int.
+      ratioWrapped["p95"] = hasFloatRatio ? pyFloat(v) : v;
+    }
+
     const wrapped = {
       ...result,
       total_cost_usd: pyFloat(result["total_cost_usd"] as number),

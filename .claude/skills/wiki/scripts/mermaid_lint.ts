@@ -140,6 +140,8 @@ export function validateBlock(block: string): string[] {
   if (!_RELATIONSHIP_BRACKET_TYPES.has(diagramType)) {
     const stack: string[] = [];
     let stopped = false;
+    // TODO: balance check ignores quote context; `A["{test}"]` would miscount.
+    // Preserved parity with mermaid_lint.py — both have this pre-existing limitation.
     for (const ch of trimmed) {
       if (_BRACKET_OPENERS.has(ch)) {
         stack.push(ch);
