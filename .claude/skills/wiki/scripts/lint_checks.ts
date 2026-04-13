@@ -21,10 +21,11 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as yaml from "js-yaml";
 import { pythonJsonDumps } from "./_json_py.js";
 import { isolatedNodes, listEdges } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
+import { parseFrontmatter as parseFrontmatterRaw } from "./_frontmatter.js";
+import { wikiPages } from "./_wiki_fs.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -45,60 +46,12 @@ const _LINK_RE = /\[.*?\]\(([^)]+)\)/g;
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /**
- * Parse YAML frontmatter from page content using Python's strict delimiter
- * rules: the content must start with `---\n` and a trailing `\n---\n` must
- * appear later. Anything else (malformed YAML, wrong delimiters) yields an
- * empty dict, matching lint_checks.py._parse_frontmatter.
+ * Thin adapter: lint only needs the frontmatter dict (not the body), and
+ * collapses the `null`/missing case to `{}` to match the original Python
+ * `_parse_frontmatter` return shape (`dict[str, Any]`, never None).
  */
 function parseFrontmatter(content: string): Record<string, unknown> {
-  if (!content.startsWith("---\n")) {
-    return {};
-  }
-  const end = content.indexOf("\n---\n", 4);
-  if (end === -1) {
-    return {};
-  }
-  let parsed: unknown;
-  try {
-    parsed = yaml.load(content.slice(4, end));
-  } catch {
-    return {};
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return {};
-  }
-  return parsed as Record<string, unknown>;
-}
-
-/** List every `.md` file under `<wikiRoot>/wiki/`, sorted lexicographically
- *  to match Python's `sorted(Path.rglob("*.md"))`. */
-function wikiPages(wikiRoot: string): string[] {
-  const wikiDir = path.join(wikiRoot, "wiki");
-  if (!fs.existsSync(wikiDir)) {
-    return [];
-  }
-  const out: string[] = [];
-  const stack: string[] = [wikiDir];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) continue;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.isFile() && full.endsWith(".md")) {
-        out.push(full);
-      }
-    }
-  }
-  out.sort();
-  return out;
+  return parseFrontmatterRaw(content).frontmatter ?? {};
 }
 
 /** Shape of a single lint issue, matching the Python dict. */
