@@ -21,10 +21,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as yaml from "js-yaml";
 import { pyFloat, pythonJsonDumpsFloats } from "./_json_py.js";
 import { computeDegrees } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
+import { parseFrontmatter } from "./_frontmatter.js";
+import { wikiPages } from "./_wiki_fs.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -58,38 +59,16 @@ const _MERMAID_RE = /```mermaid\s*\n[\s\S]*?```/;
 // ── Library API ─────────────────────────────────────────────────────
 
 /**
- * Split `content` into a frontmatter dict and body string using Python's
- * strict delimiter rules: content MUST start with `---\n`, and a trailing
- * `\n---\n` MUST appear later. Anything else (malformed YAML, wrong
- * delimiters, non-dict YAML) returns `[{}, content]`, matching
- * quality_score.py._parse_frontmatter.
+ * Adapter for the shared parser: quality_score historically returned
+ * `[{}, content]` on failure (the original content as the body). We re-apply
+ * that contract on top of the shared helper, which exposes the parsed dict
+ * as `null` and keeps the original content as the body in the same case.
  */
 function parseFrontmatterWithBody(
   content: string,
 ): [Record<string, unknown>, string] {
-  if (!content.startsWith("---\n")) {
-    return [{}, content];
-  }
-  const end = content.indexOf("\n---\n", 4);
-  if (end === -1) {
-    return [{}, content];
-  }
-  const fmStr = content.slice(4, end);
-  const body = content.slice(end + 5);
-  let parsed: unknown;
-  try {
-    parsed = yaml.load(fmStr);
-  } catch {
-    return [{}, content];
-  }
-  if (
-    parsed === null ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed)
-  ) {
-    return [{}, content];
-  }
-  return [parsed as Record<string, unknown>, body];
+  const r = parseFrontmatter(content);
+  return [r.frontmatter ?? {}, r.body];
 }
 
 /** A single scoring signal, mirroring the Python dict shape. */
@@ -304,37 +283,6 @@ export interface WikiScore {
   /** pyFloat-wrapped to preserve `0.0`/`1.0` emission. */
   quality: unknown;
   signals: Signal[];
-}
-
-/** List every `.md` file under `<wikiRoot>/wiki/`, sorted lexicographically
- *  to match Python's `sorted(Path.rglob("*.md"))`. */
-function wikiPages(wikiRoot: string): string[] {
-  const wikiDir = path.join(wikiRoot, "wiki");
-  if (!fs.existsSync(wikiDir)) {
-    return [];
-  }
-  const out: string[] = [];
-  const stack: string[] = [wikiDir];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) continue;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.isFile() && full.endsWith(".md")) {
-        out.push(full);
-      }
-    }
-  }
-  out.sort();
-  return out;
 }
 
 /**
