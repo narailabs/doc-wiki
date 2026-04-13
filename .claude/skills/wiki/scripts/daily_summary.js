@@ -81,14 +81,13 @@ function formatThousands(n) {
 }
 /** Match Python's `f"{x:.{precision}f}"` fixed-precision float format. */
 function formatFixed(x, precision) {
-    // toFixed uses banker's rounding on some platforms; Python uses half-even.
-    // For the cost ($.4f) and ratio (.1f) magnitudes we emit, banker's-rounding
-    // differences are vanishingly unlikely — but we still prefer a half-away-
-    // from-zero implementation matching Python's default CPython behavior for
-    // these magnitudes.
+    // Python's f-string formatting uses half-to-even (banker's) rounding by
+    // default via CPython's float_format; we replicate it here so our cost
+    // ($.4f) and ratio (.1f) output matches Python byte-for-byte.
     //
     // Strategy: use a large-integer arithmetic via string-based math to avoid
-    // float precision edge cases entirely, then restore the decimal point.
+    // float precision edge cases, then restore the decimal point. For exact-half
+    // boundaries (e.g. 0.125 → .12, 0.135 → .14 at .2f), we round to even.
     if (!Number.isFinite(x)) {
         // Python's f-string on NaN/inf still emits something; we defer to the
         // same shape as Number.prototype.toFixed for these edge cases.
