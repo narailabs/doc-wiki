@@ -84,7 +84,9 @@ export function normalizeExtracted(text) {
  * Node-friendly bundle that doesn't try to load DOM-only worker shims).
  *
  * Per-page strategy (matches PyMuPDF's `page.get_text()` shape closely):
- *   - join all text items with a single space (PyMuPDF uses spacing too)
+ *   - concatenate all item.str values verbatim (pdfjs already bakes word
+ *     spacing into each item from the PDF's glyph positions, mirroring how
+ *     PyMuPDF's text extractor emits pre-spaced tokens)
  *   - insert `\n` whenever an item has `hasEOL = true`
  *   - drop pages whose trimmed text is empty (parity with the Python loop)
  * Pages are joined by a blank line and then run through `normalizeExtracted`.
@@ -266,7 +268,10 @@ export async function extractPptx(filePath) {
     });
     const sections = [];
     for (let i = 0; i < slidePaths.length; i++) {
-        const entry = zip.file(slidePaths[i] ?? "");
+        const slidePath = slidePaths[i];
+        if (slidePath === undefined)
+            continue;
+        const entry = zip.file(slidePath);
         if (entry === null)
             continue;
         const xml = await entry.async("string");
