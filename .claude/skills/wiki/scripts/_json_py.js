@@ -45,6 +45,29 @@ export function insertPythonSeparators(raw) {
     return out;
 }
 /**
+ * Escape every non-ASCII code point in an already-serialized JSON string to
+ * `\uXXXX` the way Python's `json.dumps(..., ensure_ascii=True)` does. We
+ * walk the JSON byte-wise so keys, string values, and incidental whitespace
+ * are all handled uniformly — characters outside string literals are never
+ * non-ASCII for well-formed JSON, so touching them is a no-op.
+ *
+ * Surrogate pairs are emitted as two `\uXXXX` escapes (Python's exact
+ * behaviour for characters outside the BMP).
+ */
+function asciiSafeJson(raw) {
+    let out = "";
+    for (let i = 0; i < raw.length; i++) {
+        const code = raw.charCodeAt(i);
+        if (code < 0x80) {
+            out += raw[i];
+        }
+        else {
+            out += "\\u" + code.toString(16).padStart(4, "0");
+        }
+    }
+    return out;
+}
+/**
  * Serialize a value to JSON using Python's default json.dumps separators.
  *
  * - When `indent` is null (the default), emits compact form with Python's
@@ -52,13 +75,24 @@ export function insertPythonSeparators(raw) {
  * - When `indent` is a number, delegates to JSON.stringify with that indent;
  *   this matches Python's indented output format exactly for the shapes the
  *   wiki scripts emit.
+ * - When `ensureAscii` is true (opt-in), escapes every non-ASCII code point
+ *   to `\uXXXX` to match Python's `json.dumps(..., ensure_ascii=True)`
+ *   default. Off by default so the existing wiki skill scripts (which only
+ *   emit ASCII content in JSON strings) stay untouched; API-wrapper agent
+ *   scripts, whose validation messages use em-dashes, enable it explicitly.
  */
-export function pythonJsonDumps(obj, indent = null) {
+export function pythonJsonDumps(obj, indent = null, ensureAscii = false) {
+    let raw;
     if (indent !== null) {
-        return JSON.stringify(obj, null, indent);
+        raw = JSON.stringify(obj, null, indent);
     }
-    const raw = JSON.stringify(obj);
-    return insertPythonSeparators(raw);
+    else {
+        raw = insertPythonSeparators(JSON.stringify(obj));
+    }
+    if (ensureAscii) {
+        return asciiSafeJson(raw);
+    }
+    return raw;
 }
 /**
  * Marker for a value that MUST serialize as a Python-style float (i.e. with
