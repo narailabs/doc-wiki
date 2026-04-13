@@ -15,9 +15,14 @@ import {
   checkCodeRefDrift,
   checkFrontmatter,
   checkHighAmbiguityRate,
+  checkIndexCoverage,
   checkIsolatedNodes,
+  checkMermaidSyntax,
+  checkOrmMappingFreshness,
   checkOrphans,
   checkProvenanceCompleteness,
+  checkSummariesSync,
+  checkThinClusters,
   lintWiki,
 } from "../lint_checks.js";
 import {
@@ -397,6 +402,339 @@ describe("TestLintWiki", () => {
     );
     const result = lintWiki(tmpPath);
     expect(result.summary.error).toBe(0);
+  });
+});
+
+// ── Mermaid syntax tests ──────────────────────────────────────────
+
+describe("TestCheckMermaidSyntax", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-mermaid-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_flags_invalid_diagram_type", () => {
+    const page = path.join(wiki, "wiki", "bad.md");
+    writePage(
+      page,
+      fullFm(),
+      "See below.\n\n```mermaid\nnotADiagramType\n    A --> B\n```\n",
+    );
+    const issues = checkMermaidSyntax(wiki);
+    const mi = issues.filter((i) => i.page.includes("bad.md"));
+    expect(mi.length).toBeGreaterThanOrEqual(1);
+    expect(mi[0]?.category).toBe("mermaid_syntax");
+    expect(mi[0]?.severity).toBe("warning");
+  });
+
+  it("test_valid_mermaid_no_issue", () => {
+    const page = path.join(wiki, "wiki", "ok.md");
+    writePage(
+      page,
+      fullFm(),
+      "```mermaid\nsequenceDiagram\n    A->>B: hi\n```\n",
+    );
+    const issues = checkMermaidSyntax(wiki);
+    const mi = issues.filter((i) => i.page.includes("ok.md"));
+    expect(mi).toEqual([]);
+  });
+
+  it("test_registered_in_lintWiki", () => {
+    const page = path.join(wiki, "wiki", "bad.md");
+    writePage(
+      page,
+      fullFm(),
+      "```mermaid\nbogus\n    A --> B\n```\n",
+    );
+    const result = lintWiki(wiki, "mermaid_syntax");
+    expect(result.issues.length).toBeGreaterThanOrEqual(1);
+    for (const issue of result.issues) {
+      expect(issue.category).toBe("mermaid_syntax");
+    }
+  });
+});
+
+// ── Index coverage tests ──────────────────────────────────────────
+
+describe("TestCheckIndexCoverage", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-index-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_missing_entry_flagged", () => {
+    writePage(path.join(wiki, "wiki", "alpha.md"), fullFm(), "body\n");
+    writePage(path.join(wiki, "wiki", "beta.md"), fullFm(), "body\n");
+    // index.md only mentions alpha.md
+    fs.writeFileSync(
+      path.join(wiki, "wiki", "index.md"),
+      "# Index\n\n- [Alpha](alpha.md)\n",
+    );
+    const issues = checkIndexCoverage(wiki);
+    const flaggedBases = issues.map((i) => path.basename(i.page));
+    expect(flaggedBases).toContain("beta.md");
+    expect(flaggedBases).not.toContain("alpha.md");
+    const missing = issues.find((i) => path.basename(i.page) === "beta.md");
+    expect(missing?.severity).toBe("error");
+    expect(missing?.category).toBe("index_coverage");
+  });
+
+  it("test_scaffold_pages_never_flagged", () => {
+    // summaries.md / overview.md already exist from makeInitializedWiki.
+    fs.writeFileSync(
+      path.join(wiki, "wiki", "index.md"),
+      "# Index\n",
+    );
+    const issues = checkIndexCoverage(wiki);
+    const rel = issues.map((i) => i.page);
+    expect(rel.some((p) => p.includes("summaries.md"))).toBe(false);
+    expect(rel.some((p) => p.includes("overview.md"))).toBe(false);
+  });
+});
+
+// ── Summaries sync tests ──────────────────────────────────────────
+
+describe("TestCheckSummariesSync", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-sum-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_stale_hash_flagged", () => {
+    writePage(
+      path.join(wiki, "wiki", "auth.md"),
+      fullFm({ summary_hash: "newhash" }),
+      "body\n",
+    );
+    fs.writeFileSync(
+      path.join(wiki, "wiki", "summaries.md"),
+      "# Summaries\n\n- [Auth](auth.md) `oldhash`: outdated entry\n",
+    );
+    const issues = checkSummariesSync(wiki);
+    expect(issues.length).toBeGreaterThanOrEqual(1);
+    expect(issues[0]?.category).toBe("summaries_sync");
+    expect(issues[0]?.detail.includes("oldhash")).toBe(true);
+  });
+
+  it("test_missing_entry_flagged", () => {
+    writePage(
+      path.join(wiki, "wiki", "auth.md"),
+      fullFm({ summary_hash: "hash1" }),
+      "body\n",
+    );
+    fs.writeFileSync(
+      path.join(wiki, "wiki", "summaries.md"),
+      "# Summaries\n",
+    );
+    const issues = checkSummariesSync(wiki);
+    expect(issues.length).toBeGreaterThanOrEqual(1);
+    expect(issues[0]?.severity).toBe("error");
+    expect(issues[0]?.detail.toLowerCase().includes("missing")).toBe(true);
+  });
+
+  it("test_matching_hash_no_issue", () => {
+    writePage(
+      path.join(wiki, "wiki", "auth.md"),
+      fullFm({ summary_hash: "abc123" }),
+      "body\n",
+    );
+    fs.writeFileSync(
+      path.join(wiki, "wiki", "summaries.md"),
+      "# Summaries\n\n- [Auth](auth.md) `abc123`: fine\n",
+    );
+    const issues = checkSummariesSync(wiki);
+    expect(issues).toEqual([]);
+  });
+});
+
+// ── ORM mapping freshness tests ───────────────────────────────────
+
+describe("TestCheckOrmMappingFreshness", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-orm-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_stale_mapping_flagged", () => {
+    // Write a SQLAlchemy source so the profile activates via substring detection.
+    const src = path.join(wiki, "models.py");
+    fs.writeFileSync(
+      src,
+      "from sqlalchemy import Column, Integer\n" +
+        "from sqlalchemy.ext.declarative import declarative_base\n" +
+        "Base = declarative_base()\n" +
+        "class User(Base):\n" +
+        "    __tablename__ = 'users'\n" +
+        "    id = Column(Integer, primary_key=True)\n",
+    );
+
+    // Mapping page generated BEFORE the source was last modified.
+    const mappingFm = fullFm({
+      title: "Database Mapping",
+      generated_at: "2020-01-01T00:00:00Z",
+    });
+    const mapping = path.join(wiki, "wiki", "database-mapping.md");
+    writePage(mapping, mappingFm, "# Mapping\n");
+
+    // Force mtime forward.
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(src, future, future);
+
+    const issues = checkOrmMappingFreshness(wiki);
+    expect(issues.length).toBeGreaterThanOrEqual(1);
+    expect(issues[0]?.category).toBe("orm_mapping_freshness");
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.detail.includes("generated_at")).toBe(true);
+  });
+
+  it("test_fresh_mapping_no_issue", () => {
+    const src = path.join(wiki, "models.py");
+    fs.writeFileSync(
+      src,
+      "from sqlalchemy import Column\nclass User: pass\n",
+    );
+    // Backdate source.
+    const past = new Date(Date.now() - 5 * 86_400_000);
+    fs.utimesSync(src, past, past);
+
+    const mappingFm = fullFm({
+      title: "Database Mapping",
+      generated_at: new Date().toISOString(),
+    });
+    const mapping = path.join(wiki, "wiki", "database-mapping.md");
+    writePage(mapping, mappingFm, "# Mapping\n");
+
+    const issues = checkOrmMappingFreshness(wiki);
+    expect(issues).toEqual([]);
+  });
+
+  it("test_missing_mapping_file_noop", () => {
+    // No database-mapping.md → no issues.
+    const issues = checkOrmMappingFreshness(wiki);
+    expect(issues).toEqual([]);
+  });
+
+  it("test_sibling_sources_shadowed_by_wiki_root_stub", () => {
+    // Regression for the ORM source-root precedence foot-gun: a stub
+    // `models.py` inside the wiki root must NOT mask a freshly-edited
+    // `models.py` sitting at the parent (project) level. Both roots are
+    // scanned and the max mtime across the union wins.
+    const stubInWiki = path.join(wiki, "models.py");
+    fs.writeFileSync(
+      stubInWiki,
+      "from sqlalchemy import Column\nclass Stub: pass\n",
+    );
+    // Backdate the stub well into the past.
+    const past = new Date(Date.now() - 30 * 86_400_000);
+    fs.utimesSync(stubInWiki, past, past);
+
+    // The real project source sits at the PARENT of wikiRoot.
+    const projectSrc = path.join(path.dirname(wiki), "real_models.py");
+    fs.writeFileSync(
+      projectSrc,
+      "from sqlalchemy import Column, Integer\n" +
+        "from sqlalchemy.ext.declarative import declarative_base\n" +
+        "Base = declarative_base()\n" +
+        "class User(Base):\n" +
+        "    __tablename__ = 'users'\n" +
+        "    id = Column(Integer, primary_key=True)\n",
+    );
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(projectSrc, future, future);
+
+    const mappingFm = fullFm({
+      title: "Database Mapping",
+      generated_at: "2020-01-01T00:00:00Z",
+    });
+    const mapping = path.join(wiki, "wiki", "database-mapping.md");
+    writePage(mapping, mappingFm, "# Mapping\n");
+
+    try {
+      const issues = checkOrmMappingFreshness(wiki);
+      expect(issues.length).toBeGreaterThanOrEqual(1);
+      // The flagged file must be the real project source, not the wiki stub.
+      expect(issues[0]?.detail).toContain("real_models.py");
+    } finally {
+      // Clean up the file created at the parent so it doesn't leak.
+      fs.rmSync(projectSrc, { force: true });
+    }
+  });
+});
+
+// ── Thin clusters tests ───────────────────────────────────────────
+
+describe("TestCheckThinClusters", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-clusters-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_two_page_cluster_flagged", () => {
+    // One isolated cluster: A <-> B (2 pages), one big cluster: C,D,E (3 pages).
+    const edges = [
+      { from: "A.md", to: "B.md", type: "extends", provenance: "EXTRACTED" },
+      { from: "C.md", to: "D.md", type: "extends", provenance: "EXTRACTED" },
+      { from: "D.md", to: "E.md", type: "extends", provenance: "EXTRACTED" },
+    ];
+    fs.writeFileSync(
+      path.join(wiki, "graph", "edges.jsonl"),
+      edges.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const issues = checkThinClusters(wiki);
+    expect(issues.length).toBeGreaterThanOrEqual(1);
+    expect(issues[0]?.category).toBe("thin_clusters");
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.detail.includes("A.md")).toBe(true);
+    expect(issues[0]?.detail.includes("B.md")).toBe(true);
+    // The 3-page cluster should not be flagged.
+    const threePageFlagged = issues.some((i) =>
+      i.detail.includes("C.md") && i.detail.includes("D.md"),
+    );
+    expect(threePageFlagged).toBe(false);
+  });
+
+  it("test_all_clusters_large_enough", () => {
+    const edges = [
+      { from: "A.md", to: "B.md", type: "extends", provenance: "EXTRACTED" },
+      { from: "B.md", to: "C.md", type: "extends", provenance: "EXTRACTED" },
+      { from: "C.md", to: "D.md", type: "extends", provenance: "EXTRACTED" },
+    ];
+    fs.writeFileSync(
+      path.join(wiki, "graph", "edges.jsonl"),
+      edges.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const issues = checkThinClusters(wiki);
+    expect(issues).toEqual([]);
   });
 });
 

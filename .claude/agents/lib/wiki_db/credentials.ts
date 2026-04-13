@@ -1,14 +1,26 @@
 /**
  * credentials.ts — Credential providers for wiki_db.
  *
- * Mirrors `credentials.py`:
- *  - `FileCredentialProvider`  reads a JSON file keyed by `db-<env>`.
+ * Thin compatibility shim: the legacy `FileCredentialProvider` /
+ * `EnvVarCredentialProvider` / `getCredentials()` surface is retained
+ * (imported by `connection.ts` and the Phase E drivers arriving later),
+ * but the implementations now delegate to the new
+ * `lib/credential_providers/` package.
+ *
+ * Contract:
+ *  - `FileCredentialProvider` reads a JSON file keyed by `db-<env>`.
  *  - `EnvVarCredentialProvider` reads `WIKI_DB_<ENV>_USER` / `..._PASSWORD`.
  *  - `getCredentials(env, {provider, config})` is the convenience dispatcher.
+ *
+ * The return type is `[string, string]` (username, password) — unchanged
+ * from the Python port so existing tests pass verbatim.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+
+import { FileProvider } from "../credential_providers/file.js";
+import { EnvVarProvider } from "../credential_providers/env_var.js";
 
 /**
  * Default credentials file location — `~/.config/wiki_db/credentials.json`.
@@ -35,6 +47,11 @@ export abstract class CredentialProvider {
  *     "db-<env>": {"username": "...", "password": "..."},
  *     ...
  *   }
+ *
+ * Implementation note: the new `credential_providers/FileProvider` stores
+ * flat `name → value` pairs; the wiki_db file format nests
+ * `username`/`password` under `db-<env>`. So we still do the JSON parse
+ * ourselves here rather than routing through `FileProvider`.
  */
 export class FileCredentialProvider extends CredentialProvider {
   private readonly _path: string;
@@ -71,19 +88,21 @@ export class FileCredentialProvider extends CredentialProvider {
 
 /**
  * Read credentials from `WIKI_DB_{ENV}_USER` / `WIKI_DB_{ENV}_PASSWORD`.
+ *
+ * Delegates to the shared `EnvVarProvider` so the env lookup logic lives
+ * in a single place.
  */
 export class EnvVarCredentialProvider extends CredentialProvider {
+  private readonly _inner = new EnvVarProvider({ prefix: "WIKI_DB_" });
+
   override get(env: string): [string, string] {
     const envUpper = env.toUpperCase();
-    const userVar = `WIKI_DB_${envUpper}_USER`;
-    const passVar = `WIKI_DB_${envUpper}_PASSWORD`;
-    const user = process.env[userVar];
-    const password = process.env[passVar];
-    if (user === undefined || password === undefined) {
+    const user = this._inner.getSecretSync(`${envUpper}_USER`);
+    const password = this._inner.getSecretSync(`${envUpper}_PASSWORD`);
+    if (user === null || password === null) {
       const missing: string[] = [];
-      for (const v of [userVar, passVar]) {
-        if (process.env[v] === undefined) missing.push(v);
-      }
+      if (user === null) missing.push(`WIKI_DB_${envUpper}_USER`);
+      if (password === null) missing.push(`WIKI_DB_${envUpper}_PASSWORD`);
       const err = new Error(
         `Missing environment variable(s): ${missing.join(", ")}`,
       );

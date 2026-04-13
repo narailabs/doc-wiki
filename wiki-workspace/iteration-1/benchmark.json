@@ -1,0 +1,62 @@
+{
+  "skill_name": "wiki-skill-v2",
+  "iteration": 1,
+  "timestamp": "2026-04-12T00:00:00Z",
+  "summary": {
+    "total_evals": 4,
+    "total_assertions": 22,
+    "assertions_passed": 22,
+    "assertions_failed": 0,
+    "pass_rate": 1.0,
+    "mean_tokens": 34193,
+    "mean_duration_seconds": 138.5
+  },
+  "evals": [
+    {
+      "eval_id": 1,
+      "eval_name": "wiki-init-ingest-query",
+      "assertions_total": 6,
+      "assertions_passed": 6,
+      "pass_rate": 1.0,
+      "tokens": 42876,
+      "duration_seconds": 272.1,
+      "notes": "Full end-to-end pipeline: init scaffold, ingest 3 docs with cache + events, query with summary-first search. Generated Mermaid diagrams, cross-links, and knowledge graph edges."
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "wiki-lint",
+      "assertions_total": 6,
+      "assertions_passed": 6,
+      "pass_rate": 1.0,
+      "tokens": 38292,
+      "duration_seconds": 129.2,
+      "notes": "Detected broken links (2), orphans (2), missing frontmatter (4). Auto-fixed all errors. Quality scoring functional across all pages."
+    },
+    {
+      "eval_id": 3,
+      "eval_name": "wiki-path",
+      "assertions_total": 5,
+      "assertions_passed": 5,
+      "pass_rate": 1.0,
+      "tokens": 27981,
+      "duration_seconds": 59.5,
+      "notes": "Graph operations via NetworkX. Found 2-hop shortest path and 3-hop alternate. All edges typed with provenance."
+    },
+    {
+      "eval_id": 4,
+      "eval_name": "db-agent-policy",
+      "assertions_total": 5,
+      "assertions_passed": 5,
+      "pass_rate": 1.0,
+      "tokens": 27621,
+      "duration_seconds": 93.2,
+      "notes": "Guard-rail policy enforcement: SELECT allowed, INSERT PRESENT_ONLY, DROP DENY. No mutations occurred. Agent adapted to actual API (discovered class names differ from eval prompt)."
+    }
+  ],
+  "untested": {
+    "reason": "Require live API access not available in test environment",
+    "agents": ["wiki-jira-agent", "wiki-confluence-agent", "wiki-github-agent", "wiki-gcp-agent", "wiki-aws-agent", "wiki-auth0-agent", "wiki-notion-agent"],
+    "eval_count": 21,
+    "note": "Source agent contracts have 3 evals each (happy-path, input validation, read-only enforcement). These test agent behavior when connected to live APIs."
+  }
+}

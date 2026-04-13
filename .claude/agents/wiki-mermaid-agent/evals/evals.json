@@ -1,0 +1,29 @@
+{
+  "skill_name": "wiki-mermaid-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Generate a Mermaid ER diagram from this structured JSON payload describing three entities (User, Order, Product) and their one-to-many relationships",
+      "expected_output": "Valid Mermaid erDiagram fenced code block injected into the target wiki page between existing markers, with entity names and relationship cardinalities matching the input JSON",
+      "files": [],
+      "expectations": [
+        "Emits a fenced ```mermaid code block with the `erDiagram` directive",
+        "Preserves existing non-Mermaid page content outside the managed markers",
+        "Uses the `||--o{` relationship syntax for one-to-many edges",
+        "Produces syntactically valid Mermaid that passes mermaid_lint.ts"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Convert this agent output describing a deploy pipeline into a Mermaid flowchart, then inject it into pipeline.md",
+      "expected_output": "A flowchart Mermaid block added to pipeline.md matching the sequence of steps in the input, with correctly-labeled edges and nodes",
+      "files": [],
+      "expectations": [
+        "Chooses an appropriate diagram type (flowchart/sequence/state) for the input shape",
+        "Handles nodes with quotes and special characters via safe escaping",
+        "Updates pipeline.md idempotently (re-running on the same input produces no diff)",
+        "Never mutates wiki pages outside the specified target"
+      ]
+    }
+  ]
+}

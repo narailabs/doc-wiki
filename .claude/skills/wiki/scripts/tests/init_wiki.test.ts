@@ -43,6 +43,9 @@ function runInit(
 
 const EXPECTED_DIRS = [
   "wiki",
+  "wiki/claims",
+  "wiki/synthesis",
+  "wiki/templates",
   "raw",
   "graph",
   "audit/open",
@@ -135,9 +138,12 @@ describe("init_wiki — initial files", () => {
     const ignorePath = path.join(wiki, ".wiki-ignore");
     expect(fs.existsSync(ignorePath)).toBe(true);
     const content = fs.readFileSync(ignorePath, "utf-8");
-    expect(content).toContain("__pycache__/");
     expect(content).toContain(".git/");
     expect(content).toContain("node_modules/");
+    expect(content).toContain(".DS_Store");
+    // Python artifacts removed post-TypeScript migration.
+    expect(content).not.toContain("__pycache__/");
+    expect(content).not.toContain("*.pyc");
   });
 
   it("test_creates_empty_events_log", () => {
@@ -237,6 +243,247 @@ describe("init_wiki — missing args", () => {
     // code rather than calling process.exit() directly — confirm rc != 0.
     const rc = main([]);
     expect(rc).not.toBe(0);
+  });
+});
+
+// ── v2 config blocks (Phase H2) ─────────────────────────────────────
+
+describe("init_wiki — v2 config blocks", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-v2cfg-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function loadCfg(wiki: string): Record<string, any> {
+    return yaml.load(
+      fs.readFileSync(path.join(wiki, "wiki.config.yaml"), "utf-8"),
+    ) as Record<string, any>;
+  }
+
+  it("emits the ecosystem block with agents/credentials/database/orm/claude_md/mermaid", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.ecosystem).toBeDefined();
+    expect(cfg.ecosystem.agents).toBeDefined();
+    expect(cfg.ecosystem.credentials).toBeDefined();
+    expect(cfg.ecosystem.credentials.provider).toBe("file");
+    expect(cfg.ecosystem.database).toBeDefined();
+    expect(cfg.ecosystem.database.policy.block_ddl).toBe(true);
+    expect(cfg.ecosystem.database.policy.dml_mode).toBe("present_only");
+    expect(cfg.ecosystem.orm.enabled).toBe(true);
+    expect(cfg.ecosystem.claude_md.enabled).toBe(true);
+    expect(cfg.ecosystem.mermaid.auto_generate).toBe(true);
+    expect(cfg.ecosystem.mermaid.types).toContain("erDiagram");
+  });
+
+  it("emits the lint block with structural and heuristic checks", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.lint).toBeDefined();
+    expect(cfg.lint.auto_run_after_ingest).toBe(true);
+    expect(cfg.lint.checks.structural).toContain("broken_links");
+    expect(cfg.lint.checks.structural).toContain("mermaid_syntax");
+    expect(cfg.lint.checks.structural).toContain("orm_mapping_freshness");
+    expect(cfg.lint.checks.heuristic).toContain("claim_confidence_check");
+    expect(cfg.lint.auto_fix.broken_links).toBe(true);
+    expect(cfg.lint.thresholds.thin_cluster_min_pages).toBe(3);
+  });
+
+  it("emits the claims block with provenance rules and thresholds", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.claims).toBeDefined();
+    expect(cfg.claims.confidence_range).toEqual([0.0, 1.0]);
+    expect(cfg.claims.status_lifecycle).toContain("proposed");
+    expect(cfg.claims.status_lifecycle).toContain("deprecated");
+    expect(cfg.claims.failure_reason_required).toBe(true);
+  });
+
+  it("emits the code_locality block", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.code_locality).toBeDefined();
+    expect(cfg.code_locality.local_rule).toBe("same_repo_and_readable");
+    expect(cfg.code_locality.local_snippet_max_lines).toBe(6);
+    expect(cfg.code_locality.external_default).toBe("copy_with_attribution");
+    expect(cfg.code_locality.drift_detection.enabled).toBe(true);
+  });
+
+  it("emits the refresh block with schedule and staleness", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.refresh).toBeDefined();
+    expect(cfg.refresh.stale_threshold).toBe("7d");
+    expect(cfg.refresh.auto_refresh).toBe(false);
+    expect(cfg.refresh.keep_history).toBe(3);
+  });
+
+  it("emits hooks and hooks_always_on blocks", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.hooks).toBeDefined();
+    expect(cfg.hooks.crosslink.enabled).toBe(true);
+    expect(cfg.hooks.tag_harmonize.enabled).toBe(true);
+
+    expect(cfg.hooks_always_on).toBeDefined();
+    expect(cfg.hooks_always_on.enabled).toBe(true);
+    expect(cfg.hooks_always_on.phase_1_platforms.claude_code).toBeDefined();
+    expect(cfg.hooks_always_on.phase_1_platforms.codex).toBeDefined();
+    expect(cfg.hooks_always_on.phase_1_platforms.cursor).toBeDefined();
+  });
+
+  it("emits the multimodal block with vision and audio_video", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.multimodal).toBeDefined();
+    expect(cfg.multimodal.enabled).toBe("optional");
+    expect(cfg.multimodal.vision.extensions).toContain("png");
+    expect(cfg.multimodal.audio_video.extensions).toContain("mp4");
+    expect(cfg.multimodal.audio_video.whisper_model).toBe("small");
+  });
+
+  it("emits the top-level credentials block with provider/fallback/prefix", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+
+    expect(cfg.credentials).toBeDefined();
+    expect(cfg.credentials.provider).toBe("keychain");
+    expect(cfg.credentials.fallback).toEqual(["env_var"]);
+    expect(cfg.credentials.prefix).toBe("WIKI_");
+  });
+});
+
+// ── Claude Code hook install on init (Phase H1) ─────────────────────
+
+describe("init_wiki — Claude Code hook install", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-hooks-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("installs .claude/settings.json PreToolUse hooks on first run", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const settings = path.join(wiki, ".claude", "settings.json");
+    expect(fs.existsSync(settings)).toBe(true);
+    const parsed = JSON.parse(fs.readFileSync(settings, "utf-8"));
+    expect(parsed.hooks.PreToolUse).toBeDefined();
+    const matchers = parsed.hooks.PreToolUse.map(
+      (e: { matcher: string }) => e.matcher,
+    );
+    expect(matchers).toContain("WebFetch");
+    expect(matchers).toContain("WebSearch");
+  });
+
+  it("re-init does not rewrite hook settings", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const settings = path.join(wiki, ".claude", "settings.json");
+    const before = fs.readFileSync(settings, "utf-8");
+
+    runInit(wiki);
+    const after = fs.readFileSync(settings, "utf-8");
+    expect(after).toBe(before);
+
+    // Second library call reports no new files from the hook installer.
+    const second = initWiki(wiki);
+    expect(second.created_files).toEqual([]);
+  });
+});
+
+// ── credential registry wiring (Phase H credential integration) ─────
+
+describe("init_wiki — credential registry wiring", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-creds-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("populates the credential_providers registry from the emitted config", async () => {
+    const { clearProviders, listProviders } = await import(
+      "../../../../agents/lib/credential_providers/index.js"
+    );
+    clearProviders();
+
+    const wiki = tmpWiki(tmpPath);
+    initWiki(wiki);
+
+    const names = listProviders();
+    // Default config uses primary=keychain, fallback=[env_var]
+    expect(names).toContain("keychain");
+    expect(names).toContain("env_var");
+  });
+
+  it("honors ecosystem.credentials when the top-level block is absent", async () => {
+    const { clearProviders, listProviders } = await import(
+      "../../../../agents/lib/credential_providers/index.js"
+    );
+    const wiki = tmpWiki(tmpPath);
+    initWiki(wiki);
+
+    // User edits: removes the top-level block and sets provider via
+    // ecosystem.credentials only.
+    const cfgPath = path.join(wiki, "wiki.config.yaml");
+    const cfg = yaml.load(fs.readFileSync(cfgPath, "utf-8")) as Record<
+      string,
+      any
+    >;
+    delete cfg["credentials"];
+    cfg["ecosystem"]["credentials"] = { provider: "file" };
+    fs.writeFileSync(cfgPath, yaml.dump(cfg));
+
+    clearProviders();
+    initWiki(wiki); // re-init reads the edited config
+    expect(listProviders()).toContain("file");
+  });
+
+  it("emits a stderr warning when the config is malformed", async () => {
+    const { clearProviders } = await import(
+      "../../../../agents/lib/credential_providers/index.js"
+    );
+    const wiki = tmpWiki(tmpPath);
+    initWiki(wiki);
+
+    fs.writeFileSync(path.join(wiki, "wiki.config.yaml"), "not: valid: yaml:");
+    clearProviders();
+
+    const messages: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      messages.push(args.map(String).join(" "));
+    };
+    try {
+      initWiki(wiki);
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(messages.some((m) => m.includes("failed to apply credentials"))).toBe(
+      true,
+    );
   });
 });
 

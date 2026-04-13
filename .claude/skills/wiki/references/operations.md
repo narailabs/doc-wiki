@@ -178,3 +178,96 @@ Log tokens used vs estimated full-corpus read. Report reduction ratio.
 `--incremental`: Use `.wiki-cache/` to skip extraction if content hash matches. Only short-circuits extraction, never the source fetch.
 
 Default is force-full (re-extract everything). `--incremental` is the speed optimization.
+
+---
+
+## /wiki-fix — Quick Targeted Correction
+
+Use when the user identifies a specific page and a specific issue (factual error, stale reference, outdated claim, broken link, wrong code reference).
+
+1. Resolve the page — accept either a relative path (`topics/auth/jwt-rotation.md`) or a fuzzy title match against `wiki/index.md`.
+2. Read the page fully, including frontmatter.
+3. Form a proposal — describe the edit as a unified diff the user can eyeball.
+4. Autonomy gate — apply per `references/autonomy.md`:
+   - `conservative`: always ask before applying.
+   - `balanced`: auto-apply fixes scoped to a single paragraph or code-ref; ask for structural changes (frontmatter, section reorder).
+   - `autonomous`: auto-apply, notify after.
+   - `auto`: use the per-operation risk score.
+5. Write the edit. Re-emit frontmatter in canonical order (see `compilation.md`).
+6. Event log: `node {skill_path}/scripts/event_logger.js --op fix --wiki-root <root> --details '{"page": "...", "issue": "...", "applied": true}'`.
+7. Run post-op hooks (crosslink + tag-harmonize) unless `--no-crosslink` or `--no-tag-harmonize`.
+
+### When to split into two fixes
+If a single page has two independent issues, propose and apply them as separate fix events so the audit trail stays grepable per issue.
+
+---
+
+## /wiki-promote — Archived Query → Permanent Page
+
+Convert `outputs/queries/<slug>.md` into a canonically-located wiki page.
+
+1. Choose destination directory — the user may pass `--topic <dir>`, otherwise suggest one based on the answer's dominant entity tags.
+2. Rewrite inline citations:
+   - Relative-to-outputs paths become relative-to-destination paths.
+   - External URLs are preserved verbatim (but re-run through `security_check.ts` before committing).
+3. Add frontmatter: `title`, `type: synthesis`, `tags`, `sources` (from the archived citations), `promoted_from: outputs/queries/<slug>.md`, `created: <ISO-date>`.
+4. Write to `wiki/<topic>/<slug>.md`.
+5. Update `wiki/index.md` and append a summary line to `wiki/summaries.md` (50 tokens max, matching the summary convention).
+6. Leave the archive — `outputs/queries/<slug>.md` is never deleted; it stays as historical provenance.
+7. Event log: `--op promote --details '{"from": "outputs/queries/...", "to": "wiki/..."}'`.
+8. Run post-op hooks.
+
+### What NOT to promote
+- Query answers that are already covered by existing pages — suggest `/wiki-fix` on the existing page instead.
+- Answers with unresolved contradictions flagged in `## Open Questions` — resolve first, promote second.
+
+---
+
+## /wiki-path — Shortest-Path Between Concepts
+
+```bash
+node {skill_path}/scripts/graph_ops.js path \
+  --edges <wiki-root>/graph/edges.jsonl \
+  --from "<concept-a>" --to "<concept-b>" \
+  [--max-hops N] [--via "<concept>"] [--all-paths]
+```
+
+The shim walks `edges.jsonl` (typed relationships: `supports`, `contradicts`, `extends`, `supersedes`, `references`, …) and returns an edge chain connecting the two concepts.
+
+### Output shape
+- Default: single shortest path with edge types annotated per hop.
+- `--all-paths`: up to 5 alternative paths, ranked by total edge weight.
+- `--via <concept>`: constrain the shortest path to pass through the named concept; useful for "how does X relate to Y through Z" queries.
+- `--max-hops N`: cap path length; if no path exists within the cap, return `{"status": "no_path", "max_hops": N}`.
+
+### Use cases
+- "How does the auth subsystem relate to the rate-limit subsystem?"
+- "Is the new caching proposal connected to any deprecated design we replaced?"
+- "What path links a recent bug page to the original architecture decision?"
+
+No autonomy gate — `wiki-path` is read-only and never writes.
+
+---
+
+## /wiki-stats — Token Efficiency and Cost Metrics
+
+```bash
+node {skill_path}/scripts/event_logger.js stats \
+  --wiki-root <root> \
+  [--since 7d] [--per-agent] [--by-op]
+```
+
+Reads `log/events.jsonl` and aggregates across the requested window.
+
+### Reported metrics
+- **Running averages** — tokens-in, tokens-out, reduction ratio per op type.
+- **p50 / p95 reduction** — how much context the summary-first strategy saved vs a naïve full-corpus read.
+- **Spend** — total USD cost across the window, split by model where available.
+- **Per-agent breakdown** (`--per-agent`) — cost + call count for each source agent (jira, confluence, github, notion, gcp, aws).
+- **Per-op breakdown** (`--by-op`) — same metrics grouped by `/wiki-*` command.
+
+### Windowing
+`--since` accepts `Nd` (days), `Nh` (hours), or an ISO-8601 instant. Default is `7d`.
+
+### No writes
+`wiki-stats` is a report-only command; it never mutates the wiki or the event log.

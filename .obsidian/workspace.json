@@ -1,0 +1,266 @@
+{
+  "main": {
+    "id": "f29d5cc9a81ef64e",
+    "type": "split",
+    "children": [
+      {
+        "id": "ccfe2ac6efe751cf",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9325d32fefbeada2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "CLAUDE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "CLAUDE"
+            }
+          },
+          {
+            "id": "7ad45dbd4c6ba7c1",
+            "type": "leaf",
+            "state": {
+              "type": "show-hidden-files:documentation",
+              "state": {
+                "show-hidden-files:documentation": {
+                  "data": "# Show Hidden Files for Obsidian [![release](https://img.shields.io/github/v/release/polyipseity/obsidian-show-hidden-files)][latest release] [![Obsidian downloads](https://img.shields.io/badge/dynamic/json?logo=Obsidian&color=%238b6cef&label=downloads&query=$[\"show-hidden-files\"].downloads&url=https://raw.githubusercontent.com/obsidianmd/obsidian-releases/master/community-plugin-stats.json)][community plugin]\n\n[Buy Me a Coffee]: https://buymeacoffee.com/polyipseity\n[Buy Me a Coffee/embed]: https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=polyipseity&button_colour=40DCA5&font_colour=ffffff&font_family=Lato&outline_colour=000000&coffee_colour=FFDD00\n[Obsidian]: https://obsidian.md/\n[changelog]: https://github.com/polyipseity/obsidian-show-hidden-files/blob/main/CHANGELOG.md\n[community plugin]: https://obsidian.md/plugins?id=show-hidden-files\n[latest release]: https://github.com/polyipseity/obsidian-show-hidden-files/releases/latest\n[other things]: https://github.com/polyipseity/obsidian-monorepo\n[plugin library]: https://github.com/polyipseity/obsidian-plugin-library\n[repository]: https://github.com/polyipseity/obsidian-show-hidden-files\n[trailer]: https://raw.githubusercontent.com/polyipseity/obsidian-show-hidden-files/main/assets/trailer.png\n\nShow hidden files, like dotfiles, in [Obsidian].\n\n[![Buy Me a Coffee/embed]][Buy Me a Coffee]\n\n__[Repository] · [Changelog] · [Community plugin] · [Other things] · [Features](#features) · [Installation](#installation) · [Usage](#usage) · [Contributing](#contributing) · [Security](#security)__\n\n![Trailer]\n\nFor first time users, read the [installation](#installation) section first!\n\nThis file is automatically opened on first install. You can reopen it in settings or command palette.\n\n## Features\n\n- Show files that are forcefully hidden in vanilla Obsidian.\n- Toggle visibility of hidden files.\n- Interact with hidden files normally like normal files.\n\n## Installation\n\n1. Install plugin.\n    - ~~Community plugins~~\n        1. ~~Install the [plugin][community plugin] from community plugins directly.~~\n    - Manual\n        1. Create directory `show-hidden-files` under `.obsidian/plugins` of your vault.\n        2. Place `manifest.json`, `main.js`, and `styles.css` from the [latest release] into the directory.\n    - Building (latest)\n        1. Clone this repository, including its submodules.\n        2. Install [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm).\n        3. Run `npm install` in the root directory.\n        4. Run `npm run obsidian:install <vault directory>` in the root directory.\n    - [Obsidian42 - BRAT](https://obsidian.md/plugins?id=obsidian42-brat) (latest)\n        - See [their readme](https://github.com/TfTHacker/obsidian42-brat#readme).\n2. Enable plugin. _Before you enable, please check [§ Usage](#usage)._\n3. (optional) Configure plugin settings.\n\n## Usage\n\n- Before enabling the plugin, check if your vault contains dot folders with a lot of files \\(e.g. 100+ files\\). If yes, Obsidian will likely freeze \\(for a long time\\) when you enable the plugin, as Obsidian scans all files in the dot folders.\n\n    By default, the plugin excludes folders and files named `.git` or `.venv` at any level of the vault file tree. If your dot folders are excluded by the defaults, you can simply enable the plugin without freezing Obsidian. The defaults can be edited in plugin settings.\n\n    If not, you should manually create `.obsidian/plugins/show-hidden-files/data.json`, with the following contents as an example \\(excluding the comments\\):\n\n    ```JSON5\n    {\n        \"showingRules\": [\n            \"+/\", // Needed to include all hidden files and folders.\n            // Add dot folders with a lot of files, e.g.:\n            \"-/\\\\.git(?:\\\\/|$)/u\",\n            \"-/\\\\.venv(?:\\\\/|$)/u\",\n            \"-/\\\\.aDotFolderWithManyFiles(?:\\\\/|$)/u\",\n        ]\n    }\n    ```\n\n    The example excludes folders and files named `.git`, `.venv`, or `.aDotFolderWithManyFiles` at any level of the vault file tree. You can instead use `\"-.aDotFolderWithManyFiles/\"` to exclude a folder or file named `.aDotFolderWithManyFiles` at the vault root only.\n\n- Enable the plugin.\n- Please also enable `Files & links > Detect all file extensions` for the plugin to work properly.\n- Other plugins will treat visible hidden files as normal files. This may cause issues such as treating plugin JavaScript files as user scripts. To resolve such issues, exclude those hidden files in the other plugins' settings or hide those hidden files in this plugin's settings.\n\n## Contributing\n\nContributions are welcome!\n\nThis project uses [`changesets`](https://github.com/changesets/changesets) to manage the changelog. When creating a pull request, please [add a changeset](https://github.com/changesets/changesets/blob/main/docs/intro-to-using-changesets.md#adding-changesets) describing the changes. Add multiple changesets if your pull request changes several things. End each changeset with `([PR number](PR link) by [author username](author link))`. For example, the newly created file under the directory `.changeset` should look like:\n\n```Markdown\n---\n\"example\": patch\n---\n\nThis is an example change. ([GH#1](https://github.com/ghost/example/pull/1) by [@ghost](https://github.com/ghost))\n```\n\n### Todos\n\nThe todos here, ordered alphabetically, are things planned for the plugin. There are no guarantees that they will be completed. However, we are likely to accept contributions for them.\n\n- (none)\n\n### Translating\n\nTranslation files are under [`assets/locales/`](assets/locales/). Each locale has its own directory named with its corresponding __[IETF language tag](https://wikipedia.org/wiki/IETF_language_tag)__. Some translation keys are missing here and instead located at [`obsidian-plugin-library`][plugin library].\n\nTo contribute translation for an existing locale, modify the files in the corresponding directory.\n\nFor a new locale, create a new directory named with its language tag and copy [`assets/locales/en/translation.json`](assets/locales/en/translation.json) into it. Then, add an entry to [`assets/locales/en/language.json`](assets/locales/en/language.json) in this format:\n\n```JSONc\n{\n    // ...\n    \"en\": \"English\",\n    \"(your-language-tag)\": \"(Native name of your language)\",\n    \"uwu\": \"Uwuish\",\n    // ...\n}\n```\n\nSort the list of languages by the alphabetical order of their language tags. Then modify the files in the new directory. There will be errors in [`assets/locales.ts`](assets/locales.ts), which you can ignore and we will fix them for you. You are welcome to fix them yourself if you know TypeScript.\n\nWhen translating, keep in mind the following things:\n\n- Do not translate anything between `{{` and `}}` (`{{example}}`). They are __interpolations__ and will be replaced by localized strings at runtime.\n- Do not translate anything between `$t(` and `)` (`$t(example)`). They refer to other localized strings. To find the localized string being referred to, follow the path of the key, which is separated by dots (`.`). For example, the key [`youtu.be./dQw4w9WgXcQ`](https://youtu.be./dQw4w9WgXcQ) refers to:\n\n```JSONc\n{\n    // ...\n    \"youtu\": {\n        // ...\n        \"be\": {\n            // ...\n            \"/dQw4w9WgXcQ\": \"I am 'youtu.be./dQw4w9WgXcQ'!\",\n            // ...\n        },\n        // ...\n    },\n    // ...\n}\n```\n\n- The keys under `generic` are vocabularies. They can be referred in translation strings by `$t(generic.key)`. Refer to them as much as possible to standardize translations for vocabularies that appear in different places.\n- It is okay to move interpolations and references to other localized strings around to make the translation natural. It is also okay to not use some references used in the original translation. However, it is NOT okay to not use all interpolations.\n\n## Security\n\nWe hope that there will never be any security vulnerabilities, but unfortunately it does happen. Please [report](#reporting-a-vulnerability) them!\n\n### Supported versions\n\n| Version | Supported |\n|-|-|\n| latest | ✅ |\n| outdated | ❌ |\n\n### Reporting a vulnerability\n\nPlease report a vulnerability by opening an new issue. We will get back to you as soon as possible.\n",
+                  "displayTextI18nKey": "translation:generic.documentations.readme",
+                  "iconI18nKey": "asset:generic.documentations.readme-icon"
+                }
+              },
+              "icon": "file-question",
+              "title": "Readme"
+            }
+          },
+          {
+            "id": "df7e7f21dab74ebe",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": ".claude/skills/wiki/SKILL.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "SKILL"
+            }
+          }
+        ],
+        "currentTab": 2
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "47a17772abac238f",
+    "type": "split",
+    "children": [
+      {
+        "id": "8f337e65d0eef365",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "29a783cbf9f16e68",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": true
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "11a9e453447a7c52",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "4883faf33e1e7708",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "a95e005eb1a41f83",
+    "type": "split",
+    "children": [
+      {
+        "id": "6505e6058791d540",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3e3ff408a1f575b2",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": ".claude/skills/wiki/SKILL.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for SKILL"
+            }
+          },
+          {
+            "id": "04909c4c2468e773",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": ".claude/skills/wiki/SKILL.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from SKILL"
+            }
+          },
+          {
+            "id": "47d194ba1aaf498d",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "eb1e49f785e9d63c",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "50ad73606a4a4e1d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": ".claude/skills/wiki/SKILL.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of SKILL"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "df7e7f21dab74ebe",
+  "lastOpenFiles": [
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/types/fake-timers-src.d.ts",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/README.md",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/src",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/types",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/package.json",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers/LICENSE",
+    "node_modules/nise/lib/fake-server/log.js",
+    "node_modules/nise/lib/fake-server/fake-server-with-clock.js",
+    "node_modules/nise/lib/fake-server/index.js",
+    "node_modules/nise/node_modules/@sinonjs/fake-timers",
+    "node_modules/nise/lib/event/progress-event.js",
+    "node_modules/nise/README.md",
+    "node_modules/@sinonjs/samsam/node_modules/type-detect/README.md",
+    "node_modules/@sinonjs/commons/lib/prototypes/README.md",
+    "node_modules/@sinonjs/samsam/docs/index.md",
+    "node_modules/@sinonjs/samsam/README.md",
+    "node_modules/@sinonjs/fake-timers/README.md",
+    "node_modules/@sinonjs/commons/README.md",
+    "node_modules/@types/pg/README.md",
+    "node_modules/path-to-regexp/Readme.md",
+    "node_modules/just-extend/README.md",
+    "node_modules/just-extend/CHANGELOG.md",
+    "node_modules/@types/sinon/README.md",
+    "node_modules/type-detect/README.md",
+    "node_modules/diff/release-notes.md",
+    "node_modules/diff/README.md",
+    "node_modules/diff/CONTRIBUTING.md",
+    "node_modules/sinon/README.md",
+    "node_modules/sinon/CONTRIBUTING.md",
+    "node_modules/aws-sdk-client-mock/README.md",
+    "node_modules/@types/sinonjs__fake-timers/README.md",
+    "node_modules/@azure/msal-browser/README.md",
+    "node_modules/@azure/identity/README.md",
+    "node_modules/mongodb/README.md",
+    "node_modules/mongodb/LICENSE.md",
+    "node_modules/js-md4/doc/fonts/OpenSans-Regular-webfont.svg",
+    "node_modules/js-md4/doc/fonts/OpenSans-LightItalic-webfont.svg",
+    "node_modules/js-md4/doc/fonts/OpenSans-Light-webfont.svg",
+    "node_modules/js-md4/doc/fonts/OpenSans-Italic-webfont.svg",
+    "node_modules/js-md4/doc/fonts/OpenSans-BoldItalic-webfont.svg",
+    "node_modules/js-md4/doc/fonts/OpenSans-Bold-webfont.svg",
+    ".worktrees/py-to-ts/node_modules/pdfjs-dist/legacy/web/images/treeitem-expanded.svg",
+    ".worktrees/py-to-ts/node_modules/pdfjs-dist/legacy/web/images/toolbarButton-zoomOut.svg",
+    ".worktrees/py-to-ts/node_modules/pdfjs-dist/legacy/web/images/toolbarButton-viewLayers.svg",
+    ".worktrees/py-to-ts/node_modules/pdfjs-dist/legacy/web/images/treeitem-collapsed.svg"
+  ]
+}

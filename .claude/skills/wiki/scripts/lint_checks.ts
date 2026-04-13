@@ -21,11 +21,18 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as yaml from "js-yaml";
 import { pythonJsonDumps } from "./_json_py.js";
-import { isolatedNodes, listEdges } from "./graph_ops.js";
+import { clusters, isolatedNodes, listEdges } from "./graph_ops.js";
+import { lintPage as lintMermaidPage } from "./mermaid_lint.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter as parseFrontmatterRaw } from "./_frontmatter.js";
 import { wikiPages } from "./_wiki_fs.js";
+import {
+  loadAllProfiles,
+  detectOrm,
+  type OrmProfile,
+} from "../../../agents/lib/wiki_orm/index.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -345,6 +352,389 @@ function pyRoundPercent(rate: number): number {
   return floor % 2 === 0 ? floor : floor + 1;
 }
 
+/** Run mermaid_lint's per-page validator across the wiki and return lint issues. */
+export function checkMermaidSyntax(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  for (const page of wikiPages(wikiRoot)) {
+    const results = lintMermaidPage(page);
+    for (const mi of results) {
+      for (const err of mi.errors) {
+        issues.push(
+          makeIssue(
+            "warning",
+            "mermaid_syntax",
+            page,
+            `line ${mi.line}: ${err}`,
+          ),
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+/** Never-treat-as-regular-page names, matching checkOrphans. */
+const _NEVER_INDEXED: ReadonlySet<string> = new Set([
+  "index.md",
+  "summaries.md",
+  "overview.md",
+]);
+
+/**
+ * Every `.md` under `wiki/` (except the three scaffolding pages) must appear
+ * as a markdown link target in `wiki/index.md`. Missing entries are errors.
+ */
+export function checkIndexCoverage(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  const indexPath = path.join(wikiRoot, "wiki", "index.md");
+  if (!fs.existsSync(indexPath)) {
+    return issues;
+  }
+  const indexContent = fs.readFileSync(indexPath, { encoding: "utf-8" });
+  const linked = new Set<string>();
+  for (const link of findLinks(indexContent)) {
+    if (link.startsWith("http") || link.startsWith("#") || !link.endsWith(".md")) {
+      continue;
+    }
+    // Normalize to path relative to wiki/ so we can compare with rel paths.
+    const resolved = path.resolve(path.dirname(indexPath), link);
+    linked.add(resolved);
+  }
+
+  const wikiDir = path.join(wikiRoot, "wiki");
+  for (const page of wikiPages(wikiRoot)) {
+    const base = path.basename(page);
+    if (_NEVER_INDEXED.has(base)) {
+      continue;
+    }
+    if (!linked.has(page)) {
+      const rel = path.relative(wikiDir, page);
+      issues.push(
+        makeIssue(
+          "error",
+          "index_coverage",
+          page,
+          `Page '${rel}' is not linked from wiki/index.md`,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/**
+ * Parse `wiki/summaries.md` for entries shaped like:
+ *   - [title](rel/path.md) `hash`: summary...
+ * Returns a map of absolute page path -> stored hash.
+ */
+function parseSummariesIndex(
+  wikiRoot: string,
+): { entries: Map<string, string>; path: string; exists: boolean } {
+  const summariesPath = path.join(wikiRoot, "wiki", "summaries.md");
+  const entries = new Map<string, string>();
+  if (!fs.existsSync(summariesPath)) {
+    return { entries, path: summariesPath, exists: false };
+  }
+  const content = fs.readFileSync(summariesPath, { encoding: "utf-8" });
+  // Each entry line pairs a markdown link with a hash in backticks. Hash
+  // format is permissive — any non-whitespace, non-backtick run — so tests
+  // and real summaries may use full sha256 hex, short hashes, or placeholders.
+  const entryRe = /\[[^\]]*\]\(([^)]+\.md)\)\s*`([^`\s]+)`/g;
+  let m: RegExpExecArray | null;
+  while ((m = entryRe.exec(content)) !== null) {
+    const rel = m[1];
+    const hash = m[2];
+    if (!rel || !hash) continue;
+    const abs = path.resolve(path.dirname(summariesPath), rel);
+    entries.set(abs, hash);
+  }
+  return { entries, path: summariesPath, exists: true };
+}
+
+/**
+ * Every wiki page must have a summaries.md entry whose stored hash matches
+ * the page's frontmatter `summary_hash`. Missing entries or mismatches are
+ * errors; pages without a `summary_hash` field in frontmatter are skipped.
+ */
+export function checkSummariesSync(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  const { entries, path: summariesPath, exists } = parseSummariesIndex(wikiRoot);
+  if (!exists) {
+    return issues;
+  }
+  for (const page of wikiPages(wikiRoot)) {
+    const base = path.basename(page);
+    if (_NEVER_INDEXED.has(base)) {
+      continue;
+    }
+    const content = fs.readFileSync(page, { encoding: "utf-8" });
+    const fm = parseFrontmatter(content);
+    const hashVal = fm["summary_hash"];
+    const pageHash = typeof hashVal === "string" ? hashVal : "";
+    if (!pageHash) {
+      continue;
+    }
+    const storedHash = entries.get(page);
+    if (storedHash === undefined) {
+      issues.push(
+        makeIssue(
+          "error",
+          "summaries_sync",
+          page,
+          `Page is missing from ${path.relative(wikiRoot, summariesPath)}`,
+        ),
+      );
+      continue;
+    }
+    if (storedHash !== pageHash) {
+      issues.push(
+        makeIssue(
+          "warning",
+          "summaries_sync",
+          page,
+          `summary_hash mismatch: page has ${pageHash}, summaries.md has ${storedHash}`,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
+/**
+ * Resolve the active ORM profile for `wikiRoot`. Order of preference:
+ *   1. `ecosystem.orm.profile` name in wiki.config.yaml → matched by profile name.
+ *   2. Substring-detection via `detectOrm` over a sample of project files.
+ * Returns null when no profile can be resolved.
+ */
+function resolveActiveOrmProfile(wikiRoot: string): OrmProfile | null {
+  const profiles = loadAllProfiles();
+  if (profiles.length === 0) return null;
+
+  const configPath = path.join(wikiRoot, "wiki.config.yaml");
+  if (fs.existsSync(configPath)) {
+    try {
+      const parsed = yaml.load(fs.readFileSync(configPath, { encoding: "utf-8" }));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const cfg = parsed as Record<string, unknown>;
+        const eco = cfg["ecosystem"];
+        const ormSection =
+          eco && typeof eco === "object" && !Array.isArray(eco)
+            ? (eco as Record<string, unknown>)["orm"]
+            : undefined;
+        const profileName =
+          ormSection &&
+          typeof ormSection === "object" &&
+          !Array.isArray(ormSection)
+            ? (ormSection as Record<string, unknown>)["profile"]
+            : undefined;
+        if (typeof profileName === "string" && profileName) {
+          const match = profiles.find((p) => p.name === profileName);
+          if (match) return match;
+        }
+      }
+    } catch {
+      // Fall through to detection.
+    }
+  }
+
+  // Sample up to a few representative files near the project root for
+  // substring-based detection. `wikiRoot` may sit at a `wiki-root/` child so
+  // also probe the parent directory.
+  const probeRoots = [wikiRoot, path.dirname(wikiRoot)];
+  const samples: Record<string, string> = {};
+  for (const root of probeRoots) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const full = path.join(root, entry.name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.size > 65536) continue;
+        samples[full] = fs.readFileSync(full, { encoding: "utf-8" });
+      } catch {
+        continue;
+      }
+      if (Object.keys(samples).length >= 30) break;
+    }
+    if (Object.keys(samples).length >= 30) break;
+  }
+  const detected = detectOrm(samples, profiles);
+  return detected[0] ?? null;
+}
+
+/**
+ * Walk `searchRoot` recursively and collect files whose basename matches any
+ * of `filePatterns` (glob-style with `*` wildcard). Skips common vendor dirs.
+ */
+function findOrmSourceFiles(
+  searchRoot: string,
+  filePatterns: readonly string[],
+): string[] {
+  if (!fs.existsSync(searchRoot)) return [];
+  const out: string[] = [];
+  const skip = new Set([
+    "node_modules",
+    ".git",
+    "wiki-root",
+    "wiki",
+    "raw",
+    "graph",
+    ".wiki-cache",
+    "log",
+    "outputs",
+    "dist",
+    "build",
+    "__pycache__",
+  ]);
+  const regexes = filePatterns.map((p) => globToRegex(p));
+  const stack: string[] = [searchRoot];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (dir === undefined) continue;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (skip.has(entry.name)) continue;
+        stack.push(path.join(dir, entry.name));
+      } else if (entry.isFile()) {
+        if (regexes.some((re) => re.test(entry.name))) {
+          out.push(path.join(dir, entry.name));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Convert a simple glob (`**`, `*`, `?`, literal chars) to a regex anchored
+ * at both ends and applied to a basename. Leading `**\/` and path segments
+ * are stripped so `**\/*.py` reduces to `*.py`.
+ */
+function globToRegex(glob: string): RegExp {
+  const base = glob.split("/").pop() ?? glob;
+  let body = "";
+  for (const ch of base) {
+    if (ch === "*") body += ".*";
+    else if (ch === "?") body += ".";
+    else body += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp("^" + body + "$");
+}
+
+/**
+ * If `wiki/database-mapping.md` exists, compare its frontmatter `generated_at`
+ * against the newest mtime of any ORM source file. Newer source → warning.
+ */
+export function checkOrmMappingFreshness(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  const mappingPath = path.join(wikiRoot, "wiki", "database-mapping.md");
+  if (!fs.existsSync(mappingPath)) {
+    return issues;
+  }
+  const content = fs.readFileSync(mappingPath, { encoding: "utf-8" });
+  const fm = parseFrontmatter(content);
+  const generatedAtVal = fm["generated_at"];
+  if (typeof generatedAtVal !== "string" || !generatedAtVal) {
+    issues.push(
+      makeIssue(
+        "warning",
+        "orm_mapping_freshness",
+        mappingPath,
+        "database-mapping.md is missing frontmatter 'generated_at' field",
+      ),
+    );
+    return issues;
+  }
+  const generatedMs = Date.parse(generatedAtVal);
+  if (Number.isNaN(generatedMs)) {
+    issues.push(
+      makeIssue(
+        "warning",
+        "orm_mapping_freshness",
+        mappingPath,
+        `Cannot parse 'generated_at' timestamp: ${generatedAtVal}`,
+      ),
+    );
+    return issues;
+  }
+
+  const profile = resolveActiveOrmProfile(wikiRoot);
+  if (profile === null || profile.file_patterns.length === 0) {
+    return issues;
+  }
+
+  // Search both the wiki root and its parent — a project repo typically hosts
+  // the wiki as a subdirectory, so ORM sources usually live one level up.
+  // Take the max mtime across the UNION of both roots: a stray file inside
+  // the wiki root must not shadow the real project sources one level up.
+  const searchRoots = [wikiRoot, path.dirname(wikiRoot)];
+  const seen = new Set<string>();
+  let newestMs = 0;
+  let newestFile = "";
+  for (const root of searchRoots) {
+    for (const f of findOrmSourceFiles(root, profile.file_patterns)) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      try {
+        const stat = fs.statSync(f);
+        const mtime = stat.mtimeMs;
+        if (mtime > newestMs) {
+          newestMs = mtime;
+          newestFile = f;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  if (newestMs > 0 && newestMs > generatedMs) {
+    issues.push(
+      makeIssue(
+        "warning",
+        "orm_mapping_freshness",
+        mappingPath,
+        `ORM source ${path.relative(wikiRoot, newestFile)} is newer than generated_at (${generatedAtVal})`,
+      ),
+    );
+  }
+  return issues;
+}
+
+/** Report graph clusters with fewer than 3 pages. */
+export function checkThinClusters(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  const edgesPath = path.join(wikiRoot, "graph", "edges.jsonl");
+  if (!fs.existsSync(edgesPath)) {
+    return issues;
+  }
+  const cs = clusters(edgesPath);
+  cs.forEach((cluster, idx) => {
+    if (cluster.length < 3) {
+      issues.push(
+        makeIssue(
+          "warning",
+          "thin_clusters",
+          `cluster #${idx + 1}`,
+          `Cluster has ${cluster.length} page(s) (min 3): ${cluster.join(", ")}`,
+        ),
+      );
+    }
+  });
+  return issues;
+}
+
 // ── Main lint function ──────────────────────────────────────────────
 
 /** Registry of check functions, matching the Python dict insertion order. */
@@ -358,6 +748,11 @@ const CHECK_FUNCTIONS: ReadonlyArray<
   ["code_ref_drift", checkCodeRefDrift],
   ["provenance", checkProvenanceCompleteness],
   ["ambiguity_rate", checkHighAmbiguityRate],
+  ["mermaid_syntax", checkMermaidSyntax],
+  ["index_coverage", checkIndexCoverage],
+  ["summaries_sync", checkSummariesSync],
+  ["orm_mapping_freshness", checkOrmMappingFreshness],
+  ["thin_clusters", checkThinClusters],
 ];
 
 const VALID_CATEGORIES: ReadonlySet<string> = new Set(

@@ -1,0 +1,29 @@
+{
+  "skill_name": "wiki-claude-md-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Generate a CLAUDE.md for this project and its three submodules, pointing each submodule back to the root",
+      "expected_output": "Root CLAUDE.md with wiki-managed section linking to all submodules; per-submodule CLAUDE.md with a parent link back to the root",
+      "files": [],
+      "expectations": [
+        "Managed content wrapped in `<!-- wiki-managed: start -->` and `<!-- wiki-managed: end -->` markers",
+        "Root file lists every discovered submodule with a relative link",
+        "Each submodule file includes a Parent Project link back to the root CLAUDE.md",
+        "Content outside the managed markers is preserved byte-for-byte on re-generation"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Update the CLAUDE.md of a project I already edited manually (added a custom section at the top), without clobbering my additions",
+      "expected_output": "Only the content between the wiki-managed markers is replaced; the user's manual additions remain intact",
+      "files": [],
+      "expectations": [
+        "Preserves all content above the `<!-- wiki-managed: start -->` marker",
+        "Preserves all content below the `<!-- wiki-managed: end -->` marker",
+        "Regenerates only the managed section from the current wiki state",
+        "Is idempotent on re-run when the wiki state has not changed"
+      ]
+    }
+  ]
+}

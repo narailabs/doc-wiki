@@ -189,6 +189,66 @@ export function isolatedNodes(edgesPath, allPages) {
     const degrees = computeDegrees(edgesPath);
     return allPages.filter((p) => (degrees[p] ?? 0) <= 1);
 }
+/**
+ * Return weakly-connected components of the edge graph. Edges are treated as
+ * undirected for clustering. Each component is an array of node names.
+ *
+ * When `allPages` is supplied, any page that does not appear in the edge file
+ * is emitted as its own singleton cluster (preserves `allPages` ordering).
+ * Components without an `allPages` anchor are ordered by the first appearance
+ * of any member node across the edge file.
+ */
+export function clusters(edgesPath, allPages) {
+    const edges = readAllEdges(edgesPath);
+    const parent = new Map();
+    const order = [];
+    const ensure = (node) => {
+        if (!parent.has(node)) {
+            parent.set(node, node);
+            order.push(node);
+        }
+    };
+    const find = (node) => {
+        let cur = node;
+        while (parent.get(cur) !== cur) {
+            const p = parent.get(cur) ?? cur;
+            parent.set(cur, parent.get(p) ?? p);
+            cur = parent.get(cur) ?? cur;
+        }
+        return cur;
+    };
+    const union = (a, b) => {
+        const ra = find(a);
+        const rb = find(b);
+        if (ra !== rb) {
+            parent.set(rb, ra);
+        }
+    };
+    for (const e of edges) {
+        ensure(e.from);
+        ensure(e.to);
+        union(e.from, e.to);
+    }
+    if (allPages) {
+        for (const p of allPages) {
+            ensure(p);
+        }
+    }
+    // Group by root, preserving first-appearance order both at the group level
+    // and within each group.
+    const groups = new Map();
+    for (const node of order) {
+        const root = find(node);
+        const list = groups.get(root);
+        if (list === undefined) {
+            groups.set(root, [node]);
+        }
+        else {
+            list.push(node);
+        }
+    }
+    return [...groups.values()];
+}
 /** Build a directed graph from edges.jsonl, returning the graph plus a
  *  lookup from "from\u0000to" -> edge dict so we can reconstruct rich path
  *  output after BFS.

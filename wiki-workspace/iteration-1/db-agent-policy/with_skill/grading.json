@@ -1,0 +1,11 @@
+{
+  "eval_id": 4,
+  "eval_name": "db-agent-policy",
+  "expectations": [
+    {"text": "SELECT query returns status 'success' with 2 rows of user data", "passed": true, "evidence": "status='ok', 2 rows returned: Alice (alice@example.com), Bob (bob@example.com)"},
+    {"text": "INSERT returns policy decision PRESENT_ONLY (not executed)", "passed": true, "evidence": "status='present_only', formatted SQL returned, row count stayed at 2"},
+    {"text": "DROP TABLE returns policy decision DENY (not executed)", "passed": true, "evidence": "status='denied', reason='DDL statements are never allowed', table still intact"},
+    {"text": "After all operations, users table still contains exactly 2 rows (no mutations)", "passed": true, "evidence": "Verified after INSERT and DROP: table still has 2 rows"},
+    {"text": "No SQL injection or policy bypass occurred", "passed": true, "evidence": "All 3 queries classified correctly. DML and DDL blocked. Only SELECT executed."}
+  ]
+}

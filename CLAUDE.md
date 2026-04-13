@@ -5,8 +5,13 @@ Documentation wiki generator and maintainer. Runs entirely inside Claude Code as
 ## Architecture
 
 - **Main skill:** `.claude/skills/wiki/SKILL.md` — orchestrates all `/wiki-*` commands
+- **Slash-command wrappers:** `.claude/commands/wiki-*.md` — 10 thin wrappers so `/wiki-init`, `/wiki-onboard`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
+
+### Slash commands (10) — `.claude/commands/`
+
+Thin wrappers so each documented `/wiki-*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `wiki-init.md`, `wiki-onboard.md`, `wiki-ingest.md`, `wiki-query.md`, `wiki-lint.md`, `wiki-fix.md`, `wiki-promote.md`, `wiki-refresh.md`, `wiki-path.md`, `wiki-stats.md`.
 
 ### TypeScript scripts (11) — `.claude/skills/wiki/scripts/`
 
@@ -114,7 +119,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **393 tests passed (Vitest)**.
+Current status: **677 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 

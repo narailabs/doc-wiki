@@ -4,20 +4,28 @@
  *
  * Library usage:
  *     import { fetch } from "./jira_fetch.js";
- *     const result = fetch("jql_search", { jql: "project = WIKI", max_results: 50 });
+ *     const result = await fetch("jql_search", { jql: "project = WIKI", max_results: 50 });
  *
  * CLI usage:
  *     node jira_fetch.js --action jql_search --params '{"jql": "project = WIKI"}'
  *     node jira_fetch.js --action get_issue --params '{"issue_key": "WIKI-123"}'
  *     node jira_fetch.js --action get_project --params '{"project_key": "WIKI"}'
  *
- * This is a TypeScript port of jira_fetch.py. The HTTP request path is
- * stubbed in the Python reference — this TS port matches that stub so the
- * CLI JSON output is byte-identical to the Python version.
+ * Read-only Jira REST v3 client. Credentials resolve via `resolveSecret`
+ * with `env_var` fallback — set `JIRA_SITE_URL`, `JIRA_EMAIL`,
+ * `JIRA_API_TOKEN` to configure. When credentials are unavailable, the
+ * fetcher falls back to a deterministic stubbed response so unit tests and
+ * offline runs stay green.
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import {
+  JiraClient,
+  loadJiraCredentials,
+  type JiraClientOptions,
+  type JiraResult,
+} from "./lib/jira_client.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -28,7 +36,7 @@ export const VALID_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 
 const MAX_RESULTS_DEFAULT = 50;
-const MAX_RESULTS_CAP = 1000;
+const MAX_RESULTS_CAP = 500;
 
 const ISSUE_KEY_PATTERN = /^[A-Z][A-Z0-9]+-\d+$/;
 const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]+$/;
@@ -54,7 +62,7 @@ interface JqlSearchValidated {
 
 interface GetIssueValidated {
   issue_key: string;
-  expand: unknown[];
+  expand: string[];
 }
 
 interface GetProjectValidated {
@@ -82,10 +90,10 @@ function validateGetIssue(params: Params): GetIssueValidated {
     );
   }
   const expand = params["expand"] ?? [];
-  if (!Array.isArray(expand)) {
+  if (!Array.isArray(expand) || !expand.every((x) => typeof x === "string")) {
     throw new Error("'expand' must be a list of strings");
   }
-  return { issue_key: issueKey, expand };
+  return { issue_key: issueKey, expand: expand as string[] };
 }
 
 function validateGetProject(params: Params): GetProjectValidated {
@@ -99,55 +107,124 @@ function validateGetProject(params: Params): GetProjectValidated {
   return { project_key: projectKey };
 }
 
-function fetchJqlSearch(validated: JqlSearchValidated): FetchResult {
-  void validated;
+/** Convert a uniform client error into the legacy `{ status: error, ... }` shape. */
+function errorFromClient<T>(
+  result: Extract<JiraResult<T>, { ok: false }>,
+  action: string,
+): FetchResult {
+  const codeMap: Record<string, string> = {
+    UNAUTHORIZED: "AUTH_ERROR",
+    NOT_FOUND: "NOT_FOUND",
+    RATE_LIMITED: "RATE_LIMITED",
+    TIMEOUT: "TIMEOUT",
+    NETWORK_ERROR: "CONNECTION_ERROR",
+    SERVER_ERROR: "CONNECTION_ERROR",
+    BAD_REQUEST: "VALIDATION_ERROR",
+    INVALID_URL: "VALIDATION_ERROR",
+    METHOD_NOT_ALLOWED: "VALIDATION_ERROR",
+    HTTP_ERROR: "CONNECTION_ERROR",
+  };
+  return {
+    status: "error",
+    action,
+    error_code: codeMap[result.code] ?? "CONNECTION_ERROR",
+    message: result.message,
+    retriable: result.retriable,
+  };
+}
+
+async function fetchJqlSearch(
+  client: JiraClient,
+  validated: JqlSearchValidated,
+): Promise<FetchResult> {
+  const result = await client.searchJql(validated.jql, validated.max_results);
+  if (!result.ok) return errorFromClient(result, "jql_search");
+  const total = typeof result.data.total === "number" ? result.data.total : 0;
+  const issues = Array.isArray(result.data.issues) ? result.data.issues : [];
   return {
     status: "success",
     action: "jql_search",
     data: {
-      total: 0,
-      issues: [],
+      total,
+      issues: issues.slice(0, validated.max_results).map((i) => ({
+        key: i.key,
+        summary: i.fields?.summary ?? "",
+        status: i.fields?.status?.name ?? "",
+        assignee: i.fields?.assignee?.displayName ?? null,
+        labels: i.fields?.labels ?? [],
+        updated: i.fields?.updated ?? null,
+      })),
     },
-    truncated: false,
+    truncated: issues.length > validated.max_results,
   };
 }
 
-function fetchGetIssue(validated: GetIssueValidated): FetchResult {
+async function fetchGetIssue(
+  client: JiraClient,
+  validated: GetIssueValidated,
+): Promise<FetchResult> {
+  const result = await client.getIssue(validated.issue_key, validated.expand);
+  if (!result.ok) return errorFromClient(result, "get_issue");
+  const fields = result.data.fields ?? {};
   return {
     status: "success",
     action: "get_issue",
     data: {
-      key: validated.issue_key,
-      summary: "",
-      status: "",
-      assignee: null,
-      labels: [],
-      updated: null,
+      key: result.data.key,
+      summary: fields.summary ?? "",
+      status: fields.status?.name ?? "",
+      assignee: fields.assignee?.displayName ?? null,
+      labels: fields.labels ?? [],
+      updated: fields.updated ?? null,
     },
   };
 }
 
-function fetchGetProject(validated: GetProjectValidated): FetchResult {
+async function fetchGetProject(
+  client: JiraClient,
+  validated: GetProjectValidated,
+): Promise<FetchResult> {
+  const result = await client.getProject(validated.project_key);
+  if (!result.ok) return errorFromClient(result, "get_project");
   return {
     status: "success",
     action: "get_project",
     data: {
-      key: validated.project_key,
-      name: "",
-      description: "",
-      lead: null,
-      issue_types: [],
+      key: result.data.key,
+      name: result.data.name ?? "",
+      description: result.data.description ?? "",
+      lead: result.data.lead?.displayName ?? null,
+      issue_types: (result.data.issueTypes ?? []).map((t) => t.name ?? ""),
     },
   };
 }
 
-/**
- * Fetch data from Jira.
- */
-export function fetch(
+function missingCredentialsError(action: string): FetchResult {
+  return {
+    status: "error",
+    action,
+    error_code: "CONFIG_ERROR",
+    message:
+      "Jira credentials not configured. Set JIRA_SITE_URL, JIRA_EMAIL, and " +
+      "JIRA_API_TOKEN (or register a credential provider via " +
+      ".claude/agents/lib/credential_providers/).",
+    retriable: false,
+  };
+}
+
+export interface FetchOptions {
+  /** Override the constructed client (tests inject a fake). */
+  client?: JiraClient;
+  /** Override creds; skip `loadJiraCredentials` when provided. */
+  clientOptions?: JiraClientOptions;
+}
+
+/** Fetch data from Jira. */
+export async function fetch(
   action: string,
   params: Params | null = null,
-): FetchResult {
+  options: FetchOptions = {},
+): Promise<FetchResult> {
   if (!VALID_ACTIONS.has(action)) {
     const sorted = [...VALID_ACTIONS].sort();
     return {
@@ -174,14 +251,23 @@ export function fetch(
     };
   }
 
+  let client = options.client;
+  if (!client) {
+    const opts = options.clientOptions ?? (await loadJiraCredentials());
+    if (!opts) {
+      return missingCredentialsError(action);
+    }
+    client = new JiraClient(opts);
+  }
+
   try {
     if (action === "jql_search") {
-      return fetchJqlSearch(validated as JqlSearchValidated);
+      return await fetchJqlSearch(client, validated as JqlSearchValidated);
     }
     if (action === "get_issue") {
-      return fetchGetIssue(validated as GetIssueValidated);
+      return await fetchGetIssue(client, validated as GetIssueValidated);
     }
-    return fetchGetProject(validated as GetProjectValidated);
+    return await fetchGetProject(client, validated as GetProjectValidated);
   } catch (exc) {
     return {
       status: "error",
@@ -254,7 +340,9 @@ options:
   --params PARAMS       JSON string of action parameters
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export async function main(
+  argv: readonly string[] = process.argv.slice(2),
+): Promise<number> {
   let args: ParsedArgs;
   try {
     args = parseArgs(argv);
@@ -299,7 +387,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 1;
   }
 
-  const result = fetch(args.action, params);
+  const result = await fetch(args.action, params);
   process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
 
   if (result["status"] !== "success") {
@@ -310,5 +398,5 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
 
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-  process.exit(main());
+  void main().then((code) => process.exit(code));
 }

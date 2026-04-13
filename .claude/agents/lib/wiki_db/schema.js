@@ -6,6 +6,12 @@
  *    keyed by `(env, schemaName, tableFilter)`.
  *  - On driver error, returns `[]` (never raises).
  *  - `clearCache()` forces re-query on next call.
+ *
+ * Phase E bridge:
+ *  - Phase E drivers (pg, mysql, mssql, mongo, dynamo) expose
+ *    `getSchemaAsync(conn, schema?, tableFilter?)` and return a useless
+ *    stub from the sync `getSchema`. We detect the async method and await
+ *    it when present; otherwise fall back to the sync call (sqlite path).
  */
 import { performance } from "node:perf_hooks";
 /** Cached schema introspection via a database driver. */
@@ -19,7 +25,7 @@ export class SchemaManager {
         this._cache = new Map();
     }
     /** Get schema, using cache if within TTL. */
-    getSchema(conn, env, schemaName = "", tableFilter = null) {
+    async getSchema(conn, env, schemaName = "", tableFilter = null) {
         // Python uses a tuple cache key; emulate with a JSON-encoded key so
         // (None, "", "") and ("", "", "") differ exactly as in Python.
         const cacheKey = JSON.stringify([env, schemaName, tableFilter]);
@@ -33,7 +39,13 @@ export class SchemaManager {
         }
         let tables;
         try {
-            tables = this._driver.getSchema(conn, schemaName, tableFilter);
+            const asyncHook = this._driver.getSchemaAsync;
+            if (typeof asyncHook === "function") {
+                tables = await asyncHook.call(this._driver, conn, schemaName, tableFilter);
+            }
+            else {
+                tables = this._driver.getSchema(conn, schemaName, tableFilter);
+            }
         }
         catch {
             return [];

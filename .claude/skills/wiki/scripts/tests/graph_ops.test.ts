@@ -19,6 +19,7 @@ import {
   isolatedNodes,
   shortestPath,
   allPaths,
+  clusters,
 } from "../graph_ops.js";
 import {
   SCRIPTS_DIR,
@@ -477,5 +478,101 @@ describe("TestGraphOpsCLI", () => {
       .trim()
       .split("\n");
     expect(written).toHaveLength(1);
+  });
+});
+
+// ── clusters() tests ──────────────────────────────────────────────
+
+describe("TestClusters", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("clusters-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("test_empty_edges_returns_empty_array", () => {
+    const edgesFile = makeEmptyEdgesFile(tmpPath);
+    expect(clusters(edgesFile)).toEqual([]);
+  });
+
+  it("test_empty_edges_with_allPages_returns_singletons", () => {
+    const edgesFile = makeEmptyEdgesFile(tmpPath);
+    const result = clusters(edgesFile, ["X.md", "Y.md", "Z.md"]);
+    expect(result).toEqual([["X.md"], ["Y.md"], ["Z.md"]]);
+  });
+
+  it("test_connected_edges_single_cluster", () => {
+    const edgesFile = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(
+      edgesFile,
+      [
+        { from: "A", to: "B", type: "extends", provenance: "EXTRACTED" },
+        { from: "B", to: "C", type: "extends", provenance: "EXTRACTED" },
+        { from: "C", to: "D", type: "extends", provenance: "EXTRACTED" },
+      ]
+        .map((e) => JSON.stringify(e))
+        .join("\n") + "\n",
+    );
+    const result = clusters(edgesFile);
+    expect(result).toHaveLength(1);
+    expect(new Set(result[0])).toEqual(new Set(["A", "B", "C", "D"]));
+  });
+
+  it("test_disconnected_edges_multiple_clusters", () => {
+    const edgesFile = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(
+      edgesFile,
+      [
+        { from: "A", to: "B", type: "extends", provenance: "EXTRACTED" },
+        { from: "C", to: "D", type: "extends", provenance: "EXTRACTED" },
+        { from: "D", to: "E", type: "extends", provenance: "EXTRACTED" },
+      ]
+        .map((e) => JSON.stringify(e))
+        .join("\n") + "\n",
+    );
+    const result = clusters(edgesFile);
+    expect(result).toHaveLength(2);
+    // Order stable by first-seen node: A-cluster before C-cluster.
+    expect(result[0]).toEqual(["A", "B"]);
+    expect(new Set(result[1])).toEqual(new Set(["C", "D", "E"]));
+  });
+
+  it("test_allPages_adds_disconnected_nodes_as_singletons", () => {
+    const edgesFile = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(
+      edgesFile,
+      [{ from: "A", to: "B", type: "extends", provenance: "EXTRACTED" }]
+        .map((e) => JSON.stringify(e))
+        .join("\n") + "\n",
+    );
+    const result = clusters(edgesFile, ["A", "B", "Z", "Y"]);
+    // Pair cluster first (from edges), then Z and Y as singletons in that order.
+    expect(result).toEqual([["A", "B"], ["Z"], ["Y"]]);
+  });
+
+  it("test_undirected_treatment_for_back_edges", () => {
+    // A->B and B->A should NOT create two separate clusters.
+    const edgesFile = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(
+      edgesFile,
+      [
+        { from: "A", to: "B", type: "extends", provenance: "EXTRACTED" },
+        { from: "B", to: "A", type: "supports", provenance: "INFERRED" },
+      ]
+        .map((e) => JSON.stringify(e))
+        .join("\n") + "\n",
+    );
+    const result = clusters(edgesFile);
+    expect(result).toHaveLength(1);
+    expect(new Set(result[0])).toEqual(new Set(["A", "B"]));
+  });
+
+  it("test_missing_edges_file_returns_empty", () => {
+    // readAllEdges silently returns [] on missing files.
+    const result = clusters(path.join(tmpPath, "does-not-exist.jsonl"));
+    expect(result).toEqual([]);
   });
 });
