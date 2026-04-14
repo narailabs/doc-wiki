@@ -165,3 +165,114 @@ describe("github_fetch.fetch", () => {
     expect(r["error_code"]).toBe("VALIDATION_ERROR");
   });
 });
+
+describe("github_fetch mermaid field (G1)", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("get_file on package.json emits graph LR dependency graph", async () => {
+    const pkg = JSON.stringify({
+      name: "demo",
+      dependencies: { react: "^18", lodash: "^4.17" },
+      devDependencies: { vitest: "^2" },
+    });
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        path: "package.json",
+        size: pkg.length,
+        encoding: "base64",
+        content: Buffer.from(pkg, "utf-8").toString("base64"),
+      }),
+    );
+    const r = await fetch(
+      "get_file",
+      { owner: "a", repo: "b", path: "package.json" },
+      { client },
+    );
+    const m = r["mermaid"] as { type: string; title: string; code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph LR");
+    expect(m!.title).toBe("Dependency Graph");
+    expect(m!.code).toContain("react");
+    expect(m!.code).toContain("lodash");
+    expect(m!.code).toContain("vitest");
+  });
+
+  it("get_file on requirements.txt emits graph LR dependency graph", async () => {
+    const reqs = "requests==2.31\n# comment\nflask>=3\n\nsqlalchemy\n";
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        path: "requirements.txt",
+        size: reqs.length,
+        encoding: "base64",
+        content: Buffer.from(reqs, "utf-8").toString("base64"),
+      }),
+    );
+    const r = await fetch(
+      "get_file",
+      { owner: "a", repo: "b", path: "requirements.txt" },
+      { client },
+    );
+    const m = r["mermaid"] as { type: string; code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph LR");
+    expect(m!.code).toContain("requests");
+    expect(m!.code).toContain("flask");
+    expect(m!.code).toContain("sqlalchemy");
+  });
+
+  it("get_file on a non-manifest file omits mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        path: "README.md",
+        size: 5,
+        encoding: "base64",
+        content: Buffer.from("hello", "utf-8").toString("base64"),
+      }),
+    );
+    const r = await fetch(
+      "get_file",
+      { owner: "a", repo: "b", path: "README.md" },
+      { client },
+    );
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("get_file on package.json with no deps omits mermaid", async () => {
+    const pkg = JSON.stringify({ name: "demo" });
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        path: "package.json",
+        size: pkg.length,
+        encoding: "base64",
+        content: Buffer.from(pkg, "utf-8").toString("base64"),
+      }),
+    );
+    const r = await fetch(
+      "get_file",
+      { owner: "a", repo: "b", path: "package.json" },
+      { client },
+    );
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("other actions (repo_info) never emit mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        full_name: "a/b",
+        description: "Test",
+        stargazers_count: 10,
+        forks_count: 2,
+        open_issues_count: 3,
+        default_branch: "main",
+      }),
+    );
+    const r = await fetch(
+      "repo_info",
+      { owner: "a", repo: "b" },
+      { client },
+    );
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

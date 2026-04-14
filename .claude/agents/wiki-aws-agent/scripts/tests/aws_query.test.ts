@@ -192,3 +192,104 @@ describe("aws_query.fetch", () => {
     expect(r["error_code"]).toBe("NOT_FOUND");
   });
 });
+
+describe("aws_query mermaid field (G1)", () => {
+  it("list_functions emits graph TB with region + function nodes", async () => {
+    const client = makeClient(
+      makeFactories({
+        lambda: async () => ({
+          Functions: [
+            { FunctionName: "hello", Runtime: "nodejs20.x", LastModified: "2026-04-01" },
+            { FunctionName: "world", Runtime: "python3.12", LastModified: "2026-04-02" },
+          ],
+        }),
+      }),
+    );
+    const r = await fetch("list_functions", { region: "us-east-1" }, { client });
+    const m = r["mermaid"] as { type: string; title: string; code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph TB");
+    expect(m!.code).toContain("graph TB");
+    expect(m!.code).toContain("hello");
+    expect(m!.code).toContain("world");
+    expect(m!.title).toContain("us-east-1");
+  });
+
+  it("describe_db emits graph TB with region + db node", async () => {
+    const client = makeClient(
+      makeFactories({
+        rds: async () => ({
+          DBInstances: [
+            {
+              DBInstanceIdentifier: "acme-rds",
+              Engine: "postgres",
+              EngineVersion: "15.3",
+              DBInstanceClass: "db.t3.medium",
+              DBInstanceStatus: "available",
+              Endpoint: { Address: "acme.rds" },
+              AllocatedStorage: 100,
+            },
+          ],
+        }),
+      }),
+    );
+    const r = await fetch(
+      "describe_db",
+      { region: "us-east-1", db_identifier: "acme-rds" },
+      { client },
+    );
+    const m = r["mermaid"] as { type: string; code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph TB");
+    expect(m!.code).toContain("acme-rds");
+    expect(m!.code).toContain("postgres");
+  });
+
+  it("list_buckets emits graph TB when buckets are present", async () => {
+    const client = makeClient(
+      makeFactories({
+        s3: async () => ({
+          Buckets: [
+            { Name: "acme-logs", CreationDate: new Date("2026-01-01") },
+            { Name: "acme-data", CreationDate: new Date("2026-01-02") },
+          ],
+        }),
+      }),
+    );
+    const r = await fetch("list_buckets", {}, { client });
+    const m = r["mermaid"] as { code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.code).toContain("acme-logs");
+    expect(m!.code).toContain("acme-data");
+  });
+
+  it("list_buckets omits mermaid when empty", async () => {
+    const client = makeClient(
+      makeFactories({ s3: async () => ({ Buckets: [] }) }),
+    );
+    const r = await fetch("list_buckets", {}, { client });
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("get_metrics never emits mermaid (not diagram-worthy)", async () => {
+    const client = makeClient(
+      makeFactories({
+        cloudwatch: async () => ({
+          Datapoints: [{ Timestamp: new Date(), Sum: 1, Average: 1, Maximum: 1 }],
+        }),
+      }),
+    );
+    const r = await fetch(
+      "get_metrics",
+      {
+        region: "us-east-1",
+        namespace: "AWS/Lambda",
+        metric_name: "Errors",
+        dimensions: { FunctionName: "hello" },
+      },
+      { client },
+    );
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

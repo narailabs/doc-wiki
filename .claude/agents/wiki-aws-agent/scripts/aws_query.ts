@@ -20,6 +20,12 @@ import {
   type AwsResult,
   type AwsSdkFactories,
 } from "./lib/aws_client.js";
+import {
+  formatGraph,
+  type GraphEdge,
+  type GraphNode,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "list_functions",
@@ -284,6 +290,77 @@ async function fetchGetMetrics(
   };
 }
 
+// ── Mermaid infra-topology builder (v2 design §6) ─────────────────────
+//
+// Per v2 "Agent Output Contract", source agents that produce
+// diagram-worthy structured data MUST include a `mermaid: {type,title,code}`
+// field so the wiki compiler can splice the diagram directly into a page.
+// AWS actions emit `graph TB` infrastructure topologies (region → services).
+// `get_metrics` returns pure time-series data — not diagram-worthy, so
+// we omit the field entirely (absence === "no diagram", per the contract).
+
+function mermaidForAws(result: FetchResult): MermaidBlock | undefined {
+  if (result["status"] !== "success") return undefined;
+  const action = result["action"];
+  const data = result["data"] as Record<string, unknown> | undefined;
+  if (data === undefined) return undefined;
+
+  if (action === "list_functions") {
+    const fns = (data["functions"] as Array<{ name: string; runtime: string }> | undefined) ?? [];
+    if (fns.length === 0) return undefined;
+    const region = (data["region"] as string) || "region";
+    const nodes: GraphNode[] = [
+      { id: `region_${region}`, label: `Region: ${region}`, shape: "rounded" },
+      ...fns.map((f) => ({
+        id: `fn_${f.name}`,
+        label: `${f.name} (${f.runtime || "unknown"})`,
+      })),
+    ];
+    const edges: GraphEdge[] = fns.map((f) => ({
+      from: `region_${region}`,
+      to: `fn_${f.name}`,
+    }));
+    return formatGraph("TB", `AWS Lambda Functions — ${region}`, nodes, edges);
+  }
+
+  if (action === "describe_db") {
+    const region = (data["region"] as string) || "region";
+    const id = (data["db_identifier"] as string) || "db";
+    const engine = (data["engine"] as string) || "";
+    const cls = (data["instance_class"] as string) || "";
+    const label = engine || cls ? `${id} (${engine}${cls ? `, ${cls}` : ""})` : id;
+    const nodes: GraphNode[] = [
+      { id: `region_${region}`, label: `Region: ${region}`, shape: "rounded" },
+      { id: `db_${id}`, label, shape: "stadium" },
+    ];
+    const edges: GraphEdge[] = [{ from: `region_${region}`, to: `db_${id}` }];
+    return formatGraph("TB", `AWS RDS — ${id}`, nodes, edges);
+  }
+
+  if (action === "list_buckets") {
+    const buckets = (data["buckets"] as Array<{ name: string }> | undefined) ?? [];
+    if (buckets.length === 0) return undefined;
+    const nodes: GraphNode[] = [
+      { id: "account", label: "AWS Account", shape: "rounded" },
+      ...buckets.map((b) => ({ id: `bucket_${b.name}`, label: b.name })),
+    ];
+    const edges: GraphEdge[] = buckets.map((b) => ({
+      from: "account",
+      to: `bucket_${b.name}`,
+    }));
+    return formatGraph("TB", "AWS S3 Buckets", nodes, edges);
+  }
+
+  // get_metrics: time-series datapoints — not diagram-worthy. Omit.
+  return undefined;
+}
+
+function decorateResult(result: FetchResult): FetchResult {
+  const mermaid = mermaidForAws(result);
+  if (mermaid === undefined) return result;
+  return { ...result, mermaid };
+}
+
 function missingSdkError(action: string): FetchResult {
   return {
     status: "error",
@@ -411,16 +488,24 @@ export async function fetch(
   }
 
   try {
+    let result: FetchResult;
     switch (action) {
       case "list_functions":
-        return await fetchListFunctions(client, validated as ListFunctionsValidated);
+        result = await fetchListFunctions(client, validated as ListFunctionsValidated);
+        break;
       case "describe_db":
-        return await fetchDescribeDb(client, validated as DescribeDbValidated);
+        result = await fetchDescribeDb(client, validated as DescribeDbValidated);
+        break;
       case "list_buckets":
-        return await fetchListBuckets(client, validated as ListBucketsValidated);
+        result = await fetchListBuckets(client, validated as ListBucketsValidated);
+        break;
       case "get_metrics":
-        return await fetchGetMetrics(client, validated as GetMetricsValidated);
+        result = await fetchGetMetrics(client, validated as GetMetricsValidated);
+        break;
+      default:
+        return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
     }
+    return decorateResult(result);
   } catch (exc) {
     return {
       status: "error",
@@ -428,8 +513,6 @@ export async function fetch(
       message: `AWS API call failed: ${(exc as Error).message}`,
     };
   }
-
-  return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
 
 interface ParsedArgs {

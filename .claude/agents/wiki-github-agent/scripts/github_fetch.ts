@@ -19,6 +19,12 @@ import {
   type GithubClientOptions,
   type GithubResult,
 } from "./lib/github_client.js";
+import {
+  formatGraph,
+  type GraphEdge,
+  type GraphNode,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "repo_info",
@@ -324,6 +330,89 @@ async function fetchGetFile(
   };
 }
 
+// ── Mermaid dependency-graph builder (v2 design §6) ───────────────────
+//
+// GitHub's `get_file` emits a `graph LR` dependency graph when the
+// fetched file is a recognizable dependency manifest (package.json,
+// requirements.txt). Every other action is prose/metadata-shaped and
+// is not diagram-worthy, so the `mermaid` field is omitted entirely.
+
+/** Parse `package.json` contents into an ordered list of dep names. */
+function parsePackageJsonDeps(content: string): string[] {
+  try {
+    const parsed = JSON.parse(content) as {
+      dependencies?: Record<string, unknown>;
+      devDependencies?: Record<string, unknown>;
+    };
+    const deps = [
+      ...Object.keys(parsed.dependencies ?? {}),
+      ...Object.keys(parsed.devDependencies ?? {}),
+    ];
+    // Preserve insertion order but drop duplicates.
+    return [...new Set(deps)];
+  } catch {
+    return [];
+  }
+}
+
+/** Parse `requirements.txt` contents into an ordered list of dep names. */
+function parseRequirementsTxt(content: string): string[] {
+  const deps: string[] = [];
+  const seen = new Set<string>();
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    // Strip version specifiers, extras, and environment markers.
+    const m = line.match(/^([A-Za-z0-9_.\-]+)/);
+    if (!m) continue;
+    const name = m[1]!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    deps.push(name);
+  }
+  return deps;
+}
+
+function mermaidForGithub(result: FetchResult): MermaidBlock | undefined {
+  if (result["status"] !== "success") return undefined;
+  if (result["action"] !== "get_file") return undefined;
+  const data = result["data"] as Record<string, unknown> | undefined;
+  if (data === undefined) return undefined;
+
+  const filePath = ((data["path"] as string) ?? "").toLowerCase();
+  const content = (data["content"] as string) ?? "";
+  if (content === "") return undefined;
+
+  let deps: string[] = [];
+  if (filePath.endsWith("package.json")) {
+    deps = parsePackageJsonDeps(content);
+  } else if (filePath.endsWith("requirements.txt")) {
+    deps = parseRequirementsTxt(content);
+  }
+
+  if (deps.length === 0) return undefined;
+  // Cap at a reasonable node count so very large manifests don't
+  // generate un-renderable Mermaid blocks. Users with more deps can
+  // still see the full list in `data.content`.
+  const capped = deps.slice(0, 40);
+  const rootLabel = (data["path"] as string) || "repo";
+  const nodes: GraphNode[] = [
+    { id: "root", label: rootLabel, shape: "rounded" },
+    ...capped.map((d, i) => ({ id: `dep_${i}`, label: d })),
+  ];
+  const edges: GraphEdge[] = capped.map((_, i) => ({
+    from: "root",
+    to: `dep_${i}`,
+  }));
+  return formatGraph("LR", "Dependency Graph", nodes, edges);
+}
+
+function decorateResult(result: FetchResult): FetchResult {
+  const mermaid = mermaidForGithub(result);
+  if (mermaid === undefined) return result;
+  return { ...result, mermaid };
+}
+
 function missingCredentialsError(action: string): FetchResult {
   return {
     status: "error",
@@ -401,18 +490,31 @@ export async function fetch(
   }
 
   try {
+    let result: FetchResult;
     switch (action) {
       case "repo_info":
-        return await fetchRepoInfo(client, validated as RepoInfoValidated);
+        result = await fetchRepoInfo(client, validated as RepoInfoValidated);
+        break;
       case "search_code":
-        return await fetchSearchCode(client, validated as SearchCodeValidated);
+        result = await fetchSearchCode(client, validated as SearchCodeValidated);
+        break;
       case "get_issues":
-        return await fetchGetIssues(client, validated as GetIssuesValidated);
+        result = await fetchGetIssues(client, validated as GetIssuesValidated);
+        break;
       case "get_pulls":
-        return await fetchGetPulls(client, validated as GetPullsValidated);
+        result = await fetchGetPulls(client, validated as GetPullsValidated);
+        break;
       case "get_file":
-        return await fetchGetFile(client, validated as GetFileValidated);
+        result = await fetchGetFile(client, validated as GetFileValidated);
+        break;
+      default:
+        return {
+          status: "error",
+          error_code: "UNKNOWN",
+          message: "Unexpected state",
+        };
     }
+    return decorateResult(result);
   } catch (exc) {
     return {
       status: "error",
@@ -420,12 +522,6 @@ export async function fetch(
       message: `GitHub API call failed: ${(exc as Error).message}`,
     };
   }
-
-  return {
-    status: "error",
-    error_code: "UNKNOWN",
-    message: "Unexpected state",
-  };
 }
 
 interface ParsedArgs {
