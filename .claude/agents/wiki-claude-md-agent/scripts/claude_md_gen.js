@@ -23,6 +23,40 @@ import { fileURLToPath } from "node:url";
 // ── Constants ───────────────────────────────────────────────────────
 export const MARKER_START = "<!-- wiki-managed: start -->";
 export const MARKER_END = "<!-- wiki-managed: end -->";
+/**
+ * G-CLAUDE-MD-MARKER: raised by `updateClaudeMd` when the target file's
+ * wiki-managed markers are unbalanced — e.g. a `start` without an `end`,
+ * or two `start`s. The AGENT.md contract lists this as error_code
+ * MARKER_CORRUPT; the CLI catches it and writes a structured JSON
+ * payload to stdout.
+ */
+export class MarkerCorruptError extends Error {
+    error_code = "MARKER_CORRUPT";
+    starts;
+    ends;
+    constructor(starts, ends) {
+        super(`Corrupted wiki-managed markers: ${starts} start marker(s) and ` +
+            `${ends} end marker(s) (expected exactly 1 of each). Reset markers ` +
+            "manually or delete the file and re-run without --update.");
+        this.name = "MarkerCorruptError";
+        this.starts = starts;
+        this.ends = ends;
+    }
+}
+function countOccurrences(haystack, needle) {
+    if (needle.length === 0)
+        return 0;
+    let count = 0;
+    let i = 0;
+    while (true) {
+        const hit = haystack.indexOf(needle, i);
+        if (hit < 0)
+            break;
+        count++;
+        i = hit + needle.length;
+    }
+    return count;
+}
 /** Regex to find and replace the managed section. Matches Python's
  *  `re.compile(re.escape(MARKER_START) + r"\n(.*?)" + re.escape(MARKER_END), re.DOTALL)`.
  *
@@ -126,7 +160,20 @@ export function updateClaudeMd(filePath, newManagedContent) {
         content = fs.readFileSync(filePath, { encoding: "utf-8" });
     }
     const replacement = `${MARKER_START}\n${newManagedContent}${MARKER_END}`;
-    if (content.includes(MARKER_START) && content.includes(MARKER_END)) {
+    // G-CLAUDE-MD-MARKER: validate balanced markers BEFORE any file I/O. The
+    // MARKER_CORRUPT error code is documented in AGENT.md but was never
+    // raised. Accept exactly one of each (the normal managed case) or zero
+    // of each (fresh file, markers will be appended). Any other combination
+    // — a lone start, a lone end, or multiple starts/ends from a hand-edit
+    // gone wrong — is ambiguous, so we refuse to mutate.
+    const starts = countOccurrences(content, MARKER_START);
+    const ends = countOccurrences(content, MARKER_END);
+    const isClean = starts === 0 && ends === 0;
+    const isBalanced = starts === 1 && ends === 1;
+    if (!isClean && !isBalanced) {
+        throw new MarkerCorruptError(starts, ends);
+    }
+    if (isBalanced) {
         // Single-match replace (Python's `re.sub` replaces the first match only
         // when used without `count` override; since the markers are unique the
         // result is identical to `replace(first_match, replacement)`).
@@ -272,7 +319,24 @@ export function main(argv = process.argv.slice(2)) {
         inner = fullGenerated;
     }
     if (args.update) {
-        const result = updateClaudeMd(args.update, inner);
+        let result;
+        try {
+            result = updateClaudeMd(args.update, inner);
+        }
+        catch (e) {
+            if (e instanceof MarkerCorruptError) {
+                // G-CLAUDE-MD-MARKER: surface as structured JSON + non-zero exit so
+                // the orchestrator (and any callers) can inspect error_code.
+                process.stdout.write(JSON.stringify({
+                    status: "error",
+                    error_code: e.error_code,
+                    message: e.message,
+                    details: { starts: e.starts, ends: e.ends },
+                }, null, 2) + "\n");
+                return 1;
+            }
+            throw e;
+        }
         fs.mkdirSync(path.dirname(args.update), { recursive: true });
         fs.writeFileSync(args.update, result);
         process.stdout.write(`Updated: ${args.update}\n`);
