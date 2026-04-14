@@ -15,6 +15,9 @@ import {
   updateClaudeMd,
   extractManagedSection,
   listSubmodules,
+  MarkerCorruptError,
+  MARKER_START,
+  MARKER_END,
 } from "../claude_md_gen.js";
 
 const SCRIPTS_DIR = path.resolve(
@@ -307,5 +310,121 @@ describe("TestClaudeMdGenCLI", () => {
     const updated = fs.readFileSync(file, { encoding: "utf-8" });
     expect(updated.includes("Custom intro that should be preserved.")).toBe(true);
     expect(updated.includes("<!-- wiki-managed: start -->")).toBe(true);
+  });
+});
+
+// ======================================================================
+// G-CLAUDE-MD-MARKER: balanced-marker validation
+// ======================================================================
+
+describe("marker validation (G-CLAUDE-MD-MARKER)", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("marker-corrupt-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("start marker without end marker throws MarkerCorruptError", () => {
+    const file = path.join(tmpPath, "CLAUDE.md");
+    fs.writeFileSync(
+      file,
+      `# Project\n\n${MARKER_START}\ndangling\n`,
+      "utf-8",
+    );
+    expect(() => updateClaudeMd(file, "new content")).toThrow(
+      MarkerCorruptError,
+    );
+    // File is not mutated.
+    const after = fs.readFileSync(file, "utf-8");
+    expect(after).toContain("dangling");
+    expect(after).not.toContain("new content");
+  });
+
+  it("end marker without start marker throws MarkerCorruptError", () => {
+    const file = path.join(tmpPath, "CLAUDE.md");
+    fs.writeFileSync(
+      file,
+      `# Project\n\n${MARKER_END}\ntrailing\n`,
+      "utf-8",
+    );
+    expect(() => updateClaudeMd(file, "new content")).toThrow(
+      MarkerCorruptError,
+    );
+  });
+
+  it("duplicate start markers throws MarkerCorruptError", () => {
+    const file = path.join(tmpPath, "CLAUDE.md");
+    fs.writeFileSync(
+      file,
+      `${MARKER_START}\nfirst\n${MARKER_END}\n\n${MARKER_START}\nsecond\n${MARKER_END}\n`,
+      "utf-8",
+    );
+    let err: unknown;
+    try {
+      updateClaudeMd(file, "new");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(MarkerCorruptError);
+    const mce = err as MarkerCorruptError;
+    expect(mce.error_code).toBe("MARKER_CORRUPT");
+    expect(mce.starts).toBe(2);
+    expect(mce.ends).toBe(2);
+  });
+
+  it("clean file (no markers) appends without error", () => {
+    const file = path.join(tmpPath, "CLAUDE.md");
+    fs.writeFileSync(file, "# Project\n\nUser prose.\n", "utf-8");
+    const result = updateClaudeMd(file, "managed body");
+    expect(result).toContain("User prose.");
+    expect(result).toContain(MARKER_START);
+    expect(result).toContain("managed body");
+    expect(result).toContain(MARKER_END);
+  });
+
+  it("balanced markers (1 + 1) replaces managed section", () => {
+    const file = path.join(tmpPath, "CLAUDE.md");
+    fs.writeFileSync(
+      file,
+      `${MARKER_START}\nold body\n${MARKER_END}\n\n## User\nkeep me\n`,
+      "utf-8",
+    );
+    const result = updateClaudeMd(file, "new body");
+    expect(result).toContain("new body");
+    expect(result).not.toContain("old body");
+    expect(result).toContain("keep me");
+  });
+
+  it("CLI emits MARKER_CORRUPT JSON and exits 1 on corrupted markers", () => {
+    const projectRoot = makeProjectRoot(tmpPath);
+    const file = path.join(projectRoot, "CLAUDE.md");
+    fs.writeFileSync(
+      file,
+      `# Project\n\n${MARKER_START}\nunclosed\n`,
+      "utf-8",
+    );
+    const { stdout, status } = runCli([
+      "--project-root",
+      projectRoot,
+      "--wiki-root",
+      path.join(projectRoot, "wiki"),
+      "--update",
+      file,
+    ]);
+    expect(status).toBe(1);
+    const parsed = JSON.parse(stdout) as {
+      status: string;
+      error_code: string;
+      details: { starts: number; ends: number };
+    };
+    expect(parsed.status).toBe("error");
+    expect(parsed.error_code).toBe("MARKER_CORRUPT");
+    expect(parsed.details.starts).toBe(1);
+    expect(parsed.details.ends).toBe(0);
+    // File remains unchanged
+    const after = fs.readFileSync(file, "utf-8");
+    expect(after).toContain("unclosed");
   });
 });
