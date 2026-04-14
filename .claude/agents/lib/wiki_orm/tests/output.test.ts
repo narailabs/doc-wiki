@@ -10,6 +10,7 @@ import {
   makeExtractedColumn,
   makeExtractedEntity,
   makeExtractedRelationship,
+  type CrossValidationReport,
   type ExtractedEntity,
 } from "../extractor.js";
 import { generateMappingMarkdown } from "../output.js";
@@ -125,5 +126,110 @@ describe("TestGenerateMarkdown", () => {
     const md = generateMappingMarkdown(sampleEntities(), "TestProject", "jpa");
     expect(md).toContain("jpa");
     expect(md).toContain("database");
+  });
+});
+
+// ======================================================================
+// Cross-validation section (G2)
+// ======================================================================
+
+describe("cross-validation section rendering", () => {
+  it("renders unmapped-tables, orphan-entities, and mismatch tables", () => {
+    const xvalid: CrossValidationReport = {
+      matched: [{ entity: "User", table: "public.users" }],
+      column_mismatches: [
+        {
+          entity: "User",
+          table: "public.users",
+          entity_field: "phone",
+          reason: "missing_in_db",
+        },
+      ],
+      unmapped_tables: ["public.audit_log"],
+      orphan_entities: ["GhostEntity"],
+    };
+    const md = generateMappingMarkdown(
+      sampleEntities(),
+      "P",
+      "jpa",
+      undefined,
+      undefined,
+      xvalid,
+    );
+    expect(md).toContain("## Cross-Validation");
+    expect(md).toContain("### Unmapped DB Tables");
+    expect(md).toContain("public.audit_log");
+    expect(md).toContain("### Orphan Entities");
+    expect(md).toContain("GhostEntity");
+    expect(md).toContain("### Column Mismatches");
+    expect(md).toContain("| User | public.users | phone | missing_in_db |");
+  });
+
+  it("renders error note when validation failed", () => {
+    const xvalid: CrossValidationReport = {
+      matched: [],
+      column_mismatches: [],
+      unmapped_tables: [],
+      orphan_entities: ["User"],
+      error: "connect ECONNREFUSED 127.0.0.1:5432",
+    };
+    const md = generateMappingMarkdown(
+      sampleEntities(),
+      "P",
+      "jpa",
+      undefined,
+      undefined,
+      xvalid,
+    );
+    expect(md).toContain("## Cross-Validation");
+    expect(md).toContain("Validation could not run");
+    expect(md).toContain("ECONNREFUSED");
+  });
+
+  it("renders all-clear message when no mismatches", () => {
+    const xvalid: CrossValidationReport = {
+      matched: [{ entity: "User", table: "users" }],
+      column_mismatches: [],
+      unmapped_tables: [],
+      orphan_entities: [],
+    };
+    const md = generateMappingMarkdown(
+      sampleEntities(),
+      "P",
+      "jpa",
+      undefined,
+      undefined,
+      xvalid,
+    );
+    expect(md).toContain("## Cross-Validation");
+    expect(md).toContain("All extracted entities match the live DB schema");
+  });
+
+  it("omits section entirely when no report is passed", () => {
+    const md = generateMappingMarkdown(sampleEntities(), "P", "jpa");
+    expect(md).not.toContain("## Cross-Validation");
+  });
+
+  it("places section after Dual-Access and before Mermaid", () => {
+    const xvalid: CrossValidationReport = {
+      matched: [],
+      column_mismatches: [],
+      unmapped_tables: ["audit"],
+      orphan_entities: [],
+    };
+    const md = generateMappingMarkdown(
+      sampleEntities(),
+      "P",
+      "jpa",
+      ["unmapped1"],
+      ["dual1"],
+      xvalid,
+    );
+    const idxDual = md.indexOf("## Dual-Access Tables");
+    const idxXval = md.indexOf("## Cross-Validation");
+    const idxMerm = md.indexOf("```mermaid");
+    expect(idxDual).toBeGreaterThan(0);
+    expect(idxXval).toBeGreaterThan(idxDual);
+    expect(idxMerm).toBeGreaterThan(idxXval);
   });
 });

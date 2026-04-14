@@ -1,3 +1,4 @@
+import { getConnection, releaseConnection, SchemaManager, } from "../wiki_db/index.js";
 /** Construct an entity with Python-style defaults. */
 export function makeExtractedEntity(init) {
     return {
@@ -138,4 +139,112 @@ function classToTable(className, profile) {
  */
 function toSnakeCase(name) {
     return name.replace(/(?<=[a-z0-9])([A-Z])/g, "_$1").toLowerCase();
+}
+/** Compose a table's full name — `<schema>.<name>` when schema is set. */
+function tableKey(schema, name) {
+    return schema ? `${schema}.${name}` : name;
+}
+/**
+ * Compare entities extracted from code against the live database schema
+ * for `envName`. Connects via wiki_db's connection pool, queries the
+ * schema via `SchemaManager`, and diffs the two.
+ *
+ * NEVER throws — connection / query failures yield a report whose
+ * `error` field is set and whose arrays are empty (except `orphan_entities`
+ * which is all of `entities`, because nothing validated).
+ */
+export async function crossValidate(entities, envName, tableFilter = null) {
+    const report = {
+        matched: [],
+        column_mismatches: [],
+        unmapped_tables: [],
+        orphan_entities: [],
+    };
+    let conn = null;
+    let tables;
+    try {
+        conn = getConnection(envName);
+        const mgr = new SchemaManager(conn.driver);
+        tables = await mgr.getSchema(conn.native, envName, "", tableFilter);
+    }
+    catch (e) {
+        report.error = e.message;
+        report.orphan_entities = entities.map((ent) => ent.class_name);
+        if (conn) {
+            try {
+                releaseConnection(envName, conn);
+            }
+            catch { /* best-effort */ }
+        }
+        return report;
+    }
+    finally {
+        if (conn) {
+            try {
+                releaseConnection(envName, conn);
+            }
+            catch { /* best-effort */ }
+        }
+    }
+    // Build lookup structures from the DB schema.
+    const dbTablesByKey = new Map();
+    for (const t of tables)
+        dbTablesByKey.set(tableKey(t.schema, t.name), t);
+    const dbTablesByName = new Map();
+    for (const t of tables) {
+        if (!dbTablesByName.has(t.name))
+            dbTablesByName.set(t.name, t);
+    }
+    const matchedTableKeys = new Set();
+    for (const ent of entities) {
+        const direct = tableKey(ent.schema_name, ent.table_name);
+        let dbTable = dbTablesByKey.get(direct);
+        if (dbTable === undefined && !ent.schema_name) {
+            dbTable = dbTablesByName.get(ent.table_name);
+        }
+        if (dbTable === undefined) {
+            report.orphan_entities.push(ent.class_name);
+            continue;
+        }
+        const fullKey = tableKey(dbTable.schema, dbTable.name);
+        matchedTableKeys.add(fullKey);
+        report.matched.push({ entity: ent.class_name, table: fullKey });
+        const dbCols = new Set(dbTable.columns.map((c) => c.name));
+        const codeCols = new Set(ent.columns.map((c) => c.name));
+        for (const field of codeCols) {
+            if (!dbCols.has(field)) {
+                report.column_mismatches.push({
+                    entity: ent.class_name,
+                    table: fullKey,
+                    entity_field: field,
+                    reason: "missing_in_db",
+                });
+            }
+        }
+        for (const col of dbCols) {
+            if (!codeCols.has(col)) {
+                report.column_mismatches.push({
+                    entity: ent.class_name,
+                    table: fullKey,
+                    entity_field: col,
+                    reason: "missing_in_code",
+                });
+            }
+        }
+    }
+    for (const [key] of dbTablesByKey) {
+        if (!matchedTableKeys.has(key))
+            report.unmapped_tables.push(key);
+    }
+    report.unmapped_tables.sort();
+    report.orphan_entities.sort();
+    report.column_mismatches.sort((a, b) => {
+        if (a.entity !== b.entity)
+            return a.entity < b.entity ? -1 : 1;
+        if (a.entity_field !== b.entity_field) {
+            return a.entity_field < b.entity_field ? -1 : 1;
+        }
+        return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
+    });
+    return report;
 }

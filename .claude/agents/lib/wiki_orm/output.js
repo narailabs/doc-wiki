@@ -5,7 +5,7 @@
  * becomes the `project_name` option here. The TS call sites pass them by
  * name, which is clearer than the three-positional Python form.
  */
-export function generateMappingMarkdown(entities, projectName = "Project", ormProfile = "unknown", unmappedTables, dualAccessTables) {
+export function generateMappingMarkdown(entities, projectName = "Project", ormProfile = "unknown", unmappedTables, dualAccessTables, crossValidation) {
     const today = isoToday();
     const unmapped = unmappedTables ?? [];
     const dual = dualAccessTables ?? [];
@@ -58,6 +58,57 @@ export function generateMappingMarkdown(entities, projectName = "Project", ormPr
             lines.push(`- \`${table}\``);
         lines.push("");
     }
+    // Cross-validation against live DB (G2). Emitted AFTER Dual-Access and
+    // BEFORE the Mermaid ER diagram. Per §5 of the v2 report: flag tables
+    // present in DB but unmapped, entities with no matching table, and
+    // per-column mismatches.
+    if (crossValidation !== undefined) {
+        lines.push("## Cross-Validation");
+        lines.push("");
+        if (crossValidation.error !== undefined) {
+            lines.push(`Validation could not run: \`${crossValidation.error}\`. ` +
+                "Entity ↔ DB schema diff is unavailable.");
+            lines.push("");
+        }
+        else {
+            if (crossValidation.unmapped_tables.length > 0) {
+                lines.push("### Unmapped DB Tables");
+                lines.push("");
+                lines.push("Tables present in the live DB with no matching entity:");
+                lines.push("");
+                for (const t of crossValidation.unmapped_tables) {
+                    lines.push(`- \`${t}\``);
+                }
+                lines.push("");
+            }
+            if (crossValidation.orphan_entities.length > 0) {
+                lines.push("### Orphan Entities");
+                lines.push("");
+                lines.push("Entities extracted from code with no matching table in the DB:");
+                lines.push("");
+                for (const e of crossValidation.orphan_entities) {
+                    lines.push(`- \`${e}\``);
+                }
+                lines.push("");
+            }
+            if (crossValidation.column_mismatches.length > 0) {
+                lines.push("### Column Mismatches");
+                lines.push("");
+                lines.push("| Entity | Table | Field | Reason |");
+                lines.push("|---|---|---|---|");
+                for (const m of crossValidation.column_mismatches) {
+                    lines.push(`| ${m.entity} | ${m.table} | ${m.entity_field} | ${m.reason} |`);
+                }
+                lines.push("");
+            }
+            if (crossValidation.unmapped_tables.length === 0 &&
+                crossValidation.orphan_entities.length === 0 &&
+                crossValidation.column_mismatches.length === 0) {
+                lines.push("All extracted entities match the live DB schema. No mismatches detected.");
+                lines.push("");
+            }
+        }
+    }
     // Mermaid ER diagram
     if (entities.length > 0) {
         lines.push("## Entity Relationship Diagram");
@@ -98,7 +149,7 @@ export function generateMappingMarkdown(entities, projectName = "Project", ormPr
  * separate so tests can prefer whichever spelling reads best.
  */
 export function generateMappingMarkdownOpts(entities, opts = {}) {
-    return generateMappingMarkdown(entities, opts.project_name, opts.orm_profile, opts.unmapped_tables, opts.dual_access_tables);
+    return generateMappingMarkdown(entities, opts.project_name, opts.orm_profile, opts.unmapped_tables, opts.dual_access_tables, opts.cross_validation);
 }
 /**
  * Mirror of Python's `date.today().isoformat()` in the caller's local

@@ -12,3 +12,4 @@
 export * from "./profiles.js";
 export * from "./extractor.js";
 export * from "./output.js";
+export * from "./serena.js";

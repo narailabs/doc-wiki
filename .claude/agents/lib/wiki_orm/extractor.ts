@@ -12,6 +12,12 @@
  *   - relationship patterns → no flags (re.search truthiness)
  */
 import type { OrmProfile } from "./profiles.js";
+import {
+  getConnection,
+  releaseConnection,
+  SchemaManager,
+  type Table,
+} from "../wiki_db/index.js";
 
 /** One column on an extracted entity. */
 export interface ExtractedColumn {
@@ -200,4 +206,144 @@ function classToTable(className: string, profile: OrmProfile): string {
  */
 function toSnakeCase(name: string): string {
   return name.replace(/(?<=[a-z0-9])([A-Z])/g, "_$1").toLowerCase();
+}
+
+// ── Cross-validation against live DB schema (G2) ───────────────────────
+
+/**
+ * One column-level discrepancy between a code-extracted entity and the
+ * live database schema. `type_mismatch` is reserved for the future Serena
+ * path; the regex extractor does not carry type info today.
+ */
+export interface ColumnMismatch {
+  entity: string;
+  table: string;
+  entity_field: string;
+  reason: "missing_in_db" | "missing_in_code" | "type_mismatch";
+  db_type?: string;
+  code_type?: string;
+}
+
+/** Summary of an ORM ↔ DB cross-validation pass. */
+export interface CrossValidationReport {
+  matched: Array<{ entity: string; table: string }>;
+  column_mismatches: ColumnMismatch[];
+  /** Tables present in the DB but not mapped by any extracted entity. */
+  unmapped_tables: string[];
+  /** Entities in code whose `table_name` has no matching table in the DB. */
+  orphan_entities: string[];
+  /** Populated when validation failed (e.g. connection refused). */
+  error?: string;
+}
+
+/** Compose a table's full name — `<schema>.<name>` when schema is set. */
+function tableKey(schema: string, name: string): string {
+  return schema ? `${schema}.${name}` : name;
+}
+
+/**
+ * Compare entities extracted from code against the live database schema
+ * for `envName`. Connects via wiki_db's connection pool, queries the
+ * schema via `SchemaManager`, and diffs the two.
+ *
+ * NEVER throws — connection / query failures yield a report whose
+ * `error` field is set and whose arrays are empty (except `orphan_entities`
+ * which is all of `entities`, because nothing validated).
+ */
+export async function crossValidate(
+  entities: ExtractedEntity[],
+  envName: string,
+  tableFilter: string | null = null,
+): Promise<CrossValidationReport> {
+  const report: CrossValidationReport = {
+    matched: [],
+    column_mismatches: [],
+    unmapped_tables: [],
+    orphan_entities: [],
+  };
+
+  let conn: Awaited<ReturnType<typeof getConnection>> | null = null;
+  let tables: Table[];
+  try {
+    conn = getConnection(envName);
+    const mgr = new SchemaManager(conn.driver);
+    tables = await mgr.getSchema(conn.native, envName, "", tableFilter);
+  } catch (e) {
+    report.error = (e as Error).message;
+    report.orphan_entities = entities.map((ent) => ent.class_name);
+    if (conn) {
+      try { releaseConnection(envName, conn); } catch { /* best-effort */ }
+    }
+    return report;
+  } finally {
+    if (conn) {
+      try { releaseConnection(envName, conn); } catch { /* best-effort */ }
+    }
+  }
+
+  // Build lookup structures from the DB schema.
+  const dbTablesByKey = new Map<string, Table>();
+  for (const t of tables) dbTablesByKey.set(tableKey(t.schema, t.name), t);
+  const dbTablesByName = new Map<string, Table>();
+  for (const t of tables) {
+    if (!dbTablesByName.has(t.name)) dbTablesByName.set(t.name, t);
+  }
+
+  const matchedTableKeys = new Set<string>();
+
+  for (const ent of entities) {
+    const direct = tableKey(ent.schema_name, ent.table_name);
+    let dbTable = dbTablesByKey.get(direct);
+    if (dbTable === undefined && !ent.schema_name) {
+      dbTable = dbTablesByName.get(ent.table_name);
+    }
+    if (dbTable === undefined) {
+      report.orphan_entities.push(ent.class_name);
+      continue;
+    }
+
+    const fullKey = tableKey(dbTable.schema, dbTable.name);
+    matchedTableKeys.add(fullKey);
+    report.matched.push({ entity: ent.class_name, table: fullKey });
+
+    const dbCols = new Set(dbTable.columns.map((c) => c.name));
+    const codeCols = new Set(ent.columns.map((c) => c.name));
+
+    for (const field of codeCols) {
+      if (!dbCols.has(field)) {
+        report.column_mismatches.push({
+          entity: ent.class_name,
+          table: fullKey,
+          entity_field: field,
+          reason: "missing_in_db",
+        });
+      }
+    }
+    for (const col of dbCols) {
+      if (!codeCols.has(col)) {
+        report.column_mismatches.push({
+          entity: ent.class_name,
+          table: fullKey,
+          entity_field: col,
+          reason: "missing_in_code",
+        });
+      }
+    }
+  }
+
+  for (const [key] of dbTablesByKey) {
+    if (!matchedTableKeys.has(key)) report.unmapped_tables.push(key);
+  }
+
+  report.unmapped_tables.sort();
+  report.orphan_entities.sort();
+  report.column_mismatches.sort((a, b) => {
+    if (a.entity !== b.entity) return a.entity < b.entity ? -1 : 1;
+    if (a.entity_field !== b.entity_field) {
+      return a.entity_field < b.entity_field ? -1 : 1;
+    }
+    return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
+  });
+
+  return report;
 }

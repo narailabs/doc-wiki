@@ -70,3 +70,40 @@ Or for custom ORM scaffolding:
 - **Fall back to regex** when Serena is not available
 - **Always generate Mermaid** — the ER diagram is a required output, not optional
 - **Flag unmapped tables** — if DB schema is available, report tables with no entity
+
+## Serena MCP path (preferred when available)
+
+When the `serena` MCP server is connected to the orchestrator session,
+prefer it over the regex extractor. The TypeScript library provides the
+contract; the orchestrator runs the MCP calls.
+
+1. Load the ORM profile via `loadProfile` / `loadAllProfiles`.
+2. Call `buildExtractionRequest(profile)` from `wiki_orm/serena.ts` to
+   get a `SerenaQueryPlan`.
+3. For each entry in `plan.patterns`, dispatch
+   `mcp__plugin_serena_serena__search_for_pattern` with the entry's
+   `pattern` and `file_pattern`. Use `mcp__plugin_serena_serena__find_symbol`
+   and `mcp__plugin_serena_serena__find_referencing_symbols` to resolve
+   an `enclosing_class` for every non-`entity_class` match.
+4. Collect responses into `SerenaMatch[]` and call
+   `parseSerenaMatches(matches, profile)` to get back `ExtractedEntity[]`.
+5. Feed those entities into the normal pipeline (`crossValidate` when
+   `--env` is set, then `generateMappingMarkdown`).
+
+If the Serena MCP is unavailable (offline, CI, no plugin), fall back to
+`extractEntities(fileContents, profile)` — that is the regex path the
+CLI uses today. No behavioural change at the mapping-markdown level.
+
+## Cross-validation against a live DB (--env)
+
+With `--env <name>`, the CLI cross-validates extracted entities against
+the environment's schema via `wiki_db`. The emitted
+`database-mapping.md` gains a "Cross-Validation" section (after
+"Dual-Access Tables", before the Mermaid ER diagram) listing unmapped
+tables, orphan entities, and column mismatches. Connection failures
+don't crash the CLI — they surface as an `error` string inside the
+`cross_validation` report and every entity gets listed as an orphan.
+
+The behaviour is gated by `ecosystem.orm.cross_validate_against_db` in
+`wiki.config.yaml` (default `true`). The CLI reads the config from
+`<codebase-path>/wiki.config.yaml` first, then `<codebase-path>/wiki/wiki.config.yaml`.

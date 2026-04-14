@@ -62,7 +62,7 @@ function runCli(args: readonly string[]): {
   }
 }
 
-function captureStdout(fn: () => void): string {
+async function captureStdout(fn: () => void | Promise<void>): Promise<string> {
   const orig = process.stdout.write.bind(process.stdout);
   const chunks: string[] = [];
   process.stdout.write = ((s: string | Uint8Array): boolean => {
@@ -70,7 +70,7 @@ function captureStdout(fn: () => void): string {
     return true;
   }) as typeof process.stdout.write;
   try {
-    fn();
+    await fn();
   } finally {
     process.stdout.write = orig;
   }
@@ -78,7 +78,7 @@ function captureStdout(fn: () => void): string {
 }
 
 describe("orm_detect main()", () => {
-  it("requires --codebase-path", () => {
+  it("requires --codebase-path", async () => {
     const origErr = process.stderr.write.bind(process.stderr);
     const errChunks: string[] = [];
     process.stderr.write = ((s: string | Uint8Array): boolean => {
@@ -88,7 +88,7 @@ describe("orm_detect main()", () => {
       return true;
     }) as typeof process.stderr.write;
     try {
-      const code = main([]);
+      const code = await main([]);
       expect(code).toBe(2);
       expect(errChunks.join("")).toContain("--codebase-path");
     } finally {
@@ -96,10 +96,10 @@ describe("orm_detect main()", () => {
     }
   });
 
-  it("detects JPA profile on the JPA fixture and emits JSON", () => {
+  it("detects JPA profile on the JPA fixture and emits JSON", async () => {
     const jpaPath = path.join(ORM_FIXTURES_DIR, "jpa");
-    const stdout = captureStdout(() => {
-      const code = main([
+    const stdout = await captureStdout(async () => {
+      const code = await main([
         "--codebase-path",
         jpaPath,
         "--profile",
@@ -120,10 +120,10 @@ describe("orm_detect main()", () => {
     expect(result.mermaid.code).toContain("erDiagram");
   });
 
-  it("detects Django profile on the Django fixture", () => {
+  it("detects Django profile on the Django fixture", async () => {
     const djangoPath = path.join(ORM_FIXTURES_DIR, "django");
-    const stdout = captureStdout(() => {
-      main([
+    const stdout = await captureStdout(async () => {
+      await main([
         "--codebase-path",
         djangoPath,
         "--profile",
@@ -136,12 +136,12 @@ describe("orm_detect main()", () => {
     expect((result.entities as unknown[]).length).toBeGreaterThan(0);
   });
 
-  it("writes database-mapping.md when --output-markdown is given", () => {
+  it("writes database-mapping.md when --output-markdown is given", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "orm-detect-test-"));
     const outFile = path.join(tmp, "database-mapping.md");
     try {
       const jpaPath = path.join(ORM_FIXTURES_DIR, "jpa");
-      const code = main([
+      const code = await main([
         "--codebase-path",
         jpaPath,
         "--output-markdown",
@@ -157,13 +157,12 @@ describe("orm_detect main()", () => {
     }
   });
 
-  it("returns empty success result when no ORM is detected", () => {
+  it("returns empty success result when no ORM is detected", async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "orm-detect-empty-"));
     try {
-      // Directory with no ORM-matching files
       fs.writeFileSync(path.join(tmp, "README.md"), "# Empty");
-      const stdout = captureStdout(() => {
-        main(["--codebase-path", tmp, "--output-json"]);
+      const stdout = await captureStdout(async () => {
+        await main(["--codebase-path", tmp, "--output-json"]);
       });
       const result = JSON.parse(stdout);
       expect(result.status).toBe("success");
@@ -172,6 +171,39 @@ describe("orm_detect main()", () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+
+  it("does not call crossValidate when --env is absent (no cross_validation field)", async () => {
+    const jpaPath = path.join(ORM_FIXTURES_DIR, "jpa");
+    const stdout = await captureStdout(async () => {
+      await main([
+        "--codebase-path",
+        jpaPath,
+        "--profile",
+        "auto",
+        "--output-json",
+      ]);
+    });
+    const result = JSON.parse(stdout);
+    expect(result).not.toHaveProperty("cross_validation");
+  });
+
+  it("surfaces cross_validation.error when --env points at an unregistered env", async () => {
+    const jpaPath = path.join(ORM_FIXTURES_DIR, "jpa");
+    const stdout = await captureStdout(async () => {
+      await main([
+        "--codebase-path",
+        jpaPath,
+        "--profile",
+        "auto",
+        "--output-json",
+        "--env",
+        "no-such-env",
+      ]);
+    });
+    const result = JSON.parse(stdout);
+    expect(result.cross_validation).toBeDefined();
+    expect(result.cross_validation.error).toBeDefined();
   });
 });
 
