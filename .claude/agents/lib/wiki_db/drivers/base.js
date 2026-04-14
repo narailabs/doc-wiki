@@ -1,14 +1,3 @@
-/**
- * drivers/base.ts — Abstract base class for database drivers.
- *
- * Mirrors `drivers/base.py`:
- *  - `Column` and `Table` carry column-level + table-level metadata with a
- *    `toDict()` helper (returning a plain object with snake_case keys to
- *    match the Python dict layout).
- *  - `DatabaseDriver` is an abstract class exposing `connect`, `executeRead`,
- *    `getSchema`, and `close`. Concrete drivers (sqlite, postgres, …)
- *    extend it.
- */
 /** Represents a database column. */
 export class Column {
     name;
@@ -63,5 +52,9 @@ export class DatabaseDriver {
     /** Alias for {@link getSchema}. */
     get_schema(conn, schemaName, tableFilter) {
         return this.getSchema(conn, schemaName, tableFilter ?? null);
+    }
+    /** Alias for {@link classifyOperation}. */
+    classify_operation(query) {
+        return this.classifyOperation(query);
     }
 }

@@ -30,6 +30,30 @@ import {
   Table,
   type ExecuteReadResult,
 } from "./base.js";
+import { OperationType } from "../policy.js";
+
+/**
+ * G-DB-1: MongoDB verb → OperationType mapping.
+ *
+ * READ: collection-reading verbs the driver actually supports here, plus
+ * `count`/`distinct`/`estimatedDocumentCount` which the spec considers
+ * read-only. DML: write verbs (insert/update/delete/replace/findAndModify
+ * variants + bulk). DDL: collection/index lifecycle. Unknown verbs
+ * default to DDL (most restrictive).
+ */
+const _MONGO_READ_OPS: ReadonlySet<string> = new Set([
+  "find", "findOne", "aggregate", "count", "countDocuments",
+  "estimatedDocumentCount", "distinct",
+]);
+const _MONGO_DML_OPS: ReadonlySet<string> = new Set([
+  "insertOne", "insertMany", "updateOne", "updateMany",
+  "replaceOne", "deleteOne", "deleteMany", "bulkWrite",
+  "findOneAndUpdate", "findOneAndReplace", "findOneAndDelete",
+]);
+const _MONGO_DDL_OPS: ReadonlySet<string> = new Set([
+  "createCollection", "drop", "dropCollection", "renameCollection",
+  "createIndex", "createIndexes", "dropIndex", "dropIndexes",
+]);
 
 // ---------------------------------------------------------------------------
 // Minimal ambient types
@@ -344,6 +368,47 @@ export class MongoDriver extends DatabaseDriver {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * G-DB-1: classify a Mongo query for the policy gate.
+   *
+   * Accepts either a JSON envelope `{collection, op, ...}` (the format
+   * this driver's `executeReadAsync` consumes) or a free-form mongo
+   * statement like `db.users.insertOne({...})`. The verb is extracted
+   * and looked up in the read/dml/ddl tables. Anything not recognized
+   * defaults to DDL — same default-deny behaviour as the SQL classifier.
+   */
+  override classifyOperation(query: string): OperationType {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      throw new Error("Empty MongoDB statement");
+    }
+
+    let op: string | null = null;
+
+    // Envelope form: {"collection": "...", "op": "..."}
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed) as { op?: unknown };
+        if (typeof parsed.op === "string") op = parsed.op;
+      } catch {
+        /* fall through to dot-notation parse */
+      }
+    }
+
+    // Dot-notation form: db.<collection>.<verb>(...)
+    if (op === null) {
+      const match = /(?:^|\.)([A-Za-z][A-Za-z0-9_]*)\s*\(/.exec(trimmed);
+      if (match !== null) op = match[1] ?? null;
+    }
+
+    if (op === null) return OperationType.DDL;
+
+    if (_MONGO_READ_OPS.has(op)) return OperationType.READ;
+    if (_MONGO_DML_OPS.has(op)) return OperationType.DML;
+    if (_MONGO_DDL_OPS.has(op)) return OperationType.DDL;
+    return OperationType.DDL;
   }
 
   /** Close the shared MongoClient. */

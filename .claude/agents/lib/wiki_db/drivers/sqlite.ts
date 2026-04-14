@@ -24,6 +24,7 @@ import {
   Table,
   type ExecuteReadResult,
 } from "./base.js";
+import { classifySqlKeywords, type OperationType } from "../policy.js";
 
 export class SQLiteDriver extends DatabaseDriver {
   override connect(envConfig: Record<string, unknown>): Database.Database {
@@ -153,6 +154,10 @@ export class SQLiteDriver extends DatabaseDriver {
 
   override close(conn: unknown): void {
     (conn as Database.Database).close();
+  }
+
+  override classifyOperation(query: string): OperationType {
+    return classifySqlKeywords(query);
   }
 }
 

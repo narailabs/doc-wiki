@@ -19,6 +19,7 @@
 import { performance } from "node:perf_hooks";
 import Database from "better-sqlite3";
 import { Column, DatabaseDriver, Table, } from "./base.js";
+import { classifySqlKeywords } from "../policy.js";
 export class SQLiteDriver extends DatabaseDriver {
     connect(envConfig) {
         const dbPath = typeof envConfig["database"] === "string"
@@ -122,6 +123,9 @@ export class SQLiteDriver extends DatabaseDriver {
     }
     close(conn) {
         conn.close();
+    }
+    classifyOperation(query) {
+        return classifySqlKeywords(query);
     }
 }
 function roundTo2(n) {

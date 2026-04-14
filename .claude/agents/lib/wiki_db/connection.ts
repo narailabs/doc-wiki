@@ -16,6 +16,7 @@
 import { getEnvironment } from "./environments.js";
 import { DatabaseDriver } from "./drivers/base.js";
 import { SQLiteDriver } from "./drivers/sqlite.js";
+import { logEvent } from "./audit.js";
 
 // ---------------------------------------------------------------------------
 // Driver factory registry
@@ -301,6 +302,12 @@ function _buildPool(envName: string): PoolEntry {
     );
   }
   const driver = factory(envCfg);
+  // G-DB-AUDIT: emit `pool_created` once per environment (this function is
+  // only invoked on the first getConnection() for a given envName).
+  logEvent({
+    event_type: "pool_created",
+    details: { env: envName, driver: driverName },
+  });
   return { envName, driver, openConnections: new Set() };
 }
 

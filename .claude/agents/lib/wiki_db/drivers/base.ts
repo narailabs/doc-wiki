@@ -6,9 +6,16 @@
  *    `toDict()` helper (returning a plain object with snake_case keys to
  *    match the Python dict layout).
  *  - `DatabaseDriver` is an abstract class exposing `connect`, `executeRead`,
- *    `getSchema`, and `close`. Concrete drivers (sqlite, postgres, …)
- *    extend it.
+ *    `getSchema`, `close`, and `classifyOperation`. Concrete drivers
+ *    (sqlite, postgres, …) extend it.
+ *
+ * G-DB-1: `classifyOperation(query)` is the driver-level hook that lets
+ * non-relational drivers (MongoDB, DynamoDB) classify their JSON envelope
+ * queries (`db.users.insertOne({...})` → DML; `find` → READ) without going
+ * through the SQL keyword path. SQL drivers delegate to
+ * `classifySqlKeywords` from `policy.ts`.
  */
+import type { OperationType } from "../policy.js";
 
 /** Represents a database column. */
 export class Column {
@@ -115,6 +122,20 @@ export abstract class DatabaseDriver {
   /** Close a connection. */
   abstract close(conn: unknown): void;
 
+  /**
+   * Classify a query string by its operation kind.
+   *
+   * SQL drivers (sqlite, postgres, mysql, sqlserver) delegate to
+   * `classifySqlKeywords` from `policy.ts`. Document-store drivers
+   * (mongodb, dynamodb) override with their own envelope-aware mapping
+   * — e.g. MongoDB `insertOne` → DML, `find` → READ; DynamoDB `putItem`
+   * → DML, `scan` → READ. Throws on empty input.
+   *
+   * Default-deny: unknown verbs/keywords classify as `"ddl"` (most
+   * restrictive), matching the SQL classifier's behaviour.
+   */
+  abstract classifyOperation(query: string): OperationType;
+
   // ------------------------------------------------------------------
   // Python-snake_case aliases (optional parity with the Python API)
   // ------------------------------------------------------------------
@@ -137,5 +158,10 @@ export abstract class DatabaseDriver {
     tableFilter?: string | null,
   ): Table[] {
     return this.getSchema(conn, schemaName, tableFilter ?? null);
+  }
+
+  /** Alias for {@link classifyOperation}. */
+  classify_operation(query: string): OperationType {
+    return this.classifyOperation(query);
   }
 }
