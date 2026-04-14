@@ -18,16 +18,17 @@ const _VALID_APPROVAL_MODES = new Set([
 const _registry = new Map();
 /** Register a named environment configuration. */
 export function registerEnvironment(name, opts) {
-    const { host, port, database, schema = "public", approval_mode = "auto", driver = "postgresql", } = opts;
+    const { host, port, database, schema = "public", approval_mode = "auto", driver = "postgresql", grant_duration_hours, } = opts;
     if (!_VALID_APPROVAL_MODES.has(approval_mode)) {
         // Python sorts the frozenset; mirror that for parity with pytest-match.
         const sorted = [..._VALID_APPROVAL_MODES].sort();
         const sortedRepr = "[" + sorted.map((s) => `'${s}'`).join(", ") + "]";
         throw new Error(`approval_mode must be one of ${sortedRepr}, got '${approval_mode}'`);
     }
-    const cfg = Object.freeze({
-        host, port, database, schema, approval_mode, driver,
-    });
+    const base = { host, port, database, schema, approval_mode, driver };
+    const cfg = Object.freeze(grant_duration_hours === undefined
+        ? base
+        : { ...base, grant_duration_hours });
     _registry.set(name, cfg);
 }
 /** Return the config for `name`, or throw a KeyError-named Error. */

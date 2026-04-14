@@ -119,4 +119,27 @@ describe("wiki_db.environments", () => {
     clearEnvironments();
     expect(listEnvironments()).toEqual([]);
   });
+
+  // ---------- 9. grant_duration_hours ----------
+  it("stores an optional grant_duration_hours field", () => {
+    registerEnvironment("prod", {
+      host: "prod-db",
+      port: 5432,
+      database: "wiki_prod",
+      approval_mode: "grant-required",
+      grant_duration_hours: 8,
+    });
+    const env = getEnvironment("prod");
+    expect(env.grant_duration_hours).toBe(8);
+  });
+
+  it("omits grant_duration_hours when unset", () => {
+    registerEnvironment("dev", {
+      host: "localhost",
+      port: 5432,
+      database: "wiki_dev",
+    });
+    const env = getEnvironment("dev");
+    expect(env.grant_duration_hours).toBeUndefined();
+  });
 });

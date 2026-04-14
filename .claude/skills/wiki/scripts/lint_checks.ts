@@ -47,6 +47,24 @@ const REQUIRED_FIELDS: ReadonlySet<string> = new Set([
   "summary",
 ]);
 
+/**
+ * The seven page types from v2 design §14. `checkFrontmatter` flags any
+ * `type:` value not in this set. A typo like `type: concepts` would
+ * otherwise pass lint because the field is present.
+ */
+const VALID_PAGE_TYPES: ReadonlySet<string> = new Set([
+  "concept",
+  "entity",
+  "summary",
+  "index",
+  "lecture",
+  "claim",
+  "synthesis",
+]);
+
+/** Default age (in days) past which a page is flagged as stale. */
+const STALE_DAYS_DEFAULT = 90;
+
 /** Python: `re.compile(r"\[.*?\]\(([^)]+)\)")` */
 const _LINK_RE = /\[.*?\]\(([^)]+)\)/g;
 
@@ -150,6 +168,21 @@ export function checkFrontmatter(wikiRoot: string): Issue[] {
           "missing_frontmatter",
           page,
           `Missing required frontmatter field: ${field}`,
+        ),
+      );
+    }
+
+    // Validate the `type:` value against the 7-type enum. Typos must
+    // not pass lint silently.
+    const typeValue = fm["type"];
+    if (typeof typeValue === "string" && !VALID_PAGE_TYPES.has(typeValue)) {
+      const allowed = [...VALID_PAGE_TYPES].join("|");
+      issues.push(
+        makeIssue(
+          "error",
+          "missing_frontmatter",
+          page,
+          `type '${typeValue}' is not one of ${allowed}`,
         ),
       );
     }
@@ -735,6 +768,52 @@ export function checkThinClusters(wikiRoot: string): Issue[] {
   return issues;
 }
 
+/**
+ * Flag pages whose `updated:` frontmatter is older than `thresholdDays`
+ * (default 90). Pages with missing or unparseable `updated:` are skipped
+ * rather than flagged — `checkFrontmatter` already enforces presence.
+ *
+ * Emits `info` severity (non-blocking signal); the reviewer can decide
+ * whether to `/wiki-refresh` or `/wiki-fix` the content.
+ */
+export function checkStaleContent(
+  wikiRoot: string,
+  thresholdDays: number = STALE_DAYS_DEFAULT,
+  now: Date = new Date(),
+): Issue[] {
+  const issues: Issue[] = [];
+  const cutoffMs = now.getTime() - thresholdDays * 24 * 60 * 60 * 1000;
+  for (const page of wikiPages(wikiRoot)) {
+    const content = fs.readFileSync(page, { encoding: "utf-8" });
+    const fm = parseFrontmatter(content);
+    const raw = fm["updated"];
+    if (raw === undefined || raw === null) continue;
+    // YAML dates come back as `Date`; string dates are parsed below.
+    let ts: number;
+    if (raw instanceof Date) {
+      ts = raw.getTime();
+    } else if (typeof raw === "string") {
+      const parsed = Date.parse(raw);
+      if (Number.isNaN(parsed)) continue;
+      ts = parsed;
+    } else {
+      continue;
+    }
+    if (ts < cutoffMs) {
+      const ageDays = Math.floor((now.getTime() - ts) / (24 * 60 * 60 * 1000));
+      issues.push(
+        makeIssue(
+          "info",
+          "stale_content",
+          page,
+          `Page is ${ageDays} days old (threshold ${thresholdDays})`,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
 // ── Main lint function ──────────────────────────────────────────────
 
 /** Registry of check functions, matching the Python dict insertion order. */
@@ -753,6 +832,7 @@ const CHECK_FUNCTIONS: ReadonlyArray<
   ["summaries_sync", checkSummariesSync],
   ["orm_mapping_freshness", checkOrmMappingFreshness],
   ["thin_clusters", checkThinClusters],
+  ["stale_content", checkStaleContent],
 ];
 
 const VALID_CATEGORIES: ReadonlySet<string> = new Set(

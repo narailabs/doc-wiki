@@ -115,7 +115,7 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 3. **Cache check**: Run `cache_manager.ts` (`node cache_manager.js check`). If cached and cache_version matches, skip extraction.
 
-4. **Extract**: For binary files, run `extract_binary.ts` (`node extract_binary.js`). For markdown/text, read directly.
+4. **Extract**: For binary files, run `extract_binary.ts` (`node extract_binary.js`). For markdown/text, read directly. When the source is a folder, call `loadIgnore(wikiRoot)` from `_wiki_fs.ts` and skip any paths matched by `.wiki-ignore` (gitignore-syntax, evaluated relative to `wikiRoot`).
 
 5. **Read fully**: Read the entire source. No skipping sections.
 

@@ -17,6 +17,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import ignore from "ignore";
 /**
  * Return absolute paths to every `.md` file under `<wikiRoot>/wiki/`,
  * sorted lexicographically. See module docstring for parity details.
@@ -51,4 +52,34 @@ export function wikiPages(wikiRoot) {
     }
     out.sort();
     return out;
+}
+/** Wraps the `ignore` package so callers only see `isIgnored`. */
+function wrap(ig) {
+    return {
+        isIgnored(relPath) {
+            const normalized = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+            if (normalized === "")
+                return false;
+            return ig.ignores(normalized);
+        },
+    };
+}
+/**
+ * Load `<wikiRoot>/.wiki-ignore`. If the file is missing or unreadable,
+ * returns a matcher that ignores nothing. Lines are parsed by the
+ * `ignore` npm package (gitignore-compatible: supports `!` negation,
+ * `#` comments, `**` globs, trailing `/` directory markers).
+ */
+export function loadIgnore(wikiRoot) {
+    const ig = ignore();
+    const file = path.join(wikiRoot, ".wiki-ignore");
+    let text;
+    try {
+        text = fs.readFileSync(file, { encoding: "utf-8" });
+    }
+    catch {
+        return wrap(ig);
+    }
+    ig.add(text);
+    return wrap(ig);
 }

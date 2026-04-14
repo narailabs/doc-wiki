@@ -17,6 +17,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import ignore, { type Ignore } from "ignore";
 
 /**
  * Return absolute paths to every `.md` file under `<wikiRoot>/wiki/`,
@@ -49,4 +50,53 @@ export function wikiPages(wikiRoot: string): string[] {
   }
   out.sort();
   return out;
+}
+
+// ── .wiki-ignore support ─────────────────────────────────────────────
+//
+// `<wikiRoot>/.wiki-ignore` is a gitignore-syntax file honored by the
+// orchestrator when walking folder sources for `/wiki-ingest` and
+// `/wiki-refresh`. See `references/operations.md` step 4 of /wiki-ingest.
+
+/**
+ * Matcher returned by `loadIgnore`. Paths are evaluated relative to the
+ * wiki root; callers pass POSIX-style paths (forward slashes).
+ */
+export interface IgnoreMatcher {
+  /**
+   * Returns true when `relPath` matches any pattern in `.wiki-ignore`.
+   * Never throws. A matcher built from a missing file returns false
+   * for every input.
+   */
+  isIgnored(relPath: string): boolean;
+}
+
+/** Wraps the `ignore` package so callers only see `isIgnored`. */
+function wrap(ig: Ignore): IgnoreMatcher {
+  return {
+    isIgnored(relPath: string): boolean {
+      const normalized = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+      if (normalized === "") return false;
+      return ig.ignores(normalized);
+    },
+  };
+}
+
+/**
+ * Load `<wikiRoot>/.wiki-ignore`. If the file is missing or unreadable,
+ * returns a matcher that ignores nothing. Lines are parsed by the
+ * `ignore` npm package (gitignore-compatible: supports `!` negation,
+ * `#` comments, `**` globs, trailing `/` directory markers).
+ */
+export function loadIgnore(wikiRoot: string): IgnoreMatcher {
+  const ig = ignore();
+  const file = path.join(wikiRoot, ".wiki-ignore");
+  let text: string;
+  try {
+    text = fs.readFileSync(file, { encoding: "utf-8" });
+  } catch {
+    return wrap(ig);
+  }
+  ig.add(text);
+  return wrap(ig);
 }
