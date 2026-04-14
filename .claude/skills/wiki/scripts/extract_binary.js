@@ -21,43 +21,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { importOptional } from "./_optional.js";
 // ── Format registry ────────────────────────────────────────────────
 export const FORMAT_MAP = {
     ".pdf": "pdf",
     ".docx": "docx",
     ".pptx": "pptx",
 };
-// ── Optional-dep loader ────────────────────────────────────────────
-/**
- * Wrap a dynamic `import(modName)` so that `ERR_MODULE_NOT_FOUND` (and the
- * older CommonJS `MODULE_NOT_FOUND`) becomes a friendly error matching the
- * Python `ImportError` style: the user sees the package name and the exact
- * `npm install` command needed.
- *
- * Anything other than a not-found error is rethrown unchanged — we don't
- * want to swallow real import failures (syntax errors, etc.).
- */
-async function importOptional(modName, installName) {
-    try {
-        // The `as unknown` round-trip is needed because callers know the shape
-        // of each module via their own inline cast at the call site.
-        return (await import(modName));
-    }
-    catch (e) {
-        const err = e;
-        if (err.code === "ERR_MODULE_NOT_FOUND" || err.code === "MODULE_NOT_FOUND") {
-            // The module specifier may include a subpath (e.g.
-            // "pdfjs-dist/legacy/build/pdf.mjs"); users need the base package name
-            // for `npm install`, not the subpath.
-            const pkgName = installName ??
-                (modName.startsWith("@")
-                    ? modName.split("/").slice(0, 2).join("/")
-                    : (modName.split("/")[0] ?? modName));
-            throw new Error(`Missing optional dependency '${pkgName}'. Install with: npm install ${pkgName}`);
-        }
-        throw e;
-    }
-}
+// `importOptional` was promoted to `_optional.ts` so extract_multimodal.ts
+// can share it. Re-export here so any external imports keep working.
+export { importOptional };
 // ── Whitespace normalization ───────────────────────────────────────
 /**
  * Normalize extracted plain text so PDF / DOCX / PPTX outputs share the

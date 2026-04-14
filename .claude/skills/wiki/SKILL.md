@@ -117,7 +117,27 @@ Default: `balanced`.
 **Phase 6 — Install hooks + scaffold:**
 
 1. Offer to install PreToolUse always-on hooks for the detected platform
-2. Generate/update `wiki.config.yaml` with all detected settings:
+
+**Phase 6b — Optional multimodal deps (Q&A):**
+
+Ask the user once, before writing the config:
+
+> "Your wiki may ingest audio/video files (`.mp4`, `.mp3`, `.wav`, ...) or YouTube URLs later. The extraction uses two optional tools that aren't installed by default:
+> - `faster-whisper` for local audio transcription (≈100 MB model on first use)
+> - `yt-dlp` for downloading YouTube audio (single binary)
+>
+> Shall I help you set these up?
+> - **Yes, both** → record `ecosystem.multimodal.enabled: on` and print exact install commands for the user's OS
+> - **Yes, yt-dlp only** → record `on`; still print the `yt-dlp` install command (whisper will be skipped when triggered)
+> - **No, skip for now** → record `ecosystem.multimodal.enabled: optional` (default); multimodal ingests will warn-and-skip until the user installs the tools later
+> - **Never ask again** → record `ecosystem.multimodal.enabled: off`; multimodal ingests are silenced entirely"
+
+When the user says yes, print the exact commands (but DO NOT run them — Claude cannot assume a package manager):
+- macOS: `brew install yt-dlp` and `pipx install faster-whisper`
+- Linux: `pipx install yt-dlp faster-whisper` (or the distro's package manager)
+- Windows: `pipx install yt-dlp faster-whisper`
+
+2. Generate/update `wiki.config.yaml` with all detected settings (including the `ecosystem.multimodal.enabled` choice from Phase 6b):
    ```bash
    node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
    ```
@@ -126,7 +146,7 @@ Default: `balanced`.
    node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
    ```
 
-**Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, and autonomy mode. Wiki scaffold created if it did not already exist.
+**Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
 
 ### /wiki-ingest — Fetch + Extract + Compile
 
@@ -134,7 +154,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 
 1. **Parse config:** `node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml`
 2. **Check cache:** `node {skill_path}/scripts/cache_manager.js check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/`
-3. **Extract** (if binary): `node {skill_path}/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/`
+3. **Extract** (if binary): `node {skill_path}/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/` for `.pdf` / `.docx` / `.pptx`. For image / audio / video / YouTube inputs, call `node {skill_path}/scripts/extract_multimodal.js <input> --enabled <from-config>` instead. When it returns `format: "skipped"`, surface the `warning` verbatim to the user (it names the missing tool and the exact install command) and continue with the rest of the ingest — do NOT abort the batch. For `format: "vision"`, use the `Read` tool directly on the image path and write notes to `raw/<topic>/images/<name>.md`. For `format: "audio_video"` and `"youtube"`, the dispatcher tells you which tool to invoke next (`faster-whisper`, or `yt-dlp | faster-whisper`); run it with the domain-aware prompt seeded from `graph_ops.godNodes()`.
 4. **Security check:** `node {skill_path}/scripts/security_check.js --url <url>` (for URL sources)
 5. **Read the source fully** — no skipping sections
 6. **Surface 3-5 takeaways + entity list** — your reasoning

@@ -275,7 +275,10 @@ function buildConfig(domain: string, name: string): Record<string, unknown> {
       },
     },
 
-    // Multimodal extraction (v2)
+    // Multimodal extraction (v2) — consumed by extract_multimodal.ts
+    // via isBinaryOnPath() in _optional.ts. `enabled` accepts
+    // "on" | "optional" | "off"; default "optional" = graceful-skip
+    // when faster-whisper or yt-dlp are not on PATH.
     multimodal: {
       enabled: "optional",
       vision: {

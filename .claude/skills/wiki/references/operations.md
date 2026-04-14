@@ -115,7 +115,7 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 3. **Cache check**: Run `cache_manager.ts` (`node cache_manager.js check`). If cached and cache_version matches, skip extraction.
 
-4. **Extract**: For binary files, run `extract_binary.ts` (`node extract_binary.js`). For markdown/text, read directly. When the source is a folder, call `loadIgnore(wikiRoot)` from `_wiki_fs.ts` and skip any paths matched by `.wiki-ignore` (gitignore-syntax, evaluated relative to `wikiRoot`).
+4. **Extract**: For `.pdf` / `.docx` / `.pptx`, run `extract_binary.ts` (`node extract_binary.js`). For images (`.png .jpg .jpeg .webp .gif .svg`), audio/video (`.mp4 .mp3 .wav .webm ...`), or YouTube URLs, run `extract_multimodal.ts` (`node extract_multimodal.js <input> --enabled <from-config>`) — it dispatches by extension or URL pattern and probes `faster-whisper` / `yt-dlp` on `PATH`. When the dispatcher returns `format: "skipped"`, surface the `warning` verbatim (names the missing tool + exact install command) and continue the batch; do not abort. For `vision` handoff, use the `Read` tool directly on the image. For markdown/text, read directly. When the source is a folder, call `loadIgnore(wikiRoot)` from `_wiki_fs.ts` and skip any paths matched by `.wiki-ignore` (gitignore-syntax, evaluated relative to `wikiRoot`).
 
 5. **Read fully**: Read the entire source. No skipping sections.
 
