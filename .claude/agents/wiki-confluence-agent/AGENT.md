@@ -73,7 +73,7 @@ Or for space metadata:
   "mermaid": {
     "type": "graph",
     "title": "Page Hierarchy",
-    "code": "graph TD\n    A[DEV Space] --> B[Architecture]\n    B --> C[System Architecture]"
+    "code": "graph TB\n    space([DEV])\n    space --> p0[Architecture]\n    space --> p1[System Architecture]"
   },
   "truncated": false
 }

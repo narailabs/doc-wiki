@@ -26,6 +26,12 @@ import {
   type JiraClientOptions,
   type JiraResult,
 } from "./lib/jira_client.js";
+import {
+  formatGraph,
+  type GraphEdge,
+  type GraphNode,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -199,6 +205,71 @@ async function fetchGetProject(
   };
 }
 
+/**
+ * G-AGENT-MERMAID: build a `graph TD` grouping issues by status.
+ *
+ * A gantt chart was originally declared in AGENT.md, but reliable
+ * start/end dates are rare on Jira issues (Jira stores `updated` and
+ * `created`, not planned dates). A status-grouped graph is truthful
+ * and always renderable. Emitted only for `jql_search`; other actions
+ * are single-record or project metadata and omit the field.
+ */
+function mermaidForJira(result: FetchResult): MermaidBlock | undefined {
+  if (result["status"] !== "success") return undefined;
+  if (result["action"] !== "jql_search") return undefined;
+  const data = result["data"] as Record<string, unknown> | undefined;
+  if (data === undefined) return undefined;
+  const issues =
+    (data["issues"] as Array<Record<string, unknown>> | undefined) ?? [];
+  if (issues.length === 0) return undefined;
+
+  // Group by status so related issues cluster visually.
+  const byStatus = new Map<string, Array<Record<string, unknown>>>();
+  for (const issue of issues) {
+    const status = ((issue["status"] as string | undefined) ?? "unknown") ||
+      "unknown";
+    let bucket = byStatus.get(status);
+    if (bucket === undefined) {
+      bucket = [];
+      byStatus.set(status, bucket);
+    }
+    bucket.push(issue);
+  }
+
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  nodes.push({ id: "root", label: "Issues", shape: "rounded" });
+  let si = 0;
+  let ii = 0;
+  // Cap total issue nodes so very large result sets don't produce
+  // un-renderable diagrams.
+  const PER_DIAGRAM_CAP = 40;
+  let drawn = 0;
+  for (const [status, bucket] of byStatus) {
+    if (drawn >= PER_DIAGRAM_CAP) break;
+    const sid = `s${si++}`;
+    nodes.push({ id: sid, label: status });
+    edges.push({ from: "root", to: sid });
+    for (const issue of bucket) {
+      if (drawn >= PER_DIAGRAM_CAP) break;
+      const key = (issue["key"] as string | undefined) ?? `I${ii}`;
+      const summary = ((issue["summary"] as string | undefined) ?? "").slice(0, 40);
+      const label = summary ? `${key}: ${summary}` : key;
+      const id = `i${ii++}`;
+      nodes.push({ id, label });
+      edges.push({ from: sid, to: id });
+      drawn++;
+    }
+  }
+  return formatGraph("TB", "Issue Status Tree", nodes, edges);
+}
+
+function decorateResult(result: FetchResult): FetchResult {
+  const mermaid = mermaidForJira(result);
+  if (mermaid === undefined) return result;
+  return { ...result, mermaid };
+}
+
 function missingCredentialsError(action: string): FetchResult {
   return {
     status: "error",
@@ -261,13 +332,15 @@ export async function fetch(
   }
 
   try {
+    let result: FetchResult;
     if (action === "jql_search") {
-      return await fetchJqlSearch(client, validated as JqlSearchValidated);
+      result = await fetchJqlSearch(client, validated as JqlSearchValidated);
+    } else if (action === "get_issue") {
+      result = await fetchGetIssue(client, validated as GetIssueValidated);
+    } else {
+      result = await fetchGetProject(client, validated as GetProjectValidated);
     }
-    if (action === "get_issue") {
-      return await fetchGetIssue(client, validated as GetIssueValidated);
-    }
-    return await fetchGetProject(client, validated as GetProjectValidated);
+    return decorateResult(result);
   } catch (exc) {
     return {
       status: "error",

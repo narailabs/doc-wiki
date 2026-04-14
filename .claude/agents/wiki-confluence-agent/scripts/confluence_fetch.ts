@@ -25,6 +25,12 @@ import {
   type ConfluenceClientOptions,
   type ConfluenceResult,
 } from "./lib/confluence_client.js";
+import {
+  formatGraph,
+  type GraphEdge,
+  type GraphNode,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "cql_search",
@@ -196,6 +202,93 @@ async function fetchGetSpace(
   };
 }
 
+/**
+ * G-AGENT-MERMAID: build a page-hierarchy `graph TD` from a result.
+ *
+ * Returns `undefined` when the action isn't diagram-worthy (`get_space`
+ * has no page tree to show) or when there are no pages to draw. Callers
+ * splice the field into the JSON conditionally so the OUTPUT contract
+ * stays `mermaid?: MermaidBlock`.
+ *
+ * - `cql_search`: root = space key (or "Results" if mixed spaces),
+ *   children = the returned pages.
+ * - `get_page`: root = space key → single page node.
+ */
+function mermaidForConfluence(result: FetchResult): MermaidBlock | undefined {
+  if (result["status"] !== "success") return undefined;
+  const action = result["action"];
+  const data = result["data"] as Record<string, unknown> | undefined;
+  if (data === undefined) return undefined;
+
+  if (action === "cql_search") {
+    const pages = (data["pages"] as Array<Record<string, unknown>> | undefined) ?? [];
+    if (pages.length === 0) return undefined;
+    // Group by space key so multi-space searches get one root per space.
+    const spaceKeys = new Set(
+      pages
+        .map((p) => (p["space_key"] as string | undefined) ?? "")
+        .filter((k) => k.length > 0),
+    );
+    const nodes: GraphNode[] = [];
+    const edges: GraphEdge[] = [];
+    // Cap to keep the diagram legible; large searches get a summary root.
+    const capped = pages.slice(0, 30);
+    if (spaceKeys.size <= 1) {
+      const root = [...spaceKeys][0] ?? "Results";
+      nodes.push({ id: "space", label: root, shape: "rounded" });
+      for (const [i, p] of capped.entries()) {
+        const title = ((p["title"] as string | undefined) ?? `page ${i}`)
+          .slice(0, 60);
+        nodes.push({ id: `p${i}`, label: title });
+        edges.push({ from: "space", to: `p${i}` });
+      }
+    } else {
+      // Multi-space: group pages under per-space roots.
+      const spaceIdx = new Map<string, string>();
+      let si = 0;
+      for (const k of spaceKeys) {
+        const id = `s${si++}`;
+        spaceIdx.set(k, id);
+        nodes.push({ id, label: k, shape: "rounded" });
+      }
+      for (const [i, p] of capped.entries()) {
+        const key = (p["space_key"] as string | undefined) ?? "";
+        const parent = spaceIdx.get(key);
+        if (parent === undefined) continue;
+        const title = ((p["title"] as string | undefined) ?? `page ${i}`)
+          .slice(0, 60);
+        nodes.push({ id: `p${i}`, label: title });
+        edges.push({ from: parent, to: `p${i}` });
+      }
+    }
+    return formatGraph("TB", "Page Hierarchy", nodes, edges);
+  }
+
+  if (action === "get_page") {
+    const spaceKey = (data["space_key"] as string | undefined) ?? "";
+    const title = ((data["title"] as string | undefined) ?? "page").slice(0, 60);
+    if (title.length === 0) return undefined;
+    const nodes: GraphNode[] = [];
+    const edges: GraphEdge[] = [];
+    if (spaceKey.length > 0) {
+      nodes.push({ id: "space", label: spaceKey, shape: "rounded" });
+      nodes.push({ id: "page", label: title });
+      edges.push({ from: "space", to: "page" });
+    } else {
+      nodes.push({ id: "page", label: title });
+    }
+    return formatGraph("TB", "Page Hierarchy", nodes, edges);
+  }
+
+  return undefined;
+}
+
+function decorateResult(result: FetchResult): FetchResult {
+  const mermaid = mermaidForConfluence(result);
+  if (mermaid === undefined) return result;
+  return { ...result, mermaid };
+}
+
 function missingCredentialsError(action: string): FetchResult {
   return {
     status: "error",
@@ -254,13 +347,15 @@ export async function fetch(
   }
 
   try {
+    let result: FetchResult;
     if (action === "cql_search") {
-      return await fetchCqlSearch(client, validated as CqlSearchValidated);
+      result = await fetchCqlSearch(client, validated as CqlSearchValidated);
+    } else if (action === "get_page") {
+      result = await fetchGetPage(client, validated as GetPageValidated);
+    } else {
+      result = await fetchGetSpace(client, validated as GetSpaceValidated);
     }
-    if (action === "get_page") {
-      return await fetchGetPage(client, validated as GetPageValidated);
-    }
-    return await fetchGetSpace(client, validated as GetSpaceValidated);
+    return decorateResult(result);
   } catch (exc) {
     return {
       status: "error",

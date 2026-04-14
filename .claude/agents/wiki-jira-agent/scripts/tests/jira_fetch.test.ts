@@ -205,3 +205,78 @@ describe("jira_fetch.fetch", () => {
     expect(r["error_code"]).toBe("AUTH_ERROR");
   });
 });
+
+// ======================================================================
+// G-AGENT-MERMAID: mermaid field contract (v2 §6)
+// ======================================================================
+
+describe("jira_fetch mermaid output (G-AGENT-MERMAID)", () => {
+  it("jql_search emits graph TB grouping issues by status", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        total: 3,
+        issues: [
+          {
+            key: "FOO-1",
+            fields: { summary: "fix login", status: { name: "Done" } },
+          },
+          {
+            key: "FOO-2",
+            fields: { summary: "add search", status: { name: "In Progress" } },
+          },
+          {
+            key: "FOO-3",
+            fields: { summary: "rename", status: { name: "Done" } },
+          },
+        ],
+      }),
+    );
+    const r = await fetch("jql_search", { jql: "project = FOO" }, { client });
+    expect(r["status"]).toBe("success");
+    const m = r["mermaid"] as Record<string, string> | undefined;
+    expect(m).toBeDefined();
+    expect(m?.type).toBe("graph TB");
+    expect(m?.code).toContain("Issues");
+    expect(m?.code).toContain("Done");
+    expect(m?.code).toContain("In Progress");
+    expect(m?.code).toContain("FOO-1");
+    expect(m?.code).toContain("FOO-2");
+    expect(m?.code).toContain("FOO-3");
+  });
+
+  it("jql_search with no issues omits mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({ total: 0, issues: [] }),
+    );
+    const r = await fetch("jql_search", { jql: "project = NONE" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("get_issue omits mermaid (single record)", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        key: "FOO-1",
+        fields: { summary: "x", status: { name: "Open" } },
+      }),
+    );
+    const r = await fetch("get_issue", { issue_key: "FOO-1" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("get_project omits mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        key: "FOO",
+        name: "Foo",
+        description: "",
+        lead: { displayName: "Jane" },
+        issueTypes: [],
+      }),
+    );
+    const r = await fetch("get_project", { project_key: "FOO" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

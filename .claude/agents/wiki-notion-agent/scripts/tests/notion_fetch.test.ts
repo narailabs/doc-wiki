@@ -148,3 +148,92 @@ describe("notion_fetch.fetch", () => {
     expect(r["error_code"]).toBe("AUTH_ERROR");
   });
 });
+
+// ======================================================================
+// G-AGENT-MERMAID: mermaid field contract (v2 §6)
+// ======================================================================
+
+describe("notion_fetch mermaid output (G-AGENT-MERMAID)", () => {
+  it("search emits graph TB with root + typed children", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        has_more: false,
+        results: [
+          { id: "p1-abcd", last_edited_time: "t", properties: {} },
+          { id: "d2-efgh", title: [] }, // no last_edited_time+properties → database
+        ],
+      }),
+    );
+    const r = await fetch("search", { query: "arch" }, { client });
+    expect(r["status"]).toBe("success");
+    const m = r["mermaid"] as Record<string, string> | undefined;
+    expect(m).toBeDefined();
+    expect(m?.type).toBe("graph TB");
+    expect(m?.code).toContain("Search Results");
+    expect(m?.code).toContain("page ");
+    expect(m?.code).toContain("database ");
+  });
+
+  it("search with no results omits mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({ has_more: false, results: [] }),
+    );
+    const r = await fetch("search", { query: "none" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("query_database emits graph with DB root + page children", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        has_more: false,
+        results: [
+          {
+            id: "p1",
+            last_edited_time: "t",
+            properties: {
+              Name: {
+                type: "title",
+                title: [{ plain_text: "Row One" }],
+              },
+            },
+          },
+          {
+            id: "p2",
+            last_edited_time: "t",
+            properties: {
+              Name: {
+                type: "title",
+                title: [{ plain_text: "Row Two" }],
+              },
+            },
+          },
+        ],
+      }),
+    );
+    const r = await fetch(
+      "query_database",
+      { database_id: SAMPLE_DB_ID },
+      { client },
+    );
+    expect(r["status"]).toBe("success");
+    const m = r["mermaid"] as Record<string, string> | undefined;
+    expect(m).toBeDefined();
+    expect(m?.code).toContain("Row One");
+    expect(m?.code).toContain("Row Two");
+  });
+
+  it("get_page omits mermaid (single record)", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        id: SAMPLE_DB_ID,
+        parent: { type: "workspace" },
+        last_edited_time: "t",
+        properties: {},
+      }),
+    );
+    const r = await fetch("get_page", { page_id: SAMPLE_DB_ID }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

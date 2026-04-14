@@ -161,3 +161,82 @@ describe("confluence_fetch.fetch", () => {
     expect(r["error_code"]).toBe("AUTH_ERROR");
   });
 });
+
+// ======================================================================
+// G-AGENT-MERMAID: mermaid field contract (v2 §6)
+// ======================================================================
+
+describe("confluence_fetch mermaid output (G-AGENT-MERMAID)", () => {
+  beforeEach(() => {
+    delete process.env["CONFLUENCE_SITE_URL"];
+    delete process.env["CONFLUENCE_EMAIL"];
+    delete process.env["CONFLUENCE_API_TOKEN"];
+  });
+
+  it("cql_search emits graph TB page hierarchy grouped by space", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        totalSize: 2,
+        size: 2,
+        results: [
+          {
+            id: "1",
+            title: "Architecture",
+            space: { key: "DEV" },
+            version: { number: 1 },
+          },
+          {
+            id: "2",
+            title: "Runbook",
+            space: { key: "DEV" },
+            version: { number: 1 },
+          },
+        ],
+      }),
+    );
+    const r = await fetch("cql_search", { cql: "space = DEV" }, { client });
+    expect(r["status"]).toBe("success");
+    const m = r["mermaid"] as Record<string, string> | undefined;
+    expect(m).toBeDefined();
+    expect(m?.type).toBe("graph TB");
+    expect(m?.code).toMatch(/^graph TB/);
+    expect(m?.code).toContain("DEV");
+    expect(m?.code).toContain("Architecture");
+    expect(m?.code).toContain("Runbook");
+  });
+
+  it("cql_search with no results omits mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({ totalSize: 0, size: 0, results: [] }),
+    );
+    const r = await fetch("cql_search", { cql: "space = X" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("get_page emits space → page mermaid", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({
+        id: "123",
+        title: "System Architecture",
+        space: { key: "DEV" },
+        version: { number: 4 },
+      }),
+    );
+    const r = await fetch("get_page", { page_id: "123" }, { client });
+    expect(r["status"]).toBe("success");
+    const m = r["mermaid"] as Record<string, string> | undefined;
+    expect(m).toBeDefined();
+    expect(m?.code).toContain("DEV");
+    expect(m?.code).toContain("System Architecture");
+  });
+
+  it("get_space omits mermaid (not diagram-worthy)", async () => {
+    const client = makeClient({}, async () =>
+      jsonResponse({ key: "DEV", name: "Development" }),
+    );
+    const r = await fetch("get_space", { space_key: "DEV" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

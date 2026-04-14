@@ -13,6 +13,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
 import { NotionClient, extractTitleFromPage, loadNotionCredentials, } from "./lib/notion_client.js";
+import { formatGraph, } from "../../lib/mermaid_format.js";
 export const VALID_ACTIONS = new Set([
     "search",
     "get_page",
@@ -179,6 +180,68 @@ async function fetchQueryDatabase(client, v) {
         truncated: Boolean(result.data.has_more),
     };
 }
+/**
+ * G-AGENT-MERMAID: build a page-tree `graph TD` for diagram-worthy
+ * Notion actions.
+ *
+ * - `search`: root = "Results", children = each hit (labeled with the
+ *   hit's object_type for quick visual typing).
+ * - `query_database`: root = database_id, children = queried pages by
+ *   title.
+ * Other actions (get_page, get_database) return a single scalar record
+ * that isn't diagram-worthy, so mermaid is omitted.
+ */
+function mermaidForNotion(result) {
+    if (result["status"] !== "success")
+        return undefined;
+    const action = result["action"];
+    const data = result["data"];
+    if (data === undefined)
+        return undefined;
+    if (action === "search") {
+        const results = data["results"] ?? [];
+        if (results.length === 0)
+            return undefined;
+        const capped = results.slice(0, 30);
+        const nodes = [
+            { id: "root", label: "Search Results", shape: "rounded" },
+        ];
+        const edges = [];
+        for (const [i, r] of capped.entries()) {
+            const id = (r["id"] ?? `r${i}`).slice(0, 8);
+            const objType = (r["object_type"] ?? "page")
+                .slice(0, 20);
+            nodes.push({ id: `r${i}`, label: `${objType} ${id}` });
+            edges.push({ from: "root", to: `r${i}` });
+        }
+        return formatGraph("TB", "Notion Search Hierarchy", nodes, edges);
+    }
+    if (action === "query_database") {
+        const databaseId = data["database_id"] ?? "database";
+        const results = data["results"] ?? [];
+        if (results.length === 0)
+            return undefined;
+        const capped = results.slice(0, 30);
+        const dbLabel = databaseId.length > 8 ? databaseId.slice(0, 8) + "…" : databaseId;
+        const nodes = [
+            { id: "db", label: `DB ${dbLabel}`, shape: "rounded" },
+        ];
+        const edges = [];
+        for (const [i, r] of capped.entries()) {
+            const title = (r["title"] ?? `row ${i}`).slice(0, 60);
+            nodes.push({ id: `p${i}`, label: title });
+            edges.push({ from: "db", to: `p${i}` });
+        }
+        return formatGraph("TB", "Notion Page Tree", nodes, edges);
+    }
+    return undefined;
+}
+function decorateResult(result) {
+    const mermaid = mermaidForNotion(result);
+    if (mermaid === undefined)
+        return result;
+    return { ...result, mermaid };
+}
 function missingCredentialsError(action) {
     return {
         status: "error",
@@ -234,16 +297,23 @@ export async function fetch(action, params = null, options = {}) {
         client = new NotionClient(opts);
     }
     try {
+        let result;
         switch (action) {
             case "search":
-                return await fetchSearch(client, validated);
+                result = await fetchSearch(client, validated);
+                break;
             case "get_page":
-                return await fetchGetPage(client, validated);
+                result = await fetchGetPage(client, validated);
+                break;
             case "get_database":
-                return await fetchGetDatabase(client, validated);
+                result = await fetchGetDatabase(client, validated);
+                break;
             case "query_database":
-                return await fetchQueryDatabase(client, validated);
+                result = await fetchQueryDatabase(client, validated);
+                break;
         }
+        if (result !== undefined)
+            return decorateResult(result);
     }
     catch (exc) {
         return {
