@@ -8,3 +8,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 coverage/
+
+# Obsidian local editor state — pane layout, open files, etc. Mutates
+# every time the app opens/closes. The rest of .obsidian/ (plugins,
+# core settings, appearance) stays tracked because those are shared.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
