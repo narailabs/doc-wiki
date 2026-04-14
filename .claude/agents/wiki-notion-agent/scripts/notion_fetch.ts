@@ -19,6 +19,12 @@ import {
   type NotionClientOptions,
   type NotionResult,
 } from "./lib/notion_client.js";
+import {
+  formatGraph,
+  type GraphEdge,
+  type GraphNode,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "search",
@@ -243,6 +249,70 @@ async function fetchQueryDatabase(
   };
 }
 
+/**
+ * G-AGENT-MERMAID: build a page-tree `graph TD` for diagram-worthy
+ * Notion actions.
+ *
+ * - `search`: root = "Results", children = each hit (labeled with the
+ *   hit's object_type for quick visual typing).
+ * - `query_database`: root = database_id, children = queried pages by
+ *   title.
+ * Other actions (get_page, get_database) return a single scalar record
+ * that isn't diagram-worthy, so mermaid is omitted.
+ */
+function mermaidForNotion(result: FetchResult): MermaidBlock | undefined {
+  if (result["status"] !== "success") return undefined;
+  const action = result["action"];
+  const data = result["data"] as Record<string, unknown> | undefined;
+  if (data === undefined) return undefined;
+
+  if (action === "search") {
+    const results =
+      (data["results"] as Array<Record<string, unknown>> | undefined) ?? [];
+    if (results.length === 0) return undefined;
+    const capped = results.slice(0, 30);
+    const nodes: GraphNode[] = [
+      { id: "root", label: "Search Results", shape: "rounded" },
+    ];
+    const edges: GraphEdge[] = [];
+    for (const [i, r] of capped.entries()) {
+      const id = ((r["id"] as string | undefined) ?? `r${i}`).slice(0, 8);
+      const objType = ((r["object_type"] as string | undefined) ?? "page")
+        .slice(0, 20);
+      nodes.push({ id: `r${i}`, label: `${objType} ${id}` });
+      edges.push({ from: "root", to: `r${i}` });
+    }
+    return formatGraph("TB", "Notion Search Hierarchy", nodes, edges);
+  }
+
+  if (action === "query_database") {
+    const databaseId = (data["database_id"] as string | undefined) ?? "database";
+    const results =
+      (data["results"] as Array<Record<string, unknown>> | undefined) ?? [];
+    if (results.length === 0) return undefined;
+    const capped = results.slice(0, 30);
+    const dbLabel = databaseId.length > 8 ? databaseId.slice(0, 8) + "…" : databaseId;
+    const nodes: GraphNode[] = [
+      { id: "db", label: `DB ${dbLabel}`, shape: "rounded" },
+    ];
+    const edges: GraphEdge[] = [];
+    for (const [i, r] of capped.entries()) {
+      const title = ((r["title"] as string | undefined) ?? `row ${i}`).slice(0, 60);
+      nodes.push({ id: `p${i}`, label: title });
+      edges.push({ from: "db", to: `p${i}` });
+    }
+    return formatGraph("TB", "Notion Page Tree", nodes, edges);
+  }
+
+  return undefined;
+}
+
+function decorateResult(result: FetchResult): FetchResult {
+  const mermaid = mermaidForNotion(result);
+  if (mermaid === undefined) return result;
+  return { ...result, mermaid };
+}
+
 function missingCredentialsError(action: string): FetchResult {
   return {
     status: "error",
@@ -314,19 +384,28 @@ export async function fetch(
   }
 
   try {
+    let result: FetchResult | undefined;
     switch (action) {
       case "search":
-        return await fetchSearch(client, validated as SearchValidated);
+        result = await fetchSearch(client, validated as SearchValidated);
+        break;
       case "get_page":
-        return await fetchGetPage(client, validated as GetPageValidated);
+        result = await fetchGetPage(client, validated as GetPageValidated);
+        break;
       case "get_database":
-        return await fetchGetDatabase(client, validated as GetDatabaseValidated);
+        result = await fetchGetDatabase(
+          client,
+          validated as GetDatabaseValidated,
+        );
+        break;
       case "query_database":
-        return await fetchQueryDatabase(
+        result = await fetchQueryDatabase(
           client,
           validated as QueryDatabaseValidated,
         );
+        break;
     }
+    if (result !== undefined) return decorateResult(result);
   } catch (exc) {
     return {
       status: "error",

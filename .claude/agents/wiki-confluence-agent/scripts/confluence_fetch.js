@@ -20,6 +20,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
 import { ConfluenceClient, loadConfluenceCredentials, } from "./lib/confluence_client.js";
+import { formatGraph, } from "../../lib/mermaid_format.js";
 export const VALID_ACTIONS = new Set([
     "cql_search",
     "get_page",
@@ -149,6 +150,94 @@ async function fetchGetSpace(client, validated) {
         },
     };
 }
+/**
+ * G-AGENT-MERMAID: build a page-hierarchy `graph TD` from a result.
+ *
+ * Returns `undefined` when the action isn't diagram-worthy (`get_space`
+ * has no page tree to show) or when there are no pages to draw. Callers
+ * splice the field into the JSON conditionally so the OUTPUT contract
+ * stays `mermaid?: MermaidBlock`.
+ *
+ * - `cql_search`: root = space key (or "Results" if mixed spaces),
+ *   children = the returned pages.
+ * - `get_page`: root = space key → single page node.
+ */
+function mermaidForConfluence(result) {
+    if (result["status"] !== "success")
+        return undefined;
+    const action = result["action"];
+    const data = result["data"];
+    if (data === undefined)
+        return undefined;
+    if (action === "cql_search") {
+        const pages = data["pages"] ?? [];
+        if (pages.length === 0)
+            return undefined;
+        // Group by space key so multi-space searches get one root per space.
+        const spaceKeys = new Set(pages
+            .map((p) => p["space_key"] ?? "")
+            .filter((k) => k.length > 0));
+        const nodes = [];
+        const edges = [];
+        // Cap to keep the diagram legible; large searches get a summary root.
+        const capped = pages.slice(0, 30);
+        if (spaceKeys.size <= 1) {
+            const root = [...spaceKeys][0] ?? "Results";
+            nodes.push({ id: "space", label: root, shape: "rounded" });
+            for (const [i, p] of capped.entries()) {
+                const title = (p["title"] ?? `page ${i}`)
+                    .slice(0, 60);
+                nodes.push({ id: `p${i}`, label: title });
+                edges.push({ from: "space", to: `p${i}` });
+            }
+        }
+        else {
+            // Multi-space: group pages under per-space roots.
+            const spaceIdx = new Map();
+            let si = 0;
+            for (const k of spaceKeys) {
+                const id = `s${si++}`;
+                spaceIdx.set(k, id);
+                nodes.push({ id, label: k, shape: "rounded" });
+            }
+            for (const [i, p] of capped.entries()) {
+                const key = p["space_key"] ?? "";
+                const parent = spaceIdx.get(key);
+                if (parent === undefined)
+                    continue;
+                const title = (p["title"] ?? `page ${i}`)
+                    .slice(0, 60);
+                nodes.push({ id: `p${i}`, label: title });
+                edges.push({ from: parent, to: `p${i}` });
+            }
+        }
+        return formatGraph("TB", "Page Hierarchy", nodes, edges);
+    }
+    if (action === "get_page") {
+        const spaceKey = data["space_key"] ?? "";
+        const title = (data["title"] ?? "page").slice(0, 60);
+        if (title.length === 0)
+            return undefined;
+        const nodes = [];
+        const edges = [];
+        if (spaceKey.length > 0) {
+            nodes.push({ id: "space", label: spaceKey, shape: "rounded" });
+            nodes.push({ id: "page", label: title });
+            edges.push({ from: "space", to: "page" });
+        }
+        else {
+            nodes.push({ id: "page", label: title });
+        }
+        return formatGraph("TB", "Page Hierarchy", nodes, edges);
+    }
+    return undefined;
+}
+function decorateResult(result) {
+    const mermaid = mermaidForConfluence(result);
+    if (mermaid === undefined)
+        return result;
+    return { ...result, mermaid };
+}
 function missingCredentialsError(action) {
     return {
         status: "error",
@@ -196,13 +285,17 @@ export async function fetch(action, params = null, options = {}) {
         client = new ConfluenceClient(opts);
     }
     try {
+        let result;
         if (action === "cql_search") {
-            return await fetchCqlSearch(client, validated);
+            result = await fetchCqlSearch(client, validated);
         }
-        if (action === "get_page") {
-            return await fetchGetPage(client, validated);
+        else if (action === "get_page") {
+            result = await fetchGetPage(client, validated);
         }
-        return await fetchGetSpace(client, validated);
+        else {
+            result = await fetchGetSpace(client, validated);
+        }
+        return decorateResult(result);
     }
     catch (exc) {
         return {

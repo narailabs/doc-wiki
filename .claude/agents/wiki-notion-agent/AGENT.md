@@ -87,8 +87,8 @@ Or for database query:
   },
   "mermaid": {
     "type": "graph",
-    "title": "Notion Page Tree",
-    "code": "graph TD\n    A[Workspace] --> B[Architecture Decision Records]\n    A --> C[Team Runbooks]"
+    "title": "Notion Search Hierarchy",
+    "code": "graph TB\n    root([Search Results])\n    root --> r0[page abcd1234]\n    root --> r1[database efgh5678]"
   },
   "truncated": false
 }

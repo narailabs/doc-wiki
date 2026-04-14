@@ -70,9 +70,9 @@ Or for project metadata:
     ]
   },
   "mermaid": {
-    "type": "gantt",
-    "title": "Issue Timeline",
-    "code": "gantt\n    title Issue Timeline\n    section Done\n    WIKI-123 :done, 2026-03-01, 2026-03-15"
+    "type": "graph",
+    "title": "Issue Status Tree",
+    "code": "graph TD\n    root([Issues])\n    root --> s0[Done]\n    s0 --> i0[\"WIKI-123: Add search feature\"]"
   },
   "truncated": false
 }
