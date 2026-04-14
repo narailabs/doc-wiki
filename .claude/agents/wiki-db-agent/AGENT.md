@@ -94,3 +94,20 @@ On DML (never executed):
 - **ALWAYS use parameterized queries** — never interpolate user values into SQL
 - **ALWAYS respect timeout and max_rows caps**
 - **ALWAYS log to audit trail when enabled**
+
+## CLI
+
+The `scripts/db_query.js` shim exposes two connection modes:
+
+```bash
+# Named environment from wiki.config.yaml (ecosystem.database.environments.<name>)
+node scripts/db_query.js --env dev --sql "SELECT 1"
+node scripts/db_query.js --env dev --config ./wiki.config.yaml --action schema
+
+# Direct SQLite file (used by tests and ad-hoc local work)
+node scripts/db_query.js --sqlite ./test.db --sql "SELECT name FROM users WHERE id = 1"
+```
+
+`--env` resolves the env's `driver`, `approval_mode`, and `grant_duration_hours`
+via `lib/wiki_db/connection.ts`. All six shipped drivers (postgresql, mysql,
+sqlite, sqlserver, mongodb, dynamodb) are wired automatically.
