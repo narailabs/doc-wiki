@@ -13,7 +13,16 @@ export interface GenerateMappingOptions {
   unmapped_tables?: string[];
   dual_access_tables?: string[];
   cross_validation?: CrossValidationReport;
+  /**
+   * G-ORM-DEEPER: environment name used by the "How to Go Deeper"
+   * `wiki agent db-query <env> ...` commands. Defaults to "dev" when
+   * omitted — matches the example in v2 §5 of the design report.
+   */
+  env?: string;
 }
+
+/** G-ORM-DEEPER: cap on sample queries emitted in "How to Go Deeper". */
+const HOW_TO_GO_DEEPER_MAX_ENTITIES = 10;
 
 /**
  * Generate the `database-mapping.md` contents.
@@ -29,6 +38,7 @@ export function generateMappingMarkdown(
   unmappedTables?: string[],
   dualAccessTables?: string[],
   crossValidation?: CrossValidationReport,
+  env: string = "dev",
 ): string {
   const today = isoToday();
   const unmapped = unmappedTables ?? [];
@@ -192,6 +202,65 @@ export function generateMappingMarkdown(
     lines.push("");
   }
 
+  // G-ORM-DEEPER: "How to Go Deeper" section.
+  //
+  // Per v2 §5 (example) and §8 (self-describing docs), DB-backed pages must
+  // include per-entity commands for live verification. Omit entirely when
+  // there are no entities (nothing to reference).
+  if (entities.length > 0) {
+    lines.push("## How to Go Deeper");
+    lines.push("");
+    lines.push(
+      "This page was compiled from ORM source files. Use these commands to " +
+        "verify or update the information against the live database:",
+    );
+    lines.push("");
+
+    const sample = entities.slice(0, HOW_TO_GO_DEEPER_MAX_ENTITIES);
+    for (const entity of sample) {
+      const qualified = entity.schema_name
+        ? `${entity.schema_name}.${entity.table_name}`
+        : entity.table_name;
+      lines.push(`- **${entity.class_name}** (\`${qualified}\`)`);
+      lines.push(
+        `  - Columns: \`wiki agent db-query ${env} ` +
+          `"SELECT column_name, data_type FROM information_schema.columns ` +
+          `WHERE table_name = '${entity.table_name}'"\``,
+      );
+      lines.push(
+        `  - Sample rows: \`wiki agent db-query ${env} ` +
+          `"SELECT * FROM ${qualified} LIMIT 5"\``,
+      );
+    }
+    if (entities.length > HOW_TO_GO_DEEPER_MAX_ENTITIES) {
+      lines.push(
+        `- ... and ${entities.length - HOW_TO_GO_DEEPER_MAX_ENTITIES} more ` +
+          "entities (see the Entity-Table Mapping table above).",
+      );
+    }
+
+    // Source files — one bullet per unique source so the reader can Read
+    // the original ORM definition and regenerate the map if drift is
+    // suspected.
+    const uniqueSources = new Set(
+      entities
+        .map((e) => e.source_file)
+        .filter((f): f is string => typeof f === "string" && f.length > 0),
+    );
+    if (uniqueSources.size > 0) {
+      lines.push(
+        `- **Live code:** Read ${[...uniqueSources]
+          .slice(0, 5)
+          .map((f) => `\`${f}\``)
+          .join(", ")}${
+          uniqueSources.size > 5 ? ` (+${uniqueSources.size - 5} more)` : ""
+        } — ORM source files this mapping was extracted from.`,
+      );
+    }
+
+    lines.push("");
+  }
+
   return lines.join("\n");
 }
 
@@ -210,6 +279,7 @@ export function generateMappingMarkdownOpts(
     opts.unmapped_tables,
     opts.dual_access_tables,
     opts.cross_validation,
+    opts.env,
   );
 }
 

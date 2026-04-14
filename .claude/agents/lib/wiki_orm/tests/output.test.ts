@@ -130,6 +130,74 @@ describe("TestGenerateMarkdown", () => {
 });
 
 // ======================================================================
+// G-ORM-DEEPER: "How to Go Deeper" section (v2 §5 / §8)
+// ======================================================================
+
+describe("How to Go Deeper section (G-ORM-DEEPER)", () => {
+  it("section is present when entities exist", () => {
+    const md = generateMappingMarkdown(sampleEntities(), "TestProject", "jpa");
+    expect(md).toContain("## How to Go Deeper");
+  });
+
+  it("emits per-entity columns + sample-rows db-query commands", () => {
+    const md = generateMappingMarkdown(sampleEntities(), "TestProject", "jpa");
+    // User entity: public.users
+    expect(md).toContain(
+      "wiki agent db-query dev \"SELECT column_name, data_type FROM " +
+        "information_schema.columns WHERE table_name = 'users'\"",
+    );
+    expect(md).toContain(
+      "wiki agent db-query dev \"SELECT * FROM public.users LIMIT 5\"",
+    );
+    // Order entity: orders (no schema)
+    expect(md).toContain(
+      "wiki agent db-query dev \"SELECT * FROM orders LIMIT 5\"",
+    );
+  });
+
+  it("custom env parameter is used in commands", () => {
+    const md = generateMappingMarkdown(
+      sampleEntities(),
+      "TestProject",
+      "jpa",
+      undefined,
+      undefined,
+      undefined,
+      "staging",
+    );
+    expect(md).toContain("wiki agent db-query staging");
+    expect(md).not.toContain("wiki agent db-query dev");
+  });
+
+  it("lists source files under 'Live code' bullet", () => {
+    const md = generateMappingMarkdown(sampleEntities(), "TestProject", "jpa");
+    expect(md).toContain("Live code:");
+    expect(md).toContain("src/model/User.java");
+    expect(md).toContain("src/model/Order.java");
+  });
+
+  it("section is omitted entirely when entities is empty", () => {
+    const md = generateMappingMarkdown([], "TestProject", "jpa");
+    expect(md).not.toContain("## How to Go Deeper");
+  });
+
+  it("caps sample at 10 entities + adds '... and N more' when exceeded", () => {
+    const many: ExtractedEntity[] = Array.from({ length: 13 }, (_, i) =>
+      makeExtractedEntity({
+        class_name: `Entity${i}`,
+        table_name: `table_${i}`,
+        source_file: `src/model/Entity${i}.java`,
+      }),
+    );
+    const md = generateMappingMarkdown(many, "TestProject", "jpa");
+    expect(md).toContain("**Entity0**");
+    expect(md).toContain("**Entity9**");
+    expect(md).not.toContain("**Entity10**");
+    expect(md).toContain("and 3 more entities");
+  });
+});
+
+// ======================================================================
 // Cross-validation section (G2)
 // ======================================================================
 
