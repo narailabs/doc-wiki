@@ -194,3 +194,79 @@ describe("gcp_query.fetch", () => {
     expect(data["version"]).toBe("8");
   });
 });
+
+describe("gcp_query mermaid field (G1)", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("list_services emits graph TB with project + service nodes", async () => {
+    const client = makeClient(
+      '[{"name": "run.googleapis.com", "config": {"title": "Cloud Run"}, "state": "ENABLED"},' +
+        ' {"name": "pubsub.googleapis.com", "config": {"title": "Pub/Sub"}, "state": "ENABLED"}]',
+    );
+    const r = await fetch(
+      "list_services",
+      { project_id: "acme-prod-123" },
+      { client },
+    );
+    const m = r["mermaid"] as { type: string; code: string; title: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph TB");
+    expect(m!.code).toContain("Cloud Run");
+    expect(m!.title).toContain("acme-prod-123");
+  });
+
+  it("list_services omits mermaid when empty", async () => {
+    const client = makeClient("[]");
+    const r = await fetch("list_services", { project_id: "acme-prod-123" }, { client });
+    expect(r["status"]).toBe("success");
+    expect(r["mermaid"]).toBeUndefined();
+  });
+
+  it("describe_db emits graph TB with project + db node", async () => {
+    const client = makeClient(
+      JSON.stringify({
+        databaseVersion: "POSTGRES_15",
+        settings: { tier: "db-n1-standard-1" },
+        region: "us-central1",
+        state: "RUNNABLE",
+      }),
+    );
+    const r = await fetch(
+      "describe_db",
+      { project_id: "acme-prod-123", instance_id: "main-db", database: "primary" },
+      { client },
+    );
+    const m = r["mermaid"] as { type: string; code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.type).toBe("graph TB");
+    expect(m!.code).toContain("main-db");
+    expect(m!.code).toContain("postgres");
+  });
+
+  it("list_topics emits graph TB when topics exist", async () => {
+    const client = makeClient(
+      '[{"name": "projects/acme-prod-123/topics/events"},' +
+        ' {"name": "projects/acme-prod-123/topics/alerts"}]',
+    );
+    const r = await fetch("list_topics", { project_id: "acme-prod-123" }, { client });
+    const m = r["mermaid"] as { code: string } | undefined;
+    expect(m).toBeDefined();
+    expect(m!.code).toContain("events");
+    expect(m!.code).toContain("alerts");
+  });
+
+  it("query_logs never emits mermaid (not diagram-worthy)", async () => {
+    const client = makeClient(
+      '[{"timestamp": "2026-04-01T00:00:00Z", "severity": "INFO", "textPayload": "hello"}]',
+    );
+    const r = await fetch(
+      "query_logs",
+      { project_id: "acme-prod-123", filter: "severity>=INFO" },
+      { client },
+    );
+    // query_logs return shape is time-series — diagram omitted regardless
+    // of whether the stub stdout happens to match the client's expected
+    // JSON shape exactly.
+    expect(r["mermaid"]).toBeUndefined();
+  });
+});

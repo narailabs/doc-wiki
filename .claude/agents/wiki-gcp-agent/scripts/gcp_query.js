@@ -14,6 +14,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
 import { GcpClient, detectGcloudAvailable, } from "./lib/gcp_client.js";
+import { formatGraph, } from "../../lib/mermaid_format.js";
 export const VALID_ACTIONS = new Set([
     "list_services",
     "describe_db",
@@ -177,6 +178,73 @@ async function fetchQueryLogs(client, v) {
         truncated: result.data.length >= v.max_results,
     };
 }
+// ── Mermaid infra-topology builder (v2 design §6) ─────────────────────
+//
+// GCP actions emit `graph TB` project-topology diagrams. `query_logs`
+// returns time-series log entries — not diagram-worthy, omitted per
+// the "absence === no diagram" rule.
+function mermaidForGcp(result) {
+    if (result["status"] !== "success")
+        return undefined;
+    const action = result["action"];
+    const data = result["data"];
+    if (data === undefined)
+        return undefined;
+    if (action === "list_services") {
+        const services = data["services"] ?? [];
+        if (services.length === 0)
+            return undefined;
+        const project = data["project_id"] || "project";
+        const nodes = [
+            { id: `proj_${project}`, label: `Project: ${project}`, shape: "rounded" },
+            ...services.map((s, i) => ({
+                id: `svc_${i}`,
+                label: s.title || s.name,
+            })),
+        ];
+        const edges = services.map((_, i) => ({
+            from: `proj_${project}`,
+            to: `svc_${i}`,
+        }));
+        return formatGraph("TB", `GCP Services — ${project}`, nodes, edges);
+    }
+    if (action === "describe_db") {
+        const project = data["project_id"] || "project";
+        const instance = data["instance_id"] || "instance";
+        const engine = data["engine"] || "";
+        const version = data["version"] || "";
+        const label = engine || version ? `${instance} (${engine}${version ? ` ${version}` : ""})` : instance;
+        const nodes = [
+            { id: `proj_${project}`, label: `Project: ${project}`, shape: "rounded" },
+            { id: `db_${instance}`, label, shape: "stadium" },
+        ];
+        const edges = [{ from: `proj_${project}`, to: `db_${instance}` }];
+        return formatGraph("TB", `GCP Cloud SQL — ${instance}`, nodes, edges);
+    }
+    if (action === "list_topics") {
+        const topics = data["topics"] ?? [];
+        if (topics.length === 0)
+            return undefined;
+        const project = data["project_id"] || "project";
+        const nodes = [
+            { id: `proj_${project}`, label: `Project: ${project}`, shape: "rounded" },
+            ...topics.map((t, i) => ({ id: `topic_${i}`, label: t })),
+        ];
+        const edges = topics.map((_, i) => ({
+            from: `proj_${project}`,
+            to: `topic_${i}`,
+        }));
+        return formatGraph("TB", `GCP Pub/Sub Topics — ${project}`, nodes, edges);
+    }
+    // query_logs: time-series log entries — not diagram-worthy.
+    return undefined;
+}
+function decorateResult(result) {
+    const mermaid = mermaidForGcp(result);
+    if (mermaid === undefined)
+        return result;
+    return { ...result, mermaid };
+}
 function missingGcloudError(action) {
     return {
         status: "error",
@@ -238,16 +306,24 @@ export async function fetch(action, params = null, options = {}) {
         }
     }
     try {
+        let result;
         switch (action) {
             case "list_services":
-                return await fetchListServices(client, validated);
+                result = await fetchListServices(client, validated);
+                break;
             case "describe_db":
-                return await fetchDescribeDb(client, validated);
+                result = await fetchDescribeDb(client, validated);
+                break;
             case "list_topics":
-                return await fetchListTopics(client, validated);
+                result = await fetchListTopics(client, validated);
+                break;
             case "query_logs":
-                return await fetchQueryLogs(client, validated);
+                result = await fetchQueryLogs(client, validated);
+                break;
+            default:
+                throw new Error("unreachable action");
         }
+        return decorateResult(result);
     }
     catch (exc) {
         return {
@@ -256,7 +332,6 @@ export async function fetch(action, params = null, options = {}) {
             message: `GCP API call failed: ${exc.message}`,
         };
     }
-    return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
 function parseArgs(argv) {
     const out = {};
