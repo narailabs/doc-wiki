@@ -6,15 +6,26 @@
  * policy gate before execution, emitting structured JSON that matches
  * the AGENT.md contract.
  *
- * Currently supports direct SQLite connections via `--sqlite <path>`.
- * Environment-based dispatch (--env, reading from wiki.config.yaml) is
- * planned alongside the non-SQLite driver expansion and may be extended
- * here without changing the JSON output shape.
+ * Two modes:
+ *  - `--sqlite <path>` — direct file connection, used by tests and ad-hoc
+ *    SQLite work. No config file required.
+ *  - `--env <name>` (G-DB-AGENT-ENV) — read `wiki.config.yaml`, look up
+ *    `ecosystem.database.environments[name]`, register the env with
+ *    `wiki_db/environments`, and dispatch through `connection.getConnection`.
+ *    All six shipped drivers (postgresql, mysql, sqlite, sqlserver, mongodb,
+ *    dynamodb) are wired automatically because `drivers/register` is
+ *    side-effect-imported at the top of this file. Approval mode and grant
+ *    duration come from the env's config.
  *
  * CLI usage:
- *   node db_query.js --sqlite <file> --sql "<sql>" [--approval-mode <mode>]
- *                    [--max-rows <N>] [--timeout-ms <N>] [--action query|schema]
- *                    [--filter <pattern>]
+ *   node db_query.js --sqlite <file> --sql "<sql>" [options]
+ *   node db_query.js --env <name> --sql "<sql>" [--config wiki.config.yaml] [options]
+ *
+ *   options: --approval-mode <mode>  (overrides env's approval_mode)
+ *            --max-rows <N>          (default 1000)
+ *            --timeout-ms <N>        (default 30000)
+ *            --action query|schema   (default query)
+ *            --filter <pattern>      (for --action schema)
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,11 +46,27 @@ import {
   type ErTable,
   type MermaidBlock,
 } from "../../lib/mermaid_format.js";
+import { parseConfig } from "../../../skills/wiki/scripts/parse_config.js";
+import {
+  registerEnvironment,
+  clearEnvironments,
+} from "../../lib/wiki_db/environments.js";
+import {
+  getConnection,
+  releaseConnection,
+} from "../../lib/wiki_db/connection.js";
+// Side-effect import: wires every shipped driver into the connection-pool
+// registry so `--env` lookups resolve regardless of which driver is named
+// in `wiki.config.yaml → ecosystem.database.environments[name].driver`.
+import { registerAll } from "../../lib/wiki_db/drivers/register.js";
+registerAll();
 
 type Action = "query" | "schema";
 
 interface ParsedArgs {
   sqlite?: string;
+  env?: string;
+  config?: string;
   sql?: string;
   approvalMode?: string;
   maxRows?: number;
@@ -74,6 +101,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "sqlite":
         out.sqlite = value ?? "";
         break;
+      case "env":
+        out.env = value ?? "";
+        break;
+      case "config":
+        out.config = value ?? "";
+        break;
       case "sql":
         out.sql = value ?? "";
         break;
@@ -102,14 +135,20 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   return out;
 }
 
-const HELP_TEXT = `usage: db_query.js --sqlite <file> --sql "<sql>" [options]
+const HELP_TEXT = `usage: db_query.js (--sqlite FILE | --env NAME) --sql "<sql>" [options]
 
 Execute a read query through the guard-rail policy gate.
 
-options:
+connection (pick one):
   --sqlite FILE              SQLite database file (use ':memory:' for in-memory)
-  --sql "SQL"                SQL statement to execute (required for --action query)
-  --approval-mode MODE       auto | confirm_once | confirm_each | grant_required (default: auto)
+  --env NAME                 Named environment from wiki.config.yaml
+                             (ecosystem.database.environments.<NAME>)
+  --config PATH              Path to wiki.config.yaml (default: ./wiki.config.yaml)
+
+query options:
+  --sql "SQL"                SQL/Mongo/Dynamo statement (required for --action query)
+  --approval-mode MODE       auto | confirm_once | confirm_each | grant_required
+                             (default: read from env config; falls back to 'auto')
   --max-rows N               Row cap (default: 1000)
   --timeout-ms N             Query timeout (default: 30000)
   --action ACTION            query (default) or schema
@@ -117,9 +156,10 @@ options:
   -h, --help                 Show this help and exit
 
 Output is JSON matching the wiki-db-agent AGENT.md contract. Writes
-(INSERT/UPDATE/DELETE) are never executed — the policy gate returns
-status=present_only with a formatted_sql payload instead. DDL and
-privilege statements return status=denied.
+(INSERT/UPDATE/DELETE / Mongo writes / Dynamo PutItem etc.) are never
+executed — the policy gate returns status=present_only with a
+formatted_sql payload instead. DDL and privilege statements return
+status=denied.
 `;
 
 function adaptDriver(driver: DatabaseDriver, conn: unknown): QueryableDriver {
@@ -195,6 +235,81 @@ function runSchema(
   }
 }
 
+/**
+ * G-DB-AGENT-ENV: resolve a named environment from `wiki.config.yaml`.
+ *
+ * Reads `ecosystem.database.environments[name]`, optionally falling back
+ * to `ecosystem.database.driver` for a default driver, and registers the
+ * env with `wiki_db/environments`. Returns the resolved env config so
+ * callers can build a Policy with the right approval mode.
+ */
+interface ResolvedEnv {
+  name: string;
+  driver: string;
+  approval_mode: string;
+  grant_duration_hours: number | undefined;
+}
+
+function resolveEnv(envName: string, configPath: string): ResolvedEnv {
+  const cfg = parseConfig(configPath) as Record<string, unknown>;
+  const ecosystem = cfg["ecosystem"] as Record<string, unknown> | undefined;
+  const database = ecosystem?.["database"] as Record<string, unknown> | undefined;
+  const rawEnvs = database?.["environments"];
+  const envs =
+    rawEnvs !== null && rawEnvs !== undefined && typeof rawEnvs === "object"
+      ? (rawEnvs as Record<string, Record<string, unknown>>)
+      : undefined;
+  if (envs === undefined || !Object.prototype.hasOwnProperty.call(envs, envName)) {
+    throw new Error(
+      `environment '${envName}' not found in ${configPath} ` +
+        "(ecosystem.database.environments)",
+    );
+  }
+  const e = envs[envName] as Record<string, unknown>;
+  const driverFromEnv = typeof e["driver"] === "string" ? (e["driver"] as string) : undefined;
+  const driverFromDb =
+    typeof database?.["driver"] === "string" ? (database["driver"] as string) : undefined;
+  const driver = driverFromEnv ?? driverFromDb;
+  if (driver === undefined) {
+    throw new Error(
+      `environment '${envName}' has no 'driver' field, and ecosystem.database.driver is unset`,
+    );
+  }
+  // Two valid-value vocabularies exist in the codebase:
+  //   environments.ts wants kebab-case: auto | confirm-once | confirm-each | grant-required
+  //   policy.ts       wants snake_case: auto | confirm_once | confirm_each | grant_required
+  // v2 YAML (per the design report) uses snake_case. Accept either and
+  // translate both directions.
+  const rawMode =
+    typeof e["approval_mode"] === "string"
+      ? (e["approval_mode"] as string)
+      : "auto";
+  const kebabMode = rawMode.replace(/_/g, "-"); // for environments.ts
+  const snakeMode = rawMode.replace(/-/g, "_"); // for policy.ts
+  const grant_duration_hours =
+    typeof e["grant_duration_hours"] === "number"
+      ? (e["grant_duration_hours"] as number)
+      : undefined;
+
+  registerEnvironment(envName, {
+    host: typeof e["host"] === "string" ? (e["host"] as string) : "",
+    port: typeof e["port"] === "number" ? (e["port"] as number) : 0,
+    database:
+      typeof e["database"] === "string" ? (e["database"] as string) : "",
+    schema: typeof e["schema"] === "string" ? (e["schema"] as string) : "public",
+    approval_mode: kebabMode,
+    driver,
+    grant_duration_hours,
+  });
+
+  return {
+    name: envName,
+    driver,
+    approval_mode: snakeMode,
+    grant_duration_hours,
+  };
+}
+
 export async function main(
   argv: readonly string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -211,8 +326,12 @@ export async function main(
     return 0;
   }
 
-  if (args.sqlite === undefined) {
-    process.stderr.write("required: --sqlite <path-or-:memory:>\n");
+  if (args.sqlite === undefined && args.env === undefined) {
+    process.stderr.write("required: --sqlite <path-or-:memory:> or --env <name>\n");
+    return 2;
+  }
+  if (args.sqlite !== undefined && args.env !== undefined) {
+    process.stderr.write("--sqlite and --env are mutually exclusive\n");
     return 2;
   }
 
@@ -223,38 +342,82 @@ export async function main(
     return 2;
   }
 
+  if (args.sqlite !== undefined) {
+    return runWithSqlite(args, action);
+  }
+
+  return runWithEnv(args, action);
+}
+
+async function runWithSqlite(args: ParsedArgs, action: Action): Promise<number> {
   const driver = new SQLiteDriver();
-  const conn = driver.connect({ database: args.sqlite });
-
+  const conn = driver.connect({ database: args.sqlite! });
   try {
-    if (action === "schema") {
-      const result = runSchema(driver, conn, args.filter ?? null);
-      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-      return result["status"] === "ok" ? 0 : 1;
-    }
-
-    const approvalMode = args.approvalMode ?? "auto";
-    let policy: Policy;
-    try {
-      policy = new Policy(approvalMode);
-    } catch (e) {
-      process.stderr.write(`${(e as Error).message}\n`);
-      return 2;
-    }
-
-    const queryableDriver = adaptDriver(driver, conn);
-    const result = await executeQuery(queryableDriver, args.sql!, policy, {
-      max_rows: args.maxRows,
-      timeout_ms: args.timeoutMs,
-    });
-
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-    return result["status"] === "ok" || result["status"] === "present_only"
-      ? 0
-      : 1;
+    return await runOnDriver(driver, conn, args, action);
   } finally {
     driver.close(conn);
   }
+}
+
+async function runWithEnv(args: ParsedArgs, action: Action): Promise<number> {
+  const configPath = args.config ?? "./wiki.config.yaml";
+  let resolved: ResolvedEnv;
+  try {
+    resolved = resolveEnv(args.env!, configPath);
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
+    return 2;
+  }
+
+  let conn;
+  try {
+    conn = getConnection(resolved.name);
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
+    clearEnvironments();
+    return 1;
+  }
+
+  try {
+    return await runOnDriver(conn.driver, conn.native, args, action, resolved);
+  } finally {
+    releaseConnection(resolved.name, conn);
+    clearEnvironments();
+  }
+}
+
+async function runOnDriver(
+  driver: DatabaseDriver,
+  conn: unknown,
+  args: ParsedArgs,
+  action: Action,
+  envCtx?: ResolvedEnv,
+): Promise<number> {
+  if (action === "schema") {
+    const result = runSchema(driver, conn, args.filter ?? null);
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return result["status"] === "ok" ? 0 : 1;
+  }
+
+  const approvalMode = args.approvalMode ?? envCtx?.approval_mode ?? "auto";
+  let policy: Policy;
+  try {
+    policy = new Policy(approvalMode);
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
+    return 2;
+  }
+
+  const queryableDriver = adaptDriver(driver, conn);
+  const result = await executeQuery(queryableDriver, args.sql!, policy, {
+    max_rows: args.maxRows,
+    timeout_ms: args.timeoutMs,
+  });
+
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  return result["status"] === "ok" || result["status"] === "present_only"
+    ? 0
+    : 1;
 }
 
 const thisFile = fileURLToPath(import.meta.url);
