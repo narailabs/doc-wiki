@@ -20,6 +20,7 @@
  */
 import { performance } from "node:perf_hooks";
 import { Column, DatabaseDriver, Table, } from "./base.js";
+import { classifySqlKeywords } from "../policy.js";
 export class SqlServerDriver extends DatabaseDriver {
     _mssqlModule = null;
     _pool = null;
@@ -234,6 +235,9 @@ export class SqlServerDriver extends DatabaseDriver {
      */
     close(_conn) {
         /* pool is shared — nothing to release per-handle */
+    }
+    classifyOperation(query) {
+        return classifySqlKeywords(query);
     }
     async closeAsync(_conn) {
         /* pool is shared — nothing to release per-handle */

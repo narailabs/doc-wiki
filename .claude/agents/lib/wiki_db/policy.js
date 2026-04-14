@@ -13,9 +13,16 @@
  *  - Default-deny on unknown first-words: the classifier falls through to
  *    `"ddl"` (the most restrictive category) for anything not in the known
  *    keyword sets, matching `policy.py`.
+ *
+ * G-DB-1: the SQL keyword classifier is exported as a top-level
+ * `classifySqlKeywords` so non-relational drivers (MongoDB, DynamoDB) can
+ * provide their own override via the `DatabaseDriver.classifyOperation`
+ * method without going through the SQL keyword path. Policy.checkQuery
+ * accepts an optional driver and dispatches accordingly.
  */
 import { performance } from "node:perf_hooks";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import { logEvent } from "./audit.js";
 /** Namespace providing Python-style attribute access (`Decision.ALLOW`). */
 export const Decision = {
     ALLOW: "allow",
@@ -45,6 +52,33 @@ const _DDL_KEYWORDS = new Set([
 const _PRIVILEGE_KEYWORDS = new Set([
     "GRANT", "REVOKE",
 ]);
+/**
+ * Classify a SQL string by its leading keyword.
+ *
+ * Exported so SQL drivers (sqlite, postgres, mysql, mssql) can implement
+ * `DatabaseDriver.classifyOperation` without instantiating a Policy. Throws
+ * `Error("Empty SQL statement")` for empty/whitespace-only input.
+ *
+ * Default-deny: any unknown first-word falls through to `DDL` (most
+ * restrictive), matching `policy.py`.
+ */
+export function classifySqlKeywords(sql) {
+    const cleaned = Policy._stripComments(sql).trim();
+    if (!cleaned) {
+        throw new Error("Empty SQL statement");
+    }
+    const firstToken = cleaned.split(/\s+/)[0] ?? "";
+    const firstWord = firstToken.toUpperCase();
+    if (_PRIVILEGE_KEYWORDS.has(firstWord))
+        return OperationType.PRIVILEGE;
+    if (_DDL_KEYWORDS.has(firstWord))
+        return OperationType.DDL;
+    if (_DML_KEYWORDS.has(firstWord))
+        return OperationType.DML;
+    if (_READ_KEYWORDS.has(firstWord))
+        return OperationType.READ;
+    return OperationType.DDL;
+}
 // Regex to strip SQL line comments (-- ...) and block comments (/* ... */)
 const _LINE_COMMENT_RE = /--[^\n]*/g;
 // Python uses re.DOTALL so `.` matches newlines; in JS use the `s` flag.
@@ -72,6 +106,9 @@ export class Policy {
     _approval_mode;
     _session_approved;
     _grants; // grant_type -> expiry (ms, performance.now())
+    // G-DB-AUDIT: grant_types that have already had a `grant_expired` event
+    // emitted (de-dupes spam from repeated isGrantActive polling).
+    _expired_logged;
     constructor(approvalMode = "auto") {
         if (!_VALID_APPROVAL_MODES.has(approvalMode)) {
             // Match Python repr(): single-quoted string.
@@ -80,6 +117,7 @@ export class Policy {
         this._approval_mode = approvalMode;
         this._session_approved = false;
         this._grants = new Map();
+        this._expired_logged = new Set();
     }
     // ------------------------------------------------------------------
     // SQL classification
@@ -92,24 +130,7 @@ export class Policy {
     }
     /** Determine the OperationType of a raw SQL string. */
     classifySql(sql) {
-        const cleaned = Policy._stripComments(sql).trim();
-        if (!cleaned) {
-            throw new Error("Empty SQL statement");
-        }
-        // Python: first_word = cleaned.split()[0].upper()
-        // str.split() with no argument splits on any whitespace run.
-        const firstToken = cleaned.split(/\s+/)[0] ?? "";
-        const firstWord = firstToken.toUpperCase();
-        if (_PRIVILEGE_KEYWORDS.has(firstWord))
-            return OperationType.PRIVILEGE;
-        if (_DDL_KEYWORDS.has(firstWord))
-            return OperationType.DDL;
-        if (_DML_KEYWORDS.has(firstWord))
-            return OperationType.DML;
-        if (_READ_KEYWORDS.has(firstWord))
-            return OperationType.READ;
-        // Default: treat unknown statements as DDL (safest)
-        return OperationType.DDL;
+        return classifySqlKeywords(sql);
     }
     // ------------------------------------------------------------------
     // Unbounded query heuristic
@@ -123,32 +144,46 @@ export class Policy {
     // ------------------------------------------------------------------
     // Decision logic
     // ------------------------------------------------------------------
-    /** Evaluate whether `sql` should be executed under current policy. */
-    checkQuery(sql) {
+    /**
+     * Evaluate whether `sql` should be executed under current policy.
+     *
+     * G-DB-1: when `driver` is supplied, classification is delegated to
+     * `driver.classifyOperation()`. This lets non-relational drivers
+     * (MongoDB, DynamoDB) classify their JSON envelope queries instead of
+     * falling through SQL keyword matching (which would default to DDL).
+     *
+     * G-DB-AUDIT: every `deny` decision is emitted as a `policy_deny` event
+     * via `audit.logEvent`. The audit module no-ops when audit is disabled.
+     */
+    checkQuery(sql, driver) {
         const stripped = sql.trim();
         if (!stripped) {
-            return { decision: "deny", reason: "Empty SQL statement" };
+            const result = { decision: "deny", reason: "Empty SQL statement" };
+            _emitDeny(result.reason, null);
+            return result;
         }
         let op;
         try {
-            op = this.classifySql(stripped);
+            op = driver !== undefined
+                ? driver.classifyOperation(stripped)
+                : this.classifySql(stripped);
         }
         catch (exc) {
-            return { decision: "deny", reason: exc.message };
+            const reason = exc.message;
+            _emitDeny(reason, null);
+            return { decision: "deny", reason };
         }
         // ----- DDL: always denied -----
         if (op === OperationType.DDL) {
-            return {
-                decision: "deny",
-                reason: "DDL statements are never allowed",
-            };
+            const reason = "DDL statements are never allowed";
+            _emitDeny(reason, op);
+            return { decision: "deny", reason };
         }
         // ----- PRIVILEGE: always denied -----
         if (op === OperationType.PRIVILEGE) {
-            return {
-                decision: "deny",
-                reason: "PRIVILEGE statements are never allowed",
-            };
+            const reason = "PRIVILEGE statements are never allowed";
+            _emitDeny(reason, op);
+            return { decision: "deny", reason };
         }
         // ----- DML: present only (show the SQL, do not execute) -----
         if (op === OperationType.DML) {
@@ -174,7 +209,11 @@ export class Policy {
             };
         }
         // ----- READ: depends on approval mode -----
-        return this._checkRead(stripped);
+        const result = this._checkRead(stripped);
+        if (result.decision === "deny") {
+            _emitDeny(result.reason, op);
+        }
+        return result;
     }
     /** Apply approval-mode logic for READ operations. */
     _checkRead(sql) {
@@ -220,16 +259,39 @@ export class Policy {
     approveSession() {
         this._session_approved = true;
     }
-    /** Add a time-limited grant. */
+    /**
+     * Add a time-limited grant.
+     *
+     * G-DB-AUDIT: emits a `grant_added` event with the grant type and TTL.
+     */
     addGrant(grantType, ttlSeconds = 300) {
         this._grants.set(grantType, performance.now() + ttlSeconds * 1000);
+        logEvent({
+            event_type: "grant_added",
+            details: { grant_type: grantType, ttl_seconds: ttlSeconds },
+        });
     }
-    /** Check whether a grant is currently active (not expired). */
+    /**
+     * Check whether a grant is currently active (not expired).
+     *
+     * G-DB-AUDIT: emits a single `grant_expired` event the first time an
+     * expired grant is observed (subsequent checks are silent so the audit
+     * log isn't spammed by repeated polling).
+     */
     isGrantActive(grantType) {
         const expiry = this._grants.get(grantType);
         if (expiry === undefined)
             return false;
-        return performance.now() < expiry;
+        if (performance.now() < expiry)
+            return true;
+        if (!this._expired_logged.has(grantType)) {
+            this._expired_logged.add(grantType);
+            logEvent({
+                event_type: "grant_expired",
+                details: { grant_type: grantType },
+            });
+        }
+        return false;
     }
     // ------------------------------------------------------------------
     // Python-snake_case aliases (for call-site parity with the Python API)
@@ -266,6 +328,17 @@ export class Policy {
 export function grantFromEnv(policy, env, grantType) {
     const hours = env.grant_duration_hours ?? 8;
     policy.addGrant(grantType, hours * 3600);
+}
+/**
+ * G-DB-AUDIT: emit a `policy_deny` event with the deny reason and the
+ * SQL operation type (when known). The audit module no-ops when audit
+ * has not been enabled, so this is safe to call unconditionally.
+ */
+function _emitDeny(reason, op) {
+    const details = { reason };
+    if (op !== null)
+        details["op"] = op;
+    logEvent({ event_type: "policy_deny", details });
 }
 /**
  * Serialize a PolicyResult to Python-compatible JSON.

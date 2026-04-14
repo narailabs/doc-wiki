@@ -23,6 +23,7 @@ import {
   Table,
   type ExecuteReadResult,
 } from "./base.js";
+import { classifySqlKeywords, type OperationType } from "../policy.js";
 
 // ---------------------------------------------------------------------------
 // Minimal ambient types — we do not depend on `@types/pg` to compile.
@@ -308,6 +309,10 @@ export class PostgresDriver extends DatabaseDriver {
       .catch(() => {
         /* best-effort */
       });
+  }
+
+  override classifyOperation(query: string): OperationType {
+    return classifySqlKeywords(query);
   }
 
   async closeAsync(conn: unknown): Promise<void> {

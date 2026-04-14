@@ -25,6 +25,7 @@ import {
   Table,
   type ExecuteReadResult,
 } from "./base.js";
+import { classifySqlKeywords, type OperationType } from "../policy.js";
 
 // ---------------------------------------------------------------------------
 // Minimal ambient types
@@ -336,6 +337,10 @@ export class SqlServerDriver extends DatabaseDriver {
    */
   override close(_conn: unknown): void {
     /* pool is shared — nothing to release per-handle */
+  }
+
+  override classifyOperation(query: string): OperationType {
+    return classifySqlKeywords(query);
   }
 
   async closeAsync(_conn: unknown): Promise<void> {

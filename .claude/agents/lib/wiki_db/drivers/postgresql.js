@@ -18,6 +18,7 @@
  */
 import { performance } from "node:perf_hooks";
 import { Column, DatabaseDriver, Table, } from "./base.js";
+import { classifySqlKeywords } from "../policy.js";
 export class PostgresDriver extends DatabaseDriver {
     _pgModule = null;
     _pool = null;
@@ -205,6 +206,9 @@ export class PostgresDriver extends DatabaseDriver {
             .catch(() => {
             /* best-effort */
         });
+    }
+    classifyOperation(query) {
+        return classifySqlKeywords(query);
     }
     async closeAsync(conn) {
         const handle = (await conn);

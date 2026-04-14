@@ -20,6 +20,7 @@ import {
   Table,
   type ExecuteReadResult,
 } from "./base.js";
+import { classifySqlKeywords, type OperationType } from "../policy.js";
 
 // ---------------------------------------------------------------------------
 // Minimal ambient types — avoid depending on @types (mysql2 ships its own).
@@ -290,6 +291,10 @@ export class MysqlDriver extends DatabaseDriver {
       .catch(() => {
         /* best-effort */
       });
+  }
+
+  override classifyOperation(query: string): OperationType {
+    return classifySqlKeywords(query);
   }
 
   async closeAsync(conn: unknown): Promise<void> {

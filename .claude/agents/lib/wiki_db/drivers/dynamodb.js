@@ -29,6 +29,39 @@
  */
 import { performance } from "node:perf_hooks";
 import { Column, DatabaseDriver, Table, } from "./base.js";
+import { OperationType } from "../policy.js";
+/**
+ * G-DB-1: DynamoDB op → OperationType mapping.
+ *
+ * Both the lower-case envelope form (`{table, op: "scan"}`) and the
+ * official AWS command names (`ScanCommand`, `PutItemCommand`) are
+ * recognised. Unknown ops default to DDL.
+ */
+const _DYNAMO_READ_OPS = new Set([
+    // envelope form
+    "get", "query", "scan", "sample", "batchGet",
+    // AWS SDK command form
+    "GetItem", "GetItemCommand", "Query", "QueryCommand",
+    "Scan", "ScanCommand", "BatchGetItem", "BatchGetItemCommand",
+    // describe / list — admin reads
+    "ListTables", "ListTablesCommand", "DescribeTable", "DescribeTableCommand",
+]);
+const _DYNAMO_DML_OPS = new Set([
+    // envelope form (would be rejected by executeReadAsync but classified
+    // correctly so policy returns PRESENT_ONLY rather than DENY/DDL)
+    "put", "update", "delete", "batchWrite", "transactWrite",
+    // AWS SDK command form
+    "PutItem", "PutItemCommand", "UpdateItem", "UpdateItemCommand",
+    "DeleteItem", "DeleteItemCommand",
+    "BatchWriteItem", "BatchWriteItemCommand",
+    "TransactWriteItems", "TransactWriteItemsCommand",
+]);
+const _DYNAMO_DDL_OPS = new Set([
+    "createTable", "deleteTable", "updateTable",
+    "CreateTable", "CreateTableCommand",
+    "DeleteTable", "DeleteTableCommand",
+    "UpdateTable", "UpdateTableCommand",
+]);
 const READ_ONLY_OPS = new Set(["get", "query", "scan", "sample"]);
 export class DynamoDriver extends DatabaseDriver {
     _dynamoModule = null;
@@ -284,6 +317,52 @@ export class DynamoDriver extends DatabaseDriver {
         catch {
             return false;
         }
+    }
+    /**
+     * G-DB-1: classify a DynamoDB op for the policy gate.
+     *
+     * Accepts the JSON envelope `{table, op, ...}` consumed by
+     * `executeReadAsync`, AWS SDK command names like `PutItemCommand`,
+     * and dot-notation `client.send(new PutItemCommand({...}))`. Unknown
+     * ops default to DDL.
+     */
+    classifyOperation(query) {
+        const trimmed = query.trim();
+        if (trimmed.length === 0) {
+            throw new Error("Empty DynamoDB statement");
+        }
+        let op = null;
+        // Envelope form
+        if (trimmed.startsWith("{")) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (typeof parsed.op === "string")
+                    op = parsed.op;
+            }
+            catch {
+                /* fall through */
+            }
+        }
+        // SDK form: detect "<Verb>Command" or first identifier
+        if (op === null) {
+            const cmdMatch = /\b([A-Z][A-Za-z0-9]*Command)\b/.exec(trimmed);
+            if (cmdMatch !== null)
+                op = cmdMatch[1] ?? null;
+        }
+        if (op === null) {
+            const wordMatch = /(?:^|\.)([A-Za-z][A-Za-z0-9_]*)\s*\(/.exec(trimmed);
+            if (wordMatch !== null)
+                op = wordMatch[1] ?? null;
+        }
+        if (op === null)
+            return OperationType.DDL;
+        if (_DYNAMO_READ_OPS.has(op))
+            return OperationType.READ;
+        if (_DYNAMO_DML_OPS.has(op))
+            return OperationType.DML;
+        if (_DYNAMO_DDL_OPS.has(op))
+            return OperationType.DDL;
+        return OperationType.DDL;
     }
     /** Destroy the shared DynamoDBClient. */
     async shutdown() {
