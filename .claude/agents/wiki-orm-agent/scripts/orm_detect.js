@@ -14,8 +14,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as yaml from "js-yaml";
 import { loadAllProfiles, detectOrm, } from "../../lib/wiki_orm/profiles.js";
-import { extractEntities } from "../../lib/wiki_orm/extractor.js";
+import { crossValidate, extractEntities, } from "../../lib/wiki_orm/extractor.js";
 import { generateMappingMarkdown } from "../../lib/wiki_orm/output.js";
 const DEFAULT_IGNORE = new Set([
     "node_modules",
@@ -92,6 +93,39 @@ function walkCodebase(root, patterns) {
     }
     return out;
 }
+/**
+ * Read `ecosystem.orm.cross_validate_against_db` from `wiki.config.yaml`
+ * at the codebase root (or the parent's `wiki/` subdir). Returns `true`
+ * when the flag is absent — matches the init_wiki.ts default. Never
+ * throws on missing or malformed YAML.
+ */
+function readCrossValidateFlag(codebasePath) {
+    const candidates = [
+        path.join(codebasePath, "wiki.config.yaml"),
+        path.join(codebasePath, "wiki", "wiki.config.yaml"),
+    ];
+    for (const file of candidates) {
+        let text;
+        try {
+            text = fs.readFileSync(file, "utf-8");
+        }
+        catch {
+            continue;
+        }
+        try {
+            const parsed = yaml.load(text);
+            const eco = parsed?.["ecosystem"];
+            const orm = eco?.["orm"];
+            const flag = orm?.["cross_validate_against_db"];
+            if (typeof flag === "boolean")
+                return flag;
+        }
+        catch {
+            // malformed YAML — treat as missing
+        }
+    }
+    return true;
+}
 function parseArgs(argv) {
     const out = {};
     let i = 0;
@@ -131,13 +165,16 @@ function parseArgs(argv) {
             case "output-markdown":
                 out.outputMarkdown = value ?? "";
                 break;
+            case "env":
+                out.env = value ?? "";
+                break;
             default:
                 throw new Error(`unrecognized argument: --${name}`);
         }
     }
     return out;
 }
-const HELP_TEXT = `usage: orm_detect.js --codebase-path <path> [--profile <name|auto>] [--project-name <name>] [--output-markdown <file>] [--output-json]
+const HELP_TEXT = `usage: orm_detect.js --codebase-path <path> [--profile <name|auto>] [--project-name <name>] [--output-markdown <file>] [--output-json] [--env <name>]
 
 Detect ORM patterns and generate database-mapping.md.
 
@@ -147,6 +184,10 @@ options:
   --project-name NAME      Project name used in the generated markdown
   --output-markdown FILE   Write database-mapping.md to FILE
   --output-json            Print the AGENT.md-contract JSON to stdout
+  --env NAME               DB environment name to cross-validate against. When
+                           set and ecosystem.orm.cross_validate_against_db is
+                           true in wiki.config.yaml (default), entity fields
+                           are diffed against the live DB schema.
   -h, --help               Show this help and exit
 `;
 function extractMermaidBlock(markdown) {
@@ -157,7 +198,7 @@ function extractMermaidBlock(markdown) {
     const type = code.trim().startsWith("erDiagram") ? "erDiagram" : "unknown";
     return { type, title: "Entity Relationships", code };
 }
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
     let args;
     try {
         args = parseArgs(argv);
@@ -212,7 +253,14 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const entities = extractEntities(fileContents, chosenProfile);
-    const markdown = generateMappingMarkdown(entities, projectName, chosenProfile.name);
+    // G2: cross-validate against live DB when --env is supplied AND the
+    // wiki.config.yaml has `ecosystem.orm.cross_validate_against_db: true`
+    // (default). Disabling the flag skips validation even with --env.
+    let xvalid;
+    if (args.env && readCrossValidateFlag(args.codebasePath)) {
+        xvalid = await crossValidate(entities, args.env);
+    }
+    const markdown = generateMappingMarkdown(entities, projectName, chosenProfile.name, undefined, undefined, xvalid);
     let mappingFile = null;
     if (args.outputMarkdown) {
         fs.mkdirSync(path.dirname(args.outputMarkdown), { recursive: true });
@@ -233,6 +281,8 @@ export function main(argv = process.argv.slice(2)) {
             mapping_file: mappingFile,
             mermaid: extractMermaidBlock(markdown),
         };
+        if (xvalid !== undefined)
+            result["cross_validation"] = xvalid;
         process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     }
     else if (!args.outputMarkdown) {
@@ -242,5 +292,8 @@ export function main(argv = process.argv.slice(2)) {
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    process.exit(main());
+    main().then((code) => process.exit(code), (err) => {
+        process.stderr.write(`${err.message}\n`);
+        process.exit(1);
+    });
 }
