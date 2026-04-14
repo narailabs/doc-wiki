@@ -131,7 +131,7 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 11. **Update indexes**: Add to `wiki/index.md` and rebuild `wiki/summaries.md`.
 
-12. **Log**: Run `event_logger.ts` (`node event_logger.js`) with operation details.
+12. **Log**: Run `event_logger.ts` (`node event_logger.js`) with operation details. Pass each dispatched sub-agent's stats under `details.agent_calls[]` so `/wiki-stats` can report per-agent cost correctly. Entries have shape `{agent, model, tokens_in, tokens_out, cost_usd, elapsed_ms, status}`; totals are computed automatically.
 
 13. **Post-op hooks**: Run crosslink + tag-harmonize passes.
 

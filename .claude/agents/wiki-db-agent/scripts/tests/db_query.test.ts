@@ -209,6 +209,23 @@ describe("db_query main()", () => {
     }
   });
 
+  it("--action schema emits a mermaid erDiagram field (G1)", async () => {
+    const dbPath = makeFixtureDb();
+    try {
+      const stdout = await captureStdout(async () => {
+        await main(["--sqlite", dbPath, "--action", "schema"]);
+      });
+      const result = JSON.parse(stdout);
+      expect(result.mermaid).toBeDefined();
+      expect(result.mermaid.type).toBe("erDiagram");
+      expect(result.mermaid.title).toBe("Database Schema");
+      expect(result.mermaid.code).toContain("erDiagram");
+      expect(result.mermaid.code).toContain("users");
+    } finally {
+      fs.rmSync(path.dirname(dbPath), { recursive: true, force: true });
+    }
+  });
+
   it("rejects invalid --approval-mode", async () => {
     const dbPath = makeFixtureDb();
     const origErr = process.stderr.write.bind(process.stderr);

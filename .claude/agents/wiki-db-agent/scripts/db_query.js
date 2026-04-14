@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { Policy } from "../../lib/wiki_db/policy.js";
 import { executeQuery, } from "../../lib/wiki_db/query.js";
 import { SQLiteDriver } from "../../lib/wiki_db/drivers/sqlite.js";
+import { formatErDiagram, } from "../../lib/mermaid_format.js";
 function parseArgs(argv) {
     const out = {};
     let i = 0;
@@ -106,14 +107,37 @@ function adaptDriver(driver, conn) {
         },
     };
 }
+/**
+ * Build an ER-diagram `mermaid` block from a list of Tables. Returns
+ * null when the schema is empty — per v2 §6, agents omit the `mermaid`
+ * field entirely when the data is not diagram-worthy (the caller
+ * splices `null` into the JSON conditionally).
+ */
+function schemaToMermaid(tables) {
+    if (tables.length === 0)
+        return null;
+    const ermTables = tables.map((t) => {
+        const cols = t.columns.map((c) => ({
+            name: c.name,
+            type: c.data_type || "string",
+            key: c.is_primary_key ? "PK" : undefined,
+        }));
+        return { name: t.name, columns: cols };
+    });
+    return formatErDiagram("Database Schema", ermTables, []);
+}
 function runSchema(driver, conn, filter) {
     try {
         const tables = driver.getSchema(conn, undefined, filter);
-        return {
+        const result = {
             status: "ok",
             tables: tables.map((t) => t.toDict()),
             table_count: tables.length,
         };
+        const mermaid = schemaToMermaid(tables);
+        if (mermaid !== null)
+            result["mermaid"] = mermaid;
+        return result;
     }
     catch (exc) {
         return {
