@@ -23,6 +23,19 @@ import { pythonJsonDumps } from "./_json_py.js";
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
 
 /**
+ * Re-exported fetch caps from `agents/lib/fetch_helper.ts` so the two
+ * security-baseline knobs live under one import at call sites.
+ * `fetch_helper` remains the canonical owner; update the numbers there.
+ */
+export {
+  FETCH_MAX_BYTES_DEFAULT,
+  FETCH_TIMEOUT_MS_DEFAULT,
+  FetchCapExceeded,
+  fetchWithCaps,
+  type FetchCapsOptions,
+} from "../../../agents/lib/fetch_helper.js";
+
+/**
  * Check that a URL uses an allowed scheme (http or https only).
  *
  * Mirrors Python's urllib.parse.urlparse: extracts a scheme by regex

@@ -143,7 +143,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 9. **Auto-generate Mermaid diagrams** — if the source data is diagram-worthy (ER, sequence, topology)
 10. **Generate "How to Go Deeper" section** — from source frontmatter, list agent commands for live verification
 11. **Update indexes + summaries.md**
-12. **Log:** `node {skill_path}/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`
+12. **Log:** `node {skill_path}/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`. When the op dispatched sub-agents, include them in `details.agent_calls[]` with shape `{agent, model, tokens_in, tokens_out, cost_usd, elapsed_ms, status}` — event_logger fills in `total_tokens_in`, `total_tokens_out`, and `total_cost_usd` automatically, and `/wiki-stats` aggregates per-agent cost from those entries.
 13. **Run post-operation hooks** (crosslink + tag-harmonize) — see below
 
 **Folder-source batches (checkpointing):** when the source is a folder (many files processed in a loop), use `scripts/checkpoint.ts` to make the batch resumable:
@@ -224,7 +224,7 @@ Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--
 node {skill_path}/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d
 ```
 
-Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown.
+Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown. Per-agent cost sums top-level `agent` fields as well as every `agent_calls[]` sub-entry on every event, so parent-op events that dispatched sub-agents are fully accounted for.
 
 ## Post-Operation Hooks
 

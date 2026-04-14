@@ -383,3 +383,92 @@ describe("EventLoggerCLIShape", () => {
     expect(js.stdout).toMatch(/"total_cost_usd":\s*15\.0/);
   });
 });
+
+// ── agent_calls[] (G9) ───────────────────────────────────────────────
+
+describe("agent_calls[] breakdown", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-agent-calls-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("computes totals when caller omits them", () => {
+    const entry = logEvent(tmpPath, "ingest", {
+      source: "report.pdf",
+      agent_calls: [
+        {
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 1200,
+          tokens_out: 340,
+          cost_usd: 0.001,
+          elapsed_ms: 2400,
+          status: "success",
+        },
+        {
+          agent: "db_agent",
+          model: null,
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.0,
+          elapsed_ms: 180,
+          status: "success",
+          note: "deterministic",
+        },
+      ],
+    });
+    expect(entry["total_tokens_in"]).toBe(1200);
+    expect(entry["total_tokens_out"]).toBe(340);
+    expect(entry["total_cost_usd"]).toBeCloseTo(0.001, 5);
+  });
+
+  it("does not overwrite caller-provided totals", () => {
+    const entry = logEvent(tmpPath, "ingest", {
+      agent_calls: [
+        {
+          agent: "jira", model: "haiku", tokens_in: 10, tokens_out: 5,
+          cost_usd: 0.5, elapsed_ms: 100, status: "success",
+        },
+      ],
+      total_cost_usd: 999,
+    });
+    expect(entry["total_cost_usd"]).toBe(999);
+    // The summed totals we omitted still get filled in.
+    expect(entry["total_tokens_in"]).toBe(10);
+    expect(entry["total_tokens_out"]).toBe(5);
+  });
+
+  it("is a no-op when agent_calls is absent or not an array", () => {
+    const entry1 = logEvent(tmpPath, "fix", { page: "x.md" });
+    expect(entry1).not.toHaveProperty("total_tokens_in");
+
+    cleanupTmpPath(tmpPath);
+    tmpPath = makeTmpPath("event-agent-calls-");
+    const entry2 = logEvent(tmpPath, "fix", { agent_calls: "not-an-array" });
+    expect(entry2).not.toHaveProperty("total_tokens_in");
+  });
+
+  it("stats aggregates per-agent cost from agent_calls[]", () => {
+    // One event with two sub-agent dispatches.
+    logEvent(tmpPath, "ingest", {
+      agent_calls: [
+        {
+          agent: "jira", model: "haiku", tokens_in: 0, tokens_out: 0,
+          cost_usd: 0.25, elapsed_ms: 10, status: "success",
+        },
+        {
+          agent: "db_agent", model: null, tokens_in: 0, tokens_out: 0,
+          cost_usd: 0.5, elapsed_ms: 10, status: "success",
+        },
+      ],
+    });
+    const stats = getStats(tmpPath);
+    const perAgent = stats["per_agent_cost"] as Record<string, number>;
+    expect(perAgent["jira"]).toBeCloseTo(0.25, 5);
+    expect(perAgent["db_agent"]).toBeCloseTo(0.5, 5);
+  });
+});

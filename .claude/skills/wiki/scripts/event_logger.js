@@ -63,6 +63,39 @@ export function parsePythonIsoformat(s) {
         return t;
     return NaN;
 }
+/**
+ * When `details.agent_calls` is an array of `AgentCallEvent`, compute
+ * `total_tokens_in`, `total_tokens_out`, `total_cost_usd` if the caller
+ * didn't pre-populate them. Returns a shallow copy so we don't mutate
+ * the caller's object.
+ */
+function _normalizeAgentCalls(details) {
+    const calls = details["agent_calls"];
+    if (!Array.isArray(calls))
+        return details;
+    const out = { ...details };
+    let ti = 0;
+    let to = 0;
+    let cu = 0;
+    for (const c of calls) {
+        if (c && typeof c === "object") {
+            const rec = c;
+            if (typeof rec["tokens_in"] === "number")
+                ti += rec["tokens_in"];
+            if (typeof rec["tokens_out"] === "number")
+                to += rec["tokens_out"];
+            if (typeof rec["cost_usd"] === "number")
+                cu += rec["cost_usd"];
+        }
+    }
+    if (out["total_tokens_in"] === undefined)
+        out["total_tokens_in"] = ti;
+    if (out["total_tokens_out"] === undefined)
+        out["total_tokens_out"] = to;
+    if (out["total_cost_usd"] === undefined)
+        out["total_cost_usd"] = cu;
+    return out;
+}
 // ── Paths ───────────────────────────────────────────────────────────
 function _eventsPath(wikiRoot) {
     const p = path.join(wikiRoot, "log", "events.jsonl");
@@ -79,13 +112,15 @@ function _eventsPath(wikiRoot) {
  * Returns the full logged entry dict.
  */
 export function logEvent(wikiRoot, op, details) {
+    // Normalize agent_calls[] → compute totals if caller omitted them.
+    const normalized = _normalizeAgentCalls(details);
     // Preserve Python's dict-literal key order: `ts` first, then `op`,
     // then the merged `details` keys in insertion order.
     const entry = {
         ts: pythonIsoformatUtc(new Date()),
         op,
     };
-    for (const [k, v] of Object.entries(details)) {
+    for (const [k, v] of Object.entries(normalized)) {
         entry[k] = v;
     }
     const p = _eventsPath(wikiRoot);
@@ -202,6 +237,24 @@ export function getStats(wikiRoot, since = null, opts = {}) {
         const agentVal = e["agent"];
         if (typeof agentVal === "string" && agentVal) {
             perAgentCost[agentVal] = (perAgentCost[agentVal] ?? 0) + cost;
+        }
+        // v2 §13: per-agent-call breakdown. When the event carries an
+        // agent_calls[] array, aggregate each sub-agent's cost under its
+        // own key (so /wiki-stats reports jira/confluence/gcp separately
+        // even if the parent op was `ingest`).
+        const calls = e["agent_calls"];
+        if (Array.isArray(calls)) {
+            for (const c of calls) {
+                if (!c || typeof c !== "object")
+                    continue;
+                const rec = c;
+                const subAgent = rec["agent"];
+                const subCost = rec["cost_usd"];
+                if (typeof subAgent === "string" && subAgent &&
+                    typeof subCost === "number") {
+                    perAgentCost[subAgent] = (perAgentCost[subAgent] ?? 0) + subCost;
+                }
+            }
         }
     }
     // Reduction ratio statistics — only populated when we saw any ratios.

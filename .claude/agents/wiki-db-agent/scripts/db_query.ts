@@ -25,7 +25,16 @@ import {
   type QueryableDriver,
 } from "../../lib/wiki_db/query.js";
 import { SQLiteDriver } from "../../lib/wiki_db/drivers/sqlite.js";
-import type { DatabaseDriver } from "../../lib/wiki_db/drivers/base.js";
+import type {
+  DatabaseDriver,
+  Table,
+} from "../../lib/wiki_db/drivers/base.js";
+import {
+  formatErDiagram,
+  type ErColumn,
+  type ErTable,
+  type MermaidBlock,
+} from "../../lib/mermaid_format.js";
 
 type Action = "query" | "schema";
 
@@ -143,6 +152,25 @@ function adaptDriver(driver: DatabaseDriver, conn: unknown): QueryableDriver {
   };
 }
 
+/**
+ * Build an ER-diagram `mermaid` block from a list of Tables. Returns
+ * null when the schema is empty — per v2 §6, agents omit the `mermaid`
+ * field entirely when the data is not diagram-worthy (the caller
+ * splices `null` into the JSON conditionally).
+ */
+function schemaToMermaid(tables: Table[]): MermaidBlock | null {
+  if (tables.length === 0) return null;
+  const ermTables: ErTable[] = tables.map((t) => {
+    const cols: ErColumn[] = t.columns.map((c) => ({
+      name: c.name,
+      type: c.data_type || "string",
+      key: c.is_primary_key ? "PK" : undefined,
+    }));
+    return { name: t.name, columns: cols };
+  });
+  return formatErDiagram("Database Schema", ermTables, []);
+}
+
 function runSchema(
   driver: DatabaseDriver,
   conn: unknown,
@@ -150,11 +178,14 @@ function runSchema(
 ): Record<string, unknown> {
   try {
     const tables = driver.getSchema(conn, undefined, filter);
-    return {
+    const result: Record<string, unknown> = {
       status: "ok",
       tables: tables.map((t) => t.toDict()),
       table_count: tables.length,
     };
+    const mermaid = schemaToMermaid(tables);
+    if (mermaid !== null) result["mermaid"] = mermaid;
+    return result;
   } catch (exc) {
     return {
       status: "error",
