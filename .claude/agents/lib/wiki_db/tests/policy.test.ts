@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 
 import {
   Decision,
+  grantFromEnv,
   OperationType,
   Policy,
 } from "../policy.js";
@@ -222,6 +223,31 @@ describe("TestDecisionLogic", () => {
   it("test_grant_expired", () => {
     const p = policyGrantRequired();
     p.addGrant("read", 0);
+    expect(p.isGrantActive("read")).toBe(false);
+  });
+});
+
+describe("grantFromEnv", () => {
+  it("uses env.grant_duration_hours when set (8h → 28800s)", () => {
+    const p = policyGrantRequired();
+    grantFromEnv(p, { grant_duration_hours: 8 }, "read");
+    expect(p.isGrantActive("read")).toBe(true);
+    // Check the checkQuery path actually accepts the grant.
+    const result = p.checkQuery("SELECT 1");
+    expect(result.decision).toBe(Decision.ALLOW);
+  });
+
+  it("defaults to 8 hours when env omits the field", () => {
+    const p = policyGrantRequired();
+    grantFromEnv(p, {}, "read");
+    // 8h > 0, so grant must be active immediately.
+    expect(p.isGrantActive("read")).toBe(true);
+  });
+
+  it("honors a smaller override (e.g. 0.0001h ≈ 0.36s)", () => {
+    const p = policyGrantRequired();
+    grantFromEnv(p, { grant_duration_hours: 0 }, "read");
+    // Zero hours → expiry in the past → inactive.
     expect(p.isGrantActive("read")).toBe(false);
   });
 });

@@ -256,6 +256,18 @@ export class Policy {
     }
 }
 /**
+ * Issue a time-limited grant whose TTL derives from an environment's
+ * `grant_duration_hours` field (v2 design §4 default: 8 hours).
+ *
+ * This is the recommended API for prod callers — `addGrant` remains the
+ * low-level primitive (5-minute default, used for short-lived operations
+ * like test scaffolding and administrative confirmations).
+ */
+export function grantFromEnv(policy, env, grantType) {
+    const hours = env.grant_duration_hours ?? 8;
+    policy.addGrant(grantType, hours * 3600);
+}
+/**
  * Serialize a PolicyResult to Python-compatible JSON.
  *
  * Key order matches Python's dataclass-to-dict field order:

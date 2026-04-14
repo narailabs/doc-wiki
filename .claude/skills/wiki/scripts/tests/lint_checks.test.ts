@@ -21,6 +21,7 @@ import {
   checkOrmMappingFreshness,
   checkOrphans,
   checkProvenanceCompleteness,
+  checkStaleContent,
   checkSummariesSync,
   checkThinClusters,
   lintWiki,
@@ -807,4 +808,127 @@ describe("TestLintChecksCLI", () => {
     }
   });
 
+});
+
+// ── Page type enum validation (G5) ─────────────────────────────────
+
+describe("checkFrontmatter page-type enum", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-type-enum-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("flags a typo'd type value as an error", () => {
+    const page = path.join(wiki, "wiki", "typo.md");
+    writePage(page, fullFm({ type: "concepts" }), "Body\n");
+    const issues = checkFrontmatter(wiki);
+    const pageIssues = issues.filter((i) => i.page === page);
+    expect(pageIssues.length).toBe(1);
+    expect(pageIssues[0]?.severity).toBe("error");
+    expect(pageIssues[0]?.detail).toContain("concepts");
+    expect(pageIssues[0]?.detail).toContain("concept|entity|summary");
+  });
+
+  it.each([
+    "concept",
+    "entity",
+    "summary",
+    "index",
+    "lecture",
+    "claim",
+    "synthesis",
+  ])("accepts the '%s' type with no issue", (t) => {
+    const page = path.join(wiki, "wiki", `${t}.md`);
+    writePage(page, fullFm({ type: t }), "Body\n");
+    const issues = checkFrontmatter(wiki);
+    const pageIssues = issues.filter((i) => i.page === page);
+    expect(pageIssues).toEqual([]);
+  });
+
+  it("emits both the missing-field and invalid-type errors independently", () => {
+    const page = path.join(wiki, "wiki", "doubly-wrong.md");
+    // Missing `title` AND bad `type` — both errors expected.
+    const fm = { ...fullFm({ type: "Concept" }) };
+    delete (fm as Record<string, unknown>)["title"];
+    writePage(page, fm, "Body\n");
+    const issues = checkFrontmatter(wiki);
+    const pageIssues = issues.filter((i) => i.page === page);
+    const details = pageIssues.map((i) => i.detail).sort();
+    expect(details).toEqual(expect.arrayContaining([
+      expect.stringContaining("title"),
+      expect.stringContaining("Concept"),
+    ]));
+  });
+});
+
+// ── Stale content (G10) ────────────────────────────────────────────
+
+describe("checkStaleContent", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-stale-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("flags a page updated more than 90 days ago as info", () => {
+    const page = path.join(wiki, "wiki", "old.md");
+    writePage(page, fullFm({ updated: "2024-01-01" }), "Body\n");
+    const now = new Date("2026-04-13T00:00:00Z");
+    const issues = checkStaleContent(wiki, 90, now);
+    const pageIssues = issues.filter((i) => i.page === page);
+    expect(pageIssues.length).toBe(1);
+    expect(pageIssues[0]?.severity).toBe("info");
+    expect(pageIssues[0]?.category).toBe("stale_content");
+    expect(pageIssues[0]?.detail).toMatch(/days old/);
+  });
+
+  it("does not flag fresh pages", () => {
+    const page = path.join(wiki, "wiki", "fresh.md");
+    writePage(page, fullFm({ updated: "2026-04-10" }), "Body\n");
+    const now = new Date("2026-04-13T00:00:00Z");
+    const issues = checkStaleContent(wiki, 90, now);
+    const pageIssues = issues.filter((i) => i.page === page);
+    expect(pageIssues).toEqual([]);
+  });
+
+  it("skips pages whose updated field is unparseable", () => {
+    const page = path.join(wiki, "wiki", "garbage-date.md");
+    writePage(page, fullFm({ updated: "not-a-date" }), "Body\n");
+    const now = new Date("2026-04-13T00:00:00Z");
+    const issues = checkStaleContent(wiki, 90, now);
+    const pageIssues = issues.filter((i) => i.page === page);
+    expect(pageIssues).toEqual([]);
+  });
+
+  it("honors a custom threshold", () => {
+    const page = path.join(wiki, "wiki", "week-old.md");
+    writePage(page, fullFm({ updated: "2026-04-01" }), "Body\n");
+    const now = new Date("2026-04-13T00:00:00Z");
+    // 12 days old — flagged when threshold is 7, skipped when 30.
+    expect(
+      checkStaleContent(wiki, 7, now).filter((i) => i.page === page).length,
+    ).toBe(1);
+    expect(
+      checkStaleContent(wiki, 30, now).filter((i) => i.page === page).length,
+    ).toBe(0);
+  });
+
+  it("skips pages with missing frontmatter (no throw)", () => {
+    const page = path.join(wiki, "wiki", "bare.md");
+    fs.mkdirSync(path.dirname(page), { recursive: true });
+    fs.writeFileSync(page, "no frontmatter here\n");
+    const issues = checkStaleContent(wiki);
+    expect(issues.filter((i) => i.page === page)).toEqual([]);
+  });
 });
