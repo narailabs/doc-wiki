@@ -154,7 +154,13 @@ function _readEvents(wikiRoot, since = null) {
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
             const entryTs = entry["ts"];
             const entryMs = typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
-            if (!Number.isNaN(entryMs) && entryMs < sinceMs) {
+            // G-EVENTS-TS-STRICT: when --since is active, drop events whose
+            // `ts` cannot be parsed. Previously a NaN skipped only the
+            // `entryMs < sinceMs` check and fell through into `events.push`,
+            // so users asking "events in the last 24h" saw events with
+            // malformed timestamps. Fail-closed: if we can't place it on
+            // the timeline, it's not in the window.
+            if (Number.isNaN(entryMs) || entryMs < sinceMs) {
                 continue;
             }
         }
