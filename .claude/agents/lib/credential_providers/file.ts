@@ -26,7 +26,7 @@ export class FileProvider implements CredentialProvider {
   private readonly _path: string;
   private readonly _suppressWarning: boolean;
   private _warned = false;
-  private _cache: Record<string, string> | null = null;
+  private _cache: Record<string, unknown> | null = null;
 
   constructor(opts: FileProviderOptions) {
     this._path = opts.path;
@@ -37,12 +37,36 @@ export class FileProvider implements CredentialProvider {
     return this.getSecretSync(name);
   }
 
+  /**
+   * Return the value for `name`. Two lookup strategies, in order:
+   *   1. Literal top-level key — preserves the original flat
+   *      `{ "<name>": "<value>" }` contract and lets users have
+   *      key names that contain dots.
+   *   2. Dot-path traversal — if the literal key doesn't resolve to a
+   *      string, treat `name` as a path (e.g. `db-prod.username`) and
+   *      walk the nested JSON. Returns null if any segment is missing
+   *      or the leaf is not a string. Lets nested credential layouts
+   *      (used by wiki_db's `db-<env>.username` shape) reuse the same
+   *      file/mode/warning machinery.
+   */
   getSecretSync(name: string): string | null {
     this._warnOnce();
     const data = this._load();
     if (data === null) return null;
-    const value = data[name];
-    return value === undefined ? null : value;
+    const literal = data[name];
+    if (typeof literal === "string") return literal;
+    if (name.includes(".")) {
+      const parts = name.split(".");
+      let cur: unknown = data;
+      for (const part of parts) {
+        if (cur === null || typeof cur !== "object" || Array.isArray(cur)) {
+          return null;
+        }
+        cur = (cur as Record<string, unknown>)[part];
+      }
+      if (typeof cur === "string") return cur;
+    }
+    return null;
   }
 
   private _warnOnce(): void {
@@ -75,7 +99,13 @@ export class FileProvider implements CredentialProvider {
     }
   }
 
-  private _load(): Record<string, string> | null {
+  /**
+   * Parse the credentials JSON. Stores the raw nested structure so
+   * dot-path traversal can find values inside subobjects (the wiki_db
+   * `db-<env>: {username, password}` layout); literal-key lookups still
+   * filter to strings in `getSecretSync`.
+   */
+  private _load(): Record<string, unknown> | null {
     if (this._cache !== null) return this._cache;
     if (!fs.existsSync(this._path)) return null;
     this._checkFileMode();
@@ -90,12 +120,7 @@ export class FileProvider implements CredentialProvider {
         `file provider: ${this._path} did not contain a JSON object`,
       );
     }
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v !== "string") continue;
-      out[k] = v;
-    }
-    this._cache = out;
-    return out;
+    this._cache = parsed as Record<string, unknown>;
+    return this._cache;
   }
 }

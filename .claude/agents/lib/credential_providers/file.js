@@ -22,13 +22,39 @@ export class FileProvider {
     async getSecret(name) {
         return this.getSecretSync(name);
     }
+    /**
+     * Return the value for `name`. Two lookup strategies, in order:
+     *   1. Literal top-level key — preserves the original flat
+     *      `{ "<name>": "<value>" }` contract and lets users have
+     *      key names that contain dots.
+     *   2. Dot-path traversal — if the literal key doesn't resolve to a
+     *      string, treat `name` as a path (e.g. `db-prod.username`) and
+     *      walk the nested JSON. Returns null if any segment is missing
+     *      or the leaf is not a string. Lets nested credential layouts
+     *      (used by wiki_db's `db-<env>.username` shape) reuse the same
+     *      file/mode/warning machinery.
+     */
     getSecretSync(name) {
         this._warnOnce();
         const data = this._load();
         if (data === null)
             return null;
-        const value = data[name];
-        return value === undefined ? null : value;
+        const literal = data[name];
+        if (typeof literal === "string")
+            return literal;
+        if (name.includes(".")) {
+            const parts = name.split(".");
+            let cur = data;
+            for (const part of parts) {
+                if (cur === null || typeof cur !== "object" || Array.isArray(cur)) {
+                    return null;
+                }
+                cur = cur[part];
+            }
+            if (typeof cur === "string")
+                return cur;
+        }
+        return null;
     }
     _warnOnce() {
         if (this._warned || this._suppressWarning)
@@ -57,6 +83,12 @@ export class FileProvider {
                 `Run 'chmod 600 ${this._path}' to restrict to the owner.`);
         }
     }
+    /**
+     * Parse the credentials JSON. Stores the raw nested structure so
+     * dot-path traversal can find values inside subobjects (the wiki_db
+     * `db-<env>: {username, password}` layout); literal-key lookups still
+     * filter to strings in `getSecretSync`.
+     */
     _load() {
         if (this._cache !== null)
             return this._cache;
@@ -70,13 +102,7 @@ export class FileProvider {
             Array.isArray(parsed)) {
             throw new Error(`file provider: ${this._path} did not contain a JSON object`);
         }
-        const out = {};
-        for (const [k, v] of Object.entries(parsed)) {
-            if (typeof v !== "string")
-                continue;
-            out[k] = v;
-        }
-        this._cache = out;
-        return out;
+        this._cache = parsed;
+        return this._cache;
     }
 }

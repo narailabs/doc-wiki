@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { FileProvider } from "../credential_providers/file.js";
 import { EnvVarProvider } from "../credential_providers/env_var.js";
 /**
  * Default credentials file location — `~/.config/wiki_db/credentials.json`.
@@ -41,16 +42,18 @@ export class CredentialProvider {
  *     ...
  *   }
  *
- * Implementation note: the new `credential_providers/FileProvider` stores
- * flat `name → value` pairs; the wiki_db file format nests
- * `username`/`password` under `db-<env>`. So we still do the JSON parse
- * ourselves here rather than routing through `FileProvider`.
+ * Delegates the actual file reading to `credential_providers/FileProvider`
+ * so the file-mode safety check (refuses 0644+ on POSIX) and plaintext
+ * warning fire here too. Nested `db-<env>.username` / `db-<env>.password`
+ * lookups are resolved by FileProvider's dot-path traversal.
  */
 export class FileCredentialProvider extends CredentialProvider {
     _path;
+    _provider;
     constructor(filePath) {
         super();
         this._path = filePath;
+        this._provider = new FileProvider({ path: filePath });
     }
     get(env) {
         if (!fs.existsSync(this._path)) {
@@ -59,17 +62,15 @@ export class FileCredentialProvider extends CredentialProvider {
             err.code = "ENOENT";
             throw err;
         }
-        const raw = fs.readFileSync(this._path, "utf-8");
-        const data = JSON.parse(raw);
         const key = `db-${env}`;
-        if (!Object.prototype.hasOwnProperty.call(data, key)) {
-            // Python repr: single-quoted.
+        const user = this._provider.getSecretSync(`${key}.username`);
+        const password = this._provider.getSecretSync(`${key}.password`);
+        if (user === null || password === null) {
             const err = new Error(`No credentials found for environment '${env}' (key '${key}')`);
             err.name = "KeyError";
             throw err;
         }
-        const entry = data[key];
-        return [entry.username, entry.password];
+        return [user, password];
     }
 }
 /**

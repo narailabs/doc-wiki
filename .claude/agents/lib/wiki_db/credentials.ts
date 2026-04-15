@@ -48,17 +48,19 @@ export abstract class CredentialProvider {
  *     ...
  *   }
  *
- * Implementation note: the new `credential_providers/FileProvider` stores
- * flat `name → value` pairs; the wiki_db file format nests
- * `username`/`password` under `db-<env>`. So we still do the JSON parse
- * ourselves here rather than routing through `FileProvider`.
+ * Delegates the actual file reading to `credential_providers/FileProvider`
+ * so the file-mode safety check (refuses 0644+ on POSIX) and plaintext
+ * warning fire here too. Nested `db-<env>.username` / `db-<env>.password`
+ * lookups are resolved by FileProvider's dot-path traversal.
  */
 export class FileCredentialProvider extends CredentialProvider {
   private readonly _path: string;
+  private readonly _provider: FileProvider;
 
   constructor(filePath: string) {
     super();
     this._path = filePath;
+    this._provider = new FileProvider({ path: filePath });
   }
 
   override get(env: string): [string, string] {
@@ -70,19 +72,17 @@ export class FileCredentialProvider extends CredentialProvider {
       err.code = "ENOENT";
       throw err;
     }
-    const raw = fs.readFileSync(this._path, "utf-8");
-    const data = JSON.parse(raw) as Record<string, unknown>;
     const key = `db-${env}`;
-    if (!Object.prototype.hasOwnProperty.call(data, key)) {
-      // Python repr: single-quoted.
+    const user = this._provider.getSecretSync(`${key}.username`);
+    const password = this._provider.getSecretSync(`${key}.password`);
+    if (user === null || password === null) {
       const err = new Error(
         `No credentials found for environment '${env}' (key '${key}')`,
       );
       err.name = "KeyError";
       throw err;
     }
-    const entry = data[key] as { username: string; password: string };
-    return [entry.username, entry.password];
+    return [user, password];
   }
 }
 
