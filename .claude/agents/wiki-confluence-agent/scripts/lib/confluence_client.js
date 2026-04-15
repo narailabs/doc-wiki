@@ -2,7 +2,7 @@
  * confluence_client.ts — read-only Atlassian Confluence REST v1 HTTP client.
  * Shares the Basic-auth + rate-limit + retry design with jira_client.ts.
  */
-import { validateUrl } from "../../../../skills/wiki/scripts/security_check.js";
+import { validateUrl } from "../../../lib/security_check.js";
 import { resolveSecret } from "../../../lib/credential_providers/index.js";
 const ALLOWED_METHODS = new Set(["GET"]);
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;

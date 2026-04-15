@@ -9,7 +9,7 @@
  * - A best-effort 60-req/min ceiling is applied per client instance.
  * - Credentials resolved via `resolveSecret` with `env_var` fallback order.
  */
-import { validateUrl } from "../../../../skills/wiki/scripts/security_check.js";
+import { validateUrl } from "../../../lib/security_check.js";
 import { resolveSecret } from "../../../lib/credential_providers/index.js";
 const ALLOWED_METHODS = new Set(["GET"]);
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;

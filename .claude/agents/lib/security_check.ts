@@ -18,7 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
+import { pythonJsonDumps } from "./_json_py.js";
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
 
@@ -33,7 +33,7 @@ export {
   FetchCapExceeded,
   fetchWithCaps,
   type FetchCapsOptions,
-} from "../../../agents/lib/fetch_helper.js";
+} from "./fetch_helper.js";
 
 /**
  * Check that a URL uses an allowed scheme (http or https only).

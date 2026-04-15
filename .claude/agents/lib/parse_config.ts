@@ -14,7 +14,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
+import { pythonJsonDumps } from "./_json_py.js";
 
 const VALID_AUTONOMY_MODES: ReadonlySet<string> = new Set([
   "conservative",

@@ -4,7 +4,7 @@
  * Uses a Personal Access Token via `Authorization: Bearer`. Only GET (REST)
  * and POST against `/graphql` (read-only queries) are permitted.
  */
-import { validateUrl } from "../../../../skills/wiki/scripts/security_check.js";
+import { validateUrl } from "../../../lib/security_check.js";
 import { resolveSecret } from "../../../lib/credential_providers/index.js";
 const ALLOWED_METHODS = new Set([
     "GET",

@@ -33,7 +33,7 @@ import { Policy } from "../../lib/wiki_db/policy.js";
 import { executeQuery, } from "../../lib/wiki_db/query.js";
 import { SQLiteDriver } from "../../lib/wiki_db/drivers/sqlite.js";
 import { formatErDiagram, } from "../../lib/mermaid_format.js";
-import { parseConfig } from "../../../skills/wiki/scripts/parse_config.js";
+import { parseConfig } from "../../lib/parse_config.js";
 import { registerEnvironment, clearEnvironments, } from "../../lib/wiki_db/environments.js";
 import { getConnection, releaseConnection, } from "../../lib/wiki_db/connection.js";
 import { enableAudit, logEvent } from "../../lib/wiki_db/audit.js";
