@@ -58,7 +58,7 @@ export class FileCredentialProvider extends CredentialProvider {
     get(env) {
         if (!fs.existsSync(this._path)) {
             const err = new Error(`Credentials file not found: ${this._path}`);
-            err.name = "FileNotFoundError";
+            err.name = "CredentialsFileNotFoundError";
             err.code = "ENOENT";
             throw err;
         }
@@ -67,7 +67,7 @@ export class FileCredentialProvider extends CredentialProvider {
         const password = this._provider.getSecretSync(`${key}.password`);
         if (user === null || password === null) {
             const err = new Error(`No credentials found for environment '${env}' (key '${key}')`);
-            err.name = "KeyError";
+            err.name = "EnvironmentNotConfiguredError";
             throw err;
         }
         return [user, password];
@@ -92,7 +92,7 @@ export class EnvVarCredentialProvider extends CredentialProvider {
             if (password === null)
                 missing.push(`WIKI_DB_${envUpper}_PASSWORD`);
             const err = new Error(`Missing environment variable(s): ${missing.join(", ")}`);
-            err.name = "EnvironmentError";
+            err.name = "EnvironmentVariableMissingError";
             throw err;
         }
         return [user, password];

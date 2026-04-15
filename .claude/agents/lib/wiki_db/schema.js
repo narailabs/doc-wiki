@@ -76,15 +76,4 @@ export class SchemaManager {
     clearCache() {
         this._cache.clear();
     }
-    // ------------------------------------------------------------------
-    // Python-snake_case aliases
-    // ------------------------------------------------------------------
-    /** Alias for {@link getSchema}. */
-    get_schema(conn, env, schemaName = "", tableFilter = null) {
-        return this.getSchema(conn, env, schemaName, tableFilter);
-    }
-    /** Alias for {@link clearCache}. */
-    clear_cache() {
-        this.clearCache();
-    }
 }

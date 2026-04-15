@@ -30,14 +30,11 @@ const DEFAULTS = {
         mode: "balanced",
     },
 };
-/**
- * FileNotFoundError equivalent — thrown when the config path does not exist.
- * Named to match Python's FileNotFoundError so test matchers can detect it.
- */
-export class FileNotFoundError extends Error {
+/** Thrown when the wiki config path does not exist. */
+export class ConfigFileNotFoundError extends Error {
     constructor(message) {
         super(message);
-        this.name = "FileNotFoundError";
+        this.name = "ConfigFileNotFoundError";
     }
 }
 function isPlainObject(v) {
@@ -48,12 +45,12 @@ function isPlainObject(v) {
  *
  * @param configPath Path to the YAML config file.
  * @returns Validated config dict with defaults applied.
- * @throws {FileNotFoundError} If the config file does not exist.
+ * @throws {ConfigFileNotFoundError} If the config file does not exist.
  * @throws {Error} If the YAML is malformed or required fields are missing.
  */
 export function parseConfig(configPath) {
     if (!fs.existsSync(configPath)) {
-        throw new FileNotFoundError(`Config file not found: ${configPath}`);
+        throw new ConfigFileNotFoundError(`Config file not found: ${configPath}`);
     }
     const raw = fs.readFileSync(configPath, { encoding: "utf-8" });
     let config;

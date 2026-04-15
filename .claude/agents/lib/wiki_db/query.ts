@@ -172,6 +172,3 @@ function _elapsedMs(start: number): number {
   // performance.now() returns ms directly.
   return Math.round((performance.now() - start) * 100) / 100;
 }
-
-/** Python alias for callers that prefer snake_case. */
-export const execute_query = executeQuery;

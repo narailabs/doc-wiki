@@ -10,7 +10,6 @@
  *    (scan → READ, ScanCommand → READ, PutItem → DML, CreateTable → DDL).
  *  - Unknown verbs default to DDL (default-deny).
  *  - Empty input throws.
- *  - The `classify_operation` snake_case alias works (Python parity).
  */
 import { describe, expect, it } from "vitest";
 
@@ -49,9 +48,6 @@ describe("DatabaseDriver.classifyOperation — G-DB-1", () => {
           expect(d.classifyOperation("GRANT SELECT ON t TO u")).toBe(
             OperationType.PRIVILEGE,
           );
-        });
-        it("snake_case alias (classify_operation) works", () => {
-          expect(d.classify_operation("SELECT 1")).toBe(OperationType.READ);
         });
         it("empty input throws", () => {
           expect(() => d.classifyOperation("   ")).toThrow(/Empty SQL statement/);

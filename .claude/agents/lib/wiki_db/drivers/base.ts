@@ -135,33 +135,4 @@ export abstract class DatabaseDriver {
    * restrictive), matching the SQL classifier's behaviour.
    */
   abstract classifyOperation(query: string): OperationType;
-
-  // ------------------------------------------------------------------
-  // Python-snake_case aliases (optional parity with the Python API)
-  // ------------------------------------------------------------------
-
-  /** Alias for {@link executeRead}. */
-  execute_read(
-    conn: unknown,
-    query: string,
-    params?: unknown[] | null,
-    maxRows?: number,
-    timeoutMs?: number,
-  ): ExecuteReadResult {
-    return this.executeRead(conn, query, params ?? null, maxRows, timeoutMs);
-  }
-
-  /** Alias for {@link getSchema}. */
-  get_schema(
-    conn: unknown,
-    schemaName?: string,
-    tableFilter?: string | null,
-  ): Table[] {
-    return this.getSchema(conn, schemaName, tableFilter ?? null);
-  }
-
-  /** Alias for {@link classifyOperation}. */
-  classify_operation(query: string): OperationType {
-    return this.classifyOperation(query);
-  }
 }

@@ -68,7 +68,7 @@ export class FileCredentialProvider extends CredentialProvider {
       const err = new Error(
         `Credentials file not found: ${this._path}`,
       ) as Error & { code?: string };
-      err.name = "FileNotFoundError";
+      err.name = "CredentialsFileNotFoundError";
       err.code = "ENOENT";
       throw err;
     }
@@ -79,7 +79,7 @@ export class FileCredentialProvider extends CredentialProvider {
       const err = new Error(
         `No credentials found for environment '${env}' (key '${key}')`,
       );
-      err.name = "KeyError";
+      err.name = "EnvironmentNotConfiguredError";
       throw err;
     }
     return [user, password];
@@ -106,7 +106,7 @@ export class EnvVarCredentialProvider extends CredentialProvider {
       const err = new Error(
         `Missing environment variable(s): ${missing.join(", ")}`,
       );
-      err.name = "EnvironmentError";
+      err.name = "EnvironmentVariableMissingError";
       throw err;
     }
     return [user, password];
