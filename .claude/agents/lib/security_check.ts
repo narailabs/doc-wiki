@@ -63,6 +63,18 @@ export function validateUrl(url: string): boolean {
  * Resolves existing symlinks in the path even when the full path does not
  * exist: walks up from the target until finding an existing ancestor,
  * realpaths it, then re-appends the non-existent tail.
+ *
+ * TOCTOU note: this function calls `existsSync` / `lstatSync` and then
+ * `realpathSync.native` as two distinct system calls. On POSIX there is
+ * no atomic replacement (Node's fs API does not expose `openat` /
+ * `O_NOFOLLOW`), so on a shared host a malicious local user could swap
+ * a parent directory between the two calls and defeat path containment
+ * checks built on top of this function. The wiki tooling assumes it
+ * runs in a directory hierarchy under the current user's control —
+ * either a developer workstation or a CI runner with a private
+ * filesystem. If multi-user isolation is required, run the toolchain
+ * in a sandbox (container, user namespace, etc.) rather than relying
+ * on this function to police the filesystem.
  */
 function bestEffortRealpath(p: string): string {
   const abs = path.resolve(p);
