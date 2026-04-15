@@ -170,28 +170,58 @@ export class PostgresDriver extends DatabaseDriver {
             }
             tableSql += " ORDER BY table_name";
             const tablesResult = await handle.client.query(tableSql, tableParams);
-            const out = [];
-            for (const row of tablesResult.rows) {
-                const tableName = String(row["table_name"]);
-                const colsResult = await handle.client.query("SELECT column_name, data_type, is_nullable, column_default " +
-                    "FROM information_schema.columns " +
-                    "WHERE table_schema = $1 AND table_name = $2 " +
-                    "ORDER BY ordinal_position", [ns, tableName]);
-                const pkResult = await handle.client.query("SELECT a.attname AS column_name " +
-                    "FROM pg_index i " +
-                    "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) " +
-                    "WHERE i.indrelid = ($1 || '.' || $2)::regclass AND i.indisprimary", [ns, tableName]);
-                const pkSet = new Set(pkResult.rows.map((r) => String(r["column_name"])));
-                const columns = colsResult.rows.map((r) => new Column({
-                    name: String(r["column_name"]),
+            const tableNames = tablesResult.rows.map((r) => String(r["table_name"]));
+            if (tableNames.length === 0)
+                return [];
+            // G-SCHEMA-BATCH: fold per-table queries into two set-based queries
+            // using PostgreSQL's `= ANY($N::text[])`. For N tables we drop from
+            // 2N+1 round-trips (tables + N columns + N PKs) to 3.
+            const colsResult = await handle.client.query("SELECT table_name, column_name, data_type, is_nullable, column_default, ordinal_position " +
+                "FROM information_schema.columns " +
+                "WHERE table_schema = $1 AND table_name = ANY($2::text[]) " +
+                "ORDER BY table_name, ordinal_position", [ns, tableNames]);
+            const pkResult = await handle.client.query("SELECT c.relname AS table_name, a.attname AS column_name " +
+                "FROM pg_index i " +
+                "JOIN pg_class c ON c.oid = i.indrelid " +
+                "JOIN pg_namespace nsp ON nsp.oid = c.relnamespace " +
+                "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) " +
+                "WHERE nsp.nspname = $1 AND c.relname = ANY($2::text[]) AND i.indisprimary", [ns, tableNames]);
+            const pksByTable = new Map();
+            for (const r of pkResult.rows) {
+                const t = String(r["table_name"]);
+                let set = pksByTable.get(t);
+                if (set === undefined) {
+                    set = new Set();
+                    pksByTable.set(t, set);
+                }
+                set.add(String(r["column_name"]));
+            }
+            const colsByTable = new Map();
+            for (const r of colsResult.rows) {
+                const t = String(r["table_name"]);
+                let list = colsByTable.get(t);
+                if (list === undefined) {
+                    list = [];
+                    colsByTable.set(t, list);
+                }
+                const name = String(r["column_name"]);
+                list.push(new Column({
+                    name,
                     data_type: String(r["data_type"]),
                     nullable: String(r["is_nullable"]).toUpperCase() === "YES",
-                    is_primary_key: pkSet.has(String(r["column_name"])),
+                    is_primary_key: pksByTable.get(t)?.has(name) ?? false,
                     default: r["column_default"] === null
                         ? null
                         : String(r["column_default"]),
                 }));
-                out.push(new Table({ name: tableName, schema: ns, columns }));
+            }
+            const out = [];
+            for (const tableName of tableNames) {
+                out.push(new Table({
+                    name: tableName,
+                    schema: ns,
+                    columns: colsByTable.get(tableName) ?? [],
+                }));
             }
             return out;
         }
