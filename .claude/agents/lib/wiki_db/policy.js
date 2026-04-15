@@ -266,8 +266,15 @@ export class Policy {
      * Add a time-limited grant.
      *
      * G-DB-AUDIT: emits a `grant_added` event with the grant type and TTL.
+     *
+     * Lifetime scope: grants are in-process only. Expiry is measured with
+     * `performance.now()`, which is reset on every Node process start, so
+     * a new CLI invocation always begins with no active grants — even if
+     * a previous run added one seconds ago. Suitable for the CLI's
+     * single-invocation model; not suitable as a cross-process gate.
      */
     addGrant(grantType, ttlSeconds = 300) {
+        // performance.now() is process-relative; see JSDoc for lifetime scope.
         this._grants.set(grantType, performance.now() + ttlSeconds * 1000);
         logEvent({
             event_type: "grant_added",
@@ -304,6 +311,14 @@ export class Policy {
  * This is the recommended API for prod callers — `addGrant` remains the
  * low-level primitive (5-minute default, used for short-lived operations
  * like test scaffolding and administrative confirmations).
+ *
+ * Lifetime scope: grants live in memory only. Because `addGrant` uses
+ * `performance.now()` — a process-relative monotonic clock — a grant
+ * written in one CLI invocation does NOT carry into the next one, even
+ * if `grant_duration_hours=8`. The "8 hour" default means "up to 8
+ * wall-clock hours within a single long-running session," not "8
+ * wall-clock hours across reboots." Persisting grants to disk is out
+ * of scope for v2.
  */
 export function grantFromEnv(policy, env, grantType) {
     const hours = env.grant_duration_hours ?? 8;
