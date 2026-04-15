@@ -24,6 +24,10 @@ import {
   type GraphNode,
   type MermaidBlock,
 } from "../../lib/mermaid_format.js";
+import {
+  parseAgentArgs,
+  type ParsedAgentArgs,
+} from "../../lib/_agent_cli.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "repo_info",
@@ -568,55 +572,12 @@ export async function fetch(
   }
 }
 
-interface ParsedArgs {
-  action?: string;
-  params?: string;
-  help?: boolean;
-}
-
-function parseArgs(argv: readonly string[]): ParsedArgs {
-  const out: ParsedArgs = {};
-  let i = 0;
-  while (i < argv.length) {
-    const a = argv[i];
-    if (a === undefined) {
-      i++;
-      continue;
-    }
-    if (a === "-h" || a === "--help") {
-      out.help = true;
-      i++;
-      continue;
-    }
-    let name: string;
-    let value: string | undefined;
-    if (a.startsWith("--")) {
-      const eq = a.indexOf("=");
-      if (eq >= 0) {
-        name = a.slice(2, eq);
-        value = a.slice(eq + 1);
-        i++;
-      } else {
-        name = a.slice(2);
-        value = argv[i + 1];
-        i += 2;
-      }
-    } else {
-      throw new Error(`unrecognized argument: ${a}`);
-    }
-    switch (name) {
-      case "action":
-        out.action = value ?? "";
-        break;
-      case "params":
-        out.params = value ?? "";
-        break;
-      default:
-        throw new Error(`unrecognized argument: --${name}`);
-    }
-  }
-  return out;
-}
+// G-AGENT-CLI-DRY: shared parser in .claude/agents/lib/_agent_cli.ts.
+// Keep the local ParsedArgs alias so the rest of the file keeps
+// reading with the same name.
+type ParsedArgs = ParsedAgentArgs;
+const parseArgs = (argv: readonly string[]): ParsedArgs =>
+  parseAgentArgs(argv, { flags: ["action", "params"] });
 
 const HELP_TEXT = `usage: github_fetch.js [-h] --action {get_file,get_issues,get_pulls,repo_info,search_code} [--params PARAMS]
 

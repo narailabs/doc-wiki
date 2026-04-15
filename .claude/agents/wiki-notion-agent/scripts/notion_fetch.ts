@@ -24,6 +24,10 @@ import {
   type GraphNode,
   type MermaidBlock,
 } from "../../lib/mermaid_format.js";
+import {
+  parseAgentArgs,
+  type ParsedAgentArgs,
+} from "../../lib/_agent_cli.js";
 
 export const VALID_ACTIONS: ReadonlySet<string> = new Set([
   "search",
@@ -416,55 +420,10 @@ export async function fetch(
   return { status: "error", error_code: "UNKNOWN", message: "Unexpected state" };
 }
 
-interface ParsedArgs {
-  action?: string;
-  params?: string;
-  help?: boolean;
-}
-
-function parseArgs(argv: readonly string[]): ParsedArgs {
-  const out: ParsedArgs = {};
-  let i = 0;
-  while (i < argv.length) {
-    const a = argv[i];
-    if (a === undefined) {
-      i++;
-      continue;
-    }
-    if (a === "-h" || a === "--help") {
-      out.help = true;
-      i++;
-      continue;
-    }
-    let name: string;
-    let value: string | undefined;
-    if (a.startsWith("--")) {
-      const eq = a.indexOf("=");
-      if (eq >= 0) {
-        name = a.slice(2, eq);
-        value = a.slice(eq + 1);
-        i++;
-      } else {
-        name = a.slice(2);
-        value = argv[i + 1];
-        i += 2;
-      }
-    } else {
-      throw new Error(`unrecognized argument: ${a}`);
-    }
-    switch (name) {
-      case "action":
-        out.action = value ?? "";
-        break;
-      case "params":
-        out.params = value ?? "";
-        break;
-      default:
-        throw new Error(`unrecognized argument: --${name}`);
-    }
-  }
-  return out;
-}
+// G-AGENT-CLI-DRY: shared parser in .claude/agents/lib/_agent_cli.ts.
+type ParsedArgs = ParsedAgentArgs;
+const parseArgs = (argv: readonly string[]): ParsedArgs =>
+  parseAgentArgs(argv, { flags: ["action", "params"] });
 
 const HELP_TEXT = `usage: notion_fetch.js [-h] --action {get_database,get_page,query_database,search} [--params PARAMS]
 
