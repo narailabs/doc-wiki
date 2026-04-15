@@ -326,7 +326,7 @@ export async function crossValidate(entities, envName, tableFilter = null) {
     let conn = null;
     let tables;
     try {
-        conn = getConnection(envName);
+        conn = await getConnection(envName);
         const mgr = new SchemaManager(conn.driver);
         tables = await mgr.getSchema(conn.native, envName, "", tableFilter);
     }

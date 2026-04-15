@@ -127,8 +127,14 @@ function _installShutdownHandlers(): void {
  * Obtain a connection for the named environment. Creates the driver and
  * pool lazily on first call. Returns a handle that must be passed to
  * {@link releaseConnection} when done.
+ *
+ * G-CONN-AWAIT: async drivers (pg, mysql, mssql, mongo, dynamo) return
+ * a Promise from `connect()`. We await the resolved handle before
+ * registering it in `openConnections` so identity-based lookups in
+ * `releaseConnection`/`shutdownAll` match the same object the caller
+ * holds. `Promise.resolve(x)` no-ops on the sync SQLite path.
  */
-export function getConnection(envName: string): Connection {
+export async function getConnection(envName: string): Promise<Connection> {
   _installShutdownHandlers();
 
   let entry = _pools.get(envName);
@@ -137,7 +143,9 @@ export function getConnection(envName: string): Connection {
     _pools.set(envName, entry);
   }
 
-  const native = entry.driver.connect(_resolveEnvConfig(envName));
+  const native = await Promise.resolve(
+    entry.driver.connect(_resolveEnvConfig(envName)),
+  );
   entry.openConnections.add(native);
   return { envName, native, driver: entry.driver };
 }
@@ -200,7 +208,7 @@ interface ShutdownDriver {
 export async function healthCheck(envName: string): Promise<boolean> {
   let conn: Connection | null = null;
   try {
-    conn = getConnection(envName);
+    conn = await getConnection(envName);
     const driverHealthCheck = (conn.driver as HealthCheckDriver).healthCheck;
     if (typeof driverHealthCheck === "function") {
       return Boolean(await driverHealthCheck.call(conn.driver, conn.native));

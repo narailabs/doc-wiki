@@ -141,7 +141,7 @@ describe("G-DB-AUDIT — non-query events", () => {
   });
 
   describe("pool_created", () => {
-    it("emitted on first getConnection per env", () => {
+    it("emitted on first getConnection per env", async () => {
       enableAudit(logPath);
       registerEnvironment("test_pool", {
         host: "",
@@ -151,7 +151,7 @@ describe("G-DB-AUDIT — non-query events", () => {
         approval_mode: "auto",
         driver: "sqlite",
       });
-      const conn = getConnection("test_pool");
+      const conn = await getConnection("test_pool");
       try {
         const records = readAudit(logPath);
         const created = records.filter(
@@ -164,7 +164,7 @@ describe("G-DB-AUDIT — non-query events", () => {
       }
     });
 
-    it("not emitted on second getConnection for same env", () => {
+    it("not emitted on second getConnection for same env", async () => {
       enableAudit(logPath);
       registerEnvironment("test_pool2", {
         host: "",
@@ -174,8 +174,8 @@ describe("G-DB-AUDIT — non-query events", () => {
         approval_mode: "auto",
         driver: "sqlite",
       });
-      const c1 = getConnection("test_pool2");
-      const c2 = getConnection("test_pool2");
+      const c1 = await getConnection("test_pool2");
+      const c2 = await getConnection("test_pool2");
       try {
         const records = readAudit(logPath);
         const created = records.filter(
@@ -192,7 +192,7 @@ describe("G-DB-AUDIT — non-query events", () => {
   // A5: connection_released emitted by releaseConnection so the audit
   // trail closes cleanly after every checkout.
   describe("connection_released (A5)", () => {
-    it("emitted once per release on a real pool", () => {
+    it("emitted once per release on a real pool", async () => {
       enableAudit(logPath);
       registerEnvironment("test_release", {
         host: "",
@@ -202,7 +202,7 @@ describe("G-DB-AUDIT — non-query events", () => {
         approval_mode: "auto",
         driver: "sqlite",
       });
-      const conn = getConnection("test_release");
+      const conn = await getConnection("test_release");
       releaseConnection("test_release", conn);
       const records = readAudit(logPath);
       const released = records.filter(
@@ -213,7 +213,7 @@ describe("G-DB-AUDIT — non-query events", () => {
       expect(released.length).toBe(1);
     });
 
-    it("audit shape for a checkout-then-release is [pool_created, connection_released]", () => {
+    it("audit shape for a checkout-then-release is [pool_created, connection_released]", async () => {
       enableAudit(logPath);
       registerEnvironment("test_lifecycle", {
         host: "",
@@ -223,7 +223,7 @@ describe("G-DB-AUDIT — non-query events", () => {
         approval_mode: "auto",
         driver: "sqlite",
       });
-      const conn = getConnection("test_lifecycle");
+      const conn = await getConnection("test_lifecycle");
       releaseConnection("test_lifecycle", conn);
       const events = readAudit(logPath)
         .filter((r) => r.details?.env === "test_lifecycle")

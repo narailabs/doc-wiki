@@ -76,14 +76,14 @@ describe("wiki_db.connection", () => {
   // getConnection + releaseConnection
   // -------------------------------------------------------------------
   describe("getConnection / releaseConnection", () => {
-    it("opens a sqlite in-memory connection from a registered env", () => {
+    it("opens a sqlite in-memory connection from a registered env", async () => {
       registerEnvironment("test", {
         host: "localhost",
         port: 0,
         database: ":memory:",
         driver: "sqlite",
       });
-      const conn = getConnection("test");
+      const conn = await getConnection("test");
       expect(conn.envName).toBe("test");
       expect(conn.driver).toBeInstanceOf(SQLiteDriver);
       expect(_hasPool("test")).toBe(true);
@@ -92,15 +92,15 @@ describe("wiki_db.connection", () => {
       expect(_openCount("test")).toBe(0);
     });
 
-    it("reuses the same pool entry across calls", () => {
+    it("reuses the same pool entry across calls", async () => {
       registerEnvironment("test", {
         host: "localhost",
         port: 0,
         database: ":memory:",
         driver: "sqlite",
       });
-      const a = getConnection("test");
-      const b = getConnection("test");
+      const a = await getConnection("test");
+      const b = await getConnection("test");
       expect(_openCount("test")).toBe(2);
       // Same driver instance, different native handles.
       expect(a.driver).toBe(b.driver);
@@ -109,7 +109,7 @@ describe("wiki_db.connection", () => {
       releaseConnection("test", b);
     });
 
-    it("supports multiple environments side-by-side", () => {
+    it("supports multiple environments side-by-side", async () => {
       registerEnvironment("dev", {
         host: "localhost",
         port: 0,
@@ -122,8 +122,8 @@ describe("wiki_db.connection", () => {
         database: ":memory:",
         driver: "sqlite",
       });
-      const devConn = getConnection("dev");
-      const prodConn = getConnection("prod");
+      const devConn = await getConnection("dev");
+      const prodConn = await getConnection("prod");
       expect(_hasPool("dev")).toBe(true);
       expect(_hasPool("prod")).toBe(true);
       expect(devConn.driver).not.toBe(prodConn.driver);
@@ -131,30 +131,30 @@ describe("wiki_db.connection", () => {
       releaseConnection("prod", prodConn);
     });
 
-    it("throws a clear error when the driver is not registered", () => {
+    it("throws a clear error when the driver is not registered", async () => {
       registerEnvironment("weird", {
         host: "h",
         port: 0,
         database: "d",
         driver: "does-not-exist",
       });
-      expect(() => getConnection("weird")).toThrow(
+      await expect(getConnection("weird")).rejects.toThrow(
         /no driver factory registered for 'does-not-exist'/,
       );
     });
 
-    it("throws when the environment is unknown", () => {
-      expect(() => getConnection("nope")).toThrow();
+    it("throws when the environment is unknown", async () => {
+      await expect(getConnection("nope")).rejects.toThrow();
     });
 
-    it("releaseConnection is a no-op for an unknown env", () => {
+    it("releaseConnection is a no-op for an unknown env", async () => {
       registerEnvironment("test", {
         host: "h",
         port: 0,
         database: ":memory:",
         driver: "sqlite",
       });
-      const conn = getConnection("test");
+      const conn = await getConnection("test");
       // Call release against a bogus env — should not throw.
       expect(() =>
         releaseConnection("not-an-env", conn),
@@ -164,14 +164,14 @@ describe("wiki_db.connection", () => {
       releaseConnection("test", conn);
     });
 
-    it("releaseConnection tolerates double-release", () => {
+    it("releaseConnection tolerates double-release", async () => {
       registerEnvironment("test", {
         host: "h",
         port: 0,
         database: ":memory:",
         driver: "sqlite",
       });
-      const conn = getConnection("test");
+      const conn = await getConnection("test");
       releaseConnection("test", conn);
       expect(() => releaseConnection("test", conn)).not.toThrow();
       expect(_openCount("test")).toBe(0);
@@ -313,9 +313,9 @@ describe("wiki_db.connection", () => {
         database: ":memory:",
         driver: "sqlite",
       });
-      getConnection("a");
-      getConnection("a");
-      getConnection("b");
+      await getConnection("a");
+      await getConnection("a");
+      await getConnection("b");
       expect(_openCount("a")).toBe(2);
       expect(_openCount("b")).toBe(1);
       await shutdownAll();
@@ -346,7 +346,7 @@ describe("wiki_db.connection", () => {
         database: "d",
         driver: "boom",
       });
-      getConnection("test");
+      await getConnection("test");
       await expect(shutdownAll()).resolves.toBeUndefined();
       expect(_hasPool("test")).toBe(false);
     });
@@ -356,14 +356,14 @@ describe("wiki_db.connection", () => {
   // End-to-end with a real driver
   // -------------------------------------------------------------------
   describe("end-to-end sqlite", () => {
-    it("opens, queries, and closes cleanly", () => {
+    it("opens, queries, and closes cleanly", async () => {
       registerEnvironment("test", {
         host: "h",
         port: 0,
         database: ":memory:",
         driver: "sqlite",
       });
-      const conn = getConnection("test");
+      const conn = await getConnection("test");
       const result = conn.driver.executeRead(
         conn.native,
         "SELECT 1 AS one",
@@ -371,6 +371,43 @@ describe("wiki_db.connection", () => {
       expect(result.status).toBe("success");
       expect(result.rows).toEqual([{ one: 1 }]);
       releaseConnection("test", conn);
+    });
+  });
+
+  // G-CONN-AWAIT: with async drivers, driver.connect() returns a
+  // Promise. getConnection must await it before registering the handle
+  // in openConnections so identity-based lookups in releaseConnection
+  // match the resolved handle the caller holds.
+  describe("async drivers register resolved handle", () => {
+    it("awaits connect() and stores the resolved native handle", async () => {
+      clearDriverFactories();
+      const resolved = { id: "resolved-handle" };
+      class AsyncConnectDriver extends DatabaseDriver {
+        override connect(): Promise<unknown> {
+          return Promise.resolve(resolved);
+        }
+        override executeRead(): ExecuteReadResult {
+          return { status: "success", execution_time_ms: 0, rows: [] };
+        }
+        override getSchema(): Table[] {
+          return [];
+        }
+        override close(): void {}
+      }
+      registerDriverFactory("async", () => new AsyncConnectDriver());
+      registerEnvironment("test", {
+        host: "h",
+        port: 0,
+        database: "d",
+        driver: "async",
+      });
+      const conn = await getConnection("test");
+      expect(conn.native).toBe(resolved);
+      expect(_openCount("test")).toBe(1);
+      // release by identity — would fail if the Set contained a Promise
+      // instead of the resolved handle.
+      releaseConnection("test", conn);
+      expect(_openCount("test")).toBe(0);
     });
   });
 });

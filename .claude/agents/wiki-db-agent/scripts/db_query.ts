@@ -423,7 +423,7 @@ async function runWithEnv(args: ParsedArgs, action: Action): Promise<number> {
 
   let conn;
   try {
-    conn = getConnection(resolved.name);
+    conn = await getConnection(resolved.name);
   } catch (e) {
     process.stderr.write(`${(e as Error).message}\n`);
     clearEnvironments();
