@@ -16,6 +16,13 @@ interface MakeDriverOptions {
   error?: Error;
 }
 
+/**
+ * Build a driver that resolves to a successful ExecuteReadResult with
+ * the supplied rows/columns, or rejects with `error` if given.
+ *
+ * G-QUERY-ASYNC-ONLY: query.ts requires `executeReadAsync`. The sync
+ * `execute(...)` path was removed; mocks now expose the async method.
+ */
 function _makeDriver(
   opts: MakeDriverOptions = {},
 ): {
@@ -24,16 +31,24 @@ function _makeDriver(
 } {
   const executeSpy = vi.fn();
   if (opts.error) {
-    executeSpy.mockImplementation(() => {
-      throw opts.error;
-    });
+    executeSpy.mockImplementation(() => Promise.reject(opts.error));
   } else {
     const rows = opts.rows ?? [];
     const columns = opts.columns ?? [];
-    executeSpy.mockReturnValue({ rows, columns });
+    // Omit `truncated` so query.ts's fallback (`rows.length >= maxRows`)
+    // drives the public flag. Mirrors the pre-G-QUERY-ASYNC-ONLY
+    // behavior where the sync-path mock had no truncated field either.
+    const result: ExecuteReadResult = {
+      status: "success",
+      rows,
+      columns,
+      execution_time_ms: 0,
+    };
+    executeSpy.mockResolvedValue(result);
   }
   const driver: QueryableDriver = {
-    execute: executeSpy as unknown as QueryableDriver["execute"],
+    executeReadAsync:
+      executeSpy as unknown as QueryableDriver["executeReadAsync"],
   };
   return { driver, executeSpy };
 }
@@ -48,7 +63,6 @@ function _makeAsyncDriver(
 ): {
   driver: QueryableDriver;
   asyncSpy: ReturnType<typeof vi.fn>;
-  syncSpy: ReturnType<typeof vi.fn>;
 } {
   const asyncSpy = vi.fn();
   if (opts.error) {
@@ -63,15 +77,11 @@ function _makeAsyncDriver(
     };
     asyncSpy.mockResolvedValue(result);
   }
-  // Also attach a sync spy to verify the async path is preferred when both
-  // methods exist on the driver.
-  const syncSpy = vi.fn().mockReturnValue({ rows: [], columns: [] });
   const driver: QueryableDriver = {
-    execute: syncSpy as unknown as QueryableDriver["execute"],
     executeReadAsync:
       asyncSpy as unknown as QueryableDriver["executeReadAsync"],
   };
-  return { driver, asyncSpy, syncSpy };
+  return { driver, asyncSpy };
 }
 
 function _autoPolicy(): Policy {
@@ -104,9 +114,8 @@ describe("TestExecuteQuery", () => {
     );
     expect(executeSpy).toHaveBeenCalledTimes(1);
     const call = executeSpy.mock.calls[0]!;
-    // (sql, {params, max_rows, timeout_ms}) — mirrors Python's kwargs style.
-    const kwargs = call[1] as { params?: unknown[] };
-    expect(kwargs.params).toEqual([42]);
+    // Positional: (conn, sql, params, maxRows, timeoutMs).
+    expect(call[2]).toEqual([42]);
   });
 
   it("test_query_max_rows_default", async () => {
@@ -117,8 +126,8 @@ describe("TestExecuteQuery", () => {
       _autoPolicy(),
     );
     const call = executeSpy.mock.calls[0]!;
-    const kwargs = call[1] as { max_rows?: number };
-    expect(kwargs.max_rows).toBe(1000);
+    // Positional: (conn, sql, params, maxRows, timeoutMs) — maxRows at index 3.
+    expect(call[3]).toBe(1000);
   });
 
   it("test_query_truncated_flag", async () => {
@@ -245,8 +254,8 @@ describe("TestExecuteQuery", () => {
 // ---------------------------------------------------------------------------
 
 describe("TestExecuteQueryAsyncPath", () => {
-  it("prefers executeReadAsync over execute when both are present", async () => {
-    const { driver, asyncSpy, syncSpy } = _makeAsyncDriver({
+  it("calls executeReadAsync with the public result shape", async () => {
+    const { driver, asyncSpy } = _makeAsyncDriver({
       result: {
         status: "success",
         rows: [{ id: 1 }],
@@ -261,7 +270,6 @@ describe("TestExecuteQueryAsyncPath", () => {
       _autoPolicy(),
     );
     expect(asyncSpy).toHaveBeenCalledTimes(1);
-    expect(syncSpy).not.toHaveBeenCalled();
     expect(result["status"]).toBe("ok");
     expect(result["rows"]).toEqual([{ id: 1 }]);
   });
@@ -339,8 +347,9 @@ describe("TestExecuteQueryAsyncPath", () => {
     expect(asyncSpy).not.toHaveBeenCalled();
   });
 
-  it("throws error dict when neither execute nor executeReadAsync exists", async () => {
-    const bareDriver: QueryableDriver = {};
+  it("returns error dict when driver lacks executeReadAsync", async () => {
+    // Cast via unknown since the interface now requires the method.
+    const bareDriver = {} as unknown as QueryableDriver;
     const result = await executeQuery(bareDriver, "SELECT 1", _autoPolicy());
     expect(result["status"]).toBe("error");
     expect(result["error"] as string).toContain("executeReadAsync");

@@ -1,12 +1,9 @@
 /**
  * query.ts — Parameterized query execution with policy enforcement.
  *
- * Wraps either `driver.executeReadAsync(...)` (Phase E drivers: pg, mysql,
- * mssql, mongo, dynamo — all genuinely async) or `driver.execute(sql, kwargs)`
- * (legacy sync path used by the mocked test drivers and the SQLite adapter
- * in db_query.ts) with policy checks, error handling, and structured
- * results. NEVER raises — all exceptions are caught and returned as error
- * dicts.
+ * Wraps `driver.executeReadAsync(conn, sql, params, maxRows, timeoutMs)`
+ * with policy checks, error handling, and structured results.
+ * NEVER raises — all exceptions are caught and returned as error dicts.
  *
  * Possible statuses:
  *   ok           — query ran successfully
@@ -15,13 +12,11 @@
  *   escalate     — query needs human approval
  *   error        — execution failed
  *
- * Driver detection:
- *  - If `typeof driver.executeReadAsync === "function"`, we await it with
- *    the positional signature `(conn, sql, params, maxRows, timeoutMs)` and
- *    map its {status, rows, columns, truncated, error_code, error} shape
- *    onto the public result format.
- *  - Otherwise we call the legacy sync `driver.execute(sql, kwargs)` with a
- *    snake_case kwargs bag — this is what the existing test suite mocks.
+ * Driver contract: callers supply a `QueryableDriver` whose
+ * `executeReadAsync` maps onto the public result format. Sync drivers
+ * (SQLite, legacy test stubs) wrap their `executeRead` into an async
+ * shim at the call site — see `adaptDriver` in
+ * `agents/wiki-db-agent/scripts/db_query.ts`.
  */
 import { performance } from "node:perf_hooks";
 import { Decision } from "./policy.js";
@@ -57,41 +52,23 @@ export async function executeQuery(driver, sql, policy, options = {}) {
                 execution_time_ms: _elapsedMs(start),
             };
         }
-        // 2. Execute via driver (ALLOW)
-        if (typeof driver.executeReadAsync === "function") {
-            // Async path: Phase E drivers (pg, mysql, mssql, mongo, dynamo).
-            const raw = await driver.executeReadAsync(conn, sql, params, maxRows, timeoutMs);
-            if (raw.status === "error") {
-                return {
-                    status: "error",
-                    error: `${raw.error_code ?? "SQL_ERROR"}: ${raw.error ?? "unknown driver error"}`,
-                    execution_time_ms: _elapsedMs(start),
-                };
-            }
-            const rows = raw.rows ?? [];
-            const columns = raw.columns ?? [];
-            const truncated = raw.truncated ?? rows.length >= maxRows;
+        // 2. Execute via driver (ALLOW). G-QUERY-ASYNC-ONLY: every driver
+        // must expose executeReadAsync. Sync drivers (SQLite, legacy test
+        // stubs) get wrapped by `adaptDriver` at the call site.
+        if (typeof driver.executeReadAsync !== "function") {
+            throw new Error("driver.executeReadAsync is required — wrap sync drivers at the call site");
+        }
+        const raw = await driver.executeReadAsync(conn, sql, params, maxRows, timeoutMs);
+        if (raw.status === "error") {
             return {
-                status: "ok",
-                rows,
-                columns,
-                row_count: rows.length,
-                truncated,
+                status: "error",
+                error: `${raw.error_code ?? "SQL_ERROR"}: ${raw.error ?? "unknown driver error"}`,
                 execution_time_ms: _elapsedMs(start),
             };
         }
-        // Sync path: legacy mocked test drivers + db_query.ts adapter.
-        if (typeof driver.execute !== "function") {
-            throw new Error("driver exposes neither executeReadAsync nor execute");
-        }
-        const raw = driver.execute(sql, {
-            params,
-            max_rows: maxRows,
-            timeout_ms: timeoutMs,
-        });
-        const rows = raw?.rows ?? [];
-        const columns = raw?.columns ?? [];
-        const truncated = rows.length >= maxRows;
+        const rows = raw.rows ?? [];
+        const columns = raw.columns ?? [];
+        const truncated = raw.truncated ?? rows.length >= maxRows;
         return {
             status: "ok",
             rows,

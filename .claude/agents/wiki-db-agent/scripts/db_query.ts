@@ -165,31 +165,32 @@ status=denied.
 `;
 
 function adaptDriver(driver: DatabaseDriver, conn: unknown): QueryableDriver {
+  // G-QUERY-ASYNC-ONLY: query.ts only calls executeReadAsync. For
+  // sync drivers (SQLite's executeRead is fully synchronous) we wrap
+  // each call in Promise.resolve — executeRead already returns the
+  // ExecuteReadResult shape query.ts expects, so there is nothing to
+  // translate.
+  //
+  // The conn passed to executeReadAsync is ignored — we close over
+  // the one the caller opened via getConnection() since query.ts
+  // invocations from this CLI don't thread `conn` through options.
   return {
-    execute(
+    executeReadAsync(
+      _conn: unknown,
       sql: string,
-      kwargs: {
-        params?: unknown[] | null;
-        max_rows?: number;
-        timeout_ms?: number;
-      },
-    ): { rows?: Record<string, unknown>[]; columns?: string[] } {
-      const result = driver.executeRead(
-        conn,
-        sql,
-        kwargs.params ?? null,
-        kwargs.max_rows ?? 1000,
-        kwargs.timeout_ms ?? 30000,
+      params?: unknown[] | null,
+      maxRows?: number,
+      timeoutMs?: number,
+    ) {
+      return Promise.resolve(
+        driver.executeRead(
+          conn,
+          sql,
+          params ?? null,
+          maxRows ?? 1000,
+          timeoutMs ?? 30000,
+        ),
       );
-      if (result.status === "error") {
-        throw new Error(
-          `${result.error_code ?? "SQL_ERROR"}: ${result.error ?? "unknown driver error"}`,
-        );
-      }
-      return {
-        rows: result.rows ?? [],
-        columns: result.columns ?? [],
-      };
     },
   };
 }
