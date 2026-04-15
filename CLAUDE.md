@@ -119,7 +119,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **677 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
+Current status: **990 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 
