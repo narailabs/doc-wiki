@@ -1,0 +1,38 @@
+{
+  "eval_id": 1,
+  "eval_name": "db-agent-schema",
+  "skill": "wiki-db-agent",
+  "prompt": "Query the dev database for the schema of the users table",
+  "assertions": [
+    {
+      "text": "Uses schema introspection (PRAGMA table_info, information_schema, or the driver's classifyOperation READ path) rather than an ad-hoc SELECT *",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Result includes all four columns of the fixture (id, email, name, created_at) each paired with the expected type (INTEGER, TEXT, TEXT, TIMESTAMP) — missing or misnamed columns fail",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "id is identified as the primary key AND email is identified as NOT NULL — a generic placeholder schema that lists columns without constraints fails",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "audit.jsonl (or the in-process audit log) contains only read-side events (connect, schema_inspect/read query, disconnect) — presence of any event whose operation is 'write', 'ddl', 'privilege', or marked executed=true for an INSERT/UPDATE/DELETE/DROP/CREATE fails this assertion",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "policy-decision.json records final_decision='allow' with env='dev' and approval_mode='auto'",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "A Mermaid ER diagram for the users table is emitted (the agent contract requires mermaid output on schema queries)",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

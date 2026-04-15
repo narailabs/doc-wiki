@@ -1,0 +1,91 @@
+{
+  "expectations": [
+    {
+      "text": "Runs lint_checks.py (or lint_checks.ts) to detect violations",
+      "passed": true,
+      "evidence": "lint-report-before.md header cites the exact command: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`. The structured output (Summary table with error/warning/info counts and per-category sections) matches the linter's emit format, and events.jsonl records a corresponding {\"op\": \"lint\", \"phase\": \"before\", \"errors\": 8, \"warnings\": 6, \"info\": 0} entry."
+    },
+    {
+      "text": "Reports missing frontmatter fields (title, type, tags, sources)",
+      "passed": true,
+      "evidence": "lint-report-before.md §'Errors (8) > missing_frontmatter (6)' lists: `page-a.md — Missing required frontmatter field: quality`; `page-b.md — Missing ... quality`, `... sources`, `... tags`; `page-c.md — No frontmatter found (missing --- delimiters)`; `page-e.md — Missing ... quality`. Missing tags and sources are explicitly called out for page-b; page-c's total absence covers title/type as well."
+    },
+    {
+      "text": "Reports broken internal links between wiki pages",
+      "passed": true,
+      "evidence": "lint-report-before.md §'Errors (8) > broken_links (2)': `wiki/page-a.md — Link to ./page-d.md not found` and `wiki/page-c.md — Link to ./ghost.md not found`. These match the pre-fix-wiki contents: page-a.md references `./page-d.md` (no such file), page-c.md references `./ghost.md` (no such file)."
+    },
+    {
+      "text": "Fixes missing frontmatter by adding required fields",
+      "passed": true,
+      "evidence": "All five post-fix pages (page-a.md, page-b.md, page-c.md, page-d.md, page-e.md) carry the full 8-field frontmatter required by lint_checks.ts REQUIRED_FIELDS (title, type, tags, sources, created, updated, quality, summary). page-c.md, which had no frontmatter at all pre-fix, now has a complete block with title 'Page C', tags [test, gamma], quality 0.5, etc. page-b.md gained the previously-missing tags:[test,beta], sources:[], and quality:0.6."
+    },
+    {
+      "text": "Fixes broken links by updating paths or removing dead links",
+      "passed": true,
+      "evidence": "page-a.md's broken `./page-d.md` reference is now resolved by a newly-created `page-d.md` stub (post-fix-wiki/page-d.md exists with proper frontmatter and content referencing back to page-a). page-c.md's dead `./ghost.md` link has been removed: the post-fix body states 'Previously referenced a non-existent ghost page; that reference has been removed' and now links to existing page-b.md and page-e.md. events.jsonl shows `\"created_pages\": [\"wiki/page-d.md\"]` confirming the stub creation."
+    },
+    {
+      "text": "Re-runs lint to confirm zero remaining violations",
+      "passed": true,
+      "evidence": "lint-report-after.md Summary table shows error=0, warning=0, info=0, Total=0. Raw JSON block: `{\"issues\": [], \"summary\": {\"error\": 0, \"warning\": 0, \"info\": 0}}`. events.jsonl final entry: `{\"op\": \"lint\", \"phase\": \"after\", \"errors\": 0, \"warnings\": 0, \"info\": 0}` confirms the second invocation returned a clean result."
+    },
+    {
+      "text": "events.jsonl records the lint and fix operations",
+      "passed": true,
+      "evidence": "events.jsonl contains exactly 3 entries: (1) op=lint phase=before with error/warning counts matching the before-report; (2) op=fix with pages_touched=[page-a..e], edges_added=10, created_pages=[page-d.md]; (3) op=lint phase=after with zeroed counts. All entries include ISO-8601 timestamps."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 69621
+  },
+  "claims": [
+    {
+      "claim": "The before-lint detected exactly 8 errors and 6 warnings (14 total issues)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "lint-report-before.md Summary table and events.jsonl 'op=lint, phase=before' entry both report errors=8, warnings=6, info=0."
+    },
+    {
+      "claim": "A new stub page `wiki/page-d.md` was created to resolve the broken link",
+      "type": "process",
+      "verified": true,
+      "evidence": "post-fix-wiki/page-d.md exists (was absent in pre-fix-wiki/); events.jsonl 'op=fix' entry has `\"created_pages\": [\"wiki/page-d.md\"]`; post-fix page-d.md content explicitly states 'Stub page created to resolve the broken link previously present in Page A.'"
+    },
+    {
+      "claim": "Orphan and isolated_node warnings were also resolved, not just errors",
+      "type": "quality",
+      "verified": true,
+      "evidence": "Before-report had 2 orphan_page and 4 isolated_node warnings for pages a/b/c/e. After-report shows 0 warnings. Post-fix pages added bidirectional links: a<->b, a<->d, a<->e, b<->c, c<->e — giving every node degree >= 2 and eliminating orphans. events.jsonl edges_added=10 corroborates."
+    },
+    {
+      "claim": "The fix did not violate the v2 design by introducing invalid `type:` values or other frontmatter errors",
+      "type": "quality",
+      "verified": true,
+      "evidence": "All 5 post-fix pages use `type: concept`, which is one of the 7 valid page types enforced by VALID_PAGE_TYPES in lint_checks.ts. The after-report shows 0 issues across all 13 structural checks, confirming the fix introduced no new problems."
+    }
+  ],
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Fixes broken links by updating paths or removing dead links",
+        "reason": "The assertion passes whether the skill creates a stub OR removes the link. Here the executor did BOTH (created page-d stub, removed ghost.md reference). Consider splitting into two assertions or specifying the expected strategy — a skill that silently deleted page-a's reference to page-d would also pass, which may hide unwanted behavior."
+      },
+      {
+        "reason": "No assertion checks that the fix preserves the original page content/semantics. page-a.md's pre-fix body said 'This page refers to [B] and also to a broken [D] that does not exist' — the post-fix version rewrites it to a clean related-pages style. A skill that replaced the body wholesale with placeholder text would still pass all 7 assertions. Consider an assertion like 'original page content (heading, primary prose) is preserved after fix'."
+      },
+      {
+        "reason": "The prompt mentions '/wiki-lint' as the command, but no assertion verifies which slash command was invoked or that the wiki skill was actually used (vs. a direct invocation of lint_checks.ts). A behavioral assertion on tool path would strengthen the eval."
+      }
+    ],
+    "overall": "All 7 assertions pass with strong evidence. The skill correctly detected 14 issues, fixed all of them (including warnings beyond the stated scope), and verified via re-lint. Main gap: assertions check presence of fixes but not quality/preservation of original content — a weak fix (e.g., wholesale rewrite) could still pass."
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "status": "success",
+  "orm_detected": "sqlalchemy",
+  "entities": [
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "schema": "",
+      "columns": 3,
+      "relationships": [
+        "relationship",
+        "relationship"
+      ]
+    },
+    {
+      "class_name": "Order",
+      "table_name": "orders",
+      "schema": "",
+      "columns": 3,
+      "relationships": [
+        "relationship",
+        "foreign_key"
+      ]
+    },
+    {
+      "class_name": "Role",
+      "table_name": "roles",
+      "schema": "",
+      "columns": 2,
+      "relationships": []
+    }
+  ],
+  "mapping_file": "./database-mapping.md",
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Entity Relationships",
+    "code": "erDiagram\n    users {\n        string id\n        string username\n        string email\n    }\n    orders {\n        string id\n        string total_amount\n        string user_id\n    }\n    roles {\n        string id\n        string name\n    }\n    users ||--o{ users_rel : \"\"\n    orders ||--o{ orders_rel : \"\"\n    orders }o--|| orders_rel : \"\"\n"
+  }
+}

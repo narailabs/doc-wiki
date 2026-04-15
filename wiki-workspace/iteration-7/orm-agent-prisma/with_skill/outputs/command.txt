@@ -1,0 +1,10 @@
+# orm_detect invocation
+node /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/scripts/orm_detect.js \
+  --codebase-path /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/prisma/ \
+  --profile prisma \
+  --output-markdown /tmp/eval-i7-orm-prisma/database-mapping.md \
+  --output-json /tmp/eval-i7-orm-prisma/detected-entities.json
+
+# mermaid_lint invocation
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/mermaid_lint.js \
+  --page /tmp/eval-i7-orm-prisma/database-mapping.md

@@ -1,0 +1,43 @@
+{
+  "status": "ok",
+  "rows": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "notnull": 0,
+      "dflt_value": null,
+      "pk": 1
+    },
+    {
+      "name": "email",
+      "type": "TEXT",
+      "notnull": 1,
+      "dflt_value": null,
+      "pk": 0
+    },
+    {
+      "name": "name",
+      "type": "TEXT",
+      "notnull": 0,
+      "dflt_value": null,
+      "pk": 0
+    },
+    {
+      "name": "created_at",
+      "type": "TIMESTAMP",
+      "notnull": 0,
+      "dflt_value": "CURRENT_TIMESTAMP",
+      "pk": 0
+    }
+  ],
+  "columns": [
+    "name",
+    "type",
+    "notnull",
+    "dflt_value",
+    "pk"
+  ],
+  "row_count": 4,
+  "truncated": false,
+  "execution_time_ms": 0.5
+}

@@ -1,0 +1,75 @@
+{
+  "expectations": [
+    {
+      "text": "Preserves all content above the `<!-- wiki-managed: start -->` marker",
+      "passed": true,
+      "evidence": "user-content-above-markers-check.md shows before/after sha256 `95b9698472b81b1ede6acd59437cf1d118dbe5c4b81320636f9495153736ab53` (145 bytes each). Independently re-extracted the pre-marker region from CLAUDE-before.md and CLAUDE-after.md with `sed -n '1,/<!-- wiki-managed: start -->/p' | sed '$d'` and both gave 145 bytes with the same sha256 `95b9698472b81...`. The user's custom header, prose, and bullet list (alpha/beta) are preserved byte-for-byte."
+    },
+    {
+      "text": "Preserves all content below the `<!-- wiki-managed: end -->` marker",
+      "passed": true,
+      "evidence": "user-content-below-markers-check.md shows before/after sha256 `a22d3512e3934d473dd75baf970521bbf4f25fa785fdfaa2abafcadd4329dafe` (83 bytes each, matching). Independent re-extraction via `sed -n '/<!-- wiki-managed: end -->/,$p' | sed '1d'` (extraction bounds differ by 1 byte because of the trailing newline handling) yields sha256 `f3c9acf297e7eea7a3473f0da38e00dec8f2dd8e86a579b0b6314e584b447653` that is IDENTICAL between before and after. The `## Manual footer` block is preserved byte-for-byte."
+    },
+    {
+      "text": "Regenerates only the managed section from the current wiki state",
+      "passed": true,
+      "evidence": "managed-section-diff.md shows the managed section sha256 changed from `b5f13169...` to `000fe78d...`. Independent re-hashing with `sed -n '/start -->/,/end -->/p'` confirms different hashes before (`596a60e8...`) vs after (`f6129fc8...`). The `diff -u` output shows the stale placeholder `(old stale generated content — should get replaced)` was replaced with freshly generated content: Overview, Build & Run, Service Dependencies, Database References sections — exactly what `generateClaudeMd()` emits for project name `eval-claude-md-preserve` with wiki at `wiki/index.md`."
+    },
+    {
+      "text": "Is idempotent on re-run when the wiki state has not changed",
+      "passed": true,
+      "evidence": "idempotency-check.md documents a second invocation of `claude_md_gen.js --update` against the same project. First-run and second-run sha256s match exactly (`7bcdbe33b3344b67a4dc325c3585464abf850f08ee22cf1e8be41e4e39d1ab4a`), `cmp` exits 0, and `diff -u` produces no output. The marker-replacement regex is deterministic."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tokens": 50281
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 50281
+  },
+  "claims": [
+    {
+      "claim": "Pre-marker region is 145 bytes with sha256 95b9698472b81...",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Independently re-extracted via `sed -n '1,/<!-- wiki-managed: start -->/p' | sed '$d'`: 145 bytes, sha256 `95b9698472b81b1ede6acd59437cf1d118dbe5c4b81320636f9495153736ab53` on both before and after files."
+    },
+    {
+      "claim": "The new managed content matches what generateClaudeMd() emits for project basename 'eval-claude-md-preserve'",
+      "type": "quality",
+      "verified": true,
+      "evidence": "The after-file managed section contains the exact boilerplate emitted by the agent's scripts — Overview bolding project name, wiki link `wiki/index.md`, and the four standard H2 sections (Build & Run, Service Dependencies, Database References). Consistent with the claude_md_gen.js template."
+    },
+    {
+      "claim": "The claude_md_gen regex MARKER_START\\n(.*?)MARKER_END reliably matches the just-written block, giving deterministic idempotency",
+      "type": "process",
+      "verified": true,
+      "evidence": "Second-run sha256 matches first-run sha256 exactly; `cmp` returns 0; `diff -u` empty."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Regenerates only the managed section from the current wiki state",
+        "reason": "The assertion is satisfied by ANY change to the managed section. A tool that wrote junk between the markers (e.g., empty string, error text, wrong project name) would also pass. Consider adding a positive content check — e.g., that the managed section contains a link to `wiki/index.md` and mentions the actual project name — so that surface-level 'the block changed' doesn't pass for a broken regeneration."
+      },
+      {
+        "reason": "No assertion checks that the markers THEMSELVES are preserved exactly once (no duplication, no whitespace drift on the marker lines). Idempotency catches some of this but a tool that reliably doubled markers on every run would still pass idempotency after run 1. Consider an explicit marker-count assertion: `grep -c 'wiki-managed: start'` must equal 1 both before and after."
+      }
+    ],
+    "overall": "The four assertions are a well-rounded smoke test of the 'preserve manual edits' contract: two byte-level preservation checks, one change check, and an idempotency check. The eval author wisely used sha256 hashes rather than fuzzy text matching. Main gap is that the 'regenerates' assertion is non-discriminating about the quality of the regenerated content."
+  }
+}

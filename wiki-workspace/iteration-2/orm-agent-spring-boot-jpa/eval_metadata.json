@@ -1,0 +1,13 @@
+{
+  "eval_id": 9,
+  "eval_name": "orm-agent-spring-boot-jpa",
+  "skill": "wiki-orm-agent",
+  "prompt": "Detect and map the ORM entities in this Spring Boot project that uses JPA with PostgreSQL",
+  "assertions": [
+    {"text": "Correctly identifies JPA @Entity classes", "passed": null, "evidence": null},
+    {"text": "Maps @Table(name) to database table names", "passed": null, "evidence": null},
+    {"text": "Detects @OneToMany and @ManyToOne relationships", "passed": null, "evidence": null},
+    {"text": "Output includes a valid Mermaid erDiagram block", "passed": null, "evidence": null},
+    {"text": "Generated markdown has proper frontmatter with type: entity", "passed": null, "evidence": null}
+  ]
+}

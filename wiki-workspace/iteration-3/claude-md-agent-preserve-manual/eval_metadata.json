@@ -1,0 +1,38 @@
+{
+  "eval_id": 2,
+  "eval_name": "claude-md-agent-preserve-manual",
+  "skill": "wiki-claude-md-agent",
+  "prompt": "Update the CLAUDE.md of a project I already edited manually (added a custom section at the top), without clobbering my additions",
+  "assertions": [
+    {
+      "text": "Bytes above the `<!-- wiki-managed: start -->` marker are preserved — sha256 of the pre-marker region before vs after matches",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Bytes below the `<!-- wiki-managed: end -->` marker are preserved — sha256 of the post-marker region before vs after matches",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The managed section is refreshed from the current wiki state — its sha256 differs between before and after (proving the tool actually ran)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The refreshed managed section contains substantive content: at least one heading AND either a link into wiki/ or a mention of the project's real name — a block of whitespace or an error stub fails this",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "After regeneration, the file still contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (no marker duplication, no whitespace drift on the marker lines)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "A second run against the same wiki state produces a byte-identical file (idempotent)",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

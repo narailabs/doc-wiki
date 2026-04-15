@@ -1,0 +1,31 @@
+name: custom-basemodel
+language: python
+description: "In-house BaseModel ORM — classes with __table__ and __columns__ attributes plus ForeignKey(...) relationships"
+
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - pattern: "BaseModel"
+      type: entity_class
+    - pattern: "__table__"
+      type: table_mapping
+    - pattern: "__columns__"
+      type: column_definition
+    - pattern: "ForeignKey("
+      type: relationship
+
+entity_extraction:
+  class_pattern: "class\\s+(\\w+)\\s*\\(\\s*BaseModel\\s*\\)"
+  table_pattern: "__table__\\s*=\\s*['\"]([\\w.]+)['\"]"
+  column_pattern: "['\"](\\w+)['\"]"
+
+relationship_detection:
+  patterns:
+    - pattern: "ForeignKey\\("
+      type: many_to_one
+    - pattern: "ForeignKey\\("
+      type: foreign_key
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: snake_case

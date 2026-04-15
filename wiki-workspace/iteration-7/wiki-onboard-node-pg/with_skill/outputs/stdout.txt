@@ -1,0 +1,33 @@
+# stdout from init_wiki.js
+{"status": "ok", "wiki_root": "/private/tmp/eval-i7-onboard-node-pg", "created_dirs": ["wiki", "wiki/claims", "wiki/synthesis", "wiki/templates", "raw", "graph", "audit/open", "audit/resolved", "log/daily", "outputs/queries", "outputs/reports", ".wiki-cache"], "created_files": ["wiki.config.yaml", "wiki/index.md", "wiki/summaries.md", "wiki/overview.md", ".wiki-ignore", "log/events.jsonl", "graph/edges.jsonl", ".claude/settings.json"]}
+
+# stdout from orm_detect.js
+orm_detect: wrote JSON to /tmp/eval-i7-onboard-node-pg/orm-detection.json
+
+# stdout from event_logger.js (init)
+{
+  "ts": "2026-04-15T01:02:00.379000+00:00",
+  "op": "init",
+  "project_root": "/tmp/eval-i7-onboard-node-pg",
+  "domain": "onboard-node-pg",
+  "wiki_root": "wiki/",
+  "scaffold_created": true
+}
+
+# stdout from event_logger.js (onboard)
+{
+  "ts": "2026-04-15T01:02:04.467000+00:00",
+  "op": "onboard",
+  "project_root": "/tmp/eval-i7-onboard-node-pg",
+  "language": "javascript",
+  "framework": "express",
+  "database_driver": "postgresql",
+  "database_host": "db.local",
+  "database_port": 5432,
+  "database_name": "appdb",
+  "user_secret": "WIKI_DB_DEV_USER",
+  "orm_profiles": [],
+  "orm_detected": null,
+  "detection_trace": "log/detection-trace.jsonl",
+  "config_written": "wiki.config.yaml"
+}

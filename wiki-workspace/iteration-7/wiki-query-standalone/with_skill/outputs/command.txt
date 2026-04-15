@@ -1,0 +1,6 @@
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js --path /tmp/eval-i7-query-wiki --domain test-query --name "Test Query Wiki"
+# Step A: read wiki/summaries.md (summaries-first search phase)
+# Step B: read wiki/auth.md, wiki/request-routing.md, wiki/app-server.md, wiki/db-write-path.md, wiki/audit-log.md
+# Step C: synthesise answer (~400-600 words) with Knowledge gaps section
+# Step D: archive to /tmp/eval-i7-query-wiki/outputs/queries/2026-04-14-request-lifecycle.md
+# Step E: append op=query event to /tmp/eval-i7-query-wiki/log/events.jsonl

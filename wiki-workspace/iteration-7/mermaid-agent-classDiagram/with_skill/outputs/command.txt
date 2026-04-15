@@ -1,0 +1,3 @@
+node /Users/narayan/src/doc-wiki/.claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.js \
+  --input /tmp/eval-i7-class-hierarchy/input.json \
+  --page /tmp/eval-i7-class-hierarchy/class-hierarchy.md

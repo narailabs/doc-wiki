@@ -1,0 +1,20 @@
+[
+  {
+    "from": "authentication",
+    "to": "user-model",
+    "type": "supports",
+    "provenance": "INFERRED"
+  },
+  {
+    "from": "user-model",
+    "to": "orm-mapping",
+    "type": "supports",
+    "provenance": "EXTRACTED"
+  },
+  {
+    "from": "orm-mapping",
+    "to": "database-schema",
+    "type": "supports",
+    "provenance": "EXTRACTED"
+  }
+]

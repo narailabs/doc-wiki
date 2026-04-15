@@ -1,0 +1,1 @@
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i4-stats-wiki/ --since 7d

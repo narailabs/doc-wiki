@@ -1,0 +1,60 @@
+{
+  "queries_evaluated": [
+    {
+      "label": "schema_action",
+      "action": "schema",
+      "sql_or_filter": "filter=users",
+      "env": "dev",
+      "approval_mode": "auto",
+      "operation_type": "introspection",
+      "policy_path": "driver.getSchema (sqlite_master + PRAGMA table_info)",
+      "decision": "allow",
+      "reason": "Schema introspection reads table metadata directly via the SQLiteDriver.getSchema path. It does not traverse Policy.checkQuery because there is no user SQL to classify; the driver runs a fixed, parameterized sqlite_master query plus PRAGMA table_info(<name>) under the dev env. Equivalent to ALLOW on a READ.",
+      "exit_code": 0,
+      "status_returned": "ok"
+    },
+    {
+      "label": "bounded_select_through_policy_gate",
+      "action": "query",
+      "sql": "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users') LIMIT 100",
+      "env": "dev",
+      "approval_mode": "auto",
+      "operation_type": "read",
+      "policy_path": "Policy.checkQuery -> classifySqlKeywords -> OperationType.READ -> _checkRead (auto) -> ALLOW",
+      "decision": "allow",
+      "reason": "auto-approved",
+      "exit_code": 0,
+      "status_returned": "ok",
+      "rows_returned": 4,
+      "truncated": false,
+      "execution_time_ms": 0.5
+    },
+    {
+      "label": "unbounded_select_safety_demo",
+      "action": "query",
+      "sql": "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users')",
+      "env": "dev",
+      "approval_mode": "auto",
+      "operation_type": "read",
+      "policy_path": "Policy.checkQuery -> classifySqlKeywords -> OperationType.READ -> _checkRead -> _isUnboundedSelect==true -> ESCALATE",
+      "decision": "escalate",
+      "reason": "Unbounded SELECT detected -- add WHERE or LIMIT",
+      "exit_code": 1,
+      "status_returned": "escalate",
+      "note": "Demonstrates the unbounded-SELECT safety heuristic fires before ALLOW. Retrying with LIMIT 100 yields the ALLOW path above."
+    }
+  ],
+  "final_decision": "allow",
+  "final_reason": "Dev-env schema introspection approved. The schema action reads SQLite catalog tables directly via the driver (ALLOW-equivalent, no Policy gate traversal). The bounded SELECT against pragma_table_info also received ALLOW with reason 'auto-approved' from Policy._checkRead under approval_mode=auto.",
+  "policy_module": "/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_db/policy.ts",
+  "gate_functions": [
+    "classifySqlKeywords(sql)",
+    "Policy.checkQuery(sql, driver?)",
+    "Policy._checkRead(sql)"
+  ],
+  "ddl_dml_privilege_checks": {
+    "ddl": "never allowed — would have returned deny",
+    "dml": "present_only — would have returned formatted SQL without executing",
+    "privilege": "never allowed — would have returned deny"
+  }
+}

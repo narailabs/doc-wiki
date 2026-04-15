@@ -1,0 +1,38 @@
+{
+  "eval_id": 5,
+  "eval_name": "wiki-onboard-django",
+  "skill": "wiki",
+  "prompt": "Set up wiki for a Django + MongoDB project",
+  "assertions": [
+    {
+      "text": "Detects Python/Django — wiki.config.yaml lists language='python' and framework='django' with at least one evidence file cited in detection-trace (requirements.txt, pyproject.toml, or manage.py)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Detects Django ORM — ecosystem.orm.profiles includes 'django' AND the detection trace names at least one extracted model class with its db_table mapping (e.g., Article → articles)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Detects MongoDB — wiki.config.yaml's database block sets driver='mongodb' (via djongo or direct) with connection info parsed from settings.py (e.g., mongodb://localhost:27017)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated for MongoDB",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Seed files (wiki/index.md, graph/edges.jsonl, log/events.jsonl) exist — not just empty directories",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

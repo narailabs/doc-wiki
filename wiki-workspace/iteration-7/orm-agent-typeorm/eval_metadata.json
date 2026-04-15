@@ -1,0 +1,43 @@
+{
+  "eval_id": 5,
+  "eval_name": "orm-agent-typeorm",
+  "skill": "wiki-orm-agent",
+  "prompt": "Detect and map the TypeORM entities in .claude/agents/wiki-orm-agent/evals/fixtures/typeorm/ — three .ts files (Author.ts, Book.ts, Publisher.ts) using @Entity, @Column, @OneToMany, @ManyToOne.",
+  "assertions": [
+    {
+      "text": "All three entities (Author, Book, Publisher) are extracted into detected-entities.json as separate entries with table_names matching the @Entity('...') first arg (e.g., 'authors', 'books', 'publishers')",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Each @OneToMany(() => Book, ...) and @ManyToOne(() => Author, ...) produces a relationship with target_entity resolved from the arrow-function call argument — never blank, never the literal string 'Book'/'Author' (the resolver must dereference to the imported class)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Relationship type matches the decorator name (one_to_many for @OneToMany, many_to_one for @ManyToOne, one_to_one for @OneToOne)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='typeorm'",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Mermaid erDiagram contains nodes for all three table names and at least two edges (authors-books and books-publishers, or whatever the fixture declares) using cardinality glyphs that match the decorator (||--o{ for one_to_many, }o--|| for many_to_one)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Any external target referenced via @ManyToOne whose class file is NOT in the fixture set is emitted as a _external stub before the edge — never an edge to an undeclared node",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "mermaid_lint.js passes on the generated page",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

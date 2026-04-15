@@ -1,0 +1,106 @@
+{
+  "expectations": [
+    {
+      "text": "All 8 source files end up as wiki pages (or 8 distinct wiki/*.md files created)",
+      "passed": true,
+      "evidence": "outputs/wiki/ listing shows 8 content pages: architecture.md, auth.md, caching.md, database.md, deployment.md, monitoring.md, sdk.md, troubleshooting.md (plus pre-existing scaffolding pages index.md, overview.md, summaries.md from init)."
+    },
+    {
+      "text": "Each generated wiki page has valid frontmatter with non-empty title + sources + a 4-8 tag list",
+      "passed": true,
+      "evidence": "All 8 pages have YAML frontmatter with non-empty title (e.g. 'System Architecture', 'Authentication & Authorization'), sources list pointing at /tmp/eval-i4-ingest-folder/docs/*.md, and 5-element tag arrays (e.g. architecture: [\"system-architecture\", \"service-mesh\", \"api-gateway\", \"kafka\", \"strangler-fig\"]). All tag counts fall in [4,8]."
+    },
+    {
+      "text": "Each source file is copied into raw/ preserving the relative path (raw/architecture.md, raw/auth.md, etc.)",
+      "passed": true,
+      "evidence": "outputs/raw-listing.txt enumerates all 8 files under raw/: architecture.md, auth.md, caching.md, database.md, deployment.md, monitoring.md, sdk.md, troubleshooting.md. run_ingest.mjs uses fs.copyFileSync(src, path.join(wikiRoot, rawRel)) where rawRel = path.join('raw', fname)."
+    },
+    {
+      "text": "events.jsonl records 8 ingest events, each naming the source file and content hash",
+      "passed": true,
+      "evidence": "events.jsonl lines 2-9 contain 8 op=ingest events for run1, each with 'source' (e.g. '/tmp/eval-i4-ingest-folder/docs/architecture.md') and 'content_hash' (e.g. 'f9e71a32f05a745db27dbcf9d8e8ca0029e63c62429110c9eca745e20ad8de42'). ingest-counts.md confirms 'run1 -> 8'."
+    },
+    {
+      "text": ".wiki-cache/ (or the caching dir named in wiki.config.yaml) contains 8 per-file hash entries after the first run",
+      "passed": true,
+      "evidence": "cache-state-run1.md: 'Total entries in .wiki-cache/ (excluding VERSION if present): 8', with 8 <hash>.json files listed, each pointing at the corresponding docs/*.md source (one entry per source file)."
+    },
+    {
+      "text": "A second run of the same ingest command logs 8 'cache_hit' or 'skipped' entries (or records zero new ingest events) — no file is reprocessed while the content is unchanged",
+      "passed": true,
+      "evidence": "events.jsonl lines 11-18 show 8 op=cache_hit events for run2 (one per source file), and ingest_batch_summary shows {new_ingests: 0, cache_hits: 8}. ingest-counts.md: 'run2 -> 0' ingests, 'run2 -> 8' cache_hits."
+    },
+    {
+      "text": "Modifying one file and re-running processes only that one file (one new ingest event; seven cache hits)",
+      "passed": true,
+      "evidence": "events.jsonl run3 block (lines 20-27) shows 7 cache_hit events and exactly 1 op=ingest for auth.md with new hash 'ea3eba776fd13b2796cfb0816024b5c2c94794ed7a1af6fb3c19dd603bf72d84' (distinct from run1's auth hash 7d33afa...). ingest_batch_summary run3: {new_ingests: 1, cache_hits: 7}."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 27369,
+    "transcript_chars": null
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "Folder batching is deterministic: run_ingest.mjs sorts files alphabetically and processes sequentially",
+      "type": "process",
+      "verified": true,
+      "evidence": "run_ingest.mjs line 53: fs.readdirSync(docsDir).filter(...).sort(). Event timestamps in run1 confirm alphabetical order: architecture, auth, caching, database, deployment, monitoring, sdk, troubleshooting."
+    },
+    {
+      "claim": "Cache uses SHA256 content hashes (64 hex chars)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "All content_hash values in events.jsonl are 64-character hex strings; run_ingest.mjs imports computeHash from .claude/skills/wiki/scripts/cache_manager.js."
+    },
+    {
+      "claim": "Run 3 keeps the old auth.md cache entry alongside the new one (9 total entries, not 8)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "cache-state-run3.md: 'Total entries in .wiki-cache/: 9' with both 7d33afa... (old auth hash) and ea3eba... (new auth hash) present. This is a content-hash-indexed cache so prior hashes accumulate."
+    },
+    {
+      "claim": "Each wiki page has H1 title matching frontmatter title",
+      "type": "quality",
+      "verified": true,
+      "evidence": "architecture.md: title 'System Architecture' matches '# System Architecture' H1. auth.md: title 'Authentication & Authorization' matches H1. Note: H1 is duplicated (template '# ${title}' then source-body's own '# System Architecture') — minor cosmetic issue, not asserted against."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Each generated wiki page has valid frontmatter with non-empty title + sources + a 4-8 tag list",
+        "reason": "Assertion does not check that tags are content-only concept tags (per CLAUDE.md's 'no structural/temporal/metadata tags' rule) nor that they relate to the page's subject. A hallucinated wiki page with 5 random-but-plausible tags would still pass. Consider requiring at least 2 tags to be keywords drawn from the source file body."
+      },
+      {
+        "reason": "No assertion verifies wiki page body actually contains the source content. The run_ingest.mjs embeds the raw body, but a bug that wrote an empty body with only frontmatter + '## Related Pages' would still satisfy all 7 assertions. Consider adding a check that each wiki page contains a substring from its source (e.g. a distinctive phrase)."
+      },
+      {
+        "reason": "No assertion checks that the content_hash recorded in events.jsonl for run3's auth.md differs from run1's auth.md hash. A broken skill that logged an 'ingest' event while silently reusing the old hash would still pass assertion 7. The grader verified this independently but the eval itself is blind to it."
+      },
+      {
+        "reason": "Eval does not exercise the /wiki-ingest slash command path directly — the executor wrote a custom run_ingest.mjs driver. This passes the 'skill scripts produce correct outputs' bar but does not validate the skill's natural-language orchestration. Consider an assertion that the skill's documented command surface (/wiki-ingest <folder>) was used, or at least that the driver imports the skill's own cache_manager + event_logger primitives (which it does here)."
+      }
+    ],
+    "overall": "All 7 assertions pass on genuine evidence — folder batching, content-hash caching, and modification detection all work correctly across 3 runs. Eval is solid on event counts but thin on content verification; a skill that produced empty-but-well-formed wiki pages could still pass. Recommend adding at least one substring-in-body assertion."
+  }
+}
