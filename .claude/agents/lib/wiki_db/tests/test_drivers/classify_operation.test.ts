@@ -19,7 +19,10 @@ import { PostgresDriver } from "../../drivers/postgresql.js";
 import { MysqlDriver } from "../../drivers/mysql.js";
 import { SqlServerDriver } from "../../drivers/sqlserver.js";
 import { MongoDriver } from "../../drivers/mongodb.js";
-import { DynamoDriver } from "../../drivers/dynamodb.js";
+import {
+  DynamoDriver,
+  DynamoEnvelopeParseError,
+} from "../../drivers/dynamodb.js";
 
 describe("DatabaseDriver.classifyOperation — G-DB-1", () => {
   describe("relational drivers (delegate to SQL keyword classifier)", () => {
@@ -184,6 +187,28 @@ describe("DatabaseDriver.classifyOperation — G-DB-1", () => {
     });
     it("empty input throws", () => {
       expect(() => d.classifyOperation("  ")).toThrow(/Empty DynamoDB statement/);
+    });
+  });
+
+  // G-DYNAMO-PARSE-ERROR: a truncated JSON envelope used to fall
+  // through to SDK-name regex matching and default to DDL with the
+  // unhelpful "DDL statements are never allowed" deny reason. The
+  // driver now surfaces a distinct parse error.
+  describe("DynamoDriver — malformed envelope", () => {
+    const d = new DynamoDriver();
+    it("truncated envelope throws DynamoEnvelopeParseError, not DDL", () => {
+      const truncated = '{"table":"users","op":"Get';
+      expect(() => d.classifyOperation(truncated)).toThrow(
+        DynamoEnvelopeParseError,
+      );
+      expect(() => d.classifyOperation(truncated)).toThrow(
+        /Malformed envelope JSON/,
+      );
+    });
+    it("trailing comma in envelope throws parse error", () => {
+      expect(() => d.classifyOperation('{"op":"scan",}')).toThrow(
+        DynamoEnvelopeParseError,
+      );
     });
   });
 });
