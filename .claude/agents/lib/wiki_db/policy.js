@@ -22,7 +22,7 @@
  */
 import { performance } from "node:perf_hooks";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
-import { logEvent } from "./audit.js";
+import { logEvent, scrubSqlSecrets } from "./audit.js";
 /** Namespace providing Python-style attribute access (`Decision.ALLOW`). */
 export const Decision = {
     ALLOW: "allow",
@@ -354,9 +354,12 @@ function _emitDeny(reason, op) {
  * API response.
  */
 function _emitPresentOnly(reason, op, formattedSql) {
-    const truncated = formattedSql.length > 500
-        ? formattedSql.slice(0, 500) + "\u2026"
-        : formattedSql;
+    // Scrub credentials before truncation so a literal split by truncation
+    // can't leak. Same helper used by audit.logQuery.
+    const scrubbed = scrubSqlSecrets(formattedSql);
+    const truncated = scrubbed.length > 500
+        ? scrubbed.slice(0, 500) + "\u2026"
+        : scrubbed;
     const details = {
         reason,
         formatted_sql: truncated,

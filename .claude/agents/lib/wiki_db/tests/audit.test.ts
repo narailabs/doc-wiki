@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { disableAudit, enableAudit, logEvent, logQuery } from "../audit.js";
+import {
+  disableAudit,
+  enableAudit,
+  logEvent,
+  logQuery,
+  scrubSqlSecrets,
+} from "../audit.js";
 import { cleanupTmpPath, makeTmpPath } from "./fixtures.js";
 
 describe("wiki_db.audit", () => {
@@ -195,5 +201,51 @@ describe("wiki_db.audit", () => {
     for (const line of lines) {
       expect(() => JSON.parse(line)).not.toThrow();
     }
+  });
+
+  // ---------- scrubSqlSecrets unit tests ----------
+  it("scrubSqlSecrets masks single-quoted credential literals", () => {
+    expect(
+      scrubSqlSecrets("SELECT * FROM u WHERE password = 'p4ss' AND id = 1"),
+    ).toBe("SELECT * FROM u WHERE password='[REDACTED]' AND id = 1");
+    expect(scrubSqlSecrets("WHERE token='sk-abc123'")).toBe(
+      "WHERE token='[REDACTED]'",
+    );
+    expect(scrubSqlSecrets("WHERE api_key = 'k1' OR api-key = 'k2'")).toBe(
+      "WHERE api_key='[REDACTED]' OR api-key='[REDACTED]'",
+    );
+  });
+
+  it("scrubSqlSecrets masks double-quoted credential literals", () => {
+    expect(scrubSqlSecrets('WHERE secret = "s3cr3t"')).toBe(
+      'WHERE secret="[REDACTED]"',
+    );
+  });
+
+  it("scrubSqlSecrets leaves non-credential literals alone", () => {
+    expect(scrubSqlSecrets("SELECT name FROM u WHERE id = 1")).toBe(
+      "SELECT name FROM u WHERE id = 1",
+    );
+    expect(scrubSqlSecrets("WHERE name = 'alice'")).toBe(
+      "WHERE name = 'alice'",
+    );
+  });
+
+  it("logQuery scrubs credentials before persisting to the audit file", () => {
+    const logPath = path.join(tmpPath, "audit.jsonl");
+    enableAudit(logPath, "abc123");
+    logQuery({
+      env: "dev",
+      query: "SELECT * FROM users WHERE password = 'leaked' LIMIT 1",
+      status: "ok",
+      row_count: 1,
+      execution_time_ms: 5,
+    });
+    const line = fs.readFileSync(logPath, "utf-8").trim();
+    const record = JSON.parse(line) as { query: string };
+    expect(record.query).toBe(
+      "SELECT * FROM users WHERE password='[REDACTED]' LIMIT 1",
+    );
+    expect(record.query).not.toContain("leaked");
   });
 });
