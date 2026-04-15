@@ -160,9 +160,29 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 6. **Surface 3-5 takeaways + entity list** — your reasoning
 7. **Cross-reference active agents** — if the config has source agents enabled, dispatch them in parallel via Agent tool to gather additional context
 8. **Compile into wiki page(s)** — read `references/compilation.md` for rules on frontmatter, linking, code locality, claims extraction
-9. **Auto-generate Mermaid diagrams** — if the source data is diagram-worthy (ER, sequence, topology)
-10. **Generate "How to Go Deeper" section** — from source frontmatter, list agent commands for live verification
-11. **Update indexes + summaries.md**
+9. **Auto-generate Mermaid diagrams** — collect every dispatched agent's JSON `mermaid: {type, title, code}` envelope and splice each into the compiled page:
+
+   ```bash
+   node {skill_path}/scripts/mermaid_inject.js --page <wiki-page.md> --agents <agent-outputs.json> --in-place
+   ```
+
+   The injector is idempotent — wraps blocks in `<!-- wiki-mermaid: <title> start/end -->` markers so a second ingest replaces stale diagrams in place instead of stacking duplicates. Agents with no diagram output omit the `mermaid` field; the script skips them silently.
+10. **Generate "How to Go Deeper" section** — from the page's final `sources:` frontmatter:
+
+    ```bash
+    node {skill_path}/scripts/how_to_go_deeper.js \
+      --sources '<JSON-array-of-source-strings>' \
+      --enabled <csv-of-enabled-agent-ids>
+    ```
+
+    Classifies each source (Jira/Confluence/GitHub/Notion/GCP/AWS/DB/local code) and emits one bullet per entry with the exact agent command to run. Pass the enabled agents from `wiki.config.yaml` so disabled-agent hints are suppressed. Elides when sources are all local `raw/...` already in the wiki body.
+11. **Update indexes + summaries.md** — rebuild `wiki/summaries.md` deterministically:
+
+    ```bash
+    node {skill_path}/scripts/summaries_rebuild.js --wiki-root <wiki-root>
+    ```
+
+    Walks every page on disk, reads its frontmatter, emits one ~50-token summary per page, and splices the `## Anti-repetition Memory` section from `banlist.js`. Content outside the `<!-- wiki-managed: summaries start/end -->` markers is preserved. You still update `wiki/index.md` yourself (add a bullet to the new page's section).
 12. **Log:** `node {skill_path}/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'`. When the op dispatched sub-agents, include them in `details.agent_calls[]` with shape `{agent, model, tokens_in, tokens_out, cost_usd, elapsed_ms, status}` — event_logger fills in `total_tokens_in`, `total_tokens_out`, and `total_cost_usd` automatically, and `/wiki-stats` aggregates per-agent cost from those entries.
 13. **Run post-operation hooks** (crosslink + tag-harmonize) — see below
 
@@ -208,7 +228,7 @@ The script reports: broken links, missing frontmatter (including page-type enum)
 
 **Query absorption:** after the structural pass, scan `outputs/queries/*.md` for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/wiki-fix` on the most relevant existing page, or (b) a `/wiki-promote` of the archived query.
 
-**Anti-repetition memory:** run `node {skill_path}/scripts/banlist.js build --wiki-root <root>` to aggregate deprecated claims' `failure_reason` fields, and splice the output into `wiki/summaries.md` under an `## Anti-repetition Memory` heading. This prevents future ingests from re-exploring abandoned directions.
+**Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
 
 Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
 

@@ -13,5 +13,12 @@
     "noEmit": false
   },
   "include": [".claude/**/*.ts", "vitest.config.ts"],
-  "exclude": ["node_modules", ".worktrees", "wiki-workspace", "**/*.test.ts", "**/tests/fixtures/**"]
+  "exclude": [
+    "node_modules",
+    ".worktrees",
+    "wiki-workspace",
+    "**/*.test.ts",
+    "**/tests/fixtures/**",
+    "**/evals/fixtures/**"
+  ]
 }
