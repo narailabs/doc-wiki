@@ -472,3 +472,80 @@ describe("agent_calls[] breakdown", () => {
     expect(perAgent["db_agent"]).toBeCloseTo(0.5, 5);
   });
 });
+
+// ── A6: includeZeroTokens flag for getStats ────────────────────────
+describe("getStats includeZeroTokens (A6)", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-zero-tokens-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** Seed a log with two ops: one carrying tokens, one without. */
+  function seed(): void {
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+    const events = [
+      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", tokens_in: 100, tokens_out: 50 },
+      { ts: "2026-04-01T11:00:00+00:00", op: "init" },  // no token data
+      { ts: "2026-04-01T12:00:00+00:00", op: "lint" },  // no token data
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+  }
+
+  it("default behaviour omits zero-token ops from total_tokens_by_op", () => {
+    seed();
+    const stats = getStats(tmpPath);
+    const tokens = stats["total_tokens_by_op"] as Record<string, number>;
+    expect(tokens["ingest"]).toBe(150);
+    expect("init" in tokens).toBe(false);
+    expect("lint" in tokens).toBe(false);
+  });
+
+  it("includeZeroTokens=true backfills every observed op as 0", () => {
+    seed();
+    const stats = getStats(tmpPath, null, { includeZeroTokens: true });
+    const tokens = stats["total_tokens_by_op"] as Record<string, number>;
+    expect(tokens["ingest"]).toBe(150);
+    expect(tokens["init"]).toBe(0);
+    expect(tokens["lint"]).toBe(0);
+    // Token-bearing op keeps its real total (not overwritten to 0).
+    expect(Object.keys(tokens).sort()).toEqual(["ingest", "init", "lint"]);
+  });
+
+  it("CLI: --include-zero-tokens flag emits the same key set as ops_by_type", () => {
+    seed();
+    const result = runCli([
+      "stats",
+      "--wiki-root",
+      tmpPath,
+      "--include-zero-tokens",
+    ]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout) as {
+      ops_by_type: Record<string, number>;
+      total_tokens_by_op: Record<string, number>;
+    };
+    expect(Object.keys(data.total_tokens_by_op).sort()).toEqual(
+      Object.keys(data.ops_by_type).sort(),
+    );
+    expect(data.total_tokens_by_op["init"]).toBe(0);
+    expect(data.total_tokens_by_op["lint"]).toBe(0);
+  });
+
+  it("CLI: default (no flag) keeps zero-token ops out of total_tokens_by_op", () => {
+    seed();
+    const result = runCli(["stats", "--wiki-root", tmpPath]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout) as {
+      total_tokens_by_op: Record<string, number>;
+    };
+    expect("init" in data.total_tokens_by_op).toBe(false);
+    expect("lint" in data.total_tokens_by_op).toBe(false);
+  });
+});

@@ -208,6 +208,40 @@ describe("TestScorePage", () => {
     expect(signals.has("concept_tags")).toBe(true);
     expect(signals.get("concept_tags")).toBeCloseTo(0.05);
   });
+
+  // A3: scorer is pure — author-set frontmatter `quality:` values do not
+  // influence the recompute. A page hand-tagged 0.85 but with content that
+  // only earns 0.4 will recompute to 0.4. This matches the iter-4 grader's
+  // observation that /wiki-fix appeared to "drop" quality 0.85→0.4; the
+  // recompute is correct, the original 0.85 was aspirational.
+  it("recompute ignores any author-set frontmatter `quality` value", () => {
+    const page = path.join(tmpPath, "wiki", "aspirational.md");
+    writePage(
+      page,
+      fullFrontmatter({
+        quality: 0.99, // wishful thinking by the author
+        tags: ["a", "b", "c"], // < 4 tags → no concept_tags bonus
+      }),
+      // 80 words → base 0.3 (50-150 bucket); +0.1 complete frontmatter
+      new Array(80).fill("word").join(" "),
+    );
+    const result = scorePage(page, edges);
+    expect(q(result.quality)).toBeCloseTo(0.4, 2);
+  });
+
+  it("recompute is idempotent — same page, same score across N calls", () => {
+    const page = path.join(tmpPath, "wiki", "stable.md");
+    writePage(
+      page,
+      fullFrontmatter({ tags: ["a", "b", "c", "d"] }),
+      new Array(200).fill("word").join(" "),
+    );
+    const r1 = q(scorePage(page, edges).quality);
+    const r2 = q(scorePage(page, edges).quality);
+    const r3 = q(scorePage(page, edges).quality);
+    expect(r1).toBe(r2);
+    expect(r2).toBe(r3);
+  });
 });
 
 // ── Claims tests ────────────────────────────────────────────────────

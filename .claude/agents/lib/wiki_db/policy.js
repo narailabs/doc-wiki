@@ -202,6 +202,7 @@ export class Policy {
                     formatted = first.toUpperCase();
                 }
             }
+            _emitPresentOnly("DML statements are displayed but not executed", op, formatted);
             return {
                 decision: "present_only",
                 reason: "DML statements are displayed but not executed",
@@ -339,6 +340,30 @@ function _emitDeny(reason, op) {
     if (op !== null)
         details["op"] = op;
     logEvent({ event_type: "policy_deny", details });
+}
+/**
+ * Symmetric to `_emitDeny`: emit a `policy_present_only` event when a DML
+ * statement is intercepted and returned as formatted SQL rather than
+ * executed. Without this, the "no write event occurred" audit assertion
+ * on PRESENT_ONLY paths passes vacuously — an empty audit log also has
+ * no writes. Recording the policy decision gives downstream consumers
+ * (and eval graders) a positive signal that the decision actually fired.
+ *
+ * The `formatted_sql` is truncated to a reasonable length so the audit
+ * file doesn't bloat on long INSERTs; the full SQL is already in the
+ * API response.
+ */
+function _emitPresentOnly(reason, op, formattedSql) {
+    const truncated = formattedSql.length > 500
+        ? formattedSql.slice(0, 500) + "\u2026"
+        : formattedSql;
+    const details = {
+        reason,
+        formatted_sql: truncated,
+    };
+    if (op !== null)
+        details["op"] = op;
+    logEvent({ event_type: "policy_present_only", details });
 }
 /**
  * Serialize a PolicyResult to Python-compatible JSON.

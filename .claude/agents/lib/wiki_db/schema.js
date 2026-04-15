@@ -14,6 +14,7 @@
  *    it when present; otherwise fall back to the sync call (sqlite path).
  */
 import { performance } from "node:perf_hooks";
+import { logEvent } from "./audit.js";
 /** Cached schema introspection via a database driver. */
 export class SchemaManager {
     _driver;
@@ -50,6 +51,24 @@ export class SchemaManager {
         catch {
             return [];
         }
+        // A5 (G-DB-AUDIT extension): emit `schema_inspect` BEFORE returning the
+        // tables to the caller. The event documents which env+filter the
+        // introspection ran against and how much surface area it exposed
+        // (column_count is the sum across all tables — the most useful
+        // single number for capacity-style audits). We never throw from
+        // logEvent (the audit pipe is best-effort), so this is safe in every
+        // code path including the cache-hit fast-path above.
+        let columnCount = 0;
+        for (const t of tables)
+            columnCount += t.columns.length;
+        logEvent({
+            event_type: "schema_inspect",
+            details: {
+                env,
+                table_filter: tableFilter,
+                column_count: columnCount,
+            },
+        });
         this._cache.set(cacheKey, { ts: now, data: tables });
         return tables;
     }

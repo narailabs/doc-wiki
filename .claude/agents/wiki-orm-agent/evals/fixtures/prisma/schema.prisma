@@ -1,0 +1,31 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  posts Post[]
+
+  @@map("users")
+}
+
+model Post {
+  id       Int       @id @default(autoincrement())
+  title    String
+  authorId Int       @map("author_id")
+  author   User      @relation(fields: [authorId], references: [id])
+  comments Comment[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id     Int    @id @default(autoincrement())
+  body   String
+  postId Int    @map("post_id")
+  post   Post   @relation(fields: [postId], references: [id])
+
+  @@map("comments")
+}

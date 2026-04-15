@@ -76,7 +76,7 @@ For pages with external source references, auto-generate:
 - **Live code:** Read `src/auth/session.py:42-58`
 ```
 
-Map source types to agent commands. Skip for pages compiled only from local files.
+Generation is handled by `scripts/how_to_go_deeper.ts` (compiled `how_to_go_deeper.js`). It classifies each string in the page's `sources:` frontmatter — Atlassian URLs / `jira://` → Jira, Confluence URLs / `confluence://` → Confluence, `gh://` or github.com → GitHub, `notion://` or notion.so → Notion, GCP/AWS console URLs and schemes → the respective agent, `db://env/target` → the db-query agent, code extensions with optional `:lines` → Live code. Sources under `raw/` (already ingested into the body) are elided. Pass the enabled-agents set from `wiki.config.yaml` so hints for disabled agents render as "enable the wiki-X-agent" callouts instead of unrunnable commands.
 
 ## Graph Edges
 
@@ -131,3 +131,5 @@ erDiagram
     users ||--o{ orders : "has many"
 ```
 ````
+
+Splicing is handled deterministically by `scripts/mermaid_inject.ts`. Every source / mapper agent that produces diagram-worthy data returns a `mermaid: { type, title, code }` envelope in its JSON output (see `agents/lib/mermaid_format.ts` for the shared builders `formatGraph` and `formatErDiagram`). The injector collects those envelopes during `/wiki-ingest` step 9 and wraps each in `<!-- wiki-mermaid: <title> start/end -->` markers, so re-running an ingest replaces stale blocks in place rather than stacking duplicates. Agents that don't produce a diagram MUST omit the `mermaid` field entirely — do not emit an empty envelope.

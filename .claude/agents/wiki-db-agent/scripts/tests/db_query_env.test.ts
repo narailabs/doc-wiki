@@ -311,4 +311,95 @@ describe("db_query --env dispatch (G-DB-AGENT-ENV)", () => {
     expect(result.table_count).toBe(1);
     expect(result.mermaid?.type).toBe("erDiagram");
   });
+
+  // A5: db_query --action schema --env <name> with audit enabled in YAML
+  // should write [pool_created, schema_inspect, connection_released] to the
+  // audit log. The test writes the YAML with an absolute audit path so we
+  // can read the log back deterministically. Uses a unique env name to
+  // avoid cross-test pool reuse — clearEnvironments drops the env-name
+  // map but pools persist, so reusing "dev" here would suppress the
+  // pool_created event from a prior test in this file.
+  it("--action schema audit log contains [pool_created, schema_inspect, connection_released]", async () => {
+    // Drain the pool registry so this test's `pool_created` will fire even
+    // if a prior test seeded a `dev`-named pool. shutdownAll is async and
+    // safe to call when nothing is registered.
+    const { shutdownAll } = await import("../../../lib/wiki_db/connection.js");
+    await shutdownAll();
+
+    const dbPath = makeFixtureDb(tmp);
+    const auditPath = path.join(tmp, "audit.jsonl");
+    // Hand-build the YAML so we can include an `audit:` block (the helper
+    // doesn't currently support nested non-environments keys). Use a
+    // unique env name to keep the pool registry distinct from other tests.
+    const envName = `a5_audit_${Math.random().toString(36).slice(2, 8)}`;
+    const configPath = path.join(tmp, "wiki.config.yaml");
+    fs.writeFileSync(
+      configPath,
+      `wiki:
+  name: A5 Test
+  domain: test
+
+ecosystem:
+  database:
+    enabled: true
+    audit:
+      enabled: true
+      path: "${auditPath}"
+    environments:
+      ${envName}:
+        driver: "sqlite"
+        database: "${dbPath}"
+        schema: ""
+        approval_mode: "auto"
+`,
+      "utf-8",
+    );
+
+    await captureStdout(async () => {
+      const code = await main([
+        "--env",
+        envName,
+        "--config",
+        configPath,
+        "--action",
+        "schema",
+      ]);
+      expect(code).toBe(0);
+    });
+
+    expect(fs.existsSync(auditPath)).toBe(true);
+    const lines = fs
+      .readFileSync(auditPath, "utf-8")
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0)
+      .map(
+        (l) =>
+          JSON.parse(l) as {
+            event_type: string;
+            details?: {
+              env?: string;
+              table_filter?: string | null;
+              column_count?: number;
+            };
+          },
+      );
+    const events = lines.map((r) => r.event_type);
+    // The exact sequence we promised in A5: pool created, schema inspected,
+    // connection released. Order matters.
+    expect(events).toContain("pool_created");
+    expect(events).toContain("schema_inspect");
+    expect(events).toContain("connection_released");
+    const poolIdx = events.indexOf("pool_created");
+    const inspectIdx = events.indexOf("schema_inspect");
+    const releaseIdx = events.indexOf("connection_released");
+    expect(poolIdx).toBeLessThan(inspectIdx);
+    expect(inspectIdx).toBeLessThan(releaseIdx);
+
+    // schema_inspect details: env name + column_count for the seeded users
+    // table (id, name → 2 columns).
+    const inspect = lines.find((r) => r.event_type === "schema_inspect");
+    expect(inspect?.details?.env).toBe(envName);
+    expect(inspect?.details?.column_count).toBe(2);
+  });
 });

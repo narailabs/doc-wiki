@@ -278,6 +278,152 @@ describe("cross-validation section rendering", () => {
     expect(md).not.toContain("## Cross-Validation");
   });
 
+  describe("A1 — SQLAlchemy `secondary=` bridge-table linkage", () => {
+    function entitiesWithBridge(): ExtractedEntity[] {
+      return [
+        makeExtractedEntity({
+          class_name: "User",
+          table_name: "users",
+          columns: [makeExtractedColumn({ name: "id" })],
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_many",
+              target_entity: "Role",
+              through_table: "user_roles",
+            }),
+          ],
+        }),
+        makeExtractedEntity({
+          class_name: "Role",
+          table_name: "roles",
+          columns: [makeExtractedColumn({ name: "id" })],
+        }),
+      ];
+    }
+
+    it("emits `}o--o{` cardinality for relationships carrying through_table", () => {
+      const md = generateMappingMarkdown(entitiesWithBridge(), "P", "sqlalchemy");
+      // True many-to-many on both ends.
+      expect(md).toContain("users }o--o{ roles");
+    });
+
+    it("emits a Mermaid comment naming the bridge table above the edge", () => {
+      const md = generateMappingMarkdown(entitiesWithBridge(), "P", "sqlalchemy");
+      const idxComment = md.indexOf("%% via user_roles");
+      const idxEdge = md.indexOf("users }o--o{ roles");
+      expect(idxComment).toBeGreaterThan(0);
+      expect(idxEdge).toBeGreaterThan(idxComment);
+    });
+
+    it("does not emit a `%% via` comment when through_table is absent", () => {
+      const plain: ExtractedEntity[] = [
+        makeExtractedEntity({
+          class_name: "User",
+          table_name: "users",
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_many",
+              target_entity: "Role",
+            }),
+          ],
+        }),
+        makeExtractedEntity({
+          class_name: "Role",
+          table_name: "roles",
+        }),
+      ];
+      const md = generateMappingMarkdown(plain, "P", "sqlalchemy");
+      expect(md).not.toContain("%% via");
+      // Cardinality is still many-to-many.
+      expect(md).toContain("users }o--o{ roles");
+    });
+  });
+
+  describe("A2 — bidirectional relationship dedup", () => {
+    it("emits one edge for User.one_to_many↔Order.many_to_one (prefers many-side)", () => {
+      const ents: ExtractedEntity[] = [
+        makeExtractedEntity({
+          class_name: "User",
+          table_name: "users",
+          relationships: [
+            makeExtractedRelationship({
+              type: "one_to_many",
+              target_entity: "Order",
+            }),
+          ],
+        }),
+        makeExtractedEntity({
+          class_name: "Order",
+          table_name: "orders",
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_one",
+              target_entity: "User",
+            }),
+          ],
+        }),
+      ];
+      const md = generateMappingMarkdown(ents, "P", "sqlalchemy");
+      // The one_to_many side wins (higher rank).
+      expect(md).toContain("users ||--o{ orders");
+      // The inverse arrow MUST NOT appear.
+      expect(md).not.toContain("orders }o--|| users");
+    });
+
+    it("preserves one-sided relationships (no inverse declared)", () => {
+      const ents: ExtractedEntity[] = [
+        makeExtractedEntity({
+          class_name: "Order",
+          table_name: "orders",
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_one",
+              target_entity: "User",
+            }),
+          ],
+        }),
+        makeExtractedEntity({
+          class_name: "User",
+          table_name: "users",
+        }),
+      ];
+      const md = generateMappingMarkdown(ents, "P", "sqlalchemy");
+      // No inverse → keep the only edge we have, even if it's "many-to-one".
+      expect(md).toContain("orders }o--|| users");
+    });
+
+    it("many-to-many beats both inverse declarations", () => {
+      const ents: ExtractedEntity[] = [
+        makeExtractedEntity({
+          class_name: "User",
+          table_name: "users",
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_many",
+              target_entity: "Role",
+              through_table: "user_roles",
+            }),
+          ],
+        }),
+        makeExtractedEntity({
+          class_name: "Role",
+          table_name: "roles",
+          relationships: [
+            makeExtractedRelationship({
+              type: "many_to_one",
+              target_entity: "User",
+            }),
+          ],
+        }),
+      ];
+      const md = generateMappingMarkdown(ents, "P", "sqlalchemy");
+      const m2mCount = (md.match(/users }o--o\{ roles/g) ?? []).length;
+      const inverseCount = (md.match(/roles }o--\|\| users/g) ?? []).length;
+      expect(m2mCount).toBe(1);
+      expect(inverseCount).toBe(0);
+    });
+  });
+
   it("places section after Dual-Access and before Mermaid", () => {
     const xvalid: CrossValidationReport = {
       matched: [],

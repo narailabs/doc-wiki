@@ -13,6 +13,7 @@ import * as yaml from "js-yaml";
 import {
   checkBrokenLinks,
   checkCodeRefDrift,
+  checkDeprecatedClaims,
   checkFrontmatter,
   checkHighAmbiguityRate,
   checkIndexCoverage,
@@ -808,6 +809,102 @@ describe("TestLintChecksCLI", () => {
     }
   });
 
+  // A4: --page scopes the report. Default behaviour (whole wiki) unchanged.
+  it("test_cli_page_filter_returns_only_target_page_issues", () => {
+    const result = runCli(CLI, [
+      "--wiki-root",
+      wiki,
+      "--page",
+      "wiki/broken.md",
+    ]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout);
+    const pages = new Set<string>(
+      (data.issues as Array<{ page: string }>).map((i) => i.page),
+    );
+    // Every issue's page must end with the requested wiki-relative path.
+    for (const p of pages) {
+      expect(p.endsWith("wiki/broken.md")).toBe(true);
+    }
+    // The unfiltered run includes lots of non-broken.md issues — verify
+    // the filtered run is strictly smaller.
+    const fullResult = runCli(CLI, ["--wiki-root", wiki]);
+    const fullData = JSON.parse(fullResult.stdout);
+    expect(data.issues.length).toBeLessThan(fullData.issues.length);
+  });
+
+  it("test_cli_page_filter_glob", () => {
+    const result = runCli(CLI, [
+      "--wiki-root",
+      wiki,
+      "--page",
+      "wiki/auth/*.md",
+    ]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout);
+    for (const issue of data.issues as Array<{ page: string }>) {
+      // Glob constrains to wiki/auth/*.md basenames.
+      expect(issue.page).toMatch(/wiki\/auth\/[^/]+\.md$/);
+    }
+  });
+
+  it("test_cli_help_mentions_page_flag", () => {
+    const result = runCli(CLI, ["--help"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("--page PAGE");
+  });
+
+});
+
+// ── Page-scoped lint (A4) — library-level ─────────────────────────
+describe("lintWiki --page filter (A4)", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-page-");
+    wiki = makeWikiWithPages(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("limits issues to one page when given an absolute path", () => {
+    const target = path.join(wiki, "wiki", "broken.md");
+    const filtered = lintWiki(wiki, null, target);
+    for (const iss of filtered.issues) {
+      expect(iss.page).toBe(target);
+    }
+    // Summary reflects the post-filter list.
+    const sumTotal =
+      filtered.summary.error + filtered.summary.warning + filtered.summary.info;
+    expect(sumTotal).toBe(filtered.issues.length);
+  });
+
+  it("limits issues to one page when given a wiki-relative path", () => {
+    const filtered = lintWiki(wiki, null, "wiki/broken.md");
+    expect(filtered.issues.length).toBeGreaterThan(0);
+    for (const iss of filtered.issues) {
+      expect(iss.page.endsWith("wiki/broken.md")).toBe(true);
+    }
+  });
+
+  it("default behaviour (no --page) returns the same result as before", () => {
+    const before = lintWiki(wiki);
+    const explicitNull = lintWiki(wiki, null, null);
+    expect(explicitNull.issues.length).toBe(before.issues.length);
+  });
+
+  it("can combine --page with --category", () => {
+    // Run only broken_links category against broken.md.
+    const filtered = lintWiki(wiki, "broken_links", "wiki/broken.md");
+    expect(filtered.issues.every((i) => i.category === "broken_links")).toBe(
+      true,
+    );
+    expect(
+      filtered.issues.every((i) => i.page.endsWith("wiki/broken.md")),
+    ).toBe(true);
+  });
 });
 
 // ── Page type enum validation (G5) ─────────────────────────────────
@@ -930,5 +1027,126 @@ describe("checkStaleContent", () => {
     fs.writeFileSync(page, "no frontmatter here\n");
     const issues = checkStaleContent(wiki);
     expect(issues.filter((i) => i.page === page)).toEqual([]);
+  });
+});
+
+describe("checkDeprecatedClaims", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-deprecated-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function claim(rel: string, fm: Record<string, unknown>): string {
+    const p = path.join(wiki, "wiki", "claims", rel);
+    writePage(
+      p,
+      fullFm({ type: "claim", ...fm }),
+      "Claim body.\n",
+    );
+    return p;
+  }
+
+  it("flags deprecated claim with missing failure_reason as error", () => {
+    const p = claim("dead.md", { status: "deprecated", confidence: 0.1 });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("error");
+    expect(issues[0]?.category).toBe("deprecated_claims");
+    expect(issues[0]?.detail).toContain("failure_reason");
+  });
+
+  it("flags deprecated claim with empty/whitespace failure_reason as error", () => {
+    const p = claim("blank.md", {
+      status: "deprecated",
+      confidence: 0.1,
+      failure_reason: "   ",
+    });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("error");
+  });
+
+  it("accepts deprecated claim with non-empty failure_reason", () => {
+    const p = claim("ok.md", {
+      status: "deprecated",
+      confidence: 0.1,
+      failure_reason: "Superseded by the new approach in RFC-42.",
+    });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toEqual([]);
+  });
+
+  it("warns on deprecated claim with high confidence (>0.3)", () => {
+    const p = claim("suspicious.md", {
+      status: "deprecated",
+      confidence: 0.85,
+      failure_reason: "still being deprecated",
+    });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.detail).toContain("0.85");
+  });
+
+  it("emits both error AND confidence warning when deprecated claim is fully broken", () => {
+    const p = claim("double.md", {
+      status: "deprecated",
+      confidence: 0.9,
+      // missing failure_reason on purpose
+    });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(2);
+    const severities = issues.map((i) => i.severity).sort();
+    expect(severities).toEqual(["error", "warning"]);
+  });
+
+  it("warns when a non-claim page carries failure_reason", () => {
+    const p = path.join(wiki, "wiki", "random.md");
+    writePage(
+      p,
+      fullFm({
+        type: "concept",
+        failure_reason: "this does nothing here",
+      }),
+      "Body\n",
+    );
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.detail).toContain("non-claim");
+  });
+
+  it("warns when a live (non-deprecated) claim carries failure_reason", () => {
+    const p = claim("live.md", {
+      status: "supported",
+      confidence: 0.8,
+      failure_reason: "leftover from earlier state",
+    });
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.detail).toContain("ignored by banlist");
+  });
+
+  it("skips pages without any claim-related fields", () => {
+    const p = path.join(wiki, "wiki", "plain.md");
+    writePage(p, fullFm({ type: "concept" }), "Body\n");
+    const issues = checkDeprecatedClaims(wiki).filter((i) => i.page === p);
+    expect(issues).toEqual([]);
+  });
+
+  it("is selectable via lintWiki(--category deprecated_claims)", () => {
+    claim("broken.md", { status: "deprecated" });
+    const result = lintWiki(wiki, "deprecated_claims");
+    const cats = new Set(result.issues.map((i) => i.category));
+    expect(cats.has("deprecated_claims")).toBe(true);
+    // No other categories should appear under a category filter.
+    expect(cats.size).toBe(1);
   });
 });

@@ -180,22 +180,144 @@ export function generateMappingMarkdown(
       }
     }
 
-    // Relationships — dedupe by (table_name, rel_type) pair.
-    const seenRels = new Set<string>();
+    // Relationships + stubs for external targets.
+    //
+    // Any relationship type with a resolvable cardinality gets an edge.
+    // Earlier iterations only rendered `one_to_many` and `many_to_many`,
+    // which meant SQLAlchemy's generic `relationship` type, `foreign_key`
+    // declarations, `many_to_one`, and `one_to_one` all produced zero
+    // Mermaid edges — a class with 3 relationship() declarations would
+    // show as 3 isolated nodes. The table below maps every extractor
+    // relationship type to a Mermaid cardinality so the diagram matches
+    // the entity-table mapping markdown above it.
+    const CARDINALITY: Record<string, string> = {
+      one_to_one: "||--||",
+      one_to_many: "||--o{",
+      many_to_one: "}o--||",
+      many_to_many: "}o--o{",
+      foreign_key: "}o--||",
+      relationship: "||--o{",
+    };
+
+    const tableByClass = new Map<string, string>();
+    for (const e of entities) tableByClass.set(e.class_name, e.table_name);
+
+    // When a relationship's `target_entity` names a class that WASN'T
+    // extracted, emit a minimal stub declaration so every endpoint in
+    // the diagram resolves to a real node (otherwise the rendered
+    // diagram shows a nameless empty box where the stub should be).
+    const externalStubs = new Set<string>();
     for (const entity of entities) {
       for (const rel of entity.relationships) {
-        if (rel.type === "one_to_many" || rel.type === "many_to_many") {
-          const relKey = `${entity.table_name}\x00${rel.type}`;
-          if (!seenRels.has(relKey)) {
-            seenRels.add(relKey);
-            const cardinality =
-              rel.type === "one_to_many" ? "||--o{" : "}o--o{";
-            lines.push(
-              `    ${entity.table_name} ${cardinality} ${entity.table_name}_rel : ""`,
-            );
-          }
+        if (!(rel.type in CARDINALITY)) continue;
+        if (rel.target_entity && !tableByClass.has(rel.target_entity)) {
+          externalStubs.add(rel.target_entity.toLowerCase());
         }
       }
+    }
+    for (const stub of Array.from(externalStubs).sort()) {
+      lines.push(`    ${stub} {`);
+      lines.push(`        string _external "not-in-scan"`);
+      lines.push(`    }`);
+    }
+
+    // Edge emission with two layers of dedup:
+    //
+    //   1. (src, tgt, rel_type) — guards against the same relationship being
+    //      declared twice on one class (e.g., two `@OneToMany` to the same
+    //      target). This is the historical dedup.
+    //
+    //   2. A2: bidirectional pair canonicalization — when we have BOTH
+    //      `User.one_to_many → Order` AND `Order.many_to_one → User`, both
+    //      describe the same underlying FK. The Mermaid diagram should show
+    //      one edge, not two arrows in opposite directions. We canonicalize
+    //      by the unordered pair {table_a, table_b} and prefer the side that
+    //      reads more naturally (one_to_many > many_to_one; many_to_many
+    //      always wins because it's symmetric anyway). When neither side is
+    //      "natural-form" we keep the first one we saw — stable, matches
+    //      pre-A2 ordering for unrelated edges.
+    //
+    // The bridge-table comment (A1, SQLAlchemy `secondary=`) is rendered as a
+    // `%%`-prefixed Mermaid comment on the line above the edge so it travels
+    // with the diagram across renderers without altering the parsed graph.
+
+    /** Order one_to_many before its inverse so we prefer the readable side. */
+    const directionRank: Record<string, number> = {
+      many_to_many: 0,
+      one_to_many: 1,
+      one_to_one: 2,
+      relationship: 3,
+      many_to_one: 4,
+      foreign_key: 5,
+    };
+
+    interface EdgeEmission {
+      src: string;
+      tgt: string;
+      relType: string;
+      cardinality: string;
+      through?: string;
+    }
+
+    const seenRels = new Set<string>();
+    const candidates: EdgeEmission[] = [];
+    for (const entity of entities) {
+      for (const rel of entity.relationships) {
+        const cardinality = CARDINALITY[rel.type];
+        if (cardinality === undefined) continue;
+        const targetTable = rel.target_entity
+          ? (tableByClass.get(rel.target_entity) ??
+            rel.target_entity.toLowerCase())
+          : `${entity.table_name}_rel`;
+        const relKey = `${entity.table_name}\x00${targetTable}\x00${rel.type}`;
+        if (seenRels.has(relKey)) continue;
+        seenRels.add(relKey);
+        candidates.push({
+          src: entity.table_name,
+          tgt: targetTable,
+          relType: rel.type,
+          cardinality,
+          through: rel.through_table,
+        });
+      }
+    }
+
+    // A2: canonicalize bidirectional pairs. Bucket by unordered pair-key,
+    // pick the highest-ranked emission per bucket.
+    const pairBuckets = new Map<string, EdgeEmission[]>();
+    for (const c of candidates) {
+      const a = c.src;
+      const b = c.tgt;
+      const key = a < b ? `${a}\x00${b}` : `${b}\x00${a}`;
+      const bucket = pairBuckets.get(key);
+      if (bucket === undefined) pairBuckets.set(key, [c]);
+      else bucket.push(c);
+    }
+    const emittedKeys = new Set<string>();
+    for (const c of candidates) {
+      const a = c.src;
+      const b = c.tgt;
+      const pairKey = a < b ? `${a}\x00${b}` : `${b}\x00${a}`;
+      if (emittedKeys.has(pairKey)) continue;
+      const bucket = pairBuckets.get(pairKey) ?? [c];
+      // Select the lowest-rank (highest-priority) emission. Tie-break on
+      // insertion order via stable sort.
+      const winner = [...bucket].sort(
+        (x, y) =>
+          (directionRank[x.relType] ?? 99) - (directionRank[y.relType] ?? 99),
+      )[0];
+      if (winner === undefined) continue;
+      emittedKeys.add(pairKey);
+      if (winner.through !== undefined && winner.through.length > 0) {
+        // A1: surface the bridge table as a Mermaid comment so the diagram
+        // documents WHICH join object brokers the m2m relationship. `%%`
+        // is the Mermaid comment marker — ignored by the parser, visible
+        // in the source.
+        lines.push(`    %% via ${winner.through}`);
+      }
+      lines.push(
+        `    ${winner.src} ${winner.cardinality} ${winner.tgt} : ""`,
+      );
     }
 
     lines.push("```");

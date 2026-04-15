@@ -4,13 +4,15 @@
     {
       "id": 1,
       "prompt": "Generate a CLAUDE.md for this project and its three submodules, pointing each submodule back to the root",
-      "expected_output": "Root CLAUDE.md with wiki-managed section linking to all submodules; per-submodule CLAUDE.md with a parent link back to the root",
+      "expected_output": "Root CLAUDE.md with wiki-managed section listing all submodules; per-submodule CLAUDE.md with a parent link back to the root; all managed content between `<!-- wiki-managed: start -->` / `<!-- wiki-managed: end -->` markers",
       "files": [],
       "expectations": [
-        "Managed content wrapped in `<!-- wiki-managed: start -->` and `<!-- wiki-managed: end -->` markers",
-        "Root file lists every discovered submodule with a relative link",
-        "Each submodule file includes a Parent Project link back to the root CLAUDE.md",
-        "Content outside the managed markers is preserved byte-for-byte on re-generation"
+        "Every generated CLAUDE.md contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (grep -c returns 1 for each on every file)",
+        "Root CLAUDE.md lists EXACTLY three submodule links — one per discovered submodule — with relative paths that resolve to real CLAUDE.md files under the submodule dirs",
+        "Each submodule CLAUDE.md contains a relative link back to the root CLAUDE.md (e.g., `../../CLAUDE.md`) under a Parent Project heading, and the link target resolves",
+        "Managed section content is non-empty: each file's region between the start/end markers contains at least an Overview heading OR a non-empty link to wiki/index.md — empty markers fail",
+        "Running the generator a second time produces byte-identical CLAUDE.md files across the board (diff -ru is empty) — idempotency holds",
+        "When the user edits content OUTSIDE the managed markers between runs (e.g., adds a new heading above the start marker), the next generation preserves that edit unchanged"
       ]
     },
     {
@@ -19,10 +21,12 @@
       "expected_output": "Only the content between the wiki-managed markers is replaced; the user's manual additions remain intact",
       "files": [],
       "expectations": [
-        "Preserves all content above the `<!-- wiki-managed: start -->` marker",
-        "Preserves all content below the `<!-- wiki-managed: end -->` marker",
-        "Regenerates only the managed section from the current wiki state",
-        "Is idempotent on re-run when the wiki state has not changed"
+        "Bytes above the `<!-- wiki-managed: start -->` marker are preserved — sha256 of the pre-marker region before vs after matches",
+        "Bytes below the `<!-- wiki-managed: end -->` marker are preserved — sha256 of the post-marker region before vs after matches",
+        "The managed section is refreshed from the current wiki state — its sha256 differs between before and after (proving the tool actually ran)",
+        "The refreshed managed section contains substantive content: at least one heading AND either a link into wiki/ or a mention of the project's real name — a block of whitespace or an error stub fails this",
+        "After regeneration, the file still contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (no marker duplication, no whitespace drift on the marker lines)",
+        "A second run against the same wiki state produces a byte-identical file (idempotent)"
       ]
     }
   ]

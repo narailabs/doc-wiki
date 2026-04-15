@@ -141,8 +141,19 @@ function parseArgs(argv) {
             continue;
         }
         if (a === "--output-json") {
-            out.outputJson = true;
-            i++;
+            // Accept an optional file path after the flag. Anything starting
+            // with `-` is another flag, not our value. `--output-json` alone
+            // keeps the legacy stdout behaviour; `--output-json <path>` writes
+            // to the named file.
+            const next = argv[i + 1];
+            if (next !== undefined && !next.startsWith("-")) {
+                out.outputJson = next;
+                i += 2;
+            }
+            else {
+                out.outputJson = true;
+                i++;
+            }
             continue;
         }
         if (!a.startsWith("--")) {
@@ -155,6 +166,10 @@ function parseArgs(argv) {
         switch (name) {
             case "codebase-path":
                 out.codebasePath = value ?? "";
+                break;
+            case "output-json":
+                // `--output-json=<path>` eq-form. Empty value → boolean stdout.
+                out.outputJson = value !== undefined && value !== "" ? value : true;
                 break;
             case "profile":
                 out.profile = value ?? "";
@@ -174,7 +189,7 @@ function parseArgs(argv) {
     }
     return out;
 }
-const HELP_TEXT = `usage: orm_detect.js --codebase-path <path> [--profile <name|auto>] [--project-name <name>] [--output-markdown <file>] [--output-json] [--env <name>]
+const HELP_TEXT = `usage: orm_detect.js --codebase-path <path> [--profile <name|auto>] [--project-name <name>] [--output-markdown <file>] [--output-json [<file>]] [--env <name>]
 
 Detect ORM patterns and generate database-mapping.md.
 
@@ -183,7 +198,12 @@ options:
   --profile NAME           ORM profile (jpa|sqlalchemy|django|prisma|typeorm|entity_framework|activerecord|auto); default: auto
   --project-name NAME      Project name used in the generated markdown
   --output-markdown FILE   Write database-mapping.md to FILE
-  --output-json            Print the AGENT.md-contract JSON to stdout
+  --output-json [<file>]   Emit the AGENT.md-contract JSON. Without a path,
+                           prints to stdout (legacy). With a path, writes
+                           to that file (directory is created as needed);
+                           stdout stays free for status/progress messages.
+                           Equivalent forms: --output-json <file>
+                                             --output-json=<file>
   --env NAME               DB environment name to cross-validate against. When
                            set and ecosystem.orm.cross_validate_against_db is
                            true in wiki.config.yaml (default), entity fields
@@ -245,7 +265,7 @@ export async function main(argv = process.argv.slice(2)) {
             mermaid: null,
         };
         if (args.outputJson) {
-            process.stdout.write(JSON.stringify(empty, null, 2) + "\n");
+            writeJsonOutput(args.outputJson, empty);
         }
         else {
             process.stdout.write("No ORM profile detected in codebase.\n");
@@ -275,20 +295,59 @@ export async function main(argv = process.argv.slice(2)) {
                 class_name: e.class_name,
                 table_name: e.table_name,
                 schema: e.schema_name,
-                columns: e.columns.length,
-                relationships: e.relationships.map((r) => r.type),
+                // A7: emit columns as objects, symmetric with relationships. The
+                // earlier shape (`columns: <count>`) was vacuous for graders that
+                // needed to verify which fields the extractor actually saw —
+                // forcing them to re-parse the Mermaid diagram. The pair {name,
+                // source_field} carries the same info the ExtractedColumn dict
+                // does internally; downstream tooling that only wants the count
+                // can take `.length` on the array.
+                columns: e.columns.map((c) => ({
+                    name: c.name,
+                    source_field: c.source_field,
+                })),
+                // Each relationship now serializes as an object carrying both the
+                // kind and the resolved target_entity, so downstream consumers
+                // (eval graders, wiki-claude-md generators, IDE tooling) can
+                // verify target resolution from the JSON alone rather than having
+                // to re-parse the rendered Mermaid diagram. Previously emitted
+                // as a flat string array of type names, which was vacuous for
+                // any assertion that needed the target.
+                relationships: e.relationships.map((r) => ({
+                    type: r.type,
+                    target_entity: r.target_entity,
+                })),
             })),
             mapping_file: mappingFile,
             mermaid: extractMermaidBlock(markdown),
         };
         if (xvalid !== undefined)
             result["cross_validation"] = xvalid;
-        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+        writeJsonOutput(args.outputJson, result);
     }
     else if (!args.outputMarkdown) {
         process.stdout.write(markdown);
     }
     return 0;
+}
+/**
+ * Dispatch the JSON output based on the `--output-json` arg shape.
+ * `true`  → write to stdout (legacy contract, used by all existing callers)
+ * string  → write to that file path, creating parent directories
+ *
+ * Also writes a one-line confirmation to stderr when a file path is used
+ * so scripted runs have a visible signal of where the JSON landed without
+ * intermixing with stdout.
+ */
+function writeJsonOutput(target, payload) {
+    const body = JSON.stringify(payload, null, 2) + "\n";
+    if (typeof target === "string") {
+        fs.mkdirSync(path.dirname(path.resolve(target)), { recursive: true });
+        fs.writeFileSync(target, body);
+        process.stderr.write(`orm_detect: wrote JSON to ${target}\n`);
+        return;
+    }
+    process.stdout.write(body);
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {

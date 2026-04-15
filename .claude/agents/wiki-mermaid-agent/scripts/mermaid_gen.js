@@ -66,24 +66,38 @@ function escapeRegex(s) {
     return s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 }
 /**
- * Inject mermaid blocks into page content under a section heading.
+ * Inject mermaid blocks into page content.
  *
- * If the page already has a section matching `section`, that section is
- * replaced (up to the next `##` heading or end of file). Otherwise the
- * section is appended at the end.
+ * Two modes, tried in order:
+ *
+ *   1. Managed markers. If the page contains both
+ *      `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` (in
+ *      that order), the content between them is replaced with the rendered
+ *      blocks and the markers themselves are preserved. This is the
+ *      preferred mode — page authors pick where the diagram lives and the
+ *      placement stays stable across re-runs.
+ *
+ *   2. Section fallback. If there are no markers, the existing
+ *      `## Diagrams` section behavior is used: replace the section content
+ *      up to the next `##` heading, or append the section at EOF.
  */
+export const MERMAID_START_MARKER = "<!-- wiki-mermaid: start -->";
+export const MERMAID_END_MARKER = "<!-- wiki-mermaid: end -->";
 export function injectMermaid(pageContent, mermaidBlocks, section = "## Diagrams") {
     const blocksText = mermaidBlocks.join("\n\n");
+    // 1. Marker-based injection when both markers are present (in order).
+    const startIdx = pageContent.indexOf(MERMAID_START_MARKER);
+    const endIdx = pageContent.indexOf(MERMAID_END_MARKER);
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        const before = pageContent.slice(0, startIdx + MERMAID_START_MARKER.length);
+        const after = pageContent.slice(endIdx);
+        return `${before}\n${blocksText}\n${after}`;
+    }
+    // 2. Section-based fallback (original behavior).
     const newSection = `${section}\n\n${blocksText}\n`;
-    // Python: `re.compile(escape(section) + r"\n.*?(?=\n## |\Z)", re.DOTALL)`
-    // The `\Z` anchor matches end-of-string in Python; in JS we can emulate
-    // by using `(?=\n## |$)` with the `s` flag, but `$` needs `m` to match
-    // line-end rather than string-end. To preserve exact Python semantics we
-    // slice manually: find the section, look ahead for the next `\n## `.
     const escaped = escapeRegex(section);
     const pattern = new RegExp(escaped + "\\n[\\s\\S]*?(?=\\n## |$)", "");
     if (pattern.test(pageContent)) {
-        // Reset state to avoid lastIndex carry-over.
         pattern.lastIndex = 0;
         return pageContent.replace(pattern, newSection);
     }

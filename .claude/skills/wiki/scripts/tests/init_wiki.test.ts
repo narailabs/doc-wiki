@@ -146,12 +146,22 @@ describe("init_wiki — initial files", () => {
     expect(content).not.toContain("*.pyc");
   });
 
-  it("test_creates_empty_events_log", () => {
+  it("test_events_log_records_init_op", () => {
+    // /wiki-init emits a single `op: init` event so the scaffold shows up in
+    // the same audit stream as ingest/query/lint. Earlier behaviour left
+    // events.jsonl empty after init; the updated contract records the op.
     const wiki = tmpWiki(tmpPath);
     runInit(wiki);
     const events = path.join(wiki, "log", "events.jsonl");
     expect(fs.existsSync(events)).toBe(true);
-    expect(fs.readFileSync(events, "utf-8")).toBe("");
+    const raw = fs.readFileSync(events, "utf-8").trim();
+    const lines = raw.split("\n").filter((l) => l.length > 0);
+    expect(lines).toHaveLength(1);
+    const entry = JSON.parse(lines[0] as string);
+    expect(entry.op).toBe("init");
+    expect(entry.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(Array.isArray(entry.created_dirs)).toBe(true);
+    expect(Array.isArray(entry.created_files)).toBe(true);
   });
 
   it("test_creates_empty_edges_file", () => {

@@ -233,3 +233,89 @@ describe("wiki_db.schema", () => {
     });
   });
 });
+
+// ── A5: schema_inspect audit emission ──────────────────────────────
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { disableAudit, enableAudit } from "../audit.js";
+import { cleanupTmpPath, makeTmpPath } from "./fixtures.js";
+
+interface AuditRecord {
+  event_type: string;
+  details?: {
+    env?: string;
+    table_filter?: string | null;
+    column_count?: number;
+  };
+}
+
+function readAudit(p: string): AuditRecord[] {
+  if (!fs.existsSync(p)) return [];
+  return fs
+    .readFileSync(p, "utf-8")
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as AuditRecord);
+}
+
+describe("SchemaManager.getSchema schema_inspect audit (A5)", () => {
+  let tmpPath: string;
+  let logPath: string;
+  let driver: SQLiteDriver;
+  let conn: unknown;
+
+  beforeEach(() => {
+    disableAudit();
+    tmpPath = makeTmpPath("schema-audit-");
+    logPath = path.join(tmpPath, "audit.jsonl");
+    driver = new SQLiteDriver();
+    const c = driver.connect({ database: ":memory:" });
+    c.exec(
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL); " +
+        "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER);",
+    );
+    conn = c;
+  });
+
+  afterEach(() => {
+    disableAudit();
+    if (conn) driver.close(conn);
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("emits schema_inspect with env, table_filter, column_count BEFORE returning", async () => {
+    enableAudit(logPath);
+    const mgr = new SchemaManager(driver, 300);
+    const tables = await mgr.getSchema(conn, "dev");
+    expect(tables.length).toBe(2);
+
+    const records = readAudit(logPath);
+    const inspects = records.filter((r) => r.event_type === "schema_inspect");
+    expect(inspects.length).toBe(1);
+    const ev = inspects[0]!;
+    expect(ev.details?.env).toBe("dev");
+    expect(ev.details?.table_filter).toBe(null);
+    // 2 cols on users + 2 cols on orders
+    expect(ev.details?.column_count).toBe(4);
+  });
+
+  it("includes the table_filter when one was supplied", async () => {
+    enableAudit(logPath);
+    const mgr = new SchemaManager(driver, 300);
+    await mgr.getSchema(conn, "qa", "", "user%");
+    const records = readAudit(logPath);
+    const inspects = records.filter((r) => r.event_type === "schema_inspect");
+    expect(inspects.length).toBe(1);
+    expect(inspects[0]!.details?.env).toBe("qa");
+    expect(inspects[0]!.details?.table_filter).toBe("user%");
+    expect(inspects[0]!.details?.column_count).toBe(2);
+  });
+
+  it("does not emit when audit is disabled (default)", async () => {
+    // (audit deliberately not enabled)
+    const mgr = new SchemaManager(driver, 300);
+    await mgr.getSchema(conn, "dev");
+    expect(fs.existsSync(logPath)).toBe(false);
+  });
+});

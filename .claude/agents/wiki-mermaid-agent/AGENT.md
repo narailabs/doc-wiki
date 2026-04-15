@@ -7,7 +7,7 @@ description: |
   diagrams, flowcharts, class diagrams, state diagrams, and more.
 type: maintenance
 autonomy_level: autonomous
-model: none
+model: inherit
 tools: [Bash, Read, Write]
 color: green
 ---
