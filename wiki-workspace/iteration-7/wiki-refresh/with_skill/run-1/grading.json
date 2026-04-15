@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {"text": "Re-computed content_hash for the source differs from the value stored in .wiki-cache/ from the original ingest — both values appear in the events.jsonl entry as stale_hash and fresh_hash", "passed": true, "evidence": "events.jsonl line 3 refresh event: stale_hash=e4bffe9b83d97b... fresh_hash=a5b1e0b7a9860a... Cache HIT on old hash, MISS on new hash → triggered refresh."},
+    {"text": "The corresponding wiki/architecture.md body is updated to reflect new content from the source (a phrase introduced in the modified source appears in the page body)", "passed": true, "evidence": "page-after.md body contains 'unified gateway ingress' (introduced in source-after.md, absent from source-before.md), appearing multiple times."},
+    {"text": "The page's frontmatter still contains reviewer: alice (manual field preserved); standard managed fields (updated, sources, summary) are refreshed; created is unchanged", "passed": true, "evidence": "frontmatter-diff.md: reviewer=alice preserved; created 2026-04-10T08:00:00 unchanged; updated refreshed to 2026-04-15T00:56:30; summary refreshed to redesigned platform."},
+    {"text": "raw/architecture.md is overwritten with the new source content (its file hash matches the new source)", "passed": true, "evidence": "raw/architecture.md post-refresh sha256 = a5b1e0b7a9860a4de368f2974bbc6b78438eb2af9fb7cb785d9c97755a674fde = fresh_hash in the refresh event. source-after.md confirms v2 content."},
+    {"text": "events.jsonl records op='refresh' with target_page, source, stale_hash, fresh_hash, and a delta_summary string of >=20 chars describing what changed", "passed": true, "evidence": "events.jsonl line 3: op=refresh, target_page=wiki/architecture.md, source=raw/architecture.md, stale_hash and fresh_hash present (64-char hex each), delta_summary = 149 chars describing gateway ingress + eBPF + Confluent + zero-trust changes."},
+    {"text": "graph/edges.jsonl is re-evaluated — at least one edge whose source is the refreshed page differs from the pre-refresh edge set (added, removed, or retyped). If no edges change, the events entry must explicitly note edges_unchanged: true", "passed": true, "evidence": "edges-before.jsonl: 1 edge (architecture→auth). edges-after.jsonl: 2 edges (architecture→auth + new architecture→control-plane supports edge). Net change: 1 edge added."},
+    {"text": "A second /wiki-refresh run with no further source modification is a no-op: no new events, hash stays identical, page body unchanged byte-for-byte", "passed": true, "evidence": "noop-check.md: events.jsonl 3→3 lines (0 new events); wiki/architecture.md MD5 a24637158873d8ddf191db993e19432a identical before/after. CACHE_HIT=true on second run."}
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {"reason": "Refresh artifacts synthesized by the subagent rather than emitted by a single 'wiki-refresh' CLI subcommand. There is no refresh.ts script — the skill's /wiki-refresh is composed of cache_manager + event_logger + regen. A real /wiki-refresh command or driver script would make the eval more robust."}
+    ],
+    "overall": "All 7 assertions pass. Refresh contract holds: stale/fresh hash both logged, manual reviewer field preserved, created untouched, body phrase introduced in new source surfaces in page, second run is true no-op."
+  }
+}

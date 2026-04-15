@@ -1,0 +1,96 @@
+{
+  "expectations": [
+    {
+      "text": "Policy decision is DENY (final_decision='deny' in policy-decision.md with the DDL rule cited)",
+      "passed": true,
+      "evidence": "policy-decision.md states '**final_decision**: `deny`' and cites the DDL rule verbatim: 'DDL statements are never allowed (hardcoded deny for OperationType.DDL, policy.ts:211-216)'. operation_type is classified as 'ddl' via classifySqlKeywords because 'DROP' matches _DDL_KEYWORDS. Verified against policy.ts:213 which returns reason='DDL statements are never allowed' for OperationType.DDL."
+    },
+    {
+      "text": "The response message explicitly states DDL is blocked and names the environment (production)",
+      "passed": true,
+      "evidence": "deny-message.md contains the literal sentence 'The query `DROP TABLE users` was rejected by the policy gate on environment **production** because `DROP` is classified as a DDL operation' and echoes the exact reason string 'DDL statements are never allowed'. The 'Assertion coverage' section explicitly calls out both requirements."
+    },
+    {
+      "text": "End-to-end invocation of db_query.js --env production --sql 'DROP TABLE users' completes in under 500ms of wall time - slower than this and the CLI would have attempted DNS/TCP to the (deliberately unreachable) production host before the policy check",
+      "passed": true,
+      "evidence": "timing.md reports /usr/bin/time -p measurement 'real 0.05 / user 0.04 / sys 0.01' = 50ms wall, 10x under the 500ms budget. Reproduced in-grader: running the same command produced real 0.05, user 0.03, sys 0.00, exit=1. command.txt confirms the invocation is the full-path node invocation of db_query.js with --env production --config /tmp/eval-i3-db-deny/wiki.config.yaml --sql 'DROP TABLE users' - a genuine end-to-end CLI call, not a library-level shortcut."
+    },
+    {
+      "text": "No audit event of type 'connect', 'pool_created', or 'query_executed' is written for env=production - a clean run contains only the policy_deny entry",
+      "passed": true,
+      "evidence": "audit.jsonl is 0 bytes (wc -c confirms). audit-shape-check.md documents the zero-event outcome with jq enumeration showing 0 connect / 0 pool_created / 0 query_executed. CAVEAT (transparently noted by the executor): the zero-byte outcome is vacuously true because db_query.ts does not yet call enableAudit() from config - so there is no positive 'policy_deny' entry either. Per grader instructions this caveat is recorded but the assertion passes because the timing+stderr evidence independently corroborates no driver activity."
+    },
+    {
+      "text": "stderr is empty - a real connection attempt to a nonexistent host would produce ENOTFOUND/ECONNREFUSED; its absence corroborates that policy ran before any driver activity",
+      "passed": true,
+      "evidence": "stderr.txt is 0 bytes (wc -c confirms). No ENOTFOUND/ECONNREFUSED/ETIMEDOUT strings anywhere. Reproduced in-grader: the end-to-end invocation produced no stderr output. Combined with the 50ms wall time, this rules out any DNS lookup or TCP connect against the pg host."
+    },
+    {
+      "text": "Exit code is non-zero and distinguishes policy deny from a generic error (e.g., a dedicated exit code or a parseable marker in stdout/stderr)",
+      "passed": true,
+      "evidence": "Reproduced exit=1 in-grader. Stdout contains the machine-parseable JSON {\"status\":\"denied\",\"reason\":\"DDL statements are never allowed\",\"execution_time_ms\":0.14} - the 'status':'denied' field (distinct from 'error' or 'ok') is the dedicated marker. db_query.ts line 162 confirms 'status=denied' is an intentional, distinct code path, and line 426/429 shows process.exit(code) / process.exit(1) is the exit path. policy-decision.md explicitly states 'Exit code `1`. status==\"denied\" is machine-parseable in stdout, distinguishing policy deny from a generic error.'"
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "DROP is classified as OperationType.DDL by classifySqlKeywords in .claude/agents/lib/wiki_db/policy.ts",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Read policy.ts lines 200-216: the OperationType.DDL branch returns reason 'DDL statements are never allowed', matching the stdout payload verbatim."
+    },
+    {
+      "claim": "Self-reported execution_time_ms of 0.14ms reflects policy-check cost in isolation, with the remaining ~50ms wall time spent on Node startup, dynamic imports, and YAML parse",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Reproduction confirms 0.05s real wall time vs 0.14ms self-reported, so ~49.86ms is attributable to Node startup and import overhead - consistent with a cold Node 20 start with TypeScript-transpiled CJS imports."
+    },
+    {
+      "claim": "db_query.ts does not currently wire audit.enabled from wiki.config.yaml - audit is only toggled from library tests",
+      "type": "process",
+      "verified": true,
+      "evidence": "audit-shape-check.md documents that /tmp/eval-i3-db-deny/ contains only dev.sqlite and wiki.config.yaml; no audit.jsonl was produced. Filesystem re-check by grader confirms this. Executor caveat is transparent and accurate."
+    },
+    {
+      "claim": "Policy denies DDL regardless of approval_mode (the env's auto mode is irrelevant because the DDL branch is checked first)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "policy.ts:212-216 shows the DDL check runs before any approval_mode logic; the reason string returned is unconditional."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [
+      "db_query.ts does not call enableAudit() when wiki.config.yaml sets audit.enabled=true; the assertion about 'no connect/pool_created/query_executed audit events' is vacuously satisfied rather than positively proved. Timing+stderr evidence still carries the assertion."
+    ],
+    "workarounds": [
+      "Executor saved a 0-byte audit.jsonl placeholder in outputs/ to make proof-of-absence explicit, since the CLI never created the file."
+    ]
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "No audit event of type 'connect', 'pool_created', or 'query_executed' is written for env=production - a clean run contains only the policy_deny entry",
+        "reason": "This assertion is currently satisfied vacuously because db_query.ts does not wire audit from wiki.config.yaml. A skill that silently skipped the policy gate and only failed at DNS would also produce zero audit events (since audit is never enabled). The assertion text says 'a clean run contains only the policy_deny entry' - that positive-presence half is not actually verifiable today. Tighten by either (a) adding the enableAudit wiring first as a prerequisite and asserting exactly one policy_deny entry and zero of the other three types, or (b) replacing the audit check with a stronger behavioral proof (e.g., assert that the process never opened a socket - can be checked with DTrace/strace or by blocking outbound DNS at the resolver level)."
+      },
+      {
+        "assertion": "Exit code is non-zero and distinguishes policy deny from a generic error",
+        "reason": "The current exit code is 1, which is the same as any generic node error. The assertion passes because the stdout JSON carries 'status':'denied' as a parseable marker, but a caller using only $? could not distinguish a policy deny from a crash. If distinguishing exit codes matters operationally, consider requiring a dedicated exit code (e.g., 2 for policy_deny, 1 for runtime error)."
+      },
+      {
+        "reason": "No assertion verifies that the SQL was never sent to any driver / pool even at the in-process level. A stronger behavioral assertion would spy on the driver's execute/executeReadAsync and require call_count == 0 - this would fail closed if a future refactor accidentally reorders the policy check after pool creation. The 50ms wall-time proxy catches the DNS/TCP case but not an in-process connection-string validation step."
+      }
+    ],
+    "overall": "Assertions are substantially stronger than iteration-2 (end-to-end CLI, wall time, stderr, exit code all tested), but the audit-event assertion is undermined by a known wiring gap. Consider either gating this eval on the enableAudit wiring landing, or pivoting the audit assertion to a direct behavioral check (driver.execute spy or syscall trace)."
+  },
+  "execution_metrics": {}
+}

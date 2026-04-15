@@ -1,0 +1,24 @@
+Mermaid lint report
+===================
+
+Command
+-------
+$ node .claude/skills/wiki/scripts/mermaid_lint.js \
+       --page /tmp/eval-mermaid-flow/pipeline.md
+
+Output
+------
+[]
+
+Exit status
+-----------
+0
+
+Interpretation
+--------------
+The lint script extracted the fenced ```mermaid block, verified the
+diagram type (`flowchart TD`) is in its VALID_DIAGRAM_TYPES set, and
+walked the code for bracket balance. It emitted an empty JSON array,
+meaning zero issues were found. The embedded `#quot;` HTML entity for
+the nested double-quotes in the "Checkout #quot;main#quot; branch"
+label was handled without triggering any bracket-imbalance warnings.

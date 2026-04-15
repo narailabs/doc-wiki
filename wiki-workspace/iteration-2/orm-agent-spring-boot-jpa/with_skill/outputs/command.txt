@@ -1,0 +1,17 @@
+Working directory: /Users/narayan/src/doc-wiki
+
+# 1. Run ORM agent detection/mapping
+node .claude/agents/wiki-orm-agent/scripts/orm_detect.js \
+  --codebase-path /Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/jpa/ \
+  --profile jpa \
+  --project-name "Spring Boot JPA Fixture" \
+  --output-markdown /Users/narayan/src/doc-wiki/wiki-workspace/iteration-2/orm-agent-spring-boot-jpa/with_skill/outputs/database-mapping.md \
+  --output-json
+
+Exit code: 0
+
+# 2. Validate Mermaid diagram syntax
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/mermaid_lint.js \
+  --page /Users/narayan/src/doc-wiki/wiki-workspace/iteration-2/orm-agent-spring-boot-jpa/with_skill/outputs/database-mapping.md
+
+Exit code: 0 (stdout: "[]" = no syntax errors)

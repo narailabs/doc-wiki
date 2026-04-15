@@ -1,0 +1,41 @@
+Wiki scaffold tree after /wiki-onboard
+Root: /tmp/eval-i3-onboard-django
+(project source files shown alongside the wiki scaffold they now live next to)
+
+/tmp/eval-i3-onboard-django
+├── .claude/
+│   └── settings.json                (Claude Code PreToolUse hooks — installed by init_wiki)
+├── .wiki-cache/                     (content-hash cache; hidden from tree)
+├── .wiki-ignore                     (defaults: .git/, node_modules/, .DS_Store)
+├── wiki.config.yaml                 (onboarded: python/django + mongodb policy stanza)
+├── audit/
+│   ├── open/
+│   └── resolved/
+├── graph/
+│   └── edges.jsonl                  [SEED — created by init_wiki, empty at onboard time]
+├── log/
+│   ├── daily/
+│   └── events.jsonl                 [SEED — contains init + onboard events]
+├── outputs/
+│   ├── queries/
+│   └── reports/
+├── raw/
+├── wiki/
+│   ├── claims/
+│   ├── synthesis/
+│   ├── templates/
+│   ├── index.md                     [SEED — "# Index\n\nWiki entry point.\n"]
+│   ├── overview.md                  [SEED — overview placeholder]
+│   └── summaries.md                 [SEED — summaries placeholder]
+│
+├── manage.py                        (project source — Django entry point)
+├── myapp/
+│   ├── __init__.py
+│   ├── models.py                    (Article model + Meta.db_table='articles')
+│   └── settings.py                  (DATABASES[default] djongo → mongodb)
+└── requirements.txt                 (Django>=4.2, djongo, pymongo)
+
+All 12 scaffold directories and 8 seed files were created by
+  node init_wiki.js --path /tmp/eval-i3-onboard-django \
+                    --domain "django-mongodb" --name "myapp Wiki"
+Idempotent: re-running returns empty created_* arrays.

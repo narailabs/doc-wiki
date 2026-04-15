@@ -1,0 +1,38 @@
+{
+  "eval_id": 8,
+  "eval_name": "wiki-stats",
+  "skill": "wiki",
+  "prompt": "Show me the wiki stats for /tmp/test-stats-wiki/ over the last 7 days. Break it down by operation (ingest, query, lint, fix) and include total-tokens and average-duration per op.",
+  "assertions": [
+    {
+      "text": "Runs the wiki's event_logger stats subcommand (event_logger.js stats --since 7d) or equivalent",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Output lists counts for at least op='ingest', op='query', op='lint', op='fix' — one line per op",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Each op's count matches the number of corresponding entries in the fixture's events.jsonl within the 7-day window",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Output emits `total_tokens_by_op` NATIVELY from the stats subcommand (no manual post-processing) — with a per-op breakdown summing event.tokens / total_tokens / tokens_in+tokens_out fields",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Output emits `avg_duration_ms_by_op` NATIVELY from the stats subcommand with a per-op average of event.duration_ms / total_duration_ms",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The --since 7d window is honored — any event older than 7 days is excluded from the counts",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

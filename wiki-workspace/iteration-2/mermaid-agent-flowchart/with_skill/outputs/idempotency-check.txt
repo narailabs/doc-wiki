@@ -1,0 +1,33 @@
+Idempotency check for wiki-mermaid-agent flowchart injection
+=============================================================
+
+Procedure
+---------
+1. Wrote fixture /tmp/eval-mermaid-flow/pipeline.md (markdown page with a
+   pre-existing `## Diagrams` section containing only a placeholder).
+2. Wrote fixture /tmp/eval-mermaid-flow/agent-output.json (the agent-format
+   input: a `mermaid` array with one `{type, title, code}` entry derived
+   from the user's nodes/edges input.json).
+3. Ran: node .claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.js \
+          --input agent-output.json --page pipeline.md
+4. Captured sha256.
+5. Re-ran the identical command.
+6. Captured sha256 again.
+7. Ran `diff` between the two post-run copies.
+
+Hashes (sha256)
+---------------
+first run : 2e65ee9d75f08ebc0519546ebd8d2af8f8a1518a8382609f7a77217a4a155089  pipeline.md
+second run: 2e65ee9d75f08ebc0519546ebd8d2af8f8a1518a8382609f7a77217a4a155089  pipeline.md
+
+Diff
+----
+$ diff pipeline-after-first-run.md pipeline-after-second-run.md
+(no output — files are byte-identical; diff exit status = 0)
+
+Conclusion
+----------
+PASS — the second run produced a byte-identical file. The agent's
+`injectMermaid` helper replaces the existing `## Diagrams` section in
+place rather than appending, so repeated invocations converge to a
+fixed point. The `%% Title: ...` line and fenced block survive intact.

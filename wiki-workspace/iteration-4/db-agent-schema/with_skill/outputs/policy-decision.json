@@ -1,0 +1,7 @@
+{
+  "final_decision": "allow",
+  "env": "dev",
+  "approval_mode": "auto",
+  "driver": "sqlite",
+  "operation_type": "read"
+}

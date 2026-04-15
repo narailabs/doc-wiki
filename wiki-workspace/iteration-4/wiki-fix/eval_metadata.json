@@ -1,0 +1,38 @@
+{
+  "eval_id": 7,
+  "eval_name": "wiki-fix",
+  "skill": "wiki",
+  "prompt": "In my wiki at /tmp/test-fix-wiki/, the page authentication.md says the service uses HS256 signing, but the source was recently updated to use RS256. Fix just that page — update the summary and any body mentions of HS256 to RS256.",
+  "assertions": [
+    {
+      "text": "authentication.md content mentions RS256 and no longer mentions HS256 in the updated regions",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The page's frontmatter 'updated' field is refreshed to the current date (differs from 'created')",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "No other wiki page is modified — a directory diff of wiki/ shows exactly one file touched",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "events.jsonl records op='fix' with target_page: 'wiki/authentication.md' (or equivalent), a reason/description field, and an ISO timestamp",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "A re-run of /wiki-lint on the fixed page reports zero violations (quality is preserved)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The quality score of the page is recomputed and its value appears in the events.jsonl fix entry",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

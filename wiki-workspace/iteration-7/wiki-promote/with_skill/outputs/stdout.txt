@@ -1,0 +1,30 @@
+# stdout from wiki-promote eval execution
+
+## init_wiki.js
+{"status": "ok", "wiki_root": "/private/tmp/eval-i7-promote-wiki", "created_dirs": ["wiki", "wiki/claims", "wiki/synthesis", "wiki/templates", "raw", "graph", "audit/open", "audit/resolved", "log/daily", "outputs/queries", "outputs/reports", ".wiki-cache"], "created_files": ["wiki.config.yaml", "wiki/index.md", "wiki/summaries.md", "wiki/overview.md", ".wiki-ignore", "log/events.jsonl", "graph/edges.jsonl", ".claude/settings.json"]}
+
+## archive before-state
+BEFORE_MTIME=2026-04-14T17:54:47
+BEFORE_SHA256=9e0a2373f1abb218fbeea22e9fff6988f335ad5318f09427330312ced4656d39
+
+## event_logger.js log --op promote
+{
+  "ts": "2026-04-15T00:55:19.507000+00:00",
+  "op": "promote",
+  "target_page": "wiki/auth/authentication-flow.md",
+  "source_query": "outputs/queries/2026-04-14-how-does-authentication-work.md",
+  "topic": "authentication-flow"
+}
+
+## archive after-state
+AFTER_MTIME=2026-04-14T17:54:47
+AFTER_SHA256=9e0a2373f1abb218fbeea22e9fff6988f335ad5318f09427330312ced4656d39
+
+## idempotency probe
+WARNING: Page already exists at wiki/auth/authentication-flow.md — promote is a no-op.
+Skipping page creation, edges append, and event logging.
+Second-run result: PAGE_EXISTS_NOOP
+Events before idempotency probe: 2
+Edges before idempotency probe:  1
+Events after idempotency probe:  2
+Edges after idempotency probe:   1

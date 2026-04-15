@@ -1,0 +1,12 @@
+{
+  "eval_id": 14,
+  "eval_name": "claude-md-agent-preserve-manual",
+  "skill": "wiki-claude-md-agent",
+  "prompt": "Update the CLAUDE.md of a project I already edited manually (added a custom section at the top), without clobbering my additions",
+  "assertions": [
+    {"text": "Preserves all content above the `<!-- wiki-managed: start -->` marker", "passed": null, "evidence": null},
+    {"text": "Preserves all content below the `<!-- wiki-managed: end -->` marker", "passed": null, "evidence": null},
+    {"text": "Regenerates only the managed section from the current wiki state", "passed": null, "evidence": null},
+    {"text": "Is idempotent on re-run when the wiki state has not changed", "passed": null, "evidence": null}
+  ]
+}

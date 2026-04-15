@@ -1,0 +1,1 @@
+{"from": "wiki/architecture.md", "to": "wiki/auth.md", "type": "extends", "provenance": "INFERRED", "ts": "2026-04-10T08:00:00+00:00", "note": "Architecture page extends auth concepts via API gateway authentication section"}

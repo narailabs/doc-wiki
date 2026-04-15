@@ -1,0 +1,38 @@
+{
+  "eval_id": 2,
+  "eval_name": "mermaid-agent-flowchart",
+  "skill": "wiki-mermaid-agent",
+  "prompt": "Convert this agent output describing a deploy pipeline into a Mermaid flowchart, then inject it into pipeline.md",
+  "assertions": [
+    {
+      "text": "Mermaid block uses flowchart directive (flowchart TD|TB|LR|RL)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Labels containing special characters (quotes, angle brackets) are escaped so mermaid_lint passes — a single escape case is OK but the lint must be clean",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Re-running with the IDENTICAL input produces a byte-identical pipeline.md (true idempotency)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Re-running with a DIFFERENT input (e.g., an added node) REPLACES the previous block between the markers — not appends a second block; pipeline.md still contains exactly one `<!-- wiki-mermaid: start -->` and one `<!-- wiki-mermaid: end -->` after both runs",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Only the named target file is modified — no other .md files in the wiki change across the runs",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Content outside the markers on pipeline.md is preserved byte-for-byte across both runs",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

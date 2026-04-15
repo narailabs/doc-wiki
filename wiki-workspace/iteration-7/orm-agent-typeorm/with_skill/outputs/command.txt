@@ -1,0 +1,6 @@
+mkdir -p /tmp/eval-i7-orm-typeorm && \
+node /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/scripts/orm_detect.js \
+  --codebase-path /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/typeorm/ \
+  --profile typeorm \
+  --output-markdown /tmp/eval-i7-orm-typeorm/database-mapping.md \
+  --output-json /tmp/eval-i7-orm-typeorm/detected-entities.json

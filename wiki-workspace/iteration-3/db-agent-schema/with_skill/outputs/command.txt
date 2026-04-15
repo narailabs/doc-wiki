@@ -1,0 +1,1 @@
+cd /tmp/eval-i3-db-schema && node /tmp/eval-i3-db-schema/run_schema.mjs --env dev --config ./wiki.config.yaml --action schema --filter 'users'

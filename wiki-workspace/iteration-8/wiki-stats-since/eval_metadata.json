@@ -1,0 +1,43 @@
+{
+  "eval_id": 12,
+  "eval_name": "wiki-stats-since",
+  "skill": "wiki",
+  "prompt": "Run /wiki-stats on /tmp/test-stats-since-wiki/ three times: first with --since 1h, then with --since 30d, then with --since 2026-04-01T00:00:00Z. Report the per-op counts for each window. The fixture's events.jsonl contains entries timestamped 30 minutes ago (2 events), 5 days ago (3 events), 20 days ago (4 events), and 60 days ago (3 events).",
+  "assertions": [
+    {
+      "text": "--since 1h returns total_events=2 (both within the last 30 minutes)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "--since 30d returns total_events=9 (the 2+3+4 events within 30 days; the 60-day-old ones excluded)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "--since 2026-04-01T00:00:00Z returns total_events=5 (only the 30-min and 5-day cohorts survive; the 20-day-old cohort is dated 2026-03-25 — which is before the 2026-04-01 ISO cutoff — so those 4 events are correctly excluded, along with the 60-day-old cohort)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "All three calls invoke the same event_logger.js stats subcommand — the prompt MUST NOT massage results client-side; counts come from the script's stdout",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Per-op breakdown (by_op) is present in every report — the count for each individual op (e.g., ingest, query, lint) appears separately and the sum across ops equals total_events",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "An invalid granularity (e.g., --since 1z) is treated as a literal string by parseRelativeSince (returns the string unchanged), and parsePythonIsoformat then fails it, so the script either errors with a non-zero exit and a human-readable message OR returns total_events=0 with an explicit warning — silent fallback to 'no filter' is a failure",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Absolute ISO timestamp output (with +00:00 UTC offset) is accepted identically to its Z-suffix equivalent (2026-04-01T00:00:00+00:00 and 2026-04-01T00:00:00Z produce the same total_events)",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

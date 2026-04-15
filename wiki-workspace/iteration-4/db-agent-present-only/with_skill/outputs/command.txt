@@ -1,0 +1,1 @@
+node /Users/narayan/src/doc-wiki/.claude/agents/wiki-db-agent/scripts/db_query.js --env dev --config ./wiki.config.yaml --sql "INSERT INTO users (name, email) VALUES ('Test', 'test@example.com')"

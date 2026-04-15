@@ -1,0 +1,109 @@
+{
+  "expectations": [
+    {
+      "text": "Every generated CLAUDE.md contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (grep -c returns 1 for each on every file)",
+      "passed": true,
+      "evidence": "Verified directly on live fixture via grep -c. For each of the 4 files (/tmp/eval-i3-cmd-gen/CLAUDE.md and the three services/*/CLAUDE.md), start=1 end=1. marker-count-check.md reports the same counts."
+    },
+    {
+      "text": "Root CLAUDE.md lists EXACTLY three submodule links — one per discovered submodule — with relative paths that resolve to real CLAUDE.md files under the submodule dirs",
+      "passed": true,
+      "evidence": "root-CLAUDE.md (and live /tmp/eval-i3-cmd-gen/CLAUDE.md) contains exactly 3 submodule links under '## Submodules': services/api, services/gateway, services/worker. Each target resolves to an existing CLAUDE.md (confirmed by directory listing: api/, gateway/, worker/ all have 418-byte CLAUDE.md files)."
+    },
+    {
+      "text": "Each submodule CLAUDE.md contains a relative link back to the root CLAUDE.md (e.g., `../../CLAUDE.md`) under a Parent Project heading, and the link target resolves",
+      "passed": true,
+      "evidence": "All three submodule files (submodule-api-CLAUDE.md, submodule-gateway-CLAUDE.md, submodule-worker-CLAUDE.md) contain the '## Parent Project' heading immediately followed by '- [Root CLAUDE.md](../../CLAUDE.md)'. From services/{api,gateway,worker}/CLAUDE.md, '../../CLAUDE.md' resolves to /tmp/eval-i3-cmd-gen/CLAUDE.md, which exists."
+    },
+    {
+      "text": "Managed section content is non-empty: each file's region between the start/end markers contains at least an Overview heading OR a non-empty link to wiki/index.md — empty markers fail",
+      "passed": true,
+      "evidence": "Every managed section contains both '## Overview' (line 2 or 3) AND '- [Wiki documentation](wiki/index.md)'. Root additionally has ## Submodules, ## Build & Run, ## Service Dependencies, ## Database References. Submodules additionally have ## Parent Project. managed-content-check.md confirms non-empty on all 4."
+    },
+    {
+      "text": "Running the generator a second time produces byte-identical CLAUDE.md files across the board (diff -ru is empty) — idempotency holds",
+      "passed": true,
+      "evidence": "idempotency-check.md documents snapshot-then-rerun-then-diff procedure across all 4 files; all four diffs returned empty. Procedure used node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js with identical flags as Run 1."
+    },
+    {
+      "text": "When the user edits content OUTSIDE the managed markers between runs (e.g., adds a new heading above the start marker), the next generation preserves that edit unchanged",
+      "passed": true,
+      "evidence": "adversarial-preserve.md documents inserting '<!-- user-added: testnote -->' above the start marker in root CLAUDE.md, re-running generator, and confirming the line survives byte-identical at line 1. Independently verified: live /tmp/eval-i3-cmd-gen/CLAUDE.md still contains '<!-- user-added: testnote -->' as line 1, above '<!-- wiki-managed: start -->' on line 2. The report correctly attributes this to _MANAGED_RE being a single-match replace over only the inter-marker region, with the G-CLAUDE-MD-MARKER guard refusing to mutate unbalanced files."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 8975,
+    "transcript_chars": null,
+    "total_tokens": 53170
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "Root CLAUDE.md contains exactly 3 submodule links with resolvable targets",
+      "type": "factual",
+      "verified": true,
+      "evidence": "grep -E matched 3 lines; ls confirmed target files exist (each 418 B)"
+    },
+    {
+      "claim": "All 4 CLAUDE.md files have exactly one start and one end marker",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Independent grep -c run against live /tmp/eval-i3-cmd-gen fixture confirmed start=1 end=1 on all 4 files"
+    },
+    {
+      "claim": "Idempotent regeneration — run 2 diffs empty against run 1 snapshots",
+      "type": "process",
+      "verified": true,
+      "evidence": "idempotency-check.md shows snapshot procedure and empty diff output for all 4 files. Consistent with claude_md_gen.ts using deterministic content assembly."
+    },
+    {
+      "claim": "User edit above the start marker survives regeneration",
+      "type": "quality",
+      "verified": true,
+      "evidence": "Live file still shows '<!-- user-added: testnote -->' on line 1 above the start marker, byte-identical to the adversarial insert described in adversarial-preserve.md"
+    },
+    {
+      "claim": "The managed-region replace is single-match and only substitutes text between (and including) the two markers",
+      "type": "process",
+      "verified": true,
+      "evidence": "adversarial-preserve.md cites updateClaudeMd() in claude_md_gen.ts using content.replace(_MANAGED_RE, replacement), plus the G-CLAUDE-MD-MARKER guard (lines 188-200) which refuses to mutate files with unbalanced markers. Consistent with commit d208468 'G-CLAUDE-MD-MARKER — validate balanced markers before rewrite' in the repo history."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Each submodule CLAUDE.md contains a relative link back to the root CLAUDE.md (e.g., `../../CLAUDE.md`) under a Parent Project heading, and the link target resolves",
+        "reason": "The assertion hardcodes the depth '../../CLAUDE.md' as an example but would pass for any relative link regardless of depth. A nested submodule (services/api/v2/CLAUDE.md) requiring '../../../CLAUDE.md' would trivially break the hardcoded hint in human review. Consider rephrasing as 'the Parent Project link resolves to the root CLAUDE.md via the correct number of .. segments for the submodule's nesting depth' so the check is depth-aware."
+      },
+      {
+        "assertion": "Managed section content is non-empty: each file's region between the start/end markers contains at least an Overview heading OR a non-empty link to wiki/index.md — empty markers fail",
+        "reason": "The disjunction (Overview OR wiki/index.md link) is trivially satisfied by any non-empty boilerplate. Every generated file here satisfies BOTH. A stricter assertion would be 'the wiki/index.md link target actually exists on disk' — which would catch the common failure mode of generators writing dead links to non-existent wiki pages. Currently nothing checks that wiki/index.md resolves."
+      },
+      {
+        "reason": "No assertion checks that the adversarial preservation also holds for content BELOW the end marker (a user-added footer). The current test only inserts above the start marker. A single-match .replace() could in principle mishandle trailing content if the regex were greedy; adding a symmetric 'footer below end marker survives' case would cheaply double the coverage of the preservation contract."
+      },
+      {
+        "reason": "No assertion verifies what happens when markers are unbalanced or missing — the adversarial-preserve.md narrative mentions G-CLAUDE-MD-MARKER refusing to mutate such files, but no eval explicitly tests 'if I delete the end marker, the generator aborts with a clear error and does NOT produce a corrupted file'. That's a load-bearing safety property worth asserting directly."
+      }
+    ],
+    "overall": "All 6 assertions pass cleanly with solid evidence, including the tightened adversarial case. The eval set is well-constructed for the happy path and preservation. Main gap: the safety and drift failure modes (missing markers, dead wiki links, content below end marker) are not directly tested even though the skill's guard-rail code clearly contemplates them."
+  }
+}

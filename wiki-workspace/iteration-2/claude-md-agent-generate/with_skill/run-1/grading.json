@@ -1,0 +1,85 @@
+{
+  "expectations": [
+    {
+      "text": "Managed content wrapped in `<!-- wiki-managed: start -->` and `<!-- wiki-managed: end -->` markers",
+      "passed": true,
+      "evidence": "Grep count of 'wiki-managed:' returns exactly 2 matches in each of the 4 output files: root-CLAUDE.md (lines 1 and 25), submodule-api-CLAUDE.md (lines 1 and 23), submodule-worker-CLAUDE.md (lines 1 and 23), submodule-gateway-CLAUDE.md (lines 1 and 23). Each file contains exactly one balanced start/end pair wrapping the managed content. markers-check.md confirms the same and references the MarkerCorruptError guard (G-CLAUDE-MD-MARKER)."
+    },
+    {
+      "text": "Root file lists every discovered submodule with a relative link",
+      "passed": true,
+      "evidence": "root-CLAUDE.md lines 10-12 contain a '## Submodules' section with relative links for all three discovered submodules: '- [services/api](services/api/CLAUDE.md)', '- [services/gateway](services/gateway/CLAUDE.md)', '- [services/worker](services/worker/CLAUDE.md)'. Links are relative (no leading '/' or absolute path)."
+    },
+    {
+      "text": "Each submodule file includes a Parent Project link back to the root CLAUDE.md",
+      "passed": true,
+      "evidence": "All three submodule files (api, worker, gateway) contain a '## Parent Project' section at line 8 with '- [Root CLAUDE.md](../../CLAUDE.md)' at line 10. The '../../' prefix correctly traverses two directory segments from 'services/<name>/' back to the project root. parent-link-check.md confirms each link resolves correctly."
+    },
+    {
+      "text": "Content outside the managed markers is preserved byte-for-byte on re-generation",
+      "passed": true,
+      "evidence": "idempotency-check.md documents the verification method: snapshot the project tree, re-run the 4-file generation sequence, then 'diff -ru'. Output shows '---DIFF_EXIT=0---' with no diff output, confirming byte-identical trees. The managed section is regenerated deterministically from projectRoot, wikiRoot, sorted submodule list, and optional --submodule flag; non-managed content is preserved via regex replacement."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "output_chars": 5874,
+    "total_output_files": 7
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 46826
+  },
+  "claims": [
+    {
+      "claim": "The generator is idempotent — second run yields byte-identical trees",
+      "type": "process",
+      "verified": true,
+      "evidence": "idempotency-check.md shows 'diff -ru' exit code 0 with no output after re-running generation on a snapshot."
+    },
+    {
+      "claim": "Submodules are listed in sorted order (api, gateway, worker)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "root-CLAUDE.md lists submodules in alphabetical order: api (line 10), gateway (line 11), worker (line 12)."
+    },
+    {
+      "claim": "The relative parent link '../../CLAUDE.md' resolves correctly from 'services/<name>/' to the project root",
+      "type": "factual",
+      "verified": true,
+      "evidence": "From /tmp/eval-claude-md-gen/services/api/ the path '../../CLAUDE.md' resolves to /tmp/eval-claude-md-gen/CLAUDE.md. Depth-2 submodule path matches the 2-segment '../../' prefix."
+    },
+    {
+      "claim": "All 4 CLAUDE.md files share the same boilerplate Build & Run / Service Dependencies / Database References sections",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Identical templated sections appear at lines 13-24 of each submodule file and lines 15-24 of root-CLAUDE.md."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Root file lists every discovered submodule with a relative link",
+        "reason": "The assertion only checks that submodules are listed. It would also pass if a submodule were missing but the other two were present. Consider asserting 'exactly 3 submodule links, one per discovered service' to catch dropped entries."
+      },
+      {
+        "reason": "No assertion checks that the managed section content is actually populated (not just that markers exist around empty content). A generator that emitted empty markers would pass the markers assertion. Consider requiring at least an 'Overview' heading or a non-empty wiki documentation link inside the markers."
+      },
+      {
+        "reason": "No assertion verifies that the idempotency check covers a scenario where the user has ADDED content outside the markers before regeneration. The current idempotency test only re-runs on unchanged files; the critical contract is preserving user-authored content outside markers, which isn't explicitly exercised."
+      }
+    ],
+    "overall": "All 4 assertions pass with solid evidence and the generator appears to work correctly. Assertions check structural correctness but not content richness or the more adversarial preservation scenario (user edits outside markers). Worth tightening if another iteration is planned."
+  }
+}

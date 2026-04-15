@@ -1,0 +1,108 @@
+{
+  "expectations": [
+    {
+      "text": "Correctly identifies JPA @Entity classes",
+      "passed": true,
+      "evidence": "detected-entities.json lists two entities with class_name 'Order' and 'User' (matching the @Entity-annotated classes in fixtures/jpa/Order.java and User.java). database-mapping.md references both in the Entity-Table Mapping table (lines 16-17: '| Order | orders | 1 | many_to_one |' and '| User | public.users | 2 | one_to_many, many_to_many |')."
+    },
+    {
+      "text": "Maps @Table(name) to database table names",
+      "passed": true,
+      "evidence": "detected-entities.json shows Order->table_name 'orders' and User->table_name 'users' with schema 'public'. database-mapping.md line 16 renders 'Order | orders' and line 17 renders 'User | public.users', matching @Table(name='orders') and @Table(name='users', schema='public')."
+    },
+    {
+      "text": "Detects @OneToMany and @ManyToOne relationships",
+      "passed": true,
+      "evidence": "detected-entities.json lists relationships 'many_to_one' for Order and 'one_to_many, many_to_many' for User. database-mapping.md line 16 shows 'many_to_one' for Order and line 17 shows 'one_to_many, many_to_many' for User. These correspond to @ManyToOne in Order.java line 16 and @OneToMany in User.java line 20."
+    },
+    {
+      "text": "Output includes a valid Mermaid erDiagram block",
+      "passed": true,
+      "evidence": "database-mapping.md lines 21-32 contain a fenced '```mermaid' block opening with 'erDiagram' and defining two entities (orders, users) with columns plus two relationship edges. mermaid-lint.txt contains '[]' (no syntax errors) and command.txt confirms mermaid_lint.js returned exit code 0."
+    },
+    {
+      "text": "Generated markdown has proper frontmatter with type: entity",
+      "passed": true,
+      "evidence": "database-mapping.md begins with '---' on line 1 and includes 'type: entity' on line 3, plus other frontmatter fields (title, tags, generated_by: orm-mapper, orm_profile: jpa, created, updated, summary) closed by '---' on line 10."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tokens": 42287,
+    "output_chars": 3310
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 42287
+  },
+  "claims": [
+    {
+      "claim": "ORM profile was auto-detected as 'jpa'",
+      "type": "process",
+      "verified": true,
+      "evidence": "detected-entities.json field 'orm_detected': 'jpa' and command.txt shows --profile jpa was passed explicitly."
+    },
+    {
+      "claim": "Two entities were detected (User, Order)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detected-entities.json contains exactly 2 entries (Order and User), matching the two @Entity-annotated classes in the fixture. UserRepository.java (not an @Entity) was correctly skipped."
+    },
+    {
+      "claim": "User maps to public.users (schema-qualified)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "@Table(name='users', schema='public') in User.java yields schema 'public' and table_name 'users' in detected-entities.json; database-mapping.md renders 'public.users'."
+    },
+    {
+      "claim": "Mermaid diagram accurately models the relationship graph",
+      "type": "quality",
+      "verified": false,
+      "evidence": "The Mermaid block references a phantom target node 'users_rel' instead of the real related entities ('orders' for the OneToMany, 'roles'/user_roles join for the ManyToMany). The diagram therefore fails to show the User->Order OneToMany edge correctly and emits a synthetic self-ish edge 'users ||--o{ users_rel' and 'users }o--o{ users_rel'. Syntax passes mermaid-lint but the semantic content is incorrect."
+    },
+    {
+      "claim": "Order's ManyToOne relationship to User is captured in the ER diagram",
+      "type": "factual",
+      "verified": false,
+      "evidence": "Order.java declares '@ManyToOne ... private User user;' but the Mermaid block contains no edge originating from the 'orders' entity. Only users<->users_rel edges are present."
+    },
+    {
+      "claim": "Column counts in detected-entities.json reflect all mapped columns",
+      "type": "factual",
+      "verified": false,
+      "evidence": "Order.java has @Id id plus @Column total_amount (and a @JoinColumn user_id) yet detected-entities.json reports columns=1. User.java has @Id id, username, email plus two collections and detected-entities.json reports columns=2. The @Id column appears to be excluded from the count."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [
+      "Mermaid diagram uses placeholder target node name 'users_rel' instead of the real related entities (orders for OneToMany, user_roles/roles for ManyToMany). The Order->User ManyToOne edge is missing entirely from the diagram."
+    ],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Output includes a valid Mermaid erDiagram block",
+        "reason": "The current check only requires an erDiagram fence and passing mermaid-lint syntax. The generated diagram passes both but contains a phantom 'users_rel' target node and omits the Order<->User edge entirely. Consider asserting that the erDiagram references both real entity table names as distinct nodes AND contains at least one edge connecting 'users' and 'orders' (e.g. grep for 'users .* orders' or 'orders .* users')."
+      },
+      {
+        "assertion": "Detects @OneToMany and @ManyToOne relationships",
+        "reason": "Currently satisfied by the plain strings 'one_to_many' and 'many_to_one' appearing in the mapping table. It would also pass if the relationships were attributed to the wrong owning entity. Consider asserting the correct attribution: many_to_one is listed for Order and one_to_many is listed for User."
+      },
+      {
+        "reason": "No assertion checks that the ManyToMany relationship (User.roles via user_roles join table) or the join column metadata is captured. Since the fixture includes @ManyToMany with @JoinTable, this is an observable gap worth asserting if the agent is supposed to model it."
+      },
+      {
+        "reason": "No assertion checks column counts or column names in detected-entities.json. The current output reports columns=1 for Order and columns=2 for User, which silently excludes @Id columns — a potential correctness issue that would go unnoticed."
+      }
+    ],
+    "overall": "All five assertions pass, but the assertions are surface-level: they check for keyword presence rather than semantic correctness. The Mermaid diagram in particular passes by virtue of being a syntactically valid erDiagram fence, while the actual relationship graph it encodes is wrong (phantom 'users_rel' node, missing orders<->users edge). Consider tightening at least the Mermaid and relationship assertions."
+  }
+}

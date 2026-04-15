@@ -1,0 +1,111 @@
+{
+  "expectations": [
+    {
+      "text": "Runs graph_ops.js with the path subcommand",
+      "passed": true,
+      "evidence": "outputs/graph_ops-raw-output.txt line 1-3 shows: `$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl --from authentication --to database-schema`. Also cited in path-answer.md lines 5-10 in the 'Command executed' block."
+    },
+    {
+      "text": "Returned path starts at 'authentication' and ends at 'database-schema'",
+      "passed": true,
+      "evidence": "path-answer.md line 20: `authentication → user-model → orm-mapping → database-schema`. Raw output JSON first edge has source='authentication' (line 7) and last edge has target='database-schema' (line 23). Confirmed against fixture at /tmp/eval-i3-path-wiki/graph/edges.jsonl."
+    },
+    {
+      "text": "Every intermediate node appears as either the source or the target of an edge in the fixture's edges.jsonl",
+      "passed": true,
+      "evidence": "Intermediate nodes are `user-model` and `orm-mapping`. Verified against /tmp/eval-i3-path-wiki/graph/edges.jsonl: `user-model` is the target on line 5 and source on line 3; `orm-mapping` is target on line 3 and source on line 4. path-answer.md lines 24-25 document this explicitly."
+    },
+    {
+      "text": "Every consecutive (from, to) pair in the returned path exists as an edge in edges.jsonl (no hallucinated links)",
+      "passed": true,
+      "evidence": "Cross-checked each hop against the real fixture: (authentication, user-model) = line 5 (supports/INFERRED); (user-model, orm-mapping) = line 3 (supports/EXTRACTED); (orm-mapping, database-schema) = line 4 (supports/EXTRACTED). Every edge type and provenance in the answer matches the fixture exactly — no hallucinations. path-answer.md lines 31-35 provides the validation table."
+    },
+    {
+      "text": "The returned path is shortest — no alternative chain in edges.jsonl connects the same endpoints with fewer hops",
+      "passed": true,
+      "evidence": "shortest-proof.md enumerates all simple paths via `allPaths(..., 20)`: Path A = 3 hops (selected) and Path B = 4 hops. Verified independently from the fixture: `authentication` has only two outgoing edges (to `session-management` and to `user-model`); neither of those reaches `database-schema` in a single additional hop (session-management only goes to user-model; user-model only to orm-mapping). So no 1-hop or 2-hop path exists, and 3 hops is provably minimal. shortest-proof.md lines 30-38 provide this no-shorter-chain proof."
+    },
+    {
+      "text": "Edge type (supports|contradicts|extends|supersedes) is reported for each hop",
+      "passed": true,
+      "evidence": "path-answer.md table lines 15-18 column 'Edge type' shows supports/supports/supports for the 3 hops. Raw output JSON (graph_ops-raw-output.txt lines 11, 18, 25) has explicit `type` fields. Also per-hop in shortest-proof.md Path A table."
+    },
+    {
+      "text": "Provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) is reported for each edge",
+      "passed": true,
+      "evidence": "path-answer.md column 'Provenance' shows INFERRED, EXTRACTED, EXTRACTED for the three hops (lines 16-18) — matching fixture exactly. Raw JSON fields at lines 12, 19, 26 of graph_ops-raw-output.txt confirm this. shortest-proof.md Path A row (lines 11-13) also lists per-hop provenance."
+    },
+    {
+      "text": "A no-path query (unreachable or unknown target) returns an empty result with a human-readable explanation — not a stack trace or bare []",
+      "passed": true,
+      "evidence": "no-path-test.md documents two cases. Case 1 (database-schema → authentication) returns `[]` raw but is wrapped in a readable explanation citing the DAG direction and offering concrete suggestions (lines 18-31). Case 2 (unknown target 'nonexistent-concept') lists known concepts and suggests /wiki-ingest and /wiki-stats (lines 46-61). 'Failure-mode notes' (lines 63-66) confirms neither invocation threw a stack trace and that exit code was 0."
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "note": "No metrics.json produced by executor; timing available.",
+    "output_chars": 9642
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "graph_ops.js uses graphology's bidirectional BFS on the directed graph",
+      "type": "process",
+      "verified": true,
+      "evidence": ".claude/skills/wiki/scripts/graph_ops.ts line 26 imports `bidirectional` from graphology-shortest-path/unweighted.js; line 394 calls `bidirectional(graph, source, target)`. Unweighted bidirectional BFS does return the shortest-hop path."
+    },
+    {
+      "claim": "Exactly two simple directed paths exist from authentication to database-schema",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Manually enumerated against the 5-line edges.jsonl: the only outgoing edges from `authentication` are to `session-management` and to `user-model`. session-management has a single outgoing edge to user-model; user-model has a single outgoing edge to orm-mapping; orm-mapping has a single outgoing edge to database-schema. This yields exactly two simple paths (3-hop and 4-hop), matching shortest-proof.md."
+    },
+    {
+      "claim": "Line numbers cited for each edge in path-answer.md (line 5, line 3, line 4) match the fixture",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Verified against /tmp/eval-i3-path-wiki/graph/edges.jsonl: line 5 is authentication→user-model, line 3 is user-model→orm-mapping, line 4 is orm-mapping→database-schema. All match."
+    },
+    {
+      "claim": "database-schema is a sink with no outgoing edges",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Scanning all 5 fixture rows, no line has `\"source\":\"database-schema\"` or `\"from\":\"database-schema\"`. The claim in shortest-proof.md line 49 and no-path-test.md lines 22-25 holds."
+    },
+    {
+      "claim": "Both no-path invocations exited 0 and returned [] without a stack trace",
+      "type": "process",
+      "verified": true,
+      "evidence": "graph_ops-raw-output.txt shows `[]` as stdout for both (lines 35 and 41) with no error lines interleaved; no-path-test.md Failure-mode notes (lines 63-66) explicitly confirms the contract."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Runs graph_ops.js with the path subcommand",
+        "reason": "A transcript that merely echoes a node command string can satisfy this assertion without the script actually running. Consider requiring that the raw JSON output (or a parsed structure) be captured in an output file so the grader can confirm the script really executed — the current eval does capture graph_ops-raw-output.txt, which is good, but the assertion text is strictly about 'running'. Tightening to 'captures the actual stdout of graph_ops.js path' would make it harder to satisfy by only documenting intent."
+      },
+      {
+        "assertion": "A no-path query ... returns an empty result with a human-readable explanation",
+        "reason": "The assertion passes if a markdown narration is present, but does not require the executor to actually invoke graph_ops.js with an unreachable target. A skill could fabricate the explanation. Consider adding a sub-assertion that the raw tool invocation for the no-path case is captured and that its stdout is literally `[]`. (The executor did this voluntarily — graph_ops-raw-output.txt lines 31-41 — but the assertion itself would pass without it.)"
+      },
+      {
+        "reason": "No assertion checks whether the BFS actually returned the *shortest* path (as opposed to the human write-up claiming it did). Consider asserting 'The number of edges in the raw JSON output equals the minimum hop count computed by an independent enumerator', which ties the claim to the actual tool output and would fail if a skill wrote the correct prose around a 4-hop raw result."
+      }
+    ],
+    "overall": "Assertions are strong and tightened from earlier iterations; all 8 pass with substantive evidence (real fixture verified, both no-path sub-cases invoked, allPaths enumeration attached). Remaining suggestions are about tying narration-level assertions more tightly to captured raw stdout, but this executor already did that voluntarily."
+  }
+}

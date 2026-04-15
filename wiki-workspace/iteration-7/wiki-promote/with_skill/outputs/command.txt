@@ -1,0 +1,44 @@
+# Commands executed for wiki-promote eval (iteration-7, eval id 9)
+
+# 1. Initialize wiki scaffold
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js \
+  --path /tmp/eval-i7-promote-wiki \
+  --domain test-promote \
+  --name "Test Promote Wiki"
+
+# 2. Capture before-state of archive (mtime + sha256)
+stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%S" /tmp/eval-i7-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md
+shasum -a 256 /tmp/eval-i7-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md
+
+# 3. Create archive file (written via tool)
+# /tmp/eval-i7-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md
+
+# 4. Create stub wiki page (written via tool)
+# /tmp/eval-i7-promote-wiki/wiki/auth.md
+
+# 5. Create wiki/auth/ directory
+mkdir -p /tmp/eval-i7-promote-wiki/wiki/auth
+
+# 6. Create promoted page (written via tool)
+# /tmp/eval-i7-promote-wiki/wiki/auth/authentication-flow.md
+
+# 7. Append edge to graph/edges.jsonl
+echo '{"from":"wiki/auth/authentication-flow.md","to":"wiki/auth.md","type":"extends","provenance":"INFERRED","created":"2026-04-14T17:55:00+00:00"}' >> /tmp/eval-i7-promote-wiki/graph/edges.jsonl
+
+# 8. Update wiki/index.md (via edit tool)
+
+# 9. Log promote event
+node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log \
+  --op promote \
+  --wiki-root /tmp/eval-i7-promote-wiki \
+  --details '{"target_page":"wiki/auth/authentication-flow.md","source_query":"outputs/queries/2026-04-14-how-does-authentication-work.md","topic":"authentication-flow"}'
+
+# 10. Capture after-state of archive (mtime + sha256)
+stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%S" /tmp/eval-i7-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md
+shasum -a 256 /tmp/eval-i7-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md
+
+# 11. Idempotency probe (shell check)
+TARGET=/tmp/eval-i7-promote-wiki/wiki/auth/authentication-flow.md
+if [ -f "$TARGET" ]; then
+  echo "WARNING: Page already exists — promote is a no-op."
+fi

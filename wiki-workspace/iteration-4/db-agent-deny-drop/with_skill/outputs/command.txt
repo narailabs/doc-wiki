@@ -1,0 +1,16 @@
+cwd: /tmp/eval-i4-db-deny
+
+command (run via `time` in zsh builtin form):
+
+time node /Users/narayan/src/doc-wiki/.claude/agents/wiki-db-agent/scripts/db_query.js \
+  --env production \
+  --config ./wiki.config.yaml \
+  --sql "DROP TABLE users" \
+  > stdout.txt 2> stderr.txt
+
+exit code: 1   (non-zero; policy deny signalled via stdout JSON status="denied")
+
+prep:
+  mkdir -p /tmp/eval-i4-db-deny
+  touch /tmp/eval-i4-db-deny/dev.sqlite
+  wrote /tmp/eval-i4-db-deny/wiki.config.yaml with two envs (dev=sqlite, production=postgresql@nonexistent.invalid.example:5432/prod) and audit.enabled=true, audit.path=./audit.jsonl

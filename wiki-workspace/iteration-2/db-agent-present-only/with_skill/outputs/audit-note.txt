@@ -1,0 +1,20 @@
+No audit log was written during this run.
+
+Reason: the wiki-db-agent CLI (`scripts/db_query.ts`) does not call
+`enableAudit()`. Audit logging is off by default (see
+`.claude/agents/lib/wiki_db/audit.ts` — `_state.enabled = false`). The
+`_writeRecord()` function short-circuits to a no-op unless a caller has
+previously invoked `enableAudit(path, sessionId)`.
+
+Policy deny events would emit `policy_deny` audit records (see
+`policy.ts` `_emitDeny`), but:
+ 1. This run produced a PRESENT_ONLY decision, not a DENY, so no audit
+    event is generated for the DML branch in the first place.
+ 2. Even if an event fired, with audit disabled nothing would be written
+    to disk.
+
+To enable audit in a real deployment, a caller would wire in:
+  import { enableAudit } from "wiki_db/audit";
+  enableAudit("/path/to/audit.jsonl", "session-id");
+before invoking the CLI. That is intentionally not the default so ad-hoc
+local runs do not pollute the filesystem with audit artifacts.

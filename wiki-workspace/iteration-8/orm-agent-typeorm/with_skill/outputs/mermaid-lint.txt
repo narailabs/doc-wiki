@@ -1,0 +1,3 @@
+Command: node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/mermaid_lint.js --page /tmp/eval-i8-orm-typeorm/database-mapping.md
+Output: []
+Exit code: 0

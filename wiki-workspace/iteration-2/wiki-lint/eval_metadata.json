@@ -1,0 +1,15 @@
+{
+  "eval_id": 2,
+  "eval_name": "wiki-lint",
+  "skill": "wiki",
+  "prompt": "Run /wiki-lint on my wiki at /tmp/test-wiki/. It has pages with missing frontmatter fields and broken internal links. Fix all issues found.",
+  "assertions": [
+    {"text": "Runs lint_checks.py (or lint_checks.ts) to detect violations", "passed": null, "evidence": null},
+    {"text": "Reports missing frontmatter fields (title, type, tags, sources)", "passed": null, "evidence": null},
+    {"text": "Reports broken internal links between wiki pages", "passed": null, "evidence": null},
+    {"text": "Fixes missing frontmatter by adding required fields", "passed": null, "evidence": null},
+    {"text": "Fixes broken links by updating paths or removing dead links", "passed": null, "evidence": null},
+    {"text": "Re-runs lint to confirm zero remaining violations", "passed": null, "evidence": null},
+    {"text": "events.jsonl records the lint and fix operations", "passed": null, "evidence": null}
+  ]
+}
