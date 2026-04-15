@@ -258,23 +258,25 @@ export class GithubClient {
   public async listIssues(
     owner: string,
     repo: string,
-    opts: { state?: string; labels?: string[]; perPage?: number } = {},
+    opts: { state?: string; labels?: string[]; perPage?: number; page?: number } = {},
   ): Promise<GithubResult<GithubIssue[]>> {
     return this.get<GithubIssue[]>(`/repos/${owner}/${repo}/issues`, {
       state: opts.state ?? "open",
       labels: opts.labels?.join(",") ?? undefined,
       per_page: opts.perPage ?? 30,
+      page: opts.page,
     });
   }
 
   public async listPulls(
     owner: string,
     repo: string,
-    opts: { state?: string; perPage?: number } = {},
+    opts: { state?: string; perPage?: number; page?: number } = {},
   ): Promise<GithubResult<GithubPull[]>> {
     return this.get<GithubPull[]>(`/repos/${owner}/${repo}/pulls`, {
       state: opts.state ?? "open",
       per_page: opts.perPage ?? 30,
+      page: opts.page,
     });
   }
 
