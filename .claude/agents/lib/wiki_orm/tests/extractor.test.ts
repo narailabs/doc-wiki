@@ -97,6 +97,31 @@ describe("TestExtractSQLAlchemy", () => {
     expect(user).toBeDefined();
     expect(user!.table_name).toBe("users");
   });
+
+  // A1: secondary=user_roles is captured and the relationship gets promoted
+  // to many_to_many with through_table set.
+  it("captures secondary=user_roles as through_table and promotes to many_to_many", () => {
+    const entities = extractEntities(saFiles(), saProfile());
+    const user = entities.find((e) => e.class_name === "User");
+    expect(user).toBeDefined();
+    const rolesRel = user!.relationships.find((r) => r.target_entity === "Role");
+    expect(rolesRel).toBeDefined();
+    expect(rolesRel!.through_table).toBe("user_roles");
+    expect(rolesRel!.type).toBe("many_to_many");
+  });
+
+  it("non-secondary `relationship('Order', ...)` keeps the profile's default type", () => {
+    const entities = extractEntities(saFiles(), saProfile());
+    const user = entities.find((e) => e.class_name === "User");
+    expect(user).toBeDefined();
+    const ordersRel = user!.relationships.find(
+      (r) => r.target_entity === "Order",
+    );
+    expect(ordersRel).toBeDefined();
+    expect(ordersRel!.through_table).toBeUndefined();
+    // sqlalchemy.yaml maps `relationship\(` to type `relationship`.
+    expect(ordersRel!.type).toBe("relationship");
+  });
 });
 
 // ======================================================================

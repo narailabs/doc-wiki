@@ -110,6 +110,16 @@ export function releaseConnection(envName, conn) {
     catch {
         /* best-effort */
     }
+    // A5 (G-DB-AUDIT extension): emit `connection_released` so the audit
+    // trail of a schema or query call has a clean lifecycle marker —
+    // `[pool_created, schema_inspect, connection_released]` rather than
+    // just `[pool_created]`. logEvent is best-effort and silently no-ops
+    // when audit isn't enabled, so the new emit is safe in every code
+    // path that releases a pooled connection.
+    logEvent({
+        event_type: "connection_released",
+        details: { env: envName },
+    });
 }
 /**
  * Cheap liveness check. Returns `true` on success, `false` on any error.

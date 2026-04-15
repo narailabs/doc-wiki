@@ -20,6 +20,7 @@ import { pythonJsonDumps } from "./_json_py.js";
 import { parseFlags } from "./_cli_args.js";
 import { installClaudeCodeHooks } from "./hook_installer.js";
 import { applyCredentialsConfig, mergeCredentialsConfig } from "./apply_config.js";
+import { logEvent } from "./event_logger.js";
 // ── Constants ───────────────────────────────────────────────────────
 const SCAFFOLD_DIRS = [
     "wiki",
@@ -392,6 +393,21 @@ export function initWiki(wikiPath, domain = "general", name = "My Wiki") {
         // loud so the mysterious "no provider" failure in a later op has a
         // breadcrumb back to the real cause.
         console.warn(`[wiki] failed to apply credentials config: ${e.message}`);
+    }
+    // 9. Audit: record an `init` event so the scaffold shows up in the same
+    // events.jsonl stream as ingest/query/lint. Idempotent re-inits still get
+    // logged (with empty created_* arrays) — that's desired: every invocation
+    // of the operation is observable.
+    try {
+        logEvent(root, "init", {
+            domain,
+            name,
+            created_dirs: createdDirs,
+            created_files: createdFiles,
+        });
+    }
+    catch (e) {
+        console.warn(`[wiki] failed to log init event: ${e.message}`);
     }
     return {
         status: "ok",

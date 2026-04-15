@@ -118,6 +118,33 @@ function thresholdIndex(totalDegrees: number): number {
  * The score is the sum of all signal deltas, clamped to [0.0, 1.0] and
  * rounded to 4 decimal places. Returns both the final score (wrapped with
  * pyFloat for integer-valued-emit parity) and the list of individual signals.
+ *
+ * A3 — "Why did /wiki-fix's quality go down?":
+ *   The signals are all *content-shape* signals — word count, frontmatter
+ *   completeness, link density, tags, mermaid presence, structural degree.
+ *   None of them care about *correctness* (HS256 vs RS256), about *recency*
+ *   (a fresh `updated:` is neutral), or about whether the change was a fix
+ *   versus a rewrite. The function is pure and idempotent: the same page
+ *   always produces the same score.
+ *
+ *   So if `/wiki-fix` recomputes a score that's lower than the page's
+ *   author-set frontmatter `quality:` field, that means the original value
+ *   was higher than the algorithm would assign — typically because it was
+ *   hand-set to an aspirational value (a 117-word page hand-tagged as 0.85
+ *   gets recomputed to 0.4, which is what the algorithm has always said
+ *   such a page is worth). The drop is *not* a regression caused by the
+ *   fix; it's the recompute correcting a stale or aspirational metadata
+ *   value. Recording both `quality_score` (recomputed) and `prev_quality`
+ *   (read from frontmatter) in the events.jsonl entry, as the /wiki-fix
+ *   skill does, is the documented way to expose the delta. Reviewers can
+ *   then decide whether to add words, tags, or links — the things the
+ *   scorer actually rewards — to bring the score up.
+ *
+ *   Do NOT add a "this update was an edit, not a rewrite" bonus here. That
+ *   would let any /wiki-fix call inflate quality without changing the page
+ *   in a way readers care about, and would couple this scorer to the
+ *   skill that invokes it (currently a clean separation: scorer is pure,
+ *   skill is procedural).
  */
 export function scorePage(
   pagePath: string,

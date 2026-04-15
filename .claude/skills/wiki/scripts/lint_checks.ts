@@ -814,6 +814,93 @@ export function checkStaleContent(
   return issues;
 }
 
+/**
+ * Claims-lifecycle lint: enforce the invariants spelled out in the v2
+ * design (§6 claims schema + compilation.md §"Additional frontmatter for
+ * claims"):
+ *
+ *   - A claim page with `status: deprecated` MUST carry a non-empty
+ *     `failure_reason`. Without it the claim silently disappears from the
+ *     Anti-repetition Memory section that `banlist.ts` splices into
+ *     `summaries.md` — which defeats the whole point of recording why
+ *     a direction was abandoned. Surface as `error`.
+ *
+ *   - Deprecated claims should have `confidence <= 0.3`. A deprecated
+ *     claim with high confidence is a red flag (either the status is
+ *     wrong or the confidence wasn't updated). Surface as `warning`.
+ *
+ *   - A non-claim page carrying `failure_reason` is probably using the
+ *     field by mistake — the banlist ignores it, so it's dead metadata.
+ *     Surface as `warning` so the author can move it to a claim or drop
+ *     it.
+ *
+ * Pages without a `claim` type and without `failure_reason` are silently
+ * skipped (the overwhelming majority of wiki pages fall here).
+ */
+export function checkDeprecatedClaims(wikiRoot: string): Issue[] {
+  const issues: Issue[] = [];
+  for (const page of wikiPages(wikiRoot)) {
+    const content = fs.readFileSync(page, { encoding: "utf-8" });
+    const fm = parseFrontmatter(content);
+    const type = fm["type"];
+    const status = fm["status"];
+    const failureReason = fm["failure_reason"];
+    const confidence = fm["confidence"];
+    const isClaim = type === "claim";
+    const isDeprecated = isClaim && status === "deprecated";
+
+    if (isDeprecated) {
+      const reason =
+        typeof failureReason === "string" ? failureReason.trim() : "";
+      if (reason === "") {
+        issues.push(
+          makeIssue(
+            "error",
+            "deprecated_claims",
+            page,
+            "Claim is deprecated but failure_reason is missing or empty. " +
+              "Required so the anti-repetition memory can record why this " +
+              "direction was abandoned.",
+          ),
+        );
+      }
+      if (typeof confidence === "number" && confidence > 0.3) {
+        issues.push(
+          makeIssue(
+            "warning",
+            "deprecated_claims",
+            page,
+            `Deprecated claim has confidence ${confidence} (expected <= 0.3). ` +
+              "Either the status is wrong or the confidence was not updated " +
+              "when the claim was deprecated.",
+          ),
+        );
+      }
+      continue;
+    }
+
+    // Non-deprecated page carrying a failure_reason — dead metadata.
+    if (
+      typeof failureReason === "string" &&
+      failureReason.trim() !== "" &&
+      !isDeprecated
+    ) {
+      const hint = isClaim
+        ? "claim is not deprecated; failure_reason will be ignored by banlist"
+        : "non-claim pages should not carry failure_reason";
+      issues.push(
+        makeIssue(
+          "warning",
+          "deprecated_claims",
+          page,
+          `failure_reason is set but ${hint}.`,
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
 // ── Main lint function ──────────────────────────────────────────────
 
 /** Registry of check functions, matching the Python dict insertion order. */
@@ -827,6 +914,7 @@ const CHECK_FUNCTIONS: ReadonlyArray<
   ["code_ref_drift", checkCodeRefDrift],
   ["provenance", checkProvenanceCompleteness],
   ["ambiguity_rate", checkHighAmbiguityRate],
+  ["deprecated_claims", checkDeprecatedClaims],
   ["mermaid_syntax", checkMermaidSyntax],
   ["index_coverage", checkIndexCoverage],
   ["summaries_sync", checkSummariesSync],
@@ -845,11 +933,64 @@ export interface LintResult {
 }
 
 /**
+ * A4: filter issues to a single page (or a glob pattern). Accepts either an
+ * absolute path, a wiki-relative path, or a glob with `*` / `**` segments.
+ *
+ * The filter is applied AFTER all check functions run. We deliberately do
+ * not skip whole-wiki checks (orphan_page, isolated_node, index_coverage,
+ * thin_clusters, ambiguity_rate) when --page is set, because those checks
+ * can produce issues whose `page` field names the target file: e.g.,
+ * `orphan_page` reports the orphan itself, `isolated_node` reports the
+ * lonely node. Running the full wiki then filtering keeps that information
+ * intact for the page the user asked about. Callers that need a true
+ * "only run check X over file Y" path can compose `--page` with `--category`.
+ */
+function pageGlobToRegex(pat: string): RegExp {
+  let body = "";
+  for (let i = 0; i < pat.length; i++) {
+    const ch = pat[i];
+    if (ch === "*") {
+      // `**` → match across path separators; `*` → within a single segment.
+      if (pat[i + 1] === "*") {
+        body += ".*";
+        i++;
+      } else {
+        body += "[^/]*";
+      }
+    } else if (ch === "?") {
+      body += ".";
+    } else if (ch !== undefined) {
+      body += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  return new RegExp("(?:^|/)" + body + "$");
+}
+
+function issueMatchesPage(issue: Issue, pageFilter: string): boolean {
+  // Try exact-path match first (most common: `--page wiki/auth/session.md`
+  // against an issue whose `page` is the absolute path).
+  if (issue.page === pageFilter) return true;
+  // Path-suffix match: `--page wiki/auth/session.md` should also match the
+  // absolute /tmp/.../wiki-root/wiki/auth/session.md form.
+  if (issue.page.endsWith(pageFilter)) return true;
+  // Glob path: any pattern containing `*` or `?` is treated as a glob.
+  if (/[*?]/.test(pageFilter)) {
+    return pageGlobToRegex(pageFilter).test(issue.page);
+  }
+  return false;
+}
+
+/**
  * Run all lint checks (or a single category) and return results.
+ *
+ * When `pageFilter` is set, only issues whose `page` field matches the
+ * filter (exact path, suffix path, or `*`/`**` glob) are returned. The
+ * `summary` counters reflect the post-filter list.
  */
 export function lintWiki(
   wikiRoot: string,
   category: string | null = null,
+  pageFilter: string | null = null,
 ): LintResult {
   let issues: Issue[] = [];
   if (category) {
@@ -861,6 +1002,10 @@ export function lintWiki(
     for (const [, fn] of CHECK_FUNCTIONS) {
       issues.push(...fn(wikiRoot));
     }
+  }
+
+  if (pageFilter !== null && pageFilter !== "") {
+    issues = issues.filter((iss) => issueMatchesPage(iss, pageFilter));
   }
 
   const summary = { error: 0, warning: 0, info: 0 };
@@ -879,9 +1024,10 @@ export function lintWiki(
 const FLAG_SPEC = {
   "--wiki-root": "wikiRoot",
   "--category": "category",
+  "--page": "page",
 } as const;
 
-const HELP_TEXT = `usage: lint_checks.js [-h] --wiki-root WIKI_ROOT [--category CATEGORY]
+const HELP_TEXT = `usage: lint_checks.js [-h] --wiki-root WIKI_ROOT [--category CATEGORY] [--page PAGE]
 
 Wiki structural lint checks.
 
@@ -889,6 +1035,13 @@ options:
   -h, --help            show this help message and exit
   --wiki-root WIKI_ROOT Wiki root path
   --category CATEGORY   Run only a specific check category
+  --page PAGE           Scope the report to a single page. Accepts an
+                        absolute path, a wiki-relative path
+                        (e.g. wiki/auth/session.md), or a glob with
+                        * / ** segments. All check functions still run
+                        (so orphan/isolated/coverage issues that name the
+                        page survive the filter); only the issues whose
+                        \`page\` field matches PAGE are reported.
 `;
 
 export function main(
@@ -924,7 +1077,10 @@ export function main(
     return 2;
   }
 
-  const result = lintWiki(wikiRoot, category);
+  const pageRaw = parsed.values["page"];
+  const pageFilter = typeof pageRaw === "string" && pageRaw ? pageRaw : null;
+
+  const result = lintWiki(wikiRoot, category, pageFilter);
   process.stdout.write(pythonJsonDumps(result, 2) + "\n");
   return 0;
 }

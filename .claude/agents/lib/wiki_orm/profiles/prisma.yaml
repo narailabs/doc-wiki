@@ -18,10 +18,22 @@ entity_extraction:
   column_pattern: "^\\s+(\\w+)\\s+\\w+"
 
 relationship_detection:
+  # P1: Prisma declares the target type in the field's own type annotation
+  # rather than as an argument to @relation(...). So the target appears
+  # BEFORE the marker ([] suffix or @relation keyword), not after — the
+  # tail-based resolver in extractor.ts can't see it. Patterns below use
+  # a capture group ($1) to extract the type token directly; the extractor
+  # prefers the capture group when it matches a class identifier (starts
+  # with uppercase), falling back to the tail resolver otherwise.
   patterns:
-    - pattern: "@relation"
-      type: relationship
-    - pattern: "\\[\\]"
+    # many_to_one — `author User @relation(fields: [...], references: [...])`.
+    # Field declaration: `<fieldName> <TypeName> @relation`. Captures TypeName.
+    # Ordered before the bare `@relation` pattern so the many_to_one
+    # classification wins over the generic "relationship" type.
+    - pattern: "\\b\\w+\\s+([A-Z]\\w*)\\s+@relation\\b"
+      type: many_to_one
+    # one_to_many — `posts Post[]`. Captures the inner type TypeName.
+    - pattern: "\\b\\w+\\s+([A-Z]\\w*)\\[\\]"
       type: one_to_many
 
 naming_conventions:

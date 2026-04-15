@@ -55,6 +55,8 @@ import {
   getConnection,
   releaseConnection,
 } from "../../lib/wiki_db/connection.js";
+import { enableAudit, logEvent } from "../../lib/wiki_db/audit.js";
+import * as os from "node:os";
 // Side-effect import: wires every shipped driver into the connection-pool
 // registry so `--env` lookups resolve regardless of which driver is named
 // in `wiki.config.yaml → ecosystem.database.environments[name].driver`.
@@ -215,9 +217,25 @@ function runSchema(
   driver: DatabaseDriver,
   conn: unknown,
   filter: string | null,
+  envName: string = "",
 ): Record<string, unknown> {
   try {
     const tables = driver.getSchema(conn, undefined, filter);
+    // A5: emit `schema_inspect` BEFORE returning the result so the audit
+    // log captures the introspection even when the caller bypasses
+    // SchemaManager (this CLI path always does, since runSchema talks to
+    // the driver directly). Payload mirrors the SchemaManager event
+    // shape: env / table_filter / column_count.
+    let columnCount = 0;
+    for (const t of tables) columnCount += t.columns.length;
+    logEvent({
+      event_type: "schema_inspect",
+      details: {
+        env: envName,
+        table_filter: filter,
+        column_count: columnCount,
+      },
+    });
     const result: Record<string, unknown> = {
       status: "ok",
       tables: tables.map((t) => t.toDict()),
@@ -250,10 +268,44 @@ interface ResolvedEnv {
   grant_duration_hours: number | undefined;
 }
 
+/**
+ * Expand `~` in a path to the user's home dir so audit paths from YAML work
+ * regardless of how the user wrote them. Keeps relative paths relative so
+ * fixtures that use "./audit.jsonl" still land next to the config.
+ */
+function _expandUser(p: string): string {
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+  if (p === "~") return os.homedir();
+  return p;
+}
+
 function resolveEnv(envName: string, configPath: string): ResolvedEnv {
   const cfg = parseConfig(configPath) as Record<string, unknown>;
   const ecosystem = cfg["ecosystem"] as Record<string, unknown> | undefined;
   const database = ecosystem?.["database"] as Record<string, unknown> | undefined;
+
+  // Wire the audit sink from `ecosystem.database.audit.{enabled, path}`.
+  // Earlier iterations of the CLI never honoured this block, which meant
+  // the audit-event assertions on DENY and PRESENT_ONLY paths in the db
+  // eval suite passed only vacuously. Doing the wire-up here, before the
+  // query executes, means every policy_eval / policy_deny / query
+  // event that the library emits lands in the audit file the config named.
+  const auditCfg = database?.["audit"] as Record<string, unknown> | undefined;
+  if (
+    auditCfg !== undefined &&
+    auditCfg["enabled"] === true &&
+    typeof auditCfg["path"] === "string" &&
+    (auditCfg["path"] as string).length > 0
+  ) {
+    const rawPath = _expandUser(auditCfg["path"] as string);
+    // Relative paths resolve relative to the config file, which is what
+    // fixtures (./audit.jsonl) and wiki roots (log/audit.jsonl) expect.
+    const auditPath = path.isAbsolute(rawPath)
+      ? rawPath
+      : path.resolve(path.dirname(configPath), rawPath);
+    enableAudit(auditPath);
+  }
+
   const rawEnvs = database?.["environments"];
   const envs =
     rawEnvs !== null && rawEnvs !== undefined && typeof rawEnvs === "object"
@@ -394,7 +446,12 @@ async function runOnDriver(
   envCtx?: ResolvedEnv,
 ): Promise<number> {
   if (action === "schema") {
-    const result = runSchema(driver, conn, args.filter ?? null);
+    const result = runSchema(
+      driver,
+      conn,
+      args.filter ?? null,
+      envCtx?.name ?? "",
+    );
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return result["status"] === "ok" ? 0 : 1;
   }

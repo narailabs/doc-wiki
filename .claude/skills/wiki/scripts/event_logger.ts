@@ -175,6 +175,21 @@ function _readEvents(
   const sinceMs =
     since !== null && since !== undefined ? parsePythonIsoformat(since) : null;
 
+  // W1: when the caller supplied a `since` value but parsing failed (e.g.
+  // `--since 1z` — invalid granularity that `parseRelativeSince` returned
+  // unchanged, then `parsePythonIsoformat` couldn't parse), warn loudly
+  // instead of silently dropping the filter. Silent fallback to "no filter"
+  // hides a user error and can cause downstream stats reports to conflate
+  // filtered vs unfiltered runs. The warning goes to stderr so stdout stays
+  // machine-readable.
+  if (since !== null && since !== undefined && Number.isNaN(sinceMs)) {
+    process.stderr.write(
+      `[event_logger] warning: unrecognized --since value: ${JSON.stringify(
+        since,
+      )} — returning all events unfiltered\n`,
+    );
+  }
+
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
   for (const rawLine of raw.split("\n")) {
@@ -254,11 +269,22 @@ function median(values: readonly number[]): number {
  *   total_cost_usd: number
  *   reduction_ratio: { mean, p50, p95 } (only keys present when ratios > 0)
  *   per_agent_cost: { [agent: string]: number }
+ *   total_tokens_by_op: { [op: string]: number }    -- v2.1: sum of event.tokens / .total_tokens / .tokens_in+out per op
+ *   avg_duration_ms_by_op: { [op: string]: number } -- v2.1: average of event.duration_ms per op (rounded to 2dp)
+ *
+ * A6 — `opts.includeZeroTokens`:
+ *   By default, ops whose events carry no token fields (e.g. deterministic
+ *   `init`, `lint` runs that emit no LLM call) are omitted from
+ *   `total_tokens_by_op` because including them would dilute per-op cost
+ *   averages with zeros. When set, every op observed in the event log
+ *   appears in `total_tokens_by_op` — those without any token data
+ *   render as `0`. Useful for capacity-style dashboards that need a
+ *   stable, predictable key set across runs.
  */
 export function getStats(
   wikiRoot: string,
   since: string | null = null,
-  opts: { includeRatios?: boolean } = {},
+  opts: { includeRatios?: boolean; includeZeroTokens?: boolean } = {},
 ): Record<string, unknown> {
   const events = _readEvents(wikiRoot, since);
 
@@ -266,6 +292,9 @@ export function getStats(
   let totalCost = 0.0;
   const ratios: number[] = [];
   const perAgentCost: Record<string, number> = {};
+  const tokensByOp: Record<string, number> = {};
+  const durationSumByOp: Record<string, number> = {};
+  const durationCountByOp: Record<string, number> = {};
 
   for (const e of events) {
     const op = typeof e["op"] === "string" ? e["op"] : "unknown";
@@ -274,6 +303,39 @@ export function getStats(
     const costVal = e["cost_usd"];
     const cost = typeof costVal === "number" ? costVal : 0.0;
     totalCost += cost;
+
+    // v2.1 per-op token aggregation. Accept several event-level keys so
+    // producers that emit `tokens`, `total_tokens`, or `tokens_in + tokens_out`
+    // are all honoured without requiring a single canonical schema.
+    let tokensOnEvent = 0;
+    const directTokens = e["tokens"] ?? e["total_tokens"];
+    if (typeof directTokens === "number") {
+      tokensOnEvent = directTokens;
+    } else {
+      const tIn = e["tokens_in"];
+      const tOut = e["tokens_out"];
+      const inN = typeof tIn === "number" ? tIn : 0;
+      const outN = typeof tOut === "number" ? tOut : 0;
+      tokensOnEvent = inN + outN;
+    }
+    if (tokensOnEvent > 0) {
+      tokensByOp[op] = (tokensByOp[op] ?? 0) + tokensOnEvent;
+    }
+
+    // v2.1 per-op duration aggregation. duration_ms or total_duration_ms
+    // are both common; fall back to total_duration_seconds × 1000.
+    let durationOnEvent: number | null = null;
+    const durMs = e["duration_ms"] ?? e["total_duration_ms"];
+    if (typeof durMs === "number") {
+      durationOnEvent = durMs;
+    } else {
+      const durSec = e["total_duration_seconds"];
+      if (typeof durSec === "number") durationOnEvent = durSec * 1000;
+    }
+    if (durationOnEvent !== null && durationOnEvent >= 0) {
+      durationSumByOp[op] = (durationSumByOp[op] ?? 0) + durationOnEvent;
+      durationCountByOp[op] = (durationCountByOp[op] ?? 0) + 1;
+    }
 
     if ("reduction_ratio" in e) {
       const r = e["reduction_ratio"];
@@ -304,6 +366,23 @@ export function getStats(
     }
   }
 
+  const avgDurationByOp: Record<string, number> = {};
+  for (const op of Object.keys(durationSumByOp)) {
+    const sum = durationSumByOp[op] ?? 0;
+    const count = durationCountByOp[op] ?? 1;
+    avgDurationByOp[op] = Math.round((sum / count) * 100) / 100;
+  }
+
+  // A6: when explicit-zero is requested, backfill every op observed in
+  // the event log so the key set of `total_tokens_by_op` exactly matches
+  // `ops_by_type`. Default behaviour is unchanged: ops whose events
+  // contributed no token data stay omitted.
+  if (opts.includeZeroTokens) {
+    for (const op of Object.keys(opsByType)) {
+      if (!(op in tokensByOp)) tokensByOp[op] = 0;
+    }
+  }
+
   // Reduction ratio statistics — only populated when we saw any ratios.
   const ratioStats: Record<string, number> = {};
   if (ratios.length > 0) {
@@ -322,6 +401,8 @@ export function getStats(
     total_cost_usd: totalCost,
     reduction_ratio: ratioStats,
     per_agent_cost: perAgentCost,
+    total_tokens_by_op: tokensByOp,
+    avg_duration_ms_by_op: avgDurationByOp,
   };
   if (opts.includeRatios) {
     // Used by the CLI stats path to decide whether reduction_ratio fields
@@ -339,6 +420,9 @@ interface ParsedArgs {
   wikiRoot?: string;
   details?: string;
   since?: string | null;
+  /** A6: when true, total_tokens_by_op contains a 0-entry for every op
+   *  observed in the log (including ops that emitted no token data). */
+  includeZeroTokens?: boolean;
   help?: boolean;
 }
 
@@ -377,6 +461,12 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     if (a === "-h" || a === "--help") {
       out.help = true;
+      i++;
+      continue;
+    }
+    // A6: boolean-style flag — no value follows. Consume just one token.
+    if (a === "--include-zero-tokens") {
+      out.includeZeroTokens = true;
       i++;
       continue;
     }
@@ -427,6 +517,14 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+
+stats options:
+  --since SINCE         Filter events to ts >= SINCE (ISO-8601 or
+                        relative shorthand like '7d', '24h', '15m')
+  --include-zero-tokens Include every observed op in total_tokens_by_op,
+                        even ops whose events carried no token data
+                        (those render as 0). Default: omit zero-token
+                        ops to keep per-op cost averages clean.
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -448,11 +546,36 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       process.stderr.write("--wiki-root is required\n");
       return 2;
     }
+
+    // W1: validate --since at the CLI boundary before doing any work.
+    // Node's `Date.parse` is surprisingly lenient — `Date.parse("1z")`
+    // returns a valid (ancient) timestamp instead of NaN — so we can't
+    // rely on a post-parse NaN guard to catch garbage input. Instead,
+    // require the value to either match the relative-duration shape
+    // (N + d|h|m) or start with an ISO-like `YYYY-MM-DD` prefix. Anything
+    // else exits non-zero with a clear error so the caller knows their
+    // filter was ignored rather than silently returning all events.
+    if (args.since !== null && args.since !== undefined) {
+      const isRelative = /^\d+[dhm]$/.test(args.since);
+      const isAbsolute = /^\d{4}-\d{2}-\d{2}/.test(args.since);
+      if (!isRelative && !isAbsolute) {
+        process.stderr.write(
+          `[event_logger] error: --since value ${JSON.stringify(
+            args.since,
+          )} is not a valid relative duration (e.g. 7d, 24h, 15m) or absolute ISO timestamp (YYYY-MM-DD...)\n`,
+        );
+        return 2;
+      }
+    }
+
     const since =
       args.since !== null && args.since !== undefined
         ? parseRelativeSince(args.since)
         : null;
-    const result = getStats(args.wikiRoot, since, { includeRatios: true });
+    const result = getStats(args.wikiRoot, since, {
+      includeRatios: true,
+      includeZeroTokens: args.includeZeroTokens === true,
+    });
     const ratios = (result["_ratios"] as number[]) ?? [];
     delete result["_ratios"];
 

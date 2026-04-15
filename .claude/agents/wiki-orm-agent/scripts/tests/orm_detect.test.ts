@@ -118,6 +118,24 @@ describe("orm_detect main()", () => {
     expect(classNames).toContain("Order");
     expect(result.mermaid).not.toBeNull();
     expect(result.mermaid.code).toContain("erDiagram");
+
+    // A7: columns serialize as objects with {name, source_field}, symmetric
+    // with the relationships shape. Asserting the array is non-empty and
+    // each entry carries name+source_field strings is enough to pin the
+    // contract — the exact column set varies by fixture.
+    const user = (result.entities as Array<{
+      class_name: string;
+      columns: Array<{ name: string; source_field: string }>;
+    }>).find((e) => e.class_name === "User");
+    expect(user).toBeDefined();
+    expect(Array.isArray(user!.columns)).toBe(true);
+    expect(user!.columns.length).toBeGreaterThan(0);
+    for (const c of user!.columns) {
+      expect(typeof c.name).toBe("string");
+      expect(typeof c.source_field).toBe("string");
+    }
+    const colNames = user!.columns.map((c) => c.name);
+    expect(colNames).toContain("username");
   });
 
   it("detects Django profile on the Django fixture", async () => {
@@ -186,6 +204,39 @@ describe("orm_detect main()", () => {
     });
     const result = JSON.parse(stdout);
     expect(result).not.toHaveProperty("cross_validation");
+  });
+
+  // A7: columns must serialize as object arrays, never as a count integer.
+  // Older versions emitted `columns: <number>` which was vacuous for any
+  // grader that needed to verify the extracted field set.
+  it("A7: columns are objects {name, source_field}, not a count integer", async () => {
+    const jpaPath = path.join(ORM_FIXTURES_DIR, "jpa");
+    const stdout = await captureStdout(async () => {
+      await main([
+        "--codebase-path",
+        jpaPath,
+        "--profile",
+        "auto",
+        "--output-json",
+      ]);
+    });
+    const result = JSON.parse(stdout) as {
+      entities: Array<{ columns: unknown }>;
+    };
+    for (const ent of result.entities) {
+      // It must NOT be a number.
+      expect(typeof ent.columns).not.toBe("number");
+      expect(Array.isArray(ent.columns)).toBe(true);
+      for (const c of ent.columns as Array<{
+        name?: unknown;
+        source_field?: unknown;
+      }>) {
+        expect(c).toBeTypeOf("object");
+        expect(c).not.toBeNull();
+        expect("name" in (c as object)).toBe(true);
+        expect("source_field" in (c as object)).toBe(true);
+      }
+    }
   });
 
   it("surfaces cross_validation.error when --env points at an unregistered env", async () => {

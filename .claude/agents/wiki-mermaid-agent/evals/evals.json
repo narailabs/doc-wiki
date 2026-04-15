@@ -4,25 +4,57 @@
     {
       "id": 1,
       "prompt": "Generate a Mermaid ER diagram from this structured JSON payload describing three entities (User, Order, Product) and their one-to-many relationships",
-      "expected_output": "Valid Mermaid erDiagram fenced code block injected into the target wiki page between existing markers, with entity names and relationship cardinalities matching the input JSON",
+      "expected_output": "Valid Mermaid erDiagram fenced code block injected between the wiki-mermaid managed markers on the target page, entity names and cardinalities match the input JSON",
       "files": [],
       "expectations": [
-        "Emits a fenced ```mermaid code block with the `erDiagram` directive",
-        "Preserves existing non-Mermaid page content outside the managed markers",
-        "Uses the `||--o{` relationship syntax for one-to-many edges",
-        "Produces syntactically valid Mermaid that passes mermaid_lint.ts"
+        "Target page emits a fenced ```mermaid code block containing the erDiagram directive",
+        "The mermaid block lives BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on the target page — marker positions are preserved, content between them is replaced. EOF append is a contract violation when markers are present.",
+        "erDiagram contains all three entity names (User, Order, Product) and each has at least one attribute from the input JSON (e.g., id, email for User)",
+        "Uses `||--o{` for one-to-many edges (matching the input's cardinality)",
+        "Content outside the markers is preserved byte-for-byte (diff of before vs after, excluding the region between markers, is empty)",
+        "mermaid_lint.js reports no issues on the resulting page"
       ]
     },
     {
       "id": 2,
       "prompt": "Convert this agent output describing a deploy pipeline into a Mermaid flowchart, then inject it into pipeline.md",
-      "expected_output": "A flowchart Mermaid block added to pipeline.md matching the sequence of steps in the input, with correctly-labeled edges and nodes",
+      "expected_output": "A flowchart Mermaid block injected between the wiki-mermaid markers on pipeline.md; re-running with different input replaces (not appends) the block",
       "files": [],
       "expectations": [
-        "Chooses an appropriate diagram type (flowchart/sequence/state) for the input shape",
-        "Handles nodes with quotes and special characters via safe escaping",
-        "Updates pipeline.md idempotently (re-running on the same input produces no diff)",
-        "Never mutates wiki pages outside the specified target"
+        "Mermaid block uses flowchart directive (flowchart TD|TB|LR|RL)",
+        "Labels containing special characters (quotes, angle brackets) are escaped so mermaid_lint passes — a single escape case is OK but the lint must be clean",
+        "Re-running with the IDENTICAL input produces a byte-identical pipeline.md (true idempotency)",
+        "Re-running with a DIFFERENT input (e.g., an added node) REPLACES the previous block between the markers — not appends a second block; pipeline.md still contains exactly one `<!-- wiki-mermaid: start -->` and one `<!-- wiki-mermaid: end -->` after both runs",
+        "Only the named target file is modified — no other .md files in the wiki change across the runs",
+        "Content outside the markers on pipeline.md is preserved byte-for-byte across both runs"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Convert this agent output describing an HTTP request flow (client → API gateway → auth service → database) into a Mermaid sequenceDiagram and inject it into request-flow.md",
+      "expected_output": "A sequenceDiagram block with participant declarations and correctly-labeled messages, injected between the wiki-mermaid markers",
+      "files": [],
+      "expectations": [
+        "Generated block starts with the `sequenceDiagram` directive",
+        "Block declares participants (or actors) for each of the four nodes (Client, Gateway, Auth, Database) using `participant` lines",
+        "Each message between participants is rendered with `->` (sync) or `->>` (async) and carries the label from the input JSON",
+        "The block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on request-flow.md — no EOF append",
+        "Content outside the markers is preserved byte-for-byte across the run",
+        "mermaid_lint.js passes on the resulting page"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Convert this agent output describing three classes (Animal, Dog, Cat with bark() and meow() methods, both inheriting from Animal which has name: string and eat()) into a Mermaid classDiagram and inject it into class-hierarchy.md.",
+      "expected_output": "A classDiagram block with <|-- inheritance edges and method/attribute lines per class, injected between the wiki-mermaid markers, lint-clean",
+      "files": [],
+      "expectations": [
+        "Generated block starts with the `classDiagram` directive",
+        "All three classes (Animal, Dog, Cat) are declared as separate `class Foo { ... }` blocks",
+        "Each class's body lists its declared methods and attributes from the input (e.g., Animal: `name: string`, `eat()`; Dog: `bark()`; Cat: `meow()`); no method appears under the wrong class",
+        "Inheritance is rendered as `Animal <|-- Dog` and `Animal <|-- Cat` (the `<|--` glyph specifically — `<--` or `--|>` are wrong directions and fail the assertion)",
+        "Block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on class-hierarchy.md — no EOF append; content outside the markers preserved byte-for-byte",
+        "mermaid_lint.js passes on the resulting page"
       ]
     }
   ]

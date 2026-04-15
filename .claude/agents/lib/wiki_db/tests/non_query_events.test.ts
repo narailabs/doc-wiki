@@ -188,4 +188,62 @@ describe("G-DB-AUDIT — non-query events", () => {
       }
     });
   });
+
+  // A5: connection_released emitted by releaseConnection so the audit
+  // trail closes cleanly after every checkout.
+  describe("connection_released (A5)", () => {
+    it("emitted once per release on a real pool", () => {
+      enableAudit(logPath);
+      registerEnvironment("test_release", {
+        host: "",
+        port: 0,
+        database: ":memory:",
+        schema: "",
+        approval_mode: "auto",
+        driver: "sqlite",
+      });
+      const conn = getConnection("test_release");
+      releaseConnection("test_release", conn);
+      const records = readAudit(logPath);
+      const released = records.filter(
+        (r) =>
+          r.event_type === "connection_released" &&
+          r.details?.env === "test_release",
+      );
+      expect(released.length).toBe(1);
+    });
+
+    it("audit shape for a checkout-then-release is [pool_created, connection_released]", () => {
+      enableAudit(logPath);
+      registerEnvironment("test_lifecycle", {
+        host: "",
+        port: 0,
+        database: ":memory:",
+        schema: "",
+        approval_mode: "auto",
+        driver: "sqlite",
+      });
+      const conn = getConnection("test_lifecycle");
+      releaseConnection("test_lifecycle", conn);
+      const events = readAudit(logPath)
+        .filter((r) => r.details?.env === "test_lifecycle")
+        .map((r) => r.event_type);
+      expect(events).toEqual(["pool_created", "connection_released"]);
+    });
+
+    it("not emitted for an unknown env (releaseConnection no-ops)", () => {
+      enableAudit(logPath);
+      releaseConnection("never_registered", {
+        envName: "never_registered",
+        native: {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        driver: {} as any,
+      });
+      const records = readAudit(logPath);
+      const released = records.filter(
+        (r) => r.event_type === "connection_released",
+      );
+      expect(released.length).toBe(0);
+    });
+  });
 });

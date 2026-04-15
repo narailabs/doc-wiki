@@ -125,11 +125,11 @@ summary: "Big-picture synthesis of {wiki_name}"
 
 8. **Compile**: Create wiki page(s). See `compilation.md` for rules.
 
-9. **Auto Mermaid**: If the source data has structure (DB entities, service architecture, request flows), generate Mermaid diagrams inline.
+9. **Auto Mermaid**: Run `mermaid_inject.ts` (`node mermaid_inject.js --page <page> --agents <agent-outputs.json> --in-place`). It reads the JSON envelopes emitted by dispatched agents, picks up every `mermaid: {type, title, code}` field, and splices each diagram into the compiled page wrapped in `<!-- wiki-mermaid: <title> start/end -->` markers so a second ingest updates diagrams in place instead of stacking duplicates. Skip this step when no agent emitted a `mermaid` field.
 
-10. **"How to Go Deeper"**: Generate section listing agent commands for live verification.
+10. **"How to Go Deeper"**: Run `how_to_go_deeper.ts` (`node how_to_go_deeper.js --sources '<json>' --enabled <csv>`) against the compiled page's `sources:` frontmatter. The helper classifies each source (jira/confluence/github/notion/gcp/aws/db/local-code/raw) and emits one bullet per external source with the exact agent command. Pass the enabled-agent list from `wiki.config.yaml` so bullets for disabled agents render as a "enable the wiki-X-agent" hint instead of an unrunnable command. The helper returns an empty string when sources are all local `raw/…` (already in the wiki body); skip the section in that case.
 
-11. **Update indexes**: Add to `wiki/index.md` and rebuild `wiki/summaries.md`.
+11. **Update indexes**: Add a bullet to `wiki/index.md` for the new page (your reasoning). Then rebuild the summary index deterministically: `node summaries_rebuild.js --wiki-root <wikiRoot>`. The rebuilder walks every frontmatter-bearing page, emits one ~50-token summary per page in alphabetical order, and splices the `## Anti-repetition Memory` section from `banlist.buildBanlistSection()` at the end of the managed block. Content outside the `<!-- wiki-managed: summaries start/end -->` markers is preserved, so hand-written preambles survive re-runs.
 
 12. **Log**: Run `event_logger.ts` (`node event_logger.js`) with operation details. Pass each dispatched sub-agent's stats under `details.agent_calls[]` so `/wiki-stats` can report per-agent cost correctly. Entries have shape `{agent, model, tokens_in, tokens_out, cost_usd, elapsed_ms, status}`; totals are computed automatically.
 
