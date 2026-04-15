@@ -164,6 +164,93 @@ describe("github_fetch.fetch", () => {
     });
     expect(r["error_code"]).toBe("VALIDATION_ERROR");
   });
+
+  // G-GITHUB-PAGINATE: listing endpoints now walk pages until
+  // max_results is hit or a short page arrives.
+  describe("G-GITHUB-PAGINATE", () => {
+    function issueRow(n: number): Record<string, unknown> {
+      return {
+        number: n,
+        title: `issue ${n}`,
+        state: "open",
+        user: { login: "author" },
+        labels: [],
+        html_url: `https://github.com/a/b/issues/${n}`,
+        updated_at: null,
+      };
+    }
+
+    function pagedFetch(
+      totalCount: number,
+      perPage = 100,
+    ): [
+      (url: string) => Response,
+      { pages: number[] },
+    ] {
+      const state = { pages: [] as number[] };
+      return [
+        (url: string) => {
+          const u = new URL(url);
+          const page = Number(u.searchParams.get("page") ?? "1");
+          state.pages.push(page);
+          const start = (page - 1) * perPage;
+          const end = Math.min(start + perPage, totalCount);
+          const rows: unknown[] = [];
+          for (let i = start + 1; i <= end; i++) rows.push(issueRow(i));
+          return jsonResponse(rows);
+        },
+        state,
+      ];
+    }
+
+    it("iterates through 3 pages when total < max_results", async () => {
+      // 223 total issues across 3 pages (100/100/23), max_results=500.
+      const [fetchImpl, state] = pagedFetch(223);
+      const client = makeClient({}, async (url) => fetchImpl(url));
+      const r = await fetch(
+        "get_issues",
+        { owner: "a", repo: "b", max_results: 500 },
+        { client },
+      );
+      expect(r["status"]).toBe("success");
+      const data = r["data"] as { total: number };
+      expect(data.total).toBe(223);
+      expect(r["truncated"]).toBe(false);
+      expect(state.pages).toEqual([1, 2, 3]);
+    });
+
+    it("stops at max_results and marks truncated", async () => {
+      // 500 total, max_results=150 → should grab pages 1 and 2 (200
+      // items), then slice to 150 and mark truncated=true.
+      const [fetchImpl, state] = pagedFetch(500);
+      const client = makeClient({}, async (url) => fetchImpl(url));
+      const r = await fetch(
+        "get_pulls",
+        { owner: "a", repo: "b", max_results: 150 },
+        { client },
+      );
+      expect(r["status"]).toBe("success");
+      const data = r["data"] as { total: number };
+      expect(data.total).toBe(150);
+      expect(r["truncated"]).toBe(true);
+      // Cap reached on page 2 — no page 3 fetched.
+      expect(state.pages).toEqual([1, 2]);
+    });
+
+    it("single-page listing returns truncated=false", async () => {
+      const [fetchImpl, state] = pagedFetch(42);
+      const client = makeClient({}, async (url) => fetchImpl(url));
+      const r = await fetch(
+        "get_issues",
+        { owner: "a", repo: "b", max_results: 500 },
+        { client },
+      );
+      const data = r["data"] as { total: number };
+      expect(data.total).toBe(42);
+      expect(r["truncated"]).toBe(false);
+      expect(state.pages).toEqual([1]);
+    });
+  });
 });
 
 describe("github_fetch mermaid field (G1)", () => {

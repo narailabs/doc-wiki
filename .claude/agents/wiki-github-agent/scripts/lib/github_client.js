@@ -201,12 +201,14 @@ export class GithubClient {
             state: opts.state ?? "open",
             labels: opts.labels?.join(",") ?? undefined,
             per_page: opts.perPage ?? 30,
+            page: opts.page,
         });
     }
     async listPulls(owner, repo, opts = {}) {
         return this.get(`/repos/${owner}/${repo}/pulls`, {
             state: opts.state ?? "open",
             per_page: opts.perPage ?? 30,
+            page: opts.page,
         });
     }
     async getFile(owner, repo, filePath, ref = "main") {

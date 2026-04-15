@@ -245,17 +245,59 @@ async function fetchSearchCode(
   };
 }
 
+// GitHub caps per_page at 100 for list endpoints.
+const GITHUB_MAX_PER_PAGE = 100;
+
+/**
+ * G-GITHUB-PAGINATE: walk `page=1, 2, 3, …` until we hit `max_results`
+ * or the listing yields fewer than `per_page` items (the last page).
+ * Returns the accumulated rows (capped at `max_results`) and a
+ * `truncated` flag indicating the cap was reached before the end.
+ *
+ * On page-level HTTP errors, returns the error alongside whatever was
+ * accumulated so far — callers decide whether to surface or swallow.
+ */
+async function paginate<T>(
+  maxResults: number,
+  fetchPage: (page: number, perPage: number) => Promise<GithubResult<T[]>>,
+): Promise<
+  | { ok: true; items: T[]; truncated: boolean }
+  | { ok: false; error: Extract<GithubResult<T[]>, { ok: false }> }
+> {
+  const perPage = Math.min(GITHUB_MAX_PER_PAGE, Math.max(1, maxResults));
+  const acc: T[] = [];
+  let truncated = false;
+  for (let page = 1; ; page++) {
+    const result = await fetchPage(page, perPage);
+    if (!result.ok) return { ok: false, error: result };
+    const chunk = Array.isArray(result.data) ? result.data : [];
+    acc.push(...chunk);
+    // Natural end of listing (short page).
+    if (chunk.length < perPage) break;
+    // Cap reached — mark truncated since more pages likely exist.
+    if (acc.length >= maxResults) {
+      truncated = true;
+      break;
+    }
+  }
+  const capped = acc.slice(0, maxResults);
+  return { ok: true, items: capped, truncated };
+}
+
 async function fetchGetIssues(
   client: GithubClient,
   v: GetIssuesValidated,
 ): Promise<FetchResult> {
-  const result = await client.listIssues(v.owner, v.repo, {
-    state: v.state,
-    labels: v.labels,
-    perPage: v.max_results,
-  });
-  if (!result.ok) return errorFromClient(result, "get_issues");
-  const issues = Array.isArray(result.data) ? result.data : [];
+  const page = await paginate(v.max_results, (pageNum, perPage) =>
+    client.listIssues(v.owner, v.repo, {
+      state: v.state,
+      labels: v.labels,
+      perPage,
+      page: pageNum,
+    }),
+  );
+  if (!page.ok) return errorFromClient(page.error, "get_issues");
+  const issues = page.items;
   return {
     status: "success",
     action: "get_issues",
@@ -273,7 +315,7 @@ async function fetchGetIssues(
         updated_at: i.updated_at ?? null,
       })),
     },
-    truncated: issues.length >= v.max_results,
+    truncated: page.truncated,
   };
 }
 
@@ -281,12 +323,15 @@ async function fetchGetPulls(
   client: GithubClient,
   v: GetPullsValidated,
 ): Promise<FetchResult> {
-  const result = await client.listPulls(v.owner, v.repo, {
-    state: v.state,
-    perPage: v.max_results,
-  });
-  if (!result.ok) return errorFromClient(result, "get_pulls");
-  const pulls = Array.isArray(result.data) ? result.data : [];
+  const page = await paginate(v.max_results, (pageNum, perPage) =>
+    client.listPulls(v.owner, v.repo, {
+      state: v.state,
+      perPage,
+      page: pageNum,
+    }),
+  );
+  if (!page.ok) return errorFromClient(page.error, "get_pulls");
+  const pulls = page.items;
   return {
     status: "success",
     action: "get_pulls",
@@ -301,7 +346,7 @@ async function fetchGetPulls(
         updated_at: p.updated_at ?? null,
       })),
     },
-    truncated: pulls.length >= v.max_results,
+    truncated: page.truncated,
   };
 }
 
