@@ -6,7 +6,7 @@
  * method whitelist therefore permits these two named endpoints via a
  * `POST_READ_ONLY` pseudo-method in addition to the standard GETs.
  */
-import { validateUrl } from "../../../../skills/wiki/scripts/security_check.js";
+import { validateUrl } from "../../../lib/security_check.js";
 import { resolveSecret } from "../../../lib/credential_providers/index.js";
 const ALLOWED_METHODS = new Set([
     "GET",

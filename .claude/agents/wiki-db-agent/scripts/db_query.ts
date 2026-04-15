@@ -46,7 +46,7 @@ import {
   type ErTable,
   type MermaidBlock,
 } from "../../lib/mermaid_format.js";
-import { parseConfig } from "../../../skills/wiki/scripts/parse_config.js";
+import { parseConfig } from "../../lib/parse_config.js";
 import {
   registerEnvironment,
   clearEnvironments,
