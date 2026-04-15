@@ -118,48 +118,46 @@ export function extractEntities(fileContents, profile) {
             // Relationships — find every match of each pattern within the class
             // window, then resolve the target entity from the field declaration
             // that follows (generic type argument or simple field type).
+            // G-ORM-PROFILE-VALIDATE: patterns are compiled and validated in
+            // loadProfile, so RegExp construction here cannot fail on a valid
+            // profile. Any throw is a bug in the loader, not user input.
             for (const rel of profile.relationship_patterns) {
-                try {
-                    const rre = new RegExp(rel.pattern, "g");
-                    let relMatch;
-                    while ((relMatch = rre.exec(windowText)) !== null) {
-                        const matchEnd = relMatch.index + relMatch[0].length;
-                        const tail = windowText.slice(matchEnd, matchEnd + 300);
-                        // P1: profiles can embed a capture group to pull the target
-                        // type out of the matched substring directly — useful for ORMs
-                        // like Prisma where the type is declared BEFORE the marker
-                        // (e.g. `author User @relation(...)` — target is `User`, but
-                        // the tail after `@relation` only sees the arg list). We take
-                        // the first capture group if present and it looks like a class
-                        // identifier (uppercase start); otherwise fall back to the
-                        // tail-based resolver so existing profiles (JPA, SQLAlchemy,
-                        // TypeORM, etc.) that don't declare a capture group keep their
-                        // current behaviour.
-                        const captured = relMatch[1];
-                        const target = captured && /^[A-Z]/.test(captured)
-                            ? captured
-                            : _resolveRelationshipTarget(tail);
-                        // A1: SQLAlchemy `relationship("Role", secondary=user_roles)` —
-                        // when a `secondary=<ident>` kwarg is visible inside the call's
-                        // argument tail, capture the bridge-table name and promote the
-                        // relationship's effective cardinality to many-to-many. We only
-                        // scan the tail since the relationship pattern already anchored
-                        // us at the open paren; reading further would risk picking up a
-                        // sibling call's `secondary=` on a different line.
-                        const through = _resolveSecondaryThroughTable(tail);
-                        const built = makeExtractedRelationship({
-                            type: through !== "" ? "many_to_many" : rel.type,
-                            target_entity: target,
-                            source_line: rel.pattern,
-                            through_table: through,
-                        });
-                        entity.relationships.push(built);
-                        if (relMatch.index === rre.lastIndex)
-                            rre.lastIndex++;
-                    }
-                }
-                catch {
-                    // invalid regex — skip
+                const rre = new RegExp(rel.pattern, "g");
+                let relMatch;
+                while ((relMatch = rre.exec(windowText)) !== null) {
+                    const matchEnd = relMatch.index + relMatch[0].length;
+                    const tail = windowText.slice(matchEnd, matchEnd + 300);
+                    // P1: profiles can embed a capture group to pull the target
+                    // type out of the matched substring directly — useful for ORMs
+                    // like Prisma where the type is declared BEFORE the marker
+                    // (e.g. `author User @relation(...)` — target is `User`, but
+                    // the tail after `@relation` only sees the arg list). We take
+                    // the first capture group if present and it looks like a class
+                    // identifier (uppercase start); otherwise fall back to the
+                    // tail-based resolver so existing profiles (JPA, SQLAlchemy,
+                    // TypeORM, etc.) that don't declare a capture group keep their
+                    // current behaviour.
+                    const captured = relMatch[1];
+                    const target = captured && /^[A-Z]/.test(captured)
+                        ? captured
+                        : _resolveRelationshipTarget(tail);
+                    // A1: SQLAlchemy `relationship("Role", secondary=user_roles)` —
+                    // when a `secondary=<ident>` kwarg is visible inside the call's
+                    // argument tail, capture the bridge-table name and promote the
+                    // relationship's effective cardinality to many-to-many. We only
+                    // scan the tail since the relationship pattern already anchored
+                    // us at the open paren; reading further would risk picking up a
+                    // sibling call's `secondary=` on a different line.
+                    const through = _resolveSecondaryThroughTable(tail);
+                    const built = makeExtractedRelationship({
+                        type: through !== "" ? "many_to_many" : rel.type,
+                        target_entity: target,
+                        source_line: rel.pattern,
+                        through_table: through,
+                    });
+                    entity.relationships.push(built);
+                    if (relMatch.index === rre.lastIndex)
+                        rre.lastIndex++;
                 }
             }
             entities.push(entity);

@@ -166,7 +166,7 @@ export function loadProfile(filePath: string): OrmProfile {
   const extraction = raw.entity_extraction ?? {};
   const relationships = raw.relationship_detection ?? {};
 
-  return {
+  const profile: OrmProfile = {
     name: toString(raw.name),
     language: toString(raw.language),
     description: toString(raw.description, ""),
@@ -178,6 +178,52 @@ export function loadProfile(filePath: string): OrmProfile {
     relationship_patterns: toMarkerList(relationships.patterns),
     naming_conventions: toStringMap(raw.naming_conventions),
   };
+
+  // G-ORM-PROFILE-VALIDATE: compile every regex-valued pattern at
+  // load time so authors see typos immediately instead of having them
+  // silently swallowed by the extractor's runtime catch. Flags must
+  // match the ones used in extractor.ts where each pattern is applied.
+  _validateProfileRegexes(profile, filePath);
+
+  return profile;
+}
+
+function _compilePattern(
+  pattern: string,
+  flags: string,
+  filePath: string,
+  field: string,
+): void {
+  if (pattern === "") return;
+  try {
+    // Constructed for validation only — the extractor builds its own
+    // RegExp at use-time with the right flags.
+    new RegExp(pattern, flags);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new ProfileValueError(
+      `Profile ${filePath} has invalid regex in ${field}: ${JSON.stringify(
+        pattern,
+      )} (${msg})`,
+    );
+  }
+}
+
+function _validateProfileRegexes(
+  profile: OrmProfile,
+  filePath: string,
+): void {
+  _compilePattern(profile.class_pattern, "gm", filePath, "class_pattern");
+  _compilePattern(profile.table_pattern, "s", filePath, "table_pattern");
+  _compilePattern(profile.column_pattern, "g", filePath, "column_pattern");
+  profile.relationship_patterns.forEach((rel, i) => {
+    _compilePattern(
+      rel.pattern,
+      "g",
+      filePath,
+      `relationship_patterns[${i}].pattern`,
+    );
+  });
 }
 
 /**
