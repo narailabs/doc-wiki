@@ -340,8 +340,16 @@ export class PostgresDriver extends DatabaseDriver {
   override close(conn: unknown): void {
     Promise.resolve(conn as Promise<PgHandle> | PgHandle)
       .then((h) => h.client.release())
-      .catch(() => {
-        /* best-effort */
+      .catch((e: unknown) => {
+        // G-CLOSE-LOG: surface release errors on stderr instead of
+        // swallowing them. close() is called from sync cleanup paths
+        // so we cannot await; keep it fire-and-forget but at least
+        // give an operator something to grep for in a misbehaving run.
+        process.stderr.write(
+          `[postgresql] release error (best-effort): ${
+            e instanceof Error ? e.message : String(e)
+          }\n`,
+        );
       });
   }
 

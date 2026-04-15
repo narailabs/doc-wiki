@@ -213,8 +213,12 @@ export class MysqlDriver extends DatabaseDriver {
     close(conn) {
         Promise.resolve(conn)
             .then((h) => h.client.release())
-            .catch(() => {
-            /* best-effort */
+            .catch((e) => {
+            // G-CLOSE-LOG: surface release errors on stderr instead of
+            // swallowing them. close() is called from sync cleanup paths
+            // so we cannot await; keep it fire-and-forget but at least
+            // give an operator something to grep for in a misbehaving run.
+            process.stderr.write(`[mysql] release error (best-effort): ${e instanceof Error ? e.message : String(e)}\n`);
         });
     }
     classifyOperation(query) {
