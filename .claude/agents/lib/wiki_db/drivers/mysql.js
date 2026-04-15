@@ -158,17 +158,31 @@ export class MysqlDriver extends DatabaseDriver {
             const tablesRows = Array.isArray(tablesRaw)
                 ? tablesRaw
                 : [];
-            const out = [];
-            for (const row of tablesRows) {
-                const tableName = String(row["table_name"] ?? row["TABLE_NAME"]);
-                const [colsRaw] = await handle.client.query("SELECT column_name, data_type, is_nullable, column_default, column_key " +
-                    "FROM information_schema.columns " +
-                    "WHERE table_schema = ? AND table_name = ? " +
-                    "ORDER BY ordinal_position", [ns, tableName]);
-                const colsRows = Array.isArray(colsRaw)
-                    ? colsRaw
-                    : [];
-                const columns = colsRows.map((r) => new Column({
+            const tableNames = tablesRows.map((r) => String(r["table_name"] ?? r["TABLE_NAME"]));
+            if (tableNames.length === 0)
+                return [];
+            // G-SCHEMA-BATCH: fold per-table column queries into one set-based
+            // query using `WHERE TABLE_NAME IN (?, ?, …)`. MySQL exposes PK
+            // membership as `COLUMN_KEY = 'PRI'` on the columns row so we do
+            // not need a separate PK query. For N tables we drop from N+1
+            // round-trips to 2.
+            const placeholders = tableNames.map(() => "?").join(", ");
+            const [colsRaw] = await handle.client.query("SELECT table_name, column_name, data_type, is_nullable, column_default, column_key, ordinal_position " +
+                "FROM information_schema.columns " +
+                `WHERE table_schema = ? AND table_name IN (${placeholders}) ` +
+                "ORDER BY table_name, ordinal_position", [ns, ...tableNames]);
+            const colsRows = Array.isArray(colsRaw)
+                ? colsRaw
+                : [];
+            const colsByTable = new Map();
+            for (const r of colsRows) {
+                const t = String(r["table_name"] ?? r["TABLE_NAME"]);
+                let list = colsByTable.get(t);
+                if (list === undefined) {
+                    list = [];
+                    colsByTable.set(t, list);
+                }
+                list.push(new Column({
                     name: String(r["column_name"] ?? r["COLUMN_NAME"]),
                     data_type: String(r["data_type"] ?? r["DATA_TYPE"]),
                     nullable: String(r["is_nullable"] ?? r["IS_NULLABLE"]).toUpperCase() ===
@@ -180,7 +194,14 @@ export class MysqlDriver extends DatabaseDriver {
                         ? null
                         : String(r["column_default"] ?? r["COLUMN_DEFAULT"]),
                 }));
-                out.push(new Table({ name: tableName, schema: ns, columns }));
+            }
+            const out = [];
+            for (const tableName of tableNames) {
+                out.push(new Table({
+                    name: tableName,
+                    schema: ns,
+                    columns: colsByTable.get(tableName) ?? [],
+                }));
             }
             return out;
         }

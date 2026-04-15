@@ -245,12 +245,14 @@ describe("wiki_db.drivers.postgresql (unit)", () => {
         return {
           rows: [
             {
+              table_name: "users",
               column_name: "id",
               data_type: "integer",
               is_nullable: "NO",
               column_default: null,
             },
             {
+              table_name: "users",
               column_name: "email",
               data_type: "text",
               is_nullable: "NO",
@@ -262,7 +264,7 @@ describe("wiki_db.drivers.postgresql (unit)", () => {
         };
       if (sql.includes("pg_index"))
         return {
-          rows: [{ column_name: "id" }],
+          rows: [{ table_name: "users", column_name: "id" }],
           rowCount: 1,
           fields: [],
         };
@@ -274,6 +276,53 @@ describe("wiki_db.drivers.postgresql (unit)", () => {
     expect(tables[0]!.columns.map((c) => c.name)).toEqual(["id", "email"]);
     expect(tables[0]!.columns[0]!.is_primary_key).toBe(true);
     expect(tables[0]!.columns[1]!.is_primary_key).toBe(false);
+  });
+
+  // G-SCHEMA-BATCH: for N tables we now issue exactly 3 queries (tables
+  // list, one batched columns query, one batched PK query) instead of
+  // 2N+1.
+  it("getSchemaAsync: batched queries — 3 round-trips regardless of N", async () => {
+    const drv = new PostgresDriver();
+    const handle = await drv.connect({ database: "app", schema: "public" });
+    const client = lastClient();
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("information_schema.tables"))
+        return {
+          rows: [
+            { table_name: "users" },
+            { table_name: "posts" },
+            { table_name: "comments" },
+          ],
+          rowCount: 3,
+          fields: [],
+        };
+      if (sql.includes("information_schema.columns"))
+        return {
+          rows: [
+            { table_name: "users", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null },
+            { table_name: "posts", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null },
+            { table_name: "comments", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null },
+          ],
+          rowCount: 3,
+          fields: [],
+        };
+      if (sql.includes("pg_index"))
+        return {
+          rows: [
+            { table_name: "users", column_name: "id" },
+            { table_name: "posts", column_name: "id" },
+            { table_name: "comments", column_name: "id" },
+          ],
+          rowCount: 3,
+          fields: [],
+        };
+      return { rows: [], rowCount: 0, fields: [] };
+    });
+    const tables = await drv.getSchemaAsync(handle, "public");
+    expect(tables).toHaveLength(3);
+    expect(tables.map((t) => t.name)).toEqual(["users", "posts", "comments"]);
+    // Exactly 3 user-visible queries — tables + columns + PKs.
+    expect(client.query.mock.calls.length).toBe(3);
   });
 
   it("getSchemaAsync escapes _ and % wildcards in tableFilter", async () => {

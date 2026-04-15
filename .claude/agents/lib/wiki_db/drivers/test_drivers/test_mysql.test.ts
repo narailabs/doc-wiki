@@ -223,6 +223,7 @@ describe("wiki_db.drivers.mysql (unit)", () => {
         return [
           [
             {
+              table_name: "orders",
               column_name: "id",
               data_type: "int",
               is_nullable: "NO",
@@ -230,6 +231,7 @@ describe("wiki_db.drivers.mysql (unit)", () => {
               column_key: "PRI",
             },
             {
+              table_name: "orders",
               column_name: "total",
               data_type: "decimal",
               is_nullable: "YES",
@@ -247,6 +249,46 @@ describe("wiki_db.drivers.mysql (unit)", () => {
     expect(tables[0]!.name).toBe("orders");
     expect(tables[0]!.columns[0]!.is_primary_key).toBe(true);
     expect(tables[0]!.columns[1]!.is_primary_key).toBe(false);
+  });
+
+  // G-SCHEMA-BATCH: for N tables we now issue exactly 2 queries (tables
+  // list + one batched columns query) instead of N+1.
+  it("getSchemaAsync: batched queries — 2 round-trips regardless of N", async () => {
+    const drv = new MysqlDriver();
+    const handle = await drv.connect({ database: "shop" });
+    const conn = lastConn();
+    conn.query.mockImplementation(async (sql: string) => {
+      if (/SET SESSION/.test(sql)) return [[], []];
+      if (sql.includes("information_schema.tables")) {
+        return [
+          [
+            { table_name: "users" },
+            { table_name: "posts" },
+            { table_name: "comments" },
+          ],
+          [],
+        ];
+      }
+      if (sql.includes("information_schema.columns")) {
+        return [
+          [
+            { table_name: "users", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null, column_key: "PRI" },
+            { table_name: "posts", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null, column_key: "PRI" },
+            { table_name: "comments", column_name: "id", data_type: "int", is_nullable: "NO", column_default: null, column_key: "PRI" },
+          ],
+          [],
+        ];
+      }
+      return [[], []];
+    });
+    const tables = await drv.getSchemaAsync(handle);
+    expect(tables).toHaveLength(3);
+    expect(tables.map((t) => t.name)).toEqual(["users", "posts", "comments"]);
+    // Filter out any SET SESSION calls — they're bookkeeping, not schema.
+    const schemaCalls = conn.query.mock.calls.filter(
+      (c: unknown[]) => typeof c[0] === "string" && !/SET SESSION/.test(c[0] as string),
+    );
+    expect(schemaCalls.length).toBe(2);
   });
 
   it("getSchemaAsync escapes _ and % wildcards in tableFilter", async () => {
