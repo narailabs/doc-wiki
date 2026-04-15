@@ -108,7 +108,11 @@ const _BLOCK_COMMENT_RE = /\/\*.*?\*\//gs;
  * Python uses `re.IGNORECASE | re.DOTALL`; in JS we emulate with `is` flags.
  */
 const _UNBOUNDED_RE = /^\s*SELECT\s+.*\bFROM\s+\w+/is;
-const _BOUNDED_KEYWORDS_RE = /\b(WHERE|LIMIT|OFFSET|JOIN|HAVING|GROUP\s+BY)\b/i;
+// G-POLICY-CROSSJOIN: require JOIN ... ON so CROSS JOIN (which has no
+// join predicate and explodes rows) does not count as bounded. Bare
+// JOIN USING (…) also falls through to escalate — safe direction.
+const _BOUNDED_KEYWORDS_RE =
+  /\b(WHERE|LIMIT|OFFSET|HAVING|GROUP\s+BY|JOIN\s+\S+\s+ON)\b/i;
 
 export type ApprovalMode =
   | "auto"

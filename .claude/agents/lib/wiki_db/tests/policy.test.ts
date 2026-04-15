@@ -195,6 +195,30 @@ describe("TestDecisionLogic", () => {
     expect(result.decision).toBe(Decision.ALLOW);
   });
 
+  // G-POLICY-CROSSJOIN: bare JOIN used to count as a bounding clause,
+  // but CROSS JOIN has no predicate and explodes rows. The bounding
+  // regex now requires JOIN ... ON.
+  it("test_cross_join_escalates", () => {
+    const result = policyAuto().checkQuery("SELECT * FROM a CROSS JOIN b");
+    expect(result.decision).toBe(Decision.ESCALATE);
+  });
+
+  it("test_inner_join_on_allowed", () => {
+    const result = policyAuto().checkQuery(
+      "SELECT * FROM a INNER JOIN b ON a.id = b.id",
+    );
+    expect(result.decision).toBe(Decision.ALLOW);
+  });
+
+  // JOIN USING (...) also loses to the tightened regex. Acceptable:
+  // escalate is the safe direction and USING without WHERE is rare.
+  it("test_join_using_escalates", () => {
+    const result = policyAuto().checkQuery(
+      "SELECT * FROM a JOIN b USING (id)",
+    );
+    expect(result.decision).toBe(Decision.ESCALATE);
+  });
+
   it("test_empty_sql_denied", () => {
     const result = policyAuto().checkQuery("");
     expect(result.decision).toBe(Decision.DENY);
