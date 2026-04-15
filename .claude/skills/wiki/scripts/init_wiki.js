@@ -16,7 +16,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 import { parseFlags } from "./_cli_args.js";
 import { installClaudeCodeHooks } from "./hook_installer.js";
 import { applyCredentialsConfig, mergeCredentialsConfig } from "./apply_config.js";
@@ -457,7 +456,7 @@ export function main(argv = process.argv.slice(2)) {
         ? parsed.values["name"]
         : "My Wiki";
     const result = initWiki(pathArg, domain, name);
-    process.stdout.write(pythonJsonDumps(result) + "\n");
+    process.stdout.write(JSON.stringify(result) + "\n");
     return 0;
 }
 // CLI entry point: run main() when this file is executed directly.

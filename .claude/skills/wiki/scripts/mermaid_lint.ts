@@ -21,7 +21,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -335,7 +334,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 0;
   }
 
-  process.stdout.write(pythonJsonDumps(issues, 2) + "\n");
+  process.stdout.write(JSON.stringify(issues, null, 2) + "\n");
   return 0;
 }
 

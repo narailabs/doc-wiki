@@ -27,7 +27,6 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const CACHE_DIR_NAME = ".wiki-cache";
 export const VERSION_FILE = "VERSION";
@@ -127,7 +126,7 @@ export function storeCache(wikiRoot, contentHash, metadata) {
     entry["cache_version"] = getCacheVersion(wikiRoot);
     const cacheFile = path.join(d, `${contentHash}.json`);
     // Python: `json.dumps(entry)` — default separators (", ", ": ").
-    fs.writeFileSync(cacheFile, pythonJsonDumps(entry));
+    fs.writeFileSync(cacheFile, JSON.stringify(entry));
 }
 /**
  * Remove all `.json` cache entries. Preserves the VERSION file.
@@ -255,10 +254,10 @@ export function main(argv = process.argv.slice(2)) {
         const h = computeHash(args.content, args.bodyOnly ?? false);
         const result = checkCache(args.wikiRoot, h);
         if (result !== null) {
-            process.stdout.write(pythonJsonDumps({ hit: true, hash: h, metadata: result }) + "\n");
+            process.stdout.write(JSON.stringify({ hit: true, hash: h, metadata: result }) + "\n");
         }
         else {
-            process.stdout.write(pythonJsonDumps({ hit: false, hash: h }) + "\n");
+            process.stdout.write(JSON.stringify({ hit: false, hash: h }) + "\n");
         }
         return 0;
     }
@@ -270,7 +269,7 @@ export function main(argv = process.argv.slice(2)) {
         const h = computeHash(args.content, args.bodyOnly ?? false);
         const meta = JSON.parse(args.metadata ?? "{}");
         storeCache(args.wikiRoot, h, meta);
-        process.stdout.write(pythonJsonDumps({ stored: true, hash: h }) + "\n");
+        process.stdout.write(JSON.stringify({ stored: true, hash: h }) + "\n");
         return 0;
     }
     if (args.command === "clear") {
@@ -279,7 +278,7 @@ export function main(argv = process.argv.slice(2)) {
             return 2;
         }
         const count = clearCache(args.wikiRoot);
-        process.stdout.write(pythonJsonDumps({ removed: count }) + "\n");
+        process.stdout.write(JSON.stringify({ removed: count }) + "\n");
         return 0;
     }
     if (args.command === "version") {
@@ -289,10 +288,10 @@ export function main(argv = process.argv.slice(2)) {
         }
         if (args.setVersion !== null && args.setVersion !== undefined) {
             setCacheVersion(args.wikiRoot, args.setVersion);
-            process.stdout.write(pythonJsonDumps({ version: args.setVersion }) + "\n");
+            process.stdout.write(JSON.stringify({ version: args.setVersion }) + "\n");
         }
         else {
-            process.stdout.write(pythonJsonDumps({ version: getCacheVersion(args.wikiRoot) }) + "\n");
+            process.stdout.write(JSON.stringify({ version: getCacheVersion(args.wikiRoot) }) + "\n");
         }
         return 0;
     }

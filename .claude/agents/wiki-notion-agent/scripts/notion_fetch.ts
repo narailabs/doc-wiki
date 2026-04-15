@@ -11,7 +11,6 @@
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../lib/_json_py.js";
 import {
   NotionClient,
   extractTitleFromPage,
@@ -521,12 +520,12 @@ export async function main(
       error_code: "VALIDATION_ERROR",
       message: `Invalid JSON in --params: ${(e as Error).message}`,
     };
-    process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 1;
   }
 
   const result = await fetch(args.action, params);
-  process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 
   if (result["status"] !== "success") {
     return 1;

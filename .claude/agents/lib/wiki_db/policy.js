@@ -21,7 +21,6 @@
  * accepts an optional driver and dispatches accordingly.
  */
 import { performance } from "node:perf_hooks";
-import { pythonJsonDumps } from "../_json_py.js";
 import { logEvent, scrubSqlSecrets } from "./audit.js";
 /** Namespace providing Python-style attribute access (`Decision.ALLOW`). */
 export const Decision = {
@@ -346,24 +345,21 @@ function _emitPresentOnly(reason, op, formattedSql) {
     logEvent({ event_type: "policy_present_only", details });
 }
 /**
- * Serialize a PolicyResult to Python-compatible JSON.
+ * Serialize a PolicyResult to JSON.
  *
- * Key order matches Python's dataclass-to-dict field order:
- *   decision, reason, (formatted_sql only when present).
- *
- * Use {@link pythonJsonDumps} so separators are ", " and ": " exactly.
+ * Key order: decision, reason, (formatted_sql only when decision ===
+ * "present_only"). V8 preserves string-key insertion order so explicit
+ * construction is sufficient.
  */
 export function policyResultJson(result) {
-    // Explicitly construct the object literal so key ordering is deterministic
-    // (V8 preserves string-key insertion order).
     if (result.decision === "present_only") {
-        return pythonJsonDumps({
+        return JSON.stringify({
             decision: result.decision,
             reason: result.reason,
             formatted_sql: result.formatted_sql,
         });
     }
-    return pythonJsonDumps({
+    return JSON.stringify({
         decision: result.decision,
         reason: result.reason,
     });

@@ -24,7 +24,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -80,7 +79,7 @@ function readAllEdges(edgesPath: string): Edge[] {
  *  `json.dumps(e)` default formatting so the file is byte-identical across
  *  the Python and TypeScript implementations. */
 function writeAllEdges(edgesPath: string, edges: readonly Edge[]): void {
-  const lines = edges.map((e) => pythonJsonDumps(e) + "\n");
+  const lines = edges.map((e) => JSON.stringify(e) + "\n");
   fs.writeFileSync(edgesPath, lines.join(""), { encoding: "utf-8" });
 }
 
@@ -135,7 +134,7 @@ export function addEdge(
     date: todayIso(),
   };
 
-  fs.appendFileSync(edgesPath, pythonJsonDumps(edge) + "\n");
+  fs.appendFileSync(edgesPath, JSON.stringify(edge) + "\n");
   return edge;
 }
 
@@ -677,7 +676,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
         args.evidence ?? "",
         args.sourceFile ?? "",
       );
-      process.stdout.write(pythonJsonDumps(edge, 2) + "\n");
+      process.stdout.write(JSON.stringify(edge, null, 2) + "\n");
       return 0;
     }
     if (args.command === "path") {
@@ -688,17 +687,17 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
         args.maxHops ?? 6,
         args.via ?? null,
       );
-      process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
       return 0;
     }
     if (args.command === "degrees") {
       const result = computeDegrees(args.edges ?? "");
-      process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
       return 0;
     }
     if (args.command === "god-nodes") {
       const result = godNodes(args.edges ?? "", args.top ?? 10);
-      process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
       return 0;
     }
     process.stdout.write(HELP_TEXT);

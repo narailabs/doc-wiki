@@ -18,7 +18,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "./_json_py.js";
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
 
@@ -247,12 +246,12 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (args.url !== undefined) {
     if (validateUrl(args.url)) {
       process.stdout.write(
-        pythonJsonDumps({ ok: true, url: args.url }) + "\n",
+        JSON.stringify({ ok: true, url: args.url }) + "\n",
       );
       return 0;
     } else {
       process.stdout.write(
-        pythonJsonDumps({ error: `URL rejected: ${args.url}` }) + "\n",
+        JSON.stringify({ error: `URL rejected: ${args.url}` }) + "\n",
       );
       return 1;
     }
@@ -261,18 +260,18 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (args.path !== undefined) {
     if (!args.wikiRoot) {
       process.stdout.write(
-        pythonJsonDumps({ error: "--wiki-root is required with --path" }) + "\n",
+        JSON.stringify({ error: "--wiki-root is required with --path" }) + "\n",
       );
       return 1;
     }
     if (checkPathContainment(args.path, args.wikiRoot)) {
       process.stdout.write(
-        pythonJsonDumps({ ok: true, path: args.path }) + "\n",
+        JSON.stringify({ ok: true, path: args.path }) + "\n",
       );
       return 0;
     } else {
       process.stdout.write(
-        pythonJsonDumps({ error: `Path escapes wiki root: ${args.path}` }) +
+        JSON.stringify({ error: `Path escapes wiki root: ${args.path}` }) +
           "\n",
       );
       return 1;
@@ -282,7 +281,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (args.label !== undefined) {
     const result = sanitizeLabel(args.label);
     process.stdout.write(
-      pythonJsonDumps({ ok: true, sanitized: result }) + "\n",
+      JSON.stringify({ ok: true, sanitized: result }) + "\n",
     );
     return 0;
   }

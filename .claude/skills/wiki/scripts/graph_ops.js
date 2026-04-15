@@ -24,7 +24,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const VALID_EDGE_TYPES = new Set([
     "supports",
@@ -62,7 +61,7 @@ function readAllEdges(edgesPath) {
  *  `json.dumps(e)` default formatting so the file is byte-identical across
  *  the Python and TypeScript implementations. */
 function writeAllEdges(edgesPath, edges) {
-    const lines = edges.map((e) => pythonJsonDumps(e) + "\n");
+    const lines = edges.map((e) => JSON.stringify(e) + "\n");
     fs.writeFileSync(edgesPath, lines.join(""), { encoding: "utf-8" });
 }
 /**
@@ -101,7 +100,7 @@ export function addEdge(edgesPath, fromPage, toPage, edgeType, provenance, evide
         source_file: sourceFile,
         date: todayIso(),
     };
-    fs.appendFileSync(edgesPath, pythonJsonDumps(edge) + "\n");
+    fs.appendFileSync(edgesPath, JSON.stringify(edge) + "\n");
     return edge;
 }
 /**
@@ -548,22 +547,22 @@ export function main(argv = process.argv.slice(2)) {
     try {
         if (args.command === "add") {
             const edge = addEdge(args.edges ?? "", args.fromPage ?? "", args.toPage ?? "", args.edgeType ?? "", args.provenance ?? "", args.evidence ?? "", args.sourceFile ?? "");
-            process.stdout.write(pythonJsonDumps(edge, 2) + "\n");
+            process.stdout.write(JSON.stringify(edge, null, 2) + "\n");
             return 0;
         }
         if (args.command === "path") {
             const result = shortestPath(args.edges ?? "", args.fromConcept ?? "", args.toConcept ?? "", args.maxHops ?? 6, args.via ?? null);
-            process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+            process.stdout.write(JSON.stringify(result, null, 2) + "\n");
             return 0;
         }
         if (args.command === "degrees") {
             const result = computeDegrees(args.edges ?? "");
-            process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+            process.stdout.write(JSON.stringify(result, null, 2) + "\n");
             return 0;
         }
         if (args.command === "god-nodes") {
             const result = godNodes(args.edges ?? "", args.top ?? 10);
-            process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+            process.stdout.write(JSON.stringify(result, null, 2) + "\n");
             return 0;
         }
         process.stdout.write(HELP_TEXT);
