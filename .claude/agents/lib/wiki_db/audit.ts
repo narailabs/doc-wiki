@@ -45,9 +45,7 @@ export function disableAudit(): void {
 
 /** Append a JSON record to the audit file. Never raises.
  *
- *  Uses `pythonJsonDumps` so the line-byte layout (separators ", " / ": ")
- *  matches Python's `json.dumps(record)` exactly — important for any
- *  downstream consumer that byte-compares Python and Node audit logs.
+ *  Uses JSON.stringify (compact form) so each record fits on one line.
  */
 function _writeRecord(record: Record<string, unknown>): void {
   if (!_state.enabled || _state.path === null) return;

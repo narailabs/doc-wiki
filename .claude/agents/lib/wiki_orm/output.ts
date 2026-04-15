@@ -1,9 +1,7 @@
 /**
  * output.ts — produces `database-mapping.md` with a Mermaid ER diagram.
  *
- * Byte-for-byte match against the Python reference (`output.py`). String
- * concatenation is used throughout — there is no JSON or number formatting
- * involved, so the `_json_py` helper is intentionally not imported here.
+ * Pure string concatenation; no JSON serialization needed.
  */
 import type { ExtractedEntity, CrossValidationReport } from "./extractor.js";
 
