@@ -329,7 +329,7 @@ async function runWithEnv(args, action) {
     }
     let conn;
     try {
-        conn = getConnection(resolved.name);
+        conn = await getConnection(resolved.name);
     }
     catch (e) {
         process.stderr.write(`${e.message}\n`);
