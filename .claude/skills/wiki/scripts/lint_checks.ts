@@ -64,9 +64,6 @@ const VALID_PAGE_TYPES: ReadonlySet<string> = new Set([
 /** Default age (in days) past which a page is flagged as stale. */
 const STALE_DAYS_DEFAULT = 90;
 
-/** Python: `re.compile(r"\[.*?\]\(([^)]+)\)")` */
-const _LINK_RE = /\[.*?\]\(([^)]+)\)/g;
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -124,12 +121,15 @@ function makeIssue(
   return { severity, category, page, detail };
 }
 
-/** Extract capture group 1 from every markdown link in `content`. */
+/**
+ * Extract capture group 1 from every markdown link in `content`.
+ *
+ * Uses `matchAll` with a fresh regex literal so there is no shared
+ * `lastIndex` state between callers — safe against reentrancy.
+ */
 function findLinks(content: string): string[] {
   const out: string[] = [];
-  _LINK_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = _LINK_RE.exec(content)) !== null) {
+  for (const m of content.matchAll(/\[.*?\]\(([^)]+)\)/g)) {
     const captured = m[1];
     if (captured !== undefined) {
       out.push(captured);

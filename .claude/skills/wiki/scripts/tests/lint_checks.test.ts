@@ -111,6 +111,23 @@ describe("TestCheckBrokenLinks", () => {
     const pageIssues = issues.filter((i) => i.page.includes("page.md"));
     expect(pageIssues).toEqual([]);
   });
+
+  // G-LINT-REGEX: the link regex used to live at module scope with /g,
+  // so its shared lastIndex could make a second call return fewer
+  // matches. Call checkBrokenLinks twice in succession and require the
+  // issue list to be identical.
+  it("test_reentrant_calls_stable", () => {
+    const page = path.join(wiki, "wiki", "page.md");
+    writePage(
+      page,
+      fullFm(),
+      "[a](nope1.md) [b](nope2.md) [c](nope3.md)\n",
+    );
+    const first = checkBrokenLinks(wiki);
+    const second = checkBrokenLinks(wiki);
+    expect(second).toEqual(first);
+    expect(first.filter((i) => i.detail.includes("nope")).length).toBe(3);
+  });
 });
 
 // ── Frontmatter tests ──────────────────────────────────────────────
