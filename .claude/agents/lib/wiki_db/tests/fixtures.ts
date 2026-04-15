@@ -25,9 +25,15 @@ export function cleanupTmpPath(p: string): void {
   }
 }
 
-/** Write a JSON credentials file at `p` with shape {db-<env>: {...}}. */
+/**
+ * Write a JSON credentials file at `p` with shape {db-<env>: {...}}.
+ * Sets mode 0600 to satisfy the FileProvider mode check on POSIX systems.
+ */
 export function writeCredsFile(p: string, data: unknown): void {
   fs.writeFileSync(p, JSON.stringify(data));
+  if (process.platform !== "win32") {
+    fs.chmodSync(p, 0o600);
+  }
 }
 
 /**
