@@ -152,6 +152,65 @@ describe("wiki_db.drivers.postgresql (unit)", () => {
     expect(callSqls.some((s: string) => s === "COMMIT")).toBe(true);
   });
 
+  // G-LIMIT-WRAP: the LIMIT injector wraps the user query as a
+  // subquery so bounded semantics hold regardless of where LIMIT
+  // appears (or doesn't) in the original.
+  describe("G-LIMIT-WRAP", () => {
+    function userSqlOf(client: {
+      query: ReturnType<typeof vi.fn>;
+    }): string {
+      const calls = client.query.mock.calls.map((c) => String(c[0]));
+      const user = calls.find(
+        (s) =>
+          !s.startsWith("SET ") &&
+          s !== "BEGIN READ ONLY" &&
+          s !== "COMMIT" &&
+          s !== "ROLLBACK",
+      );
+      if (user === undefined)
+        throw new Error(`no user query in: ${calls.join(" | ")}`);
+      return user;
+    }
+
+    async function runWith(query: string, maxRows = 5): Promise<string> {
+      const drv = new PostgresDriver();
+      const handle = await drv.connect({ database: "app" });
+      const client = lastClient();
+      client.query.mockImplementation(async () => ({
+        rows: [],
+        rowCount: 0,
+        fields: [],
+      }));
+      await drv.executeReadAsync(handle, query, null, maxRows);
+      return userSqlOf(client);
+    }
+
+    it("wraps a CTE without outer LIMIT", async () => {
+      const sql = await runWith(
+        "WITH t AS (SELECT 1 AS x LIMIT 10) SELECT * FROM t",
+      );
+      expect(sql).toMatch(/^SELECT \* FROM \(WITH t AS/);
+      expect(sql).toMatch(/\) AS _limited LIMIT 6$/);
+    });
+
+    it("wraps a query with a trailing -- limit comment", async () => {
+      const sql = await runWith("SELECT 1 -- limit me");
+      expect(sql).toMatch(/^SELECT \* FROM \(SELECT 1 -- limit me\) AS _limited LIMIT 6$/);
+    });
+
+    it("wraps a query that already has LIMIT — outer still bounds", async () => {
+      const sql = await runWith("SELECT 1 LIMIT 10");
+      expect(sql).toBe(
+        "SELECT * FROM (SELECT 1 LIMIT 10) AS _limited LIMIT 6",
+      );
+    });
+
+    it("strips a trailing semicolon before wrapping", async () => {
+      const sql = await runWith("SELECT 1;");
+      expect(sql).toBe("SELECT * FROM (SELECT 1) AS _limited LIMIT 6");
+    });
+  });
+
   it("executeReadAsync: surfaces a SQL_ERROR on driver failure", async () => {
     const drv = new PostgresDriver();
     const handle = await drv.connect({ database: "app" });

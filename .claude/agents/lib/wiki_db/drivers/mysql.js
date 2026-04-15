@@ -98,9 +98,12 @@ export class MysqlDriver extends DatabaseDriver {
             await handle.client.query("SET SESSION TRANSACTION READ ONLY");
             await handle.client.query(`SET SESSION MAX_EXECUTION_TIME=${Math.max(1, timeoutMs)}`);
             await handle.client.beginTransaction();
-            const limited = /\blimit\b/i.test(query) === false
-                ? `${query.trimEnd().replace(/;$/, "")} LIMIT ${maxRows + 1}`
-                : query;
+            // G-LIMIT-WRAP: wrap as a subquery so bounded semantics hold even
+            // when the outer query has a trailing `-- limit` comment, a CTE
+            // with its own LIMIT, or a LIMIT on an inner SELECT that the old
+            // substring check mistook for the bound.
+            const inner = query.trim().replace(/;\s*$/, "");
+            const limited = `SELECT * FROM (${inner}) AS _limited LIMIT ${maxRows + 1}`;
             const [rawRows, fields] = await handle.client.query(limited, params ?? []);
             await handle.client.commit();
             const rowsArr = Array.isArray(rawRows)
