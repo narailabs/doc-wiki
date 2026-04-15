@@ -73,6 +73,22 @@ function _isoTimestamp() {
     const iso = new Date().toISOString();
     return iso.endsWith("Z") ? iso : iso + "Z";
 }
+/**
+ * Mask values of common credential-bearing identifiers in a SQL string.
+ *
+ * Catches `password='…'`, `token="…"`, `api_key='…'`, etc. so that
+ * read-only queries against the user's own DB don't persist embedded
+ * credentials to events.jsonl. Intentionally only handles complete
+ * single/double-quoted literals — partial or concatenated literals are
+ * out of scope.
+ */
+const _SENSITIVE_LITERAL_SQUOTE_RE = /\b(password|passwd|pwd|token|api[_-]?key|secret|access[_-]?key|auth)\s*=\s*'[^']*'/gi;
+const _SENSITIVE_LITERAL_DQUOTE_RE = /\b(password|passwd|pwd|token|api[_-]?key|secret|access[_-]?key|auth)\s*=\s*"[^"]*"/gi;
+export function scrubSqlSecrets(sql) {
+    return sql
+        .replace(_SENSITIVE_LITERAL_SQUOTE_RE, (_m, key) => `${key}='[REDACTED]'`)
+        .replace(_SENSITIVE_LITERAL_DQUOTE_RE, (_m, key) => `${key}="[REDACTED]"`);
+}
 /** Log a query execution event. */
 export function logQuery(params) {
     const record = {
@@ -80,7 +96,8 @@ export function logQuery(params) {
         timestamp: _isoTimestamp(),
         session_id: _state.sessionId,
         env: params.env,
-        query: params.query.slice(0, 2000),
+        // Scrub before truncate so a credential split by truncation can't leak.
+        query: scrubSqlSecrets(params.query).slice(0, 2000),
         status: params.status,
         row_count: params.row_count,
         execution_time_ms: params.execution_time_ms,

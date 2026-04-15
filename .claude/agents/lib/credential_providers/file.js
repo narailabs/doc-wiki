@@ -37,11 +37,32 @@ export class FileProvider {
         console.warn(`[credential_providers/file] reading secrets from plaintext file ${this._path}; ` +
             "consider using the keychain or cloud_secrets provider instead.");
     }
+    /**
+     * Refuse to read the file if its mode is group- or world-accessible
+     * on POSIX systems (matches the OpenSSH posture for private keys).
+     * Skipped on Windows where stat().mode does not carry Unix permission
+     * bits in a portable way.
+     */
+    _checkFileMode() {
+        if (process.platform === "win32")
+            return;
+        if (this._suppressWarning)
+            return;
+        const st = fs.statSync(this._path);
+        const insecureBits = st.mode & 0o077;
+        if (insecureBits !== 0) {
+            const octal = (st.mode & 0o777).toString(8).padStart(3, "0");
+            throw new Error(`[credential_providers/file] refusing to read ${this._path}: ` +
+                `file mode ${octal} is group- or world-accessible. ` +
+                `Run 'chmod 600 ${this._path}' to restrict to the owner.`);
+        }
+    }
     _load() {
         if (this._cache !== null)
             return this._cache;
         if (!fs.existsSync(this._path))
             return null;
+        this._checkFileMode();
         const raw = fs.readFileSync(this._path, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed === null ||

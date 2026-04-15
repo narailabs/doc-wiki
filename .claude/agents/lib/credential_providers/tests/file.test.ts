@@ -52,6 +52,7 @@ describe("credential_providers/file", () => {
   it("warns once (not every call) when unsuppressed", async () => {
     const p = path.join(tmpDir, "secrets.json");
     fs.writeFileSync(p, JSON.stringify({ x: "1" }));
+    fs.chmodSync(p, 0o600); // satisfy mode check
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const provider = new FileProvider({ path: p });
     await provider.getSecret("x");
@@ -59,6 +60,32 @@ describe("credential_providers/file", () => {
     await provider.getSecret("missing");
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it.skipIf(process.platform === "win32")(
+    "refuses to read a credentials file with group- or world-accessible mode",
+    async () => {
+      const p = path.join(tmpDir, "loose.json");
+      fs.writeFileSync(p, JSON.stringify({ token: "ghp_x" }));
+      fs.chmodSync(p, 0o644);
+      const provider = new FileProvider({ path: p }); // not suppressed
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await expect(provider.getSecret("token")).rejects.toThrow(
+        /file mode 644 is group- or world-accessible/,
+      );
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "accepts a credentials file with mode 0600",
+    async () => {
+      const p = path.join(tmpDir, "tight.json");
+      fs.writeFileSync(p, JSON.stringify({ token: "ghp_y" }));
+      fs.chmodSync(p, 0o600);
+      const provider = new FileProvider({ path: p });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(await provider.getSecret("token")).toBe("ghp_y");
+    },
+  );
 
   it("getSecretSync mirrors getSecret", () => {
     const p = path.join(tmpDir, "secrets.json");

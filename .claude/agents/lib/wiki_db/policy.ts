@@ -23,7 +23,7 @@
 import { performance } from "node:perf_hooks";
 import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
 import type { DatabaseDriver } from "./drivers/base.js";
-import { logEvent } from "./audit.js";
+import { logEvent, scrubSqlSecrets } from "./audit.js";
 
 /** Possible outcomes of a policy check (wire format = lowercase string). */
 export type Decision = "allow" | "deny" | "escalate" | "present_only";
@@ -420,10 +420,13 @@ function _emitPresentOnly(
   op: OperationType | null,
   formattedSql: string,
 ): void {
+  // Scrub credentials before truncation so a literal split by truncation
+  // can't leak. Same helper used by audit.logQuery.
+  const scrubbed = scrubSqlSecrets(formattedSql);
   const truncated =
-    formattedSql.length > 500
-      ? formattedSql.slice(0, 500) + "\u2026"
-      : formattedSql;
+    scrubbed.length > 500
+      ? scrubbed.slice(0, 500) + "\u2026"
+      : scrubbed;
   const details: Record<string, unknown> = {
     reason,
     formatted_sql: truncated,
