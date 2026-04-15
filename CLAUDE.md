@@ -67,6 +67,16 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 
 ORM profile definitions ship as YAML files under `.claude/agents/lib/wiki_orm/profiles/*.yaml` and are loaded by the TypeScript mapper at runtime.
 
+Standalone helpers also live at `.claude/agents/lib/` (flat files, no subdirectory):
+
+| Helper | Purpose |
+|--------|---------|
+| `_agent_cli.ts` | `parseAgentArgs(argv, { flags })` — shared CLI parser for source agents |
+| `parse_config.ts` | Read and validate `wiki.config.yaml` (shared with skills) |
+| `security_check.ts` | URL validation, path containment, input sanitization (shared with skills) |
+| `fetch_helper.ts` | HTTP fetch wrapper with timeout, size cap, retry |
+| `mermaid_format.ts` | Mermaid diagram formatting utilities |
+
 ### Reference docs (5) — `.claude/skills/wiki/references/`
 
 | Document | Topic |
@@ -119,7 +129,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **990 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
+Current status: **1025 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 
@@ -130,3 +140,12 @@ Current status: **990 tests passed, 5 skipped (live-DB integration tests, gated 
 - Security Baseline: URL validation, path containment, size/timeout caps, label sanitization
 - Guard-rail policy for database agent: ALLOW / DENY / ESCALATE / PRESENT_ONLY
 - No Python in this repo. To verify: `find . -name '*.py' -not -path './node_modules/*' -not -path './wiki-workspace/*' -not -path './.worktrees/*/node_modules/*'` should return only the ORM extractor fixture source files under `.claude/agents/lib/wiki_orm/tests/fixtures/{sqlalchemy,django}/` (input data read as text by TypeScript tests).
+
+## Architecture contracts
+
+Load-bearing invariants implementers must respect:
+
+- **Database drivers implement `executeReadAsync(conn, sql, params, maxRows, timeoutMs): Promise<ExecuteReadResult>`.** There is no sync `execute` path. Sync drivers (e.g. SQLite's `executeRead`) are adapted at the call site via `adaptDriver` in `.claude/agents/wiki-db-agent/scripts/db_query.ts`.
+- **`getConnection(envName)` is async.** Callers must `await` it. `release` and `shutdown` use identity-based lookup on the awaited handle.
+- **Source agents share CLI parsing.** Use `parseAgentArgs` from `.claude/agents/lib/_agent_cli.ts` rather than hand-rolling. Template: `const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] })`.
+- **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
