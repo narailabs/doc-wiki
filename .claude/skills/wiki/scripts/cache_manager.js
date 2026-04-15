@@ -27,7 +27,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "./_json_py.js";
+import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const CACHE_DIR_NAME = ".wiki-cache";
 export const VERSION_FILE = "VERSION";

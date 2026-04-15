@@ -14,7 +14,7 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import { pythonJsonDumps } from "../_json_py.js";
 // Module-level state
 const _state = {
     enabled: false,

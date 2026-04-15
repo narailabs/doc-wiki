@@ -19,7 +19,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pyFloat, pythonJsonDumps, pythonJsonDumpsFloats } from "./_json_py.js";
+import { pyFloat, pythonJsonDumps, pythonJsonDumpsFloats } from "../../../agents/lib/_json_py.js";
 // ── Timestamp helpers ───────────────────────────────────────────────
 /**
  * Produce a Python-compatible `datetime.now(timezone.utc).isoformat()`

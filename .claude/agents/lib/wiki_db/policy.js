@@ -21,7 +21,7 @@
  * accepts an optional driver and dispatches accordingly.
  */
 import { performance } from "node:perf_hooks";
-import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import { pythonJsonDumps } from "../_json_py.js";
 import { logEvent, scrubSqlSecrets } from "./audit.js";
 /** Namespace providing Python-style attribute access (`Decision.ALLOW`). */
 export const Decision = {
