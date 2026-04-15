@@ -19,7 +19,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pyFloat, pythonJsonDumps, pythonJsonDumpsFloats } from "../../../agents/lib/_json_py.js";
 // ── Timestamp helpers ───────────────────────────────────────────────
 /**
  * Produce a Python-compatible `datetime.now(timezone.utc).isoformat()`
@@ -125,7 +124,7 @@ export function logEvent(wikiRoot, op, details) {
     }
     const p = _eventsPath(wikiRoot);
     // Python uses json.dumps(entry) (default separators: ", " and ": ").
-    fs.appendFileSync(p, pythonJsonDumps(entry) + "\n");
+    fs.appendFileSync(p, JSON.stringify(entry) + "\n");
     return entry;
 }
 // ── Stats ───────────────────────────────────────────────────────────
@@ -499,46 +498,8 @@ export function main(argv = process.argv.slice(2)) {
             includeRatios: true,
             includeZeroTokens: args.includeZeroTokens === true,
         });
-        const ratios = result["_ratios"] ?? [];
         delete result["_ratios"];
-        // total_cost_usd and per_agent_cost always render as Python floats
-        // because Python initializes them with 0.0 and accumulates via +=.
-        const perAgentWrapped = {};
-        for (const [k, v] of Object.entries(result["per_agent_cost"])) {
-            perAgentWrapped[k] = pyFloat(v);
-        }
-        // reduction_ratio fields are conditional: Python emits int when all
-        // input ratios were integers AND the aggregate is itself integer-valued.
-        // Median also renders as float for any even-count list because Python 3's
-        // `/` operator is true division (statistics.median uses `(a + b) / 2`).
-        const hasFloatRatio = ratios.some((v) => !Number.isInteger(v));
-        const ratioSrc = result["reduction_ratio"];
-        const ratioWrapped = {};
-        if ("mean" in ratioSrc) {
-            const v = ratioSrc["mean"];
-            ratioWrapped["mean"] =
-                hasFloatRatio || !Number.isInteger(v) ? pyFloat(v) : v;
-        }
-        if ("p50" in ratioSrc) {
-            const v = ratioSrc["p50"];
-            ratioWrapped["p50"] =
-                hasFloatRatio || ratios.length % 2 === 0 || !Number.isInteger(v)
-                    ? pyFloat(v)
-                    : v;
-        }
-        if ("p95" in ratioSrc) {
-            const v = ratioSrc["p95"];
-            // p95 uses nearest-rank selection: element returned as-is, so it's
-            // int when all inputs were int.
-            ratioWrapped["p95"] = hasFloatRatio ? pyFloat(v) : v;
-        }
-        const wrapped = {
-            ...result,
-            total_cost_usd: pyFloat(result["total_cost_usd"]),
-            reduction_ratio: ratioWrapped,
-            per_agent_cost: perAgentWrapped,
-        };
-        process.stdout.write(pythonJsonDumpsFloats(wrapped, 2) + "\n");
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
         return 0;
     }
     if (args.command === "log") {
@@ -548,14 +509,14 @@ export function main(argv = process.argv.slice(2)) {
         }
         const details = JSON.parse(args.details ?? "{}");
         const entry = logEvent(args.wikiRoot, args.op, details);
-        process.stdout.write(pythonJsonDumps(entry, 2) + "\n");
+        process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
         return 0;
     }
     // Fallback: bare --op style (no subcommand)
     if (args.op && args.wikiRoot) {
         const details = JSON.parse(args.details ?? "{}");
         const entry = logEvent(args.wikiRoot, args.op, details);
-        process.stdout.write(pythonJsonDumps(entry, 2) + "\n");
+        process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
         return 0;
     }
     process.stderr.write("--op and --wiki-root are required\n");

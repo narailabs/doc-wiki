@@ -14,7 +14,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { pythonJsonDumps } from "./_json_py.js";
 const VALID_AUTONOMY_MODES = new Set([
     "conservative",
     "balanced",
@@ -172,12 +171,12 @@ export function main(argv = process.argv.slice(2)) {
     }
     try {
         const config = parseConfig(args.config);
-        process.stdout.write(pythonJsonDumps(config, 2) + "\n");
+        process.stdout.write(JSON.stringify(config, null, 2) + "\n");
         return 0;
     }
     catch (exc) {
         const msg = exc instanceof Error ? exc.message : String(exc);
-        process.stderr.write(pythonJsonDumps({ error: msg }) + "\n");
+        process.stderr.write(JSON.stringify({ error: msg }) + "\n");
         return 1;
     }
 }

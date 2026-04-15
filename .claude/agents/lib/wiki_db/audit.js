@@ -14,7 +14,6 @@
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import { pythonJsonDumps } from "../_json_py.js";
 // Module-level state
 const _state = {
     enabled: false,
@@ -52,7 +51,7 @@ function _writeRecord(record) {
     try {
         // fs.appendFileSync creates the file if missing but NOT parent dirs,
         // matching Python's `open(path, "a")` semantics.
-        fs.appendFileSync(_state.path, pythonJsonDumps(record) + "\n", "utf-8");
+        fs.appendFileSync(_state.path, JSON.stringify(record) + "\n", "utf-8");
     }
     catch {
         // best-effort, same as Python's `except OSError: pass`

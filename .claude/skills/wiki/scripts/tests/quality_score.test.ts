@@ -544,16 +544,12 @@ describe("TestQualityScoreCLI", () => {
     expect(data.length).toBeGreaterThanOrEqual(5);
   });
 
-  it("cli_terrible_page_emits_float_zero", () => {
-    // Previously a Python-parity check; retained as a TypeScript-only
-    // contract: clamped-to-0 quality must serialize as "0.0" (Python-style
-    // float) not "0" (int), so downstream Python consumers — if any — get
-    // the right JSON shape.
+  it("cli_terrible_page_emits_zero_quality", () => {
     const edges = makeEdgesFile(tmpPath);
     const page = path.join(tmpPath, "wiki", "terrible.md");
     writePage(page, { type: "concept" }, "Short.");
     const ts = runCli(CLI, ["--page", page, "--edges", edges]);
     expect(ts.status).toBe(0);
-    expect(ts.stdout).toContain('"quality": 0.0');
+    expect(ts.stdout).toContain('"quality": 0');
   });
 });

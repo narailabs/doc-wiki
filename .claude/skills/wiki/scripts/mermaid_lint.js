@@ -21,7 +21,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const VALID_DIAGRAM_TYPES = new Set([
     "erDiagram",
@@ -292,7 +291,7 @@ export function main(argv = process.argv.slice(2)) {
         process.stdout.write(HELP_TEXT);
         return 0;
     }
-    process.stdout.write(pythonJsonDumps(issues, 2) + "\n");
+    process.stdout.write(JSON.stringify(issues, null, 2) + "\n");
     return 0;
 }
 // CLI entry point: run main() when this file is executed directly.

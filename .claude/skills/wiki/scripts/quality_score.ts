@@ -21,7 +21,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pyFloat, pythonJsonDumpsFloats } from "../../../agents/lib/_json_py.js";
 import { computeDegrees } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
@@ -79,9 +78,7 @@ export interface Signal {
 
 /** Shape returned by scorePage(). */
 export interface PageScore {
-  /** Wrapped via pyFloat to preserve `0.0`/`1.0` emission byte-parity with
-   *  Python's `round(quality, 4)` float output. */
-  quality: unknown;
+  quality: number;
   signals: Signal[];
 }
 
@@ -301,14 +298,13 @@ export function scorePage(
   // signal deltas don't produce .5e-4 ties in practice.
   const quality = Math.round(clamped * 10000) / 10000;
 
-  return { quality: pyFloat(quality), signals };
+  return { quality: quality, signals };
 }
 
 /** Shape returned by scoreWiki() for each page. */
 export interface WikiScore {
   page: string;
-  /** pyFloat-wrapped to preserve `0.0`/`1.0` emission. */
-  quality: unknown;
+  quality: number;
   signals: Signal[];
 }
 
@@ -340,20 +336,9 @@ export function scoreWiki(wikiRoot: string): WikiScore[] {
     });
   }
 
-  // Match Python's `results.sort(key=lambda r: r["quality"], reverse=True)`;
-  // Array.sort in V8 is stable, matching Python's stable sort. We must sort
-  // by the numeric value underneath pyFloat (which is `{value: number}`).
-  results.sort((a, b) => pyFloatValue(b.quality) - pyFloatValue(a.quality));
+  // Stable sort by quality descending (V8 Array.sort is stable).
+  results.sort((a, b) => b.quality - a.quality);
   return results;
-}
-
-function pyFloatValue(v: unknown): number {
-  if (v !== null && typeof v === "object") {
-    const rec = v as Record<string, unknown>;
-    if (typeof rec["value"] === "number") return rec["value"];
-  }
-  if (typeof v === "number") return v;
-  return 0;
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────
@@ -402,12 +387,12 @@ export function main(
 
   if (wikiRoot !== null) {
     const results = scoreWiki(wikiRoot);
-    process.stdout.write(pythonJsonDumpsFloats(results, 2) + "\n");
+    process.stdout.write(JSON.stringify(results, null, 2) + "\n");
     return 0;
   }
   if (page !== null) {
     const result = scorePage(page, edges);
-    process.stdout.write(pythonJsonDumpsFloats(result, 2) + "\n");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
   }
   process.stdout.write(HELP_TEXT);

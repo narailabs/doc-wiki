@@ -22,7 +22,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 import { clusters, isolatedNodes, listEdges } from "./graph_ops.js";
 import { lintPage as lintMermaidPage } from "./mermaid_lint.js";
 import { parseFlags } from "./_cli_args.js";
@@ -868,7 +867,7 @@ export function main(argv = process.argv.slice(2)) {
     const pageRaw = parsed.values["page"];
     const pageFilter = typeof pageRaw === "string" && pageRaw ? pageRaw : null;
     const result = lintWiki(wikiRoot, category, pageFilter);
-    process.stdout.write(pythonJsonDumps(result, 2) + "\n");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
 }
 // CLI entry point: run main() when this file is executed directly.

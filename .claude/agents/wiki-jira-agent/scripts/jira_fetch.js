@@ -19,7 +19,6 @@
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../lib/_json_py.js";
 import { JiraClient, loadJiraCredentials, } from "./lib/jira_client.js";
 import { formatGraph, } from "../../lib/mermaid_format.js";
 // ── Constants ───────────────────────────────────────────────────────
@@ -377,11 +376,11 @@ export async function main(argv = process.argv.slice(2)) {
             error_code: "VALIDATION_ERROR",
             message: `Invalid JSON in --params: ${e.message}`,
         };
-        process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
         return 1;
     }
     const result = await fetch(args.action, params);
-    process.stdout.write(pythonJsonDumps(result, 2, true) + "\n");
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     if (result["status"] !== "success") {
         return 1;
     }

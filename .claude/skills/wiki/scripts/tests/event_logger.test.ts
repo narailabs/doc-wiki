@@ -322,12 +322,12 @@ describe("EventLoggerCLIShape", () => {
   }
 
   it("cli_stats_empty_emits_zero_float", () => {
-    // No events — stats must emit `total_cost_usd: 0.0` (not `0`).
+    // No events — stats emits `total_cost_usd: 0`.
     fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
     fs.writeFileSync(path.join(tmpPath, "log", "events.jsonl"), "");
     const js = runCli(["stats", "--wiki-root", tmpPath]);
     expect(js.status).toBe(0);
-    expect(js.stdout).toContain('"total_cost_usd": 0.0');
+    expect(js.stdout).toContain('"total_cost_usd": 0');
   });
 
   it("cli_stats_populated_emits_non_zero_cost", () => {
@@ -379,8 +379,7 @@ describe("EventLoggerCLIShape", () => {
     );
     const js = runCli(["stats", "--wiki-root", tmpPath]);
     expect(js.status).toBe(0);
-    // total_cost_usd stays float even when the sum is an int.
-    expect(js.stdout).toMatch(/"total_cost_usd":\s*15\.0/);
+    expect(js.stdout).toMatch(/"total_cost_usd":\s*15\b/);
   });
 });
 

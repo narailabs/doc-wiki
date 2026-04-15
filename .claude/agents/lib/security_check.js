@@ -18,7 +18,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "./_json_py.js";
 const ALLOWED_SCHEMES = new Set(["http", "https"]);
 /**
  * Re-exported fetch caps from `agents/lib/fetch_helper.ts` so the two
@@ -222,32 +221,32 @@ export function main(argv = process.argv.slice(2)) {
     }
     if (args.url !== undefined) {
         if (validateUrl(args.url)) {
-            process.stdout.write(pythonJsonDumps({ ok: true, url: args.url }) + "\n");
+            process.stdout.write(JSON.stringify({ ok: true, url: args.url }) + "\n");
             return 0;
         }
         else {
-            process.stdout.write(pythonJsonDumps({ error: `URL rejected: ${args.url}` }) + "\n");
+            process.stdout.write(JSON.stringify({ error: `URL rejected: ${args.url}` }) + "\n");
             return 1;
         }
     }
     if (args.path !== undefined) {
         if (!args.wikiRoot) {
-            process.stdout.write(pythonJsonDumps({ error: "--wiki-root is required with --path" }) + "\n");
+            process.stdout.write(JSON.stringify({ error: "--wiki-root is required with --path" }) + "\n");
             return 1;
         }
         if (checkPathContainment(args.path, args.wikiRoot)) {
-            process.stdout.write(pythonJsonDumps({ ok: true, path: args.path }) + "\n");
+            process.stdout.write(JSON.stringify({ ok: true, path: args.path }) + "\n");
             return 0;
         }
         else {
-            process.stdout.write(pythonJsonDumps({ error: `Path escapes wiki root: ${args.path}` }) +
+            process.stdout.write(JSON.stringify({ error: `Path escapes wiki root: ${args.path}` }) +
                 "\n");
             return 1;
         }
     }
     if (args.label !== undefined) {
         const result = sanitizeLabel(args.label);
-        process.stdout.write(pythonJsonDumps({ ok: true, sanitized: result }) + "\n");
+        process.stdout.write(JSON.stringify({ ok: true, sanitized: result }) + "\n");
         return 0;
     }
     process.stdout.write(HELP_TEXT);

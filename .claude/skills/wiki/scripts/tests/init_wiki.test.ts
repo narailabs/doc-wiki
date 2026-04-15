@@ -565,8 +565,8 @@ describe("init_wiki CLI idempotency", () => {
     // The second run emits a path-scrubbed stdout whose created_* arrays
     // are empty (first run populated them, second has nothing to do).
     const scrubbedSecond = scrub(second.stdout, target);
-    expect(scrubbedSecond).toContain('"created_dirs": []');
-    expect(scrubbedSecond).toContain('"created_files": []');
+    expect(scrubbedSecond).toContain('"created_dirs":[]');
+    expect(scrubbedSecond).toContain('"created_files":[]');
   });
 });
 
