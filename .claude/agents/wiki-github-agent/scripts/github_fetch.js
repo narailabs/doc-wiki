@@ -14,6 +14,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GithubClient, loadGithubCredentials, } from "./lib/github_client.js";
 import { formatGraph, } from "../../lib/mermaid_format.js";
+import { parseAgentArgs, } from "../../lib/_agent_cli.js";
 export const VALID_ACTIONS = new Set([
     "repo_info",
     "search_code",
@@ -453,51 +454,7 @@ export async function fetch(action, params = null, options = {}) {
         };
     }
 }
-function parseArgs(argv) {
-    const out = {};
-    let i = 0;
-    while (i < argv.length) {
-        const a = argv[i];
-        if (a === undefined) {
-            i++;
-            continue;
-        }
-        if (a === "-h" || a === "--help") {
-            out.help = true;
-            i++;
-            continue;
-        }
-        let name;
-        let value;
-        if (a.startsWith("--")) {
-            const eq = a.indexOf("=");
-            if (eq >= 0) {
-                name = a.slice(2, eq);
-                value = a.slice(eq + 1);
-                i++;
-            }
-            else {
-                name = a.slice(2);
-                value = argv[i + 1];
-                i += 2;
-            }
-        }
-        else {
-            throw new Error(`unrecognized argument: ${a}`);
-        }
-        switch (name) {
-            case "action":
-                out.action = value ?? "";
-                break;
-            case "params":
-                out.params = value ?? "";
-                break;
-            default:
-                throw new Error(`unrecognized argument: --${name}`);
-        }
-    }
-    return out;
-}
+const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] });
 const HELP_TEXT = `usage: github_fetch.js [-h] --action {get_file,get_issues,get_pulls,repo_info,search_code} [--params PARAMS]
 
 Fetch data from GitHub

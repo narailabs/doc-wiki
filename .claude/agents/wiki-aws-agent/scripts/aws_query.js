@@ -15,6 +15,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AwsClient, } from "./lib/aws_client.js";
 import { formatGraph, } from "../../lib/mermaid_format.js";
+import { parseAgentArgs, } from "../../lib/_agent_cli.js";
 export const VALID_ACTIONS = new Set([
     "list_functions",
     "describe_db",
@@ -414,51 +415,7 @@ export async function fetch(action, params = null, options = {}) {
         };
     }
 }
-function parseArgs(argv) {
-    const out = {};
-    let i = 0;
-    while (i < argv.length) {
-        const a = argv[i];
-        if (a === undefined) {
-            i++;
-            continue;
-        }
-        if (a === "-h" || a === "--help") {
-            out.help = true;
-            i++;
-            continue;
-        }
-        let name;
-        let value;
-        if (a.startsWith("--")) {
-            const eq = a.indexOf("=");
-            if (eq >= 0) {
-                name = a.slice(2, eq);
-                value = a.slice(eq + 1);
-                i++;
-            }
-            else {
-                name = a.slice(2);
-                value = argv[i + 1];
-                i += 2;
-            }
-        }
-        else {
-            throw new Error(`unrecognized argument: ${a}`);
-        }
-        switch (name) {
-            case "action":
-                out.action = value ?? "";
-                break;
-            case "params":
-                out.params = value ?? "";
-                break;
-            default:
-                throw new Error(`unrecognized argument: --${name}`);
-        }
-    }
-    return out;
-}
+const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] });
 const HELP_TEXT = `usage: aws_query.js [-h] --action {describe_db,get_metrics,list_buckets,list_functions} [--params PARAMS]
 
 Query AWS resources
