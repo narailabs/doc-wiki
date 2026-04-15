@@ -31,12 +31,12 @@ export function registerEnvironment(name, opts) {
         : { ...base, grant_duration_hours });
     _registry.set(name, cfg);
 }
-/** Return the config for `name`, or throw a KeyError-named Error. */
+/** Return the config for `name`, or throw an EnvironmentNotRegisteredError. */
 export function getEnvironment(name) {
     const cfg = _registry.get(name);
     if (cfg === undefined) {
-        const err = new Error(`'${name}'`);
-        err.name = "KeyError";
+        const err = new Error(`Environment '${name}' is not registered`);
+        err.name = "EnvironmentNotRegisteredError";
         throw err;
     }
     return cfg;

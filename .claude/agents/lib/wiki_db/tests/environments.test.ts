@@ -64,9 +64,9 @@ describe("wiki_db.environments", () => {
   it("test_get_missing_raises", () => {
     try {
       getEnvironment("nonexistent");
-      throw new Error("expected KeyError");
+      throw new Error("expected EnvironmentNotRegisteredError");
     } catch (e) {
-      expect((e as Error).name).toBe("KeyError");
+      expect((e as Error).name).toBe("EnvironmentNotRegisteredError");
     }
   });
 

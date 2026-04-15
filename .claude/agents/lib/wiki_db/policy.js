@@ -294,29 +294,6 @@ export class Policy {
         }
         return false;
     }
-    // ------------------------------------------------------------------
-    // Python-snake_case aliases (for call-site parity with the Python API)
-    // ------------------------------------------------------------------
-    /** Python alias — identical to {@link checkQuery}. */
-    check_query(sql) {
-        return this.checkQuery(sql);
-    }
-    /** Python alias — identical to {@link classifySql}. */
-    classify_sql(sql) {
-        return this.classifySql(sql);
-    }
-    /** Python alias — identical to {@link approveSession}. */
-    approve_session() {
-        this.approveSession();
-    }
-    /** Python alias — identical to {@link addGrant}. */
-    add_grant(grantType, ttlSeconds = 300) {
-        this.addGrant(grantType, ttlSeconds);
-    }
-    /** Python alias — identical to {@link isGrantActive}. */
-    is_grant_active(grantType) {
-        return this.isGrantActive(grantType);
-    }
 }
 /**
  * Issue a time-limited grant whose TTL derives from an environment's

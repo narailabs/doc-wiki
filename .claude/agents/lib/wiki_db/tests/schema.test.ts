@@ -75,9 +75,6 @@ describe("wiki_db.schema", () => {
         executeRead: (c, q, p, m, t) => base.executeRead(c, q, p, m, t),
         getSchema: getSchemaSpy as unknown as DatabaseDriver["getSchema"],
         close: (c) => base.close(c),
-        execute_read: (c, q, p, m, t) =>
-          base.executeRead(c, q, p ?? null, m, t),
-        get_schema: (c, s, f) => base.getSchema(c, s, f ?? null),
       } as DatabaseDriver;
       return { driver: wrapped, getSchemaSpy };
     }
@@ -124,10 +121,6 @@ describe("wiki_db.schema", () => {
           throw new Error("connection failed");
         },
         close: () => {},
-        execute_read: () => ({ status: "success", execution_time_ms: 0 }),
-        get_schema: (): Table[] => {
-          throw new Error("connection failed");
-        },
       } as DatabaseDriver;
       const mgr = new SchemaManager(errorDriver);
       const result = await mgr.getSchema(null, "dev");
@@ -166,11 +159,6 @@ describe("wiki_db.schema", () => {
         }),
         getSchema: syncSpy as unknown as DatabaseDriver["getSchema"],
         close: () => {},
-        execute_read: (): ExecuteReadResult => ({
-          status: "success",
-          execution_time_ms: 0,
-        }),
-        get_schema: (): Table[] => [],
         getSchemaAsync: asyncSpy as unknown as (
           c: unknown,
           s?: string,
@@ -220,11 +208,6 @@ describe("wiki_db.schema", () => {
           throw new Error("sync also broken");
         },
         close: () => {},
-        execute_read: (): ExecuteReadResult => ({
-          status: "success",
-          execution_time_ms: 0,
-        }),
-        get_schema: (): Table[] => [],
         getSchemaAsync: asyncSpy as unknown as () => Promise<Table[]>,
       };
       const mgr = new SchemaManager(driverLike);

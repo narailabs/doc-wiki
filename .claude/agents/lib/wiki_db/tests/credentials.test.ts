@@ -73,9 +73,9 @@ describe("wiki_db.credentials", () => {
     const provider = new FileCredentialProvider(credsFile);
     try {
       provider.get("staging");
-      throw new Error("expected KeyError to be thrown");
+      throw new Error("expected EnvironmentNotConfiguredError to be thrown");
     } catch (e) {
-      expect((e as Error).name).toBe("KeyError");
+      expect((e as Error).name).toBe("EnvironmentNotConfiguredError");
     }
   });
 
@@ -110,10 +110,9 @@ describe("wiki_db.credentials", () => {
     const provider = new EnvVarCredentialProvider();
     try {
       provider.get("dev");
-      throw new Error("expected EnvironmentError to be thrown");
+      throw new Error("expected EnvironmentVariableMissingError to be thrown");
     } catch (e) {
-      // Python raises EnvironmentError, we label it similarly.
-      expect((e as Error).name).toBe("EnvironmentError");
+      expect((e as Error).name).toBe("EnvironmentVariableMissingError");
     }
   });
 

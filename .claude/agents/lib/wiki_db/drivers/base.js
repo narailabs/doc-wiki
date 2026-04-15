@@ -42,19 +42,4 @@ export class Table {
 }
 /** Abstract base for all database drivers. */
 export class DatabaseDriver {
-    // ------------------------------------------------------------------
-    // Python-snake_case aliases (optional parity with the Python API)
-    // ------------------------------------------------------------------
-    /** Alias for {@link executeRead}. */
-    execute_read(conn, query, params, maxRows, timeoutMs) {
-        return this.executeRead(conn, query, params ?? null, maxRows, timeoutMs);
-    }
-    /** Alias for {@link getSchema}. */
-    get_schema(conn, schemaName, tableFilter) {
-        return this.getSchema(conn, schemaName, tableFilter ?? null);
-    }
-    /** Alias for {@link classifyOperation}. */
-    classify_operation(query) {
-        return this.classifyOperation(query);
-    }
 }
