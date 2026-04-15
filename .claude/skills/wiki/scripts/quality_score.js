@@ -92,7 +92,7 @@ function thresholdIndex(totalDegrees) {
  *
  * The score is the sum of all signal deltas, clamped to [0.0, 1.0] and
  * rounded to 4 decimal places. Returns both the final score (wrapped with
- * pyFloat for integer-valued-emit parity) and the list of individual signals.
+ * and the list of individual signals.
  *
  * A3 — "Why did /wiki-fix's quality go down?":
  *   The signals are all *content-shape* signals — word count, frontmatter
@@ -267,7 +267,7 @@ export function scorePage(pagePath, edgesPath = null) {
  * Score every `.md` page under `<wikiRoot>/wiki/`.
  *
  * Returns a list sorted by quality descending. Each entry has page (relative
- * to wiki root), quality (pyFloat-wrapped), and signals array. If
+ * to wiki root), quality, and signals array. If
  * `edges.jsonl` exists under `<wikiRoot>/graph/`, structural signals are
  * included.
  */

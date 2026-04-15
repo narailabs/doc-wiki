@@ -1,10 +1,6 @@
 /**
- * Tests for quality_score.ts — ported from test_quality_score.py.
- *
- * Every pytest `def test_*` is preserved as a Vitest `it()`. CLI-parity
- * tests shell out to the compiled quality_score.js and confirm stdout
- * matches the Python reference byte-for-byte, including pyFloat-driven
- * `0.0` / `1.0` emission.
+ * Tests for quality_score.ts. CLI tests shell out to the compiled
+ * quality_score.js and parse stdout via JSON.parse.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -51,12 +47,8 @@ function fullFrontmatter(
   };
 }
 
-/** Unwrap pyFloat so tests can assert on the underlying number. */
+/** Type-narrow the quality field for assertion convenience. */
 function q(score: unknown): number {
-  if (score !== null && typeof score === "object") {
-    const rec = score as Record<string, unknown>;
-    if (typeof rec["value"] === "number") return rec["value"];
-  }
   if (typeof score === "number") return score;
   throw new Error(`not a number: ${score}`);
 }
@@ -430,7 +422,6 @@ describe("TestScorePageOutput", () => {
     const page = path.join(tmpPath, "wiki", "test.md");
     writePage(page, fullFrontmatter(), new Array(200).fill("word").join(" "));
     const result = scorePage(page, edges);
-    // `result.quality` is pyFloat-wrapped; the underlying value is numeric.
     expect(typeof q(result.quality)).toBe("number");
     expect(Array.isArray(result.signals)).toBe(true);
   });
