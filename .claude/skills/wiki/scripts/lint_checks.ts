@@ -79,6 +79,35 @@ function parseFrontmatter(content: string): Record<string, unknown> {
   return parseFrontmatterRaw(content).frontmatter ?? {};
 }
 
+/**
+ * One disk-read worth of state for a single wiki page.
+ * Built once per `lintWiki` call and threaded through every check that
+ * needs page content or frontmatter, eliminating the per-check
+ * readFileSync amplification (was 13× per page).
+ */
+interface CachedPage {
+  readonly content: string;
+  readonly frontmatter: Record<string, unknown>;
+}
+
+/** Map of absolute page path → cached content + parsed frontmatter. */
+export type PageCache = ReadonlyMap<string, CachedPage>;
+
+/**
+ * Read every wiki page once and cache content + frontmatter. Used by
+ * `lintWiki` to amortize I/O across all checks; individual checks
+ * fall back to building their own cache when called directly (e.g.
+ * from tests).
+ */
+function buildPageCache(wikiRoot: string): PageCache {
+  const cache = new Map<string, CachedPage>();
+  for (const page of wikiPages(wikiRoot)) {
+    const content = fs.readFileSync(page, { encoding: "utf-8" });
+    cache.set(page, { content, frontmatter: parseFrontmatter(content) });
+  }
+  return cache;
+}
+
 /** Shape of a single lint issue, matching the Python dict. */
 export interface Issue {
   severity: string;
@@ -113,10 +142,10 @@ function findLinks(content: string): string[] {
 // ── Check functions ─────────────────────────────────────────────────
 
 /** Find markdown links pointing to non-existent wiki pages. */
-export function checkBrokenLinks(wikiRoot: string): Issue[] {
+export function checkBrokenLinks(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
-  for (const page of wikiPages(wikiRoot)) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { content }] of pages) {
     const links = findLinks(content);
     for (const link of links) {
       // Skip external URLs, anchors, and non-.md links
@@ -137,11 +166,10 @@ export function checkBrokenLinks(wikiRoot: string): Issue[] {
 }
 
 /** Check all wiki pages for missing required frontmatter fields. */
-export function checkFrontmatter(wikiRoot: string): Issue[] {
+export function checkFrontmatter(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
-  for (const page of wikiPages(wikiRoot)) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
-    const fm = parseFrontmatter(content);
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
     if (Object.keys(fm).length === 0) {
       issues.push(
         makeIssue(
@@ -191,14 +219,13 @@ export function checkFrontmatter(wikiRoot: string): Issue[] {
 }
 
 /** Find pages not linked from any other page. */
-export function checkOrphans(wikiRoot: string): Issue[] {
+export function checkOrphans(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
-  const allPages = wikiPages(wikiRoot);
+  const pages = cache ?? buildPageCache(wikiRoot);
 
   // Build set of all linked-to filenames
   const linked = new Set<string>();
-  for (const page of allPages) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
+  for (const { content } of pages.values()) {
     const links = findLinks(content);
     for (const link of links) {
       if (link.startsWith("http") || link.startsWith("#")) {
@@ -211,7 +238,7 @@ export function checkOrphans(wikiRoot: string): Issue[] {
 
   const neverOrphan = new Set(["index.md", "summaries.md", "overview.md"]);
 
-  for (const page of allPages) {
+  for (const page of pages.keys()) {
     const pageName = path.basename(page);
     if (neverOrphan.has(pageName)) {
       continue;
@@ -254,11 +281,10 @@ export function checkIsolatedNodes(wikiRoot: string): Issue[] {
 }
 
 /** Check code references for content_hash mismatches. */
-export function checkCodeRefDrift(wikiRoot: string): Issue[] {
+export function checkCodeRefDrift(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
-  for (const page of wikiPages(wikiRoot)) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
-    const fm = parseFrontmatter(content);
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
     const refs = fm["references"];
     if (!Array.isArray(refs)) {
       continue;
@@ -417,7 +443,7 @@ const _NEVER_INDEXED: ReadonlySet<string> = new Set([
  * Every `.md` under `wiki/` (except the three scaffolding pages) must appear
  * as a markdown link target in `wiki/index.md`. Missing entries are errors.
  */
-export function checkIndexCoverage(wikiRoot: string): Issue[] {
+export function checkIndexCoverage(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
   const indexPath = path.join(wikiRoot, "wiki", "index.md");
   if (!fs.existsSync(indexPath)) {
@@ -435,7 +461,8 @@ export function checkIndexCoverage(wikiRoot: string): Issue[] {
   }
 
   const wikiDir = path.join(wikiRoot, "wiki");
-  for (const page of wikiPages(wikiRoot)) {
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const page of pages.keys()) {
     const base = path.basename(page);
     if (_NEVER_INDEXED.has(base)) {
       continue;
@@ -489,19 +516,18 @@ function parseSummariesIndex(
  * the page's frontmatter `summary_hash`. Missing entries or mismatches are
  * errors; pages without a `summary_hash` field in frontmatter are skipped.
  */
-export function checkSummariesSync(wikiRoot: string): Issue[] {
+export function checkSummariesSync(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
   const { entries, path: summariesPath, exists } = parseSummariesIndex(wikiRoot);
   if (!exists) {
     return issues;
   }
-  for (const page of wikiPages(wikiRoot)) {
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
     const base = path.basename(page);
     if (_NEVER_INDEXED.has(base)) {
       continue;
     }
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
-    const fm = parseFrontmatter(content);
     const hashVal = fm["summary_hash"];
     const pageHash = typeof hashVal === "string" ? hashVal : "";
     if (!pageHash) {
@@ -780,12 +806,12 @@ export function checkStaleContent(
   wikiRoot: string,
   thresholdDays: number = STALE_DAYS_DEFAULT,
   now: Date = new Date(),
+  cache?: PageCache,
 ): Issue[] {
   const issues: Issue[] = [];
   const cutoffMs = now.getTime() - thresholdDays * 24 * 60 * 60 * 1000;
-  for (const page of wikiPages(wikiRoot)) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
-    const fm = parseFrontmatter(content);
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
     const raw = fm["updated"];
     if (raw === undefined || raw === null) continue;
     // YAML dates come back as `Date`; string dates are parsed below.
@@ -837,11 +863,10 @@ export function checkStaleContent(
  * Pages without a `claim` type and without `failure_reason` are silently
  * skipped (the overwhelming majority of wiki pages fall here).
  */
-export function checkDeprecatedClaims(wikiRoot: string): Issue[] {
+export function checkDeprecatedClaims(wikiRoot: string, cache?: PageCache): Issue[] {
   const issues: Issue[] = [];
-  for (const page of wikiPages(wikiRoot)) {
-    const content = fs.readFileSync(page, { encoding: "utf-8" });
-    const fm = parseFrontmatter(content);
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
     const type = fm["type"];
     const status = fm["status"];
     const failureReason = fm["failure_reason"];
@@ -903,9 +928,16 @@ export function checkDeprecatedClaims(wikiRoot: string): Issue[] {
 
 // ── Main lint function ──────────────────────────────────────────────
 
-/** Registry of check functions, matching the Python dict insertion order. */
+/**
+ * Registry of check functions, matching the Python dict insertion order.
+ *
+ * Every check accepts an optional `cache` so `lintWiki` can amortize the
+ * page-read I/O across the whole run. Checks that don't read pages
+ * (provenance / ambiguity_rate / isolated_nodes / orm_mapping_freshness /
+ * thin_clusters) just ignore the cache.
+ */
 const CHECK_FUNCTIONS: ReadonlyArray<
-  [string, (wikiRoot: string) => Issue[]]
+  [string, (wikiRoot: string, cache?: PageCache) => Issue[]]
 > = [
   ["broken_links", checkBrokenLinks],
   ["frontmatter", checkFrontmatter],
@@ -920,7 +952,9 @@ const CHECK_FUNCTIONS: ReadonlyArray<
   ["summaries_sync", checkSummariesSync],
   ["orm_mapping_freshness", checkOrmMappingFreshness],
   ["thin_clusters", checkThinClusters],
-  ["stale_content", checkStaleContent],
+  // checkStaleContent has extra threshold/now params for testability;
+  // forward defaults and pass cache through.
+  ["stale_content", (root, cache) => checkStaleContent(root, undefined, undefined, cache)],
 ];
 
 const VALID_CATEGORIES: ReadonlySet<string> = new Set(
@@ -993,14 +1027,17 @@ export function lintWiki(
   pageFilter: string | null = null,
 ): LintResult {
   let issues: Issue[] = [];
+  // Build the page cache once for the whole run so checks don't each
+  // re-readFileSync every wiki page. Was 13× I/O amplification.
+  const cache = buildPageCache(wikiRoot);
   if (category) {
     const found = CHECK_FUNCTIONS.find(([k]) => k === category);
     if (found) {
-      issues = found[1](wikiRoot);
+      issues = found[1](wikiRoot, cache);
     }
   } else {
     for (const [, fn] of CHECK_FUNCTIONS) {
-      issues.push(...fn(wikiRoot));
+      issues.push(...fn(wikiRoot, cache));
     }
   }
 
