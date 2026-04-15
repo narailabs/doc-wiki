@@ -27,11 +27,6 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch": "^3.1030.0",
-    "@aws-sdk/client-dynamodb": "^3.1030.0",
-    "@aws-sdk/client-lambda": "^3.1030.0",
-    "@aws-sdk/client-rds": "^3.1030.0",
-    "@aws-sdk/client-s3": "^3.1030.0",
     "better-sqlite3": "^12.9.0",
     "fast-xml-parser": "^5.5.12",
     "graphology": "^0.26.0",
@@ -45,5 +40,12 @@
     "mysql2": "^3.22.0",
     "pdfjs-dist": "^5.6.205",
     "pg": "^8.20.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1030.0",
+    "@aws-sdk/client-dynamodb": "^3.1030.0",
+    "@aws-sdk/client-lambda": "^3.1030.0",
+    "@aws-sdk/client-rds": "^3.1030.0",
+    "@aws-sdk/client-s3": "^3.1030.0"
   }
 }

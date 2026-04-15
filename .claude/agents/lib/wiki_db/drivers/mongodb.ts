@@ -305,14 +305,18 @@ export class MongoDriver extends DatabaseDriver {
         return pattern.test(c.name);
       });
 
-      const out: Table[] = [];
-      for (const c of filtered) {
-        const sample = await handle.db
-          .collection(c.name)
-          .find({}, {})
-          .limit(50)
-          .toArray();
+      // Sample all collections in parallel — each .toArray() is a round-trip,
+      // so for an N-collection DB this trims latency from N×rtt to ~1×rtt.
+      const samples = await Promise.all(
+        filtered.map((c) =>
+          handle.db.collection(c.name).find({}, {}).limit(50).toArray(),
+        ),
+      );
 
+      const out: Table[] = [];
+      for (let i = 0; i < filtered.length; i++) {
+        const c = filtered[i]!;
+        const sample = samples[i]!;
         const keyTypes = new Map<string, string>();
         for (const doc of sample) {
           for (const k of Object.keys(doc)) {

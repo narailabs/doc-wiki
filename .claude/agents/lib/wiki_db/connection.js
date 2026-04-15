@@ -32,14 +32,7 @@ export function listDriverFactories() {
 // Register the one driver we ship with today. Phase E calls
 // `registerDriverFactory("postgresql", ...)` etc. from the driver modules
 // themselves (side-effecting on import).
-registerDriverFactory("sqlite", (envConfig) => {
-    const d = new SQLiteDriver();
-    // Stash the raw config on the instance so `Pool` can pass it through on
-    // each `connect()` call without re-reading the environment registry.
-    d._envConfig =
-        envConfig;
-    return d;
-});
+registerDriverFactory("sqlite", () => new SQLiteDriver());
 const _pools = new Map();
 // ---------------------------------------------------------------------------
 // Lifecycle handlers
