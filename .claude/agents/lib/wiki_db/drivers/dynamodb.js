@@ -31,6 +31,19 @@ import { performance } from "node:perf_hooks";
 import { Column, DatabaseDriver, Table, } from "./base.js";
 import { OperationType } from "../policy.js";
 /**
+ * G-DYNAMO-PARSE-ERROR: distinguishes a malformed envelope JSON from
+ * the default-deny "DDL" fall-through. `Policy.checkQuery` converts
+ * thrown errors into `{ decision: "deny", reason: <message> }` so
+ * this surfaces as a helpful diagnostic instead of "DDL statements are
+ * never allowed".
+ */
+export class DynamoEnvelopeParseError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "DynamoEnvelopeParseError";
+    }
+}
+/**
  * G-DB-1: DynamoDB op → OperationType mapping.
  *
  * Both the lower-case envelope form (`{table, op: "scan"}`) and the
@@ -339,8 +352,13 @@ export class DynamoDriver extends DatabaseDriver {
                 if (typeof parsed.op === "string")
                     op = parsed.op;
             }
-            catch {
-                /* fall through */
+            catch (e) {
+                // G-DYNAMO-PARSE-ERROR: surfacing malformed envelope JSON as a
+                // distinct error stops it from silently falling through to the
+                // default-deny "DDL statements are never allowed" path, which
+                // misleads callers debugging a hand-authored envelope.
+                const msg = e instanceof Error ? e.message : String(e);
+                throw new DynamoEnvelopeParseError(`Malformed envelope JSON: ${msg}`);
             }
         }
         // SDK form: detect "<Verb>Command" or first identifier
