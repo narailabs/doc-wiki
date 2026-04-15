@@ -260,6 +260,40 @@ describe("TestGetStats", () => {
     expect("query" in opsByType).toBe(false);
     expect(approxEqual(stats["total_cost_usd"] as number, 0.08)).toBe(true);
   });
+
+  // G-EVENTS-TS-STRICT: previously a malformed `ts` caused the filter
+  // branch to be skipped, so the event was kept in the result despite
+  // being un-placeable on the timeline. With --since active we now
+  // fail-closed: NaN-ts events are excluded.
+  it("test_stats_with_since_filter_drops_malformed_ts", () => {
+    const wikiRoot = makeWikiRoot(tmpPath);
+    const events = [
+      {
+        ts: "2026-04-10T08:00:00+00:00",
+        op: "ingest",
+        tokens_in: 100,
+        tokens_out: 50,
+        cost_usd: 0.01,
+      },
+      {
+        ts: "not-a-date",
+        op: "query",
+        tokens_in: 99,
+        tokens_out: 99,
+        cost_usd: 99.0,
+      },
+    ];
+    const p = path.join(wikiRoot, "log", "events.jsonl");
+    fs.writeFileSync(
+      p,
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
+    expect(stats["total_ops"]).toBe(1);
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["ingest"]).toBe(1);
+    expect("query" in opsByType).toBe(false);
+  });
 });
 
 // ── Python-compat timestamp format check ────────────────────────────
