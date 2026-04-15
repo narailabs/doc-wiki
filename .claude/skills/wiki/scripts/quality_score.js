@@ -21,7 +21,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pyFloat, pythonJsonDumpsFloats } from "./_json_py.js";
+import { pyFloat, pythonJsonDumpsFloats } from "../../../agents/lib/_json_py.js";
 import { computeDegrees } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";

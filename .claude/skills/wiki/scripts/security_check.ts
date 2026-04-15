@@ -18,7 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "./_json_py.js";
+import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http", "https"]);
 

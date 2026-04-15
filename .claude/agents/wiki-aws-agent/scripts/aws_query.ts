@@ -13,7 +13,7 @@
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import { pythonJsonDumps } from "../../lib/_json_py.js";
 import {
   AwsClient,
   type AwsClientOptions,

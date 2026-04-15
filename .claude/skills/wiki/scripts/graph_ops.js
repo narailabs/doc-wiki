@@ -24,7 +24,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
-import { pythonJsonDumps } from "./_json_py.js";
+import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const VALID_EDGE_TYPES = new Set([
     "supports",

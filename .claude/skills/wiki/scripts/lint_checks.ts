@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { pythonJsonDumps } from "./_json_py.js";
+import { pythonJsonDumps } from "../../../agents/lib/_json_py.js";
 import { clusters, isolatedNodes, listEdges } from "./graph_ops.js";
 import { lintPage as lintMermaidPage } from "./mermaid_lint.js";
 import { parseFlags } from "./_cli_args.js";

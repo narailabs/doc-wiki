@@ -13,7 +13,7 @@
  */
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pythonJsonDumps } from "../../../skills/wiki/scripts/_json_py.js";
+import { pythonJsonDumps } from "../../lib/_json_py.js";
 import { AwsClient, } from "./lib/aws_client.js";
 import { formatGraph, } from "../../lib/mermaid_format.js";
 export const VALID_ACTIONS = new Set([
