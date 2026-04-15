@@ -190,10 +190,12 @@ export class PostgresDriver extends DatabaseDriver {
         await handle.client.query(`SET LOCAL search_path TO "${safe}"`);
       }
 
-      const limited =
-        /\blimit\b/i.test(query) === false
-          ? `${query.trimEnd().replace(/;$/, "")} LIMIT ${maxRows + 1}`
-          : query;
+      // G-LIMIT-WRAP: wrap as a subquery so bounded semantics hold even
+      // when the outer query has a trailing `-- limit` comment, a CTE
+      // with its own LIMIT, a FOR UPDATE clause, or a LIMIT on an inner
+      // SELECT that the old substring check mistook for the bound.
+      const inner = query.trim().replace(/;\s*$/, "");
+      const limited = `SELECT * FROM (${inner}) AS _limited LIMIT ${maxRows + 1}`;
 
       const result = await handle.client.query(limited, params ?? []);
       await handle.client.query("COMMIT");
