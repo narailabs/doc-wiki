@@ -83,6 +83,60 @@ describe("TestLoadProfile", () => {
     }
   });
 
+  // G-ORM-PROFILE-VALIDATE: invalid regex in any pattern field used to
+  // be silently swallowed by extractor.ts. Load-time validation makes
+  // the error visible to the profile author.
+  it("test_invalid_regex_in_class_pattern_raises", () => {
+    const tmp = makeTmpPath();
+    try {
+      const bad = path.join(tmp, "bad.yaml");
+      fs.writeFileSync(
+        bad,
+        [
+          "name: badregex",
+          "language: python",
+          "detection:",
+          "  markers: []",
+          "entity_extraction:",
+          "  class_pattern: '[unclosed'",
+          "",
+        ].join("\n"),
+      );
+      expect(() => loadProfile(bad)).toThrow(/invalid regex in class_pattern/);
+      expect(() => loadProfile(bad)).toThrow(/badregex|bad\.yaml/);
+    } finally {
+      cleanupTmpPath(tmp);
+    }
+  });
+
+  it("test_invalid_regex_in_relationship_pattern_raises", () => {
+    const tmp = makeTmpPath();
+    try {
+      const bad = path.join(tmp, "bad.yaml");
+      fs.writeFileSync(
+        bad,
+        [
+          "name: badrel",
+          "language: python",
+          "detection:",
+          "  markers: []",
+          "entity_extraction:",
+          "  class_pattern: '^class'",
+          "relationship_detection:",
+          "  patterns:",
+          "    - pattern: '(unclosed'",
+          "      type: one_to_many",
+          "",
+        ].join("\n"),
+      );
+      expect(() => loadProfile(bad)).toThrow(
+        /invalid regex in relationship_patterns\[0\]/,
+      );
+    } finally {
+      cleanupTmpPath(tmp);
+    }
+  });
+
   it("test_profile_has_markers", () => {
     const p = loadProfile(path.join(PROFILES_DIR, "jpa.yaml"));
     const markerTypes = p.markers.map((m) => m.type);
