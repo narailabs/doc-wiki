@@ -217,6 +217,22 @@ describe("wiki_db.drivers.postgresql (unit)", () => {
     expect(tables[0]!.columns[1]!.is_primary_key).toBe(false);
   });
 
+  it("getSchemaAsync escapes _ and % wildcards in tableFilter", async () => {
+    const drv = new PostgresDriver();
+    const handle = await drv.connect({ database: "app", schema: "public" });
+    const client = lastClient();
+    client.query.mockResolvedValue({ rows: [], rowCount: 0, fields: [] });
+    await drv.getSchemaAsync(handle, "public", "user_data%");
+    const tableQuery = client.query.mock.calls.find(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        (c[0] as string).includes("information_schema.tables"),
+    );
+    expect(tableQuery).toBeDefined();
+    expect(tableQuery![0]).toContain("LIKE $2 ESCAPE '!'");
+    expect(tableQuery![1]).toEqual(["public", "user!_data!%"]);
+  });
+
   it("close() releases the client back to the pool — pool stays open", async () => {
     const drv = new PostgresDriver();
     const handle = await drv.connect({ database: "app" });

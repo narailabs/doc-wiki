@@ -235,8 +235,8 @@ export class MysqlDriver extends DatabaseDriver {
         "SELECT table_name FROM information_schema.tables " +
         "WHERE table_schema = ? AND table_type = 'BASE TABLE'";
       if (tableFilter !== null && tableFilter !== undefined) {
-        tableSql += " AND table_name LIKE ?";
-        tableParams.push(tableFilter);
+        tableSql += " AND table_name LIKE ? ESCAPE '!'";
+        tableParams.push(tableFilter.replace(/[!_%]/g, "!$&"));
       }
       tableSql += " ORDER BY table_name";
 

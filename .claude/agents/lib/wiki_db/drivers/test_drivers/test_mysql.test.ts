@@ -198,6 +198,22 @@ describe("wiki_db.drivers.mysql (unit)", () => {
     expect(tables[0]!.columns[1]!.is_primary_key).toBe(false);
   });
 
+  it("getSchemaAsync escapes _ and % wildcards in tableFilter", async () => {
+    const drv = new MysqlDriver();
+    const handle = await drv.connect({ database: "shop" });
+    const conn = lastConn();
+    conn.query.mockResolvedValue([[], []]);
+    await drv.getSchemaAsync(handle, "", "user_data%");
+    const tableQuery = conn.query.mock.calls.find(
+      (c: unknown[]) =>
+        typeof c[0] === "string" &&
+        (c[0] as string).includes("information_schema.tables"),
+    );
+    expect(tableQuery).toBeDefined();
+    expect(tableQuery![0]).toContain("LIKE ? ESCAPE '!'");
+    expect(tableQuery![1]).toEqual(["shop", "user!_data!%"]);
+  });
+
   it("close() releases the client — pool stays open", async () => {
     const drv = new MysqlDriver();
     const handle = await drv.connect({ database: "app" });
