@@ -158,7 +158,23 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 4. **Security check:** `node {skill_path}/scripts/security_check.js --url <url>` (for URL sources)
 5. **Read the source fully** — no skipping sections
 6. **Surface 3-5 takeaways + entity list** — your reasoning
-7. **Cross-reference active agents** — if the config has source agents enabled, dispatch them in parallel via Agent tool to gather additional context
+7. **Cross-reference active agents** — consult the agent registry to determine which agents to dispatch:
+
+   ```bash
+   node {skill_path}/../agents/lib/source_registry.js list --agents-dir {skill_path}/../agents
+   ```
+
+   This outputs a JSON array of all registered agents (builtin + custom from `ecosystem.agents.custom` in wiki.config.yaml). For each enabled source/database agent, dispatch in parallel via Agent tool:
+
+   ```
+   Agent(
+     subagent_type = "<agent.invocation_template.subagent_type>",
+     model = "<agent.invocation_template.default_model>",
+     prompt = "<constructed from agent's AGENT.md invocation contract>"
+   )
+   ```
+
+   Custom agents registered in config work identically — the registry discovers them alongside builtins
 8. **Compile into wiki page(s)** — read `references/compilation.md` for rules on frontmatter, linking, code locality, claims extraction
 9. **Auto-generate Mermaid diagrams** — collect every dispatched agent's JSON `mermaid: {type, title, code}` envelope and splice each into the compiled page:
 
@@ -175,7 +191,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
       --enabled <csv-of-enabled-agent-ids>
     ```
 
-    Classifies each source (Jira/Confluence/GitHub/Notion/GCP/AWS/DB/local code) and emits one bullet per entry with the exact agent command to run. Pass the enabled agents from `wiki.config.yaml` so disabled-agent hints are suppressed. Elides when sources are all local `raw/...` already in the wiki body.
+    Classifies each source against the agent registry (builtin + custom agents) and emits one bullet per entry with the exact agent command to run. Pass the enabled agents from `wiki.config.yaml` so disabled-agent hints are suppressed. Custom agents registered in `ecosystem.agents.custom` are included automatically. Elides when sources are all local `raw/...` already in the wiki body.
 11. **Update indexes + summaries.md** — rebuild `wiki/summaries.md` deterministically:
 
     ```bash

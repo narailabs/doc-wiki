@@ -11,6 +11,11 @@ autonomy_level: autonomous
 model: sonnet
 tools: [Bash, Read, Glob, Grep]
 color: orange
+version: "1.0.0"
+invocation_template:
+  subagent_type: wiki-orm-agent
+  default_model: sonnet
+  label: ORM
 ---
 
 # Wiki ORM Mapper Agent

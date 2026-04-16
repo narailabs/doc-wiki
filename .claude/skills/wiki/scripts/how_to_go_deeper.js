@@ -6,35 +6,12 @@
  * page compiled from EXTERNAL sources (Jira, Confluence, GitHub,
  * Notion, GCP, AWS, a database, or a code file) gets a trailing
  * section that tells future readers / agents exactly which command to
- * run to pull the latest state of the source system. This keeps wiki
- * pages useful as entry points rather than dead snapshots.
+ * run to pull the latest state of the source system.
  *
- * Before this module the section was LLM judgment and only emitted by
- * wiki-orm-agent's own output path. This implementation makes it
- * generic + deterministic: classify each `sources:` frontmatter entry
- * and render a one-line bullet per source type.
- *
- * Input: array of source strings, typically from a page's
- * `sources:` frontmatter. Examples:
- *   "jira://AUTH-123"
- *   "https://company.atlassian.net/browse/AUTH-123"
- *   "confluence://spaces/ARCH/pages/Session+Flow"
- *   "gh://org/repo/issues/42"
- *   "https://github.com/org/repo/pull/42"
- *   "notion://abc123-deadbeef"
- *   "gcp://projects/p1/services/api"
- *   "aws://arn:aws:lambda:us-east-1:123:function:ingest"
- *   "db://dev/users"
- *   "raw/auth/overview.md"
- *   "src/auth/session.py:42-58"
- *
- * Rules:
- *   - An `enabledAgents` set filters which external-source commands we
- *     recommend (skip Jira-flavoured hints when Jira isn't configured).
- *   - When sources is empty OR contains only LOCAL entries under
- *     `raw/` (already ingested into the wiki), the section is empty —
- *     a reader has nothing external to go deeper into.
- *   - Unknown schemes fall through to a plain "Read <source>" bullet.
+ * Source-to-agent matching is driven by the source_registry — agents
+ * are discovered from AGENT.md frontmatter rather than hardcoded.
+ * Custom agents registered in wiki.config.yaml are supported
+ * automatically.
  *
  * Usage as a library:
  *     import { buildHowToGoDeeper } from "./how_to_go_deeper.js";
@@ -48,224 +25,162 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
+import { lookupBySource, initRegistry, } from "../../../agents/lib/source_registry.js";
 const LOCAL_RAW_PREFIX = "raw/";
 const CODE_EXTS = new Set([
-    ".ts",
-    ".tsx",
-    ".js",
-    ".jsx",
-    ".py",
-    ".java",
-    ".kt",
-    ".go",
-    ".rs",
-    ".cs",
-    ".rb",
-    ".c",
-    ".h",
-    ".cc",
-    ".cpp",
-    ".hpp",
-    ".swift",
-    ".php",
-    ".sql",
-    ".sh",
+    ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".kt", ".go", ".rs",
+    ".cs", ".rb", ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".php",
+    ".sql", ".sh",
 ]);
-/** Detect Atlassian-hosted Jira vs Confluence URLs. */
-function isJiraUrl(url) {
-    return url.pathname.startsWith("/browse/");
-}
-function isConfluenceUrl(url) {
-    return url.pathname.startsWith("/wiki/") || url.pathname.includes("/spaces/");
-}
-function isGithubUrl(url) {
-    return url.hostname === "github.com" || url.hostname.endsWith(".github.com");
-}
-function isNotionUrl(url) {
-    return url.hostname === "notion.so" || url.hostname.endsWith(".notion.site");
-}
-function isGcpUrl(url) {
-    return (url.hostname.endsWith("cloud.google.com") ||
-        url.hostname.endsWith(".googleapis.com"));
-}
-function isAwsUrl(url) {
-    return url.hostname.endsWith("amazonaws.com") || url.hostname.endsWith(".aws.amazon.com");
-}
-function classifyUrl(url, source) {
-    if (isJiraUrl(url)) {
-        const key = url.pathname.replace(/^\/browse\//, "").split("?")[0] ?? "";
-        const query = key ? `key = ${key}` : "<JQL>";
-        return {
-            agent: "jira",
-            label: "Jira",
-            hint: `wiki agent jira --query "${query}"`,
-            source,
-        };
+// ── Registry initialization ──────────────────────────────────────────
+let _initialized = false;
+function ensureRegistry() {
+    if (_initialized)
+        return;
+    _initialized = true;
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const agentsDir = path.resolve(thisDir, "../../../agents");
+    try {
+        initRegistry({ agentsDir });
     }
-    if (isConfluenceUrl(url)) {
-        return {
-            agent: "confluence",
-            label: "Confluence",
-            hint: `wiki agent confluence --url "${source}"`,
-            source,
-        };
+    catch {
+        // Non-fatal: fall through to no-match for all sources
     }
-    if (isGithubUrl(url)) {
-        const trimmed = url.pathname.replace(/^\/+/, "");
-        return {
-            agent: "github",
-            label: "GitHub",
-            hint: `wiki agent github --path "${trimmed}"`,
-            source,
-        };
-    }
-    if (isNotionUrl(url)) {
-        return {
-            agent: "notion",
-            label: "Notion",
-            hint: `wiki agent notion --url "${source}"`,
-            source,
-        };
-    }
-    if (isGcpUrl(url)) {
-        return {
-            agent: "gcp",
-            label: "GCP",
-            hint: `wiki agent gcp --resource "${source}"`,
-            source,
-        };
-    }
-    if (isAwsUrl(url)) {
-        return {
-            agent: "aws",
-            label: "AWS",
-            hint: `wiki agent aws --resource "${source}"`,
-            source,
-        };
-    }
-    return null;
 }
-function classifyScheme(source) {
-    const m = /^([a-z]+):\/\/(.+)$/i.exec(source);
-    if (m === null)
-        return null;
-    const scheme = (m[1] ?? "").toLowerCase();
-    const rest = m[2] ?? "";
-    switch (scheme) {
-        case "jira":
-            return {
-                agent: "jira",
-                label: "Jira",
-                hint: `wiki agent jira --query "key = ${rest}"`,
-                source,
-            };
+/** Reset registry state (test helper). */
+export function _resetRegistry() {
+    _initialized = false;
+}
+// ── Short ID extraction ──────────────────────────────────────────────
+/** Extract short agent ID from manifest name: "wiki-jira-agent" → "jira". */
+function shortId(manifest) {
+    return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+}
+// ── Hint builders (per-agent, for exact output compatibility) ─────────
+/**
+ * Build a DeepEntry from a matched agent manifest and source string.
+ *
+ * Builtin agents have specific hint formats that must remain stable
+ * (tested, documented, and consumed by downstream tooling). Custom
+ * agents use a generic template.
+ */
+function buildAgentEntry(manifest, source) {
+    const id = shortId(manifest);
+    const label = manifest.invocation_template.label;
+    // Determine if this is a URL or scheme match
+    const isUrl = /^https?:\/\//i.test(source);
+    if (isUrl) {
+        return buildUrlHint(id, label, source);
+    }
+    // Scheme-based: extract the rest after scheme://
+    const schemeMatch = /^[a-z]+:\/\/(.+)$/i.exec(source);
+    const rest = schemeMatch?.[1] ?? source;
+    return buildSchemeHint(id, label, source, rest);
+}
+function buildUrlHint(id, label, source) {
+    let url;
+    try {
+        url = new URL(source);
+    }
+    catch {
+        return { agent: id, label, hint: `Open <${source}>`, source };
+    }
+    switch (id) {
+        case "jira": {
+            const key = url.pathname.replace(/^\/browse\//, "").split("?")[0] ?? "";
+            const query = key ? `key = ${key}` : "<JQL>";
+            return { agent: id, label, hint: `wiki agent jira --query "${query}"`, source };
+        }
         case "confluence":
-            return {
-                agent: "confluence",
-                label: "Confluence",
-                hint: `wiki agent confluence --path "${rest}"`,
-                source,
-            };
-        case "gh":
-        case "github":
-            return {
-                agent: "github",
-                label: "GitHub",
-                hint: `wiki agent github --path "${rest}"`,
-                source,
-            };
+            return { agent: id, label, hint: `wiki agent confluence --url "${source}"`, source };
+        case "github": {
+            const trimmed = url.pathname.replace(/^\/+/, "");
+            return { agent: id, label, hint: `wiki agent github --path "${trimmed}"`, source };
+        }
         case "notion":
-            return {
-                agent: "notion",
-                label: "Notion",
-                hint: `wiki agent notion --id "${rest}"`,
-                source,
-            };
+            return { agent: id, label, hint: `wiki agent notion --url "${source}"`, source };
         case "gcp":
-            return {
-                agent: "gcp",
-                label: "GCP",
-                hint: `wiki agent gcp --resource "${rest}"`,
-                source,
-            };
+            return { agent: id, label, hint: `wiki agent gcp --resource "${source}"`, source };
         case "aws":
-            return {
-                agent: "aws",
-                label: "AWS",
-                hint: `wiki agent aws --resource "${rest}"`,
-                source,
-            };
+            return { agent: id, label, hint: `wiki agent aws --resource "${source}"`, source };
+        default:
+            // Custom agent — generic hint
+            return { agent: id, label, hint: `wiki agent ${id} --source "${source}"`, source };
+    }
+}
+function buildSchemeHint(id, label, source, rest) {
+    switch (id) {
+        case "jira":
+            return { agent: id, label, hint: `wiki agent jira --query "key = ${rest}"`, source };
+        case "confluence":
+            return { agent: id, label, hint: `wiki agent confluence --path "${rest}"`, source };
+        case "github":
+            return { agent: id, label, hint: `wiki agent github --path "${rest}"`, source };
+        case "notion":
+            return { agent: id, label, hint: `wiki agent notion --id "${rest}"`, source };
+        case "gcp":
+            return { agent: id, label, hint: `wiki agent gcp --resource "${rest}"`, source };
+        case "aws":
+            return { agent: id, label, hint: `wiki agent aws --resource "${rest}"`, source };
         case "db": {
-            // Expect `db://<env>/<target>` where target is a table or a query hint.
             const [env = "dev", ...tail] = rest.split("/");
             const target = tail.join("/") || "<table>";
-            return {
-                agent: "db",
-                label: "Database",
-                hint: `wiki agent db-query ${env} "DESCRIBE ${target}"`,
-                source,
-            };
+            return { agent: id, label, hint: `wiki agent db-query ${env} "DESCRIBE ${target}"`, source };
         }
+        default:
+            // Custom agent — generic hint using rest
+            return { agent: id, label, hint: `wiki agent ${id} --source "${source}"`, source };
     }
-    return null;
 }
+// ── Local source classification (non-agent) ──────────────────────────
 function classifyLocal(source) {
-    // Local `raw/...` sources are already ingested into the wiki body; a
-    // reader doesn't need a "go deeper" link for them.
     if (source.startsWith(LOCAL_RAW_PREFIX))
         return null;
-    // Recognise "path:lines" code references (e.g. src/auth.py:42-58).
     const codeMatch = /^([^:]+\.[A-Za-z0-9]+)(?::(\d+(?:-\d+)?))?$/.exec(source);
     if (codeMatch !== null) {
         const file = codeMatch[1] ?? "";
         const ext = path.extname(file).toLowerCase();
         if (CODE_EXTS.has(ext)) {
-            return {
-                label: "Live code",
-                hint: `Read \`${source}\``,
-                source,
-            };
+            return { label: "Live code", hint: `Read \`${source}\``, source };
         }
     }
     return null;
 }
+// ── Main classifier ──────────────────────────────────────────────────
 /** Classify one source string into a bullet, or `null` when we skip it. */
 export function classifySource(source) {
     const trimmed = source.trim();
     if (trimmed === "")
         return null;
-    // Local `raw/...` sources are already ingested into the wiki body; a
-    // reader doesn't need a "go deeper" link for them — short-circuit
-    // before any other classifier fires (URL, scheme, code-ref, fallback).
     if (trimmed.startsWith(LOCAL_RAW_PREFIX))
         return null;
-    // Try URL parsing first — falls through when it's not a URL.
+    ensureRegistry();
+    // Try URL matching first
     if (/^https?:\/\//i.test(trimmed)) {
-        let url;
-        try {
-            url = new URL(trimmed);
+        const manifest = lookupBySource(trimmed);
+        if (manifest !== null) {
+            return buildAgentEntry(manifest, trimmed);
         }
-        catch {
-            return { label: "External link", hint: `Open <${trimmed}>`, source: trimmed };
-        }
-        const classified = classifyUrl(url, trimmed);
-        if (classified !== null)
-            return classified;
+        // Unmatched URL — generic external link
         return { label: "External link", hint: `Open <${trimmed}>`, source: trimmed };
     }
-    const schemed = classifyScheme(trimmed);
-    if (schemed !== null)
-        return schemed;
+    // Try scheme matching
+    if (/^[a-z]+:\/\//i.test(trimmed)) {
+        const manifest = lookupBySource(trimmed);
+        if (manifest !== null) {
+            return buildAgentEntry(manifest, trimmed);
+        }
+    }
+    // Local classification (code refs, file paths)
     const local = classifyLocal(trimmed);
     if (local !== null)
         return local;
-    // Absolute-ish filesystem paths without a known code extension — leave
-    // a bare Read hint so readers know where to look.
     if (trimmed.startsWith("/") || trimmed.startsWith("./") || trimmed.includes("/")) {
         return { label: "Source file", hint: `Read \`${trimmed}\``, source: trimmed };
     }
     return null;
 }
+// ── Section builder ──────────────────────────────────────────────────
 /**
  * Build the "How to Go Deeper" section for a page. Returns `""` when
  * the page has no external sources worth calling out.
@@ -279,8 +194,6 @@ export function buildHowToGoDeeper(sources, options = {}) {
         if (entry === null)
             continue;
         if (entry.agent && enabled !== undefined && !enabled.has(entry.agent)) {
-            // Agent is configured-off for this wiki; surface a subdued bullet
-            // instead of a command the reader can't run yet.
             bullets.push({
                 label: entry.label,
                 hint: `${entry.source} — enable the \`wiki-${entry.agent}-agent\` to query this live`,
@@ -288,8 +201,6 @@ export function buildHowToGoDeeper(sources, options = {}) {
             });
             continue;
         }
-        // Deduplicate on source text so repeated listings in frontmatter
-        // don't yield duplicate bullets.
         if (seen.has(entry.source))
             continue;
         seen.add(entry.source);
@@ -306,7 +217,7 @@ export function buildHowToGoDeeper(sources, options = {}) {
     lines.push("");
     return lines.join("\n");
 }
-// ── CLI ────────────────────────────────────────────────────────────
+// ── CLI ──────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
     "--sources": "sources",
     "--enabled": "enabled",
@@ -319,29 +230,17 @@ arguments:
   --sources JSON_ARRAY  JSON array of source strings (the frontmatter
                         \`sources:\` field, JSON-encoded)
   --enabled csv         Comma-separated list of enabled source agents
-                        (jira, confluence, github, notion, gcp, aws,
-                        db). When omitted, all hints are rendered.
+                        (e.g. jira,github,db). When omitted, all hints
+                        are rendered.
 options:
   -h, --help            show this help message and exit
 `;
-const KNOWN_AGENTS = new Set([
-    "jira",
-    "confluence",
-    "github",
-    "notion",
-    "gcp",
-    "aws",
-    "db",
-]);
 function parseEnabled(csv) {
     const out = new Set();
     for (const tok of csv.split(",")) {
         const trimmed = tok.trim().toLowerCase();
-        if (trimmed === "")
-            continue;
-        if (KNOWN_AGENTS.has(trimmed)) {
+        if (trimmed !== "")
             out.add(trimmed);
-        }
     }
     return out;
 }

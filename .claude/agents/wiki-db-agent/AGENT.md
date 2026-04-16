@@ -11,6 +11,12 @@ autonomy_level: supervised
 model: haiku
 tools: [Bash, Read, Write]
 color: red
+version: "1.0.0"
+source_schemes: ["db://"]
+invocation_template:
+  subagent_type: wiki-db-agent
+  default_model: haiku
+  label: Database
 ---
 
 # Wiki Database Agent

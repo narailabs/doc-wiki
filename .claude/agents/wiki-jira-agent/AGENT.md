@@ -11,6 +11,15 @@ model: haiku
 tools: [Bash, Read]
 scripts: [scripts/jira_fetch.ts]
 color: cyan
+version: "1.0.0"
+source_schemes: ["jira://"]
+source_url_patterns:
+  - hostname: "*.atlassian.net"
+    path_prefix: "/browse/"
+invocation_template:
+  subagent_type: wiki-jira-agent
+  default_model: haiku
+  label: Jira
 ---
 
 # Wiki Jira Agent

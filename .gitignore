@@ -14,3 +14,4 @@ coverage/
 # core settings, appearance) stays tracked because those are shared.
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+explainer-video/

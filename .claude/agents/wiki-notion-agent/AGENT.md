@@ -11,6 +11,15 @@ model: haiku
 tools: [Bash, Read]
 scripts: [scripts/notion_fetch.ts]
 color: pink
+version: "1.0.0"
+source_schemes: ["notion://"]
+source_url_patterns:
+  - hostname: "notion.so"
+  - hostname: "*.notion.site"
+invocation_template:
+  subagent_type: wiki-notion-agent
+  default_model: haiku
+  label: Notion
 ---
 
 # Wiki Notion Agent

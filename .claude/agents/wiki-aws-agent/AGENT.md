@@ -11,6 +11,15 @@ model: sonnet
 tools: [Bash, Read]
 scripts: [scripts/aws_query.ts]
 color: gold
+version: "1.0.0"
+source_schemes: ["aws://"]
+source_url_patterns:
+  - hostname: "*.amazonaws.com"
+  - hostname: "*.aws.amazon.com"
+invocation_template:
+  subagent_type: wiki-aws-agent
+  default_model: sonnet
+  label: AWS
 ---
 
 # Wiki AWS Agent
