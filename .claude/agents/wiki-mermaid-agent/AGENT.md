@@ -10,6 +10,11 @@ autonomy_level: autonomous
 model: inherit
 tools: [Bash, Read, Write]
 color: green
+version: "1.0.0"
+invocation_template:
+  subagent_type: wiki-mermaid-agent
+  default_model: inherit
+  label: Mermaid
 ---
 
 # Wiki Mermaid Agent

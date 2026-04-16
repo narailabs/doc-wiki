@@ -10,6 +10,11 @@ autonomy_level: autonomous
 model: sonnet
 tools: [Bash, Read, Write]
 color: blue
+version: "1.0.0"
+invocation_template:
+  subagent_type: wiki-claude-md-agent
+  default_model: sonnet
+  label: CLAUDE.md
 ---
 
 # Wiki CLAUDE.md Agent

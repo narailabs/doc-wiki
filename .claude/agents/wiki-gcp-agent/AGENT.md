@@ -11,6 +11,15 @@ model: sonnet
 tools: [Bash, Read]
 scripts: [scripts/gcp_query.ts]
 color: purple
+version: "1.0.0"
+source_schemes: ["gcp://"]
+source_url_patterns:
+  - hostname: "*.cloud.google.com"
+  - hostname: "*.googleapis.com"
+invocation_template:
+  subagent_type: wiki-gcp-agent
+  default_model: sonnet
+  label: GCP
 ---
 
 # Wiki GCP Agent

@@ -71,6 +71,7 @@ Standalone helpers also live at `.claude/agents/lib/` (flat files, no subdirecto
 
 | Helper | Purpose |
 |--------|---------|
+| `source_registry.ts` | Agent discovery, registration, and source-to-agent matching |
 | `_agent_cli.ts` | `parseAgentArgs(argv, { flags })` — shared CLI parser for source agents |
 | `parse_config.ts` | Read and validate `wiki.config.yaml` (shared with skills) |
 | `security_check.ts` | URL validation, path containment, input sanitization (shared with skills) |
@@ -149,3 +150,5 @@ Load-bearing invariants implementers must respect:
 - **`getConnection(envName)` is async.** Callers must `await` it. `release` and `shutdown` use identity-based lookup on the awaited handle.
 - **Source agents share CLI parsing.** Use `parseAgentArgs` from `.claude/agents/lib/_agent_cli.ts` rather than hand-rolling. Template: `const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] })`.
 - **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
+- **Source-to-agent matching is registry-driven.** `lookupBySource()` from `.claude/agents/lib/source_registry.ts` replaces all hardcoded agent dispatch. Agents declare their URI schemes and URL patterns in AGENT.md frontmatter (`source_schemes`, `source_url_patterns`). Custom agents are registered via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new agent. The `BUILTIN_DEFAULTS` map provides backwards compatibility for agents that lack the new frontmatter fields.
+- **AGENT.md frontmatter includes registry fields.** Every agent declares `version`, `source_schemes` (if applicable), `source_url_patterns`, and `invocation_template` with `subagent_type`, `default_model`, and `label`.

@@ -11,6 +11,15 @@ model: haiku
 tools: [Bash, Read]
 scripts: [scripts/github_fetch.ts]
 color: green
+version: "1.0.0"
+source_schemes: ["gh://", "github://"]
+source_url_patterns:
+  - hostname: "github.com"
+  - hostname: "*.github.com"
+invocation_template:
+  subagent_type: wiki-github-agent
+  default_model: haiku
+  label: GitHub
 ---
 
 # Wiki GitHub Agent

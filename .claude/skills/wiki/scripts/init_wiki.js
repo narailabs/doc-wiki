@@ -69,7 +69,11 @@ function buildConfig(domain, name) {
         ecosystem: {
             agents: {
                 source: {}, // populated by /wiki-onboard
-                custom: [], // custom source agents
+                custom: [], // custom source agents — each entry is an AgentManifest:
+                // - name: my-agent
+                //   source_schemes: ["myscheme://"]
+                //   source_url_patterns: [{hostname: "kb.company.com"}]
+                //   invocation_template: {subagent_type: my-agent, default_model: haiku, label: "My Agent"}
                 model_overrides: {}, // per-agent model overrides
             },
             credentials: {

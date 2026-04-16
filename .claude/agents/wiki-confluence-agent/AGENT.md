@@ -11,6 +11,17 @@ model: haiku
 tools: [Bash, Read]
 scripts: [scripts/confluence_fetch.ts]
 color: blue
+version: "1.0.0"
+source_schemes: ["confluence://"]
+source_url_patterns:
+  - hostname: "*.atlassian.net"
+    path_prefix: "/wiki/"
+  - hostname: "*.atlassian.net"
+    path_contains: "/spaces/"
+invocation_template:
+  subagent_type: wiki-confluence-agent
+  default_model: haiku
+  label: Confluence
 ---
 
 # Wiki Confluence Agent
