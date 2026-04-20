@@ -67,16 +67,20 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 
 ORM profile definitions ship as YAML files under `.claude/agents/lib/wiki_orm/profiles/*.yaml` and are loaded by the TypeScript mapper at runtime.
 
-Standalone helpers also live at `.claude/agents/lib/` (flat files, no subdirectory):
+Standalone helpers still live at `.claude/agents/lib/` (flat files, no subdirectory):
 
 | Helper | Purpose |
 |--------|---------|
 | `source_registry.ts` | Agent discovery, registration, and source-to-agent matching |
-| `_agent_cli.ts` | `parseAgentArgs(argv, { flags })` — shared CLI parser for source agents |
 | `parse_config.ts` | Read and validate `wiki.config.yaml` (shared with skills) |
-| `security_check.ts` | URL validation, path containment, input sanitization (shared with skills) |
-| `fetch_helper.ts` | HTTP fetch wrapper with timeout, size cap, retry |
 | `mermaid_format.ts` | Mermaid diagram formatting utilities |
+
+Vendor-neutral connector helpers now ship as npm packages and are consumed directly:
+
+| Package | Purpose |
+|---------|---------|
+| `@narai/connector-toolkit` | `parseAgentArgs`, `fetchWithCaps`, `validateUrl`, `checkPathContainment`, `sanitizeLabel` — the CLI, fetch, and security primitives shared by every source agent. Lives at `~/src/connector-toolkit/` during dev. |
+| `@narai/credential-providers` | Env-var, keychain, file, and cloud-secret-manager providers; `resolveSecret`, `registerProvider`, `CredentialResolver`. Published to npm; installed as a regular dep. |
 
 ### Reference docs (5) — `.claude/skills/wiki/references/`
 
@@ -148,7 +152,8 @@ Load-bearing invariants implementers must respect:
 
 - **Database drivers implement `executeReadAsync(conn, sql, params, maxRows, timeoutMs): Promise<ExecuteReadResult>`.** There is no sync `execute` path. Sync drivers (e.g. SQLite's `executeRead`) are adapted at the call site via `adaptDriver` in `.claude/agents/wiki-db-agent/scripts/db_query.ts`.
 - **`getConnection(envName)` is async.** Callers must `await` it. `release` and `shutdown` use identity-based lookup on the awaited handle.
-- **Source agents share CLI parsing.** Use `parseAgentArgs` from `.claude/agents/lib/_agent_cli.ts` rather than hand-rolling. Template: `const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] })`.
+- **Source agents share CLI parsing.** Use `parseAgentArgs` from `@narai/connector-toolkit` rather than hand-rolling. Template: `const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] })`.
+- **Credential resolution uses the published package.** Import `resolveSecret`, `registerProvider`, and provider classes from `@narai/credential-providers` (not from a local path). The toolkit does not re-export credentials — consumers depend on that package directly so its version stays under their control.
 - **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
 - **Source-to-agent matching is registry-driven.** `lookupBySource()` from `.claude/agents/lib/source_registry.ts` replaces all hardcoded agent dispatch. Agents declare their URI schemes and URL patterns in AGENT.md frontmatter (`source_schemes`, `source_url_patterns`). Custom agents are registered via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new agent. The `BUILTIN_DEFAULTS` map provides backwards compatibility for agents that lack the new frontmatter fields.
 - **AGENT.md frontmatter includes registry fields.** Every agent declares `version`, `source_schemes` (if applicable), `source_url_patterns`, and `invocation_template` with `subagent_type`, `default_model`, and `label`.

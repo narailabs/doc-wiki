@@ -19,8 +19,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { FileProvider } from "../credential_providers/file.js";
-import { EnvVarProvider } from "../credential_providers/env_var.js";
+import { FileProvider, EnvVarProvider } from "@narai/credential-providers";
 
 /**
  * Default credentials file location — `~/.config/wiki_db/credentials.json`.

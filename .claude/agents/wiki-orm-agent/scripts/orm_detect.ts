@@ -28,6 +28,7 @@ import {
   type ExtractedEntity,
 } from "../../lib/wiki_orm/extractor.js";
 import { generateMappingMarkdown } from "../../lib/wiki_orm/output.js";
+import { createDbProvider } from "../../lib/wiki_orm/wiki_db_provider.js";
 
 const DEFAULT_IGNORE: ReadonlySet<string> = new Set([
   "node_modules",
@@ -319,7 +320,8 @@ export async function main(
   // (default). Disabling the flag skips validation even with --env.
   let xvalid: CrossValidationReport | undefined;
   if (args.env && readCrossValidateFlag(args.codebasePath)) {
-    xvalid = await crossValidate(entities, args.env);
+    const db = createDbProvider();
+    xvalid = await crossValidate(entities, args.env, null, db);
   }
 
   const markdown = generateMappingMarkdown(

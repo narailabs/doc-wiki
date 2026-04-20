@@ -1,4 +1,3 @@
-import { getConnection, releaseConnection, SchemaManager, } from "../wiki_db/index.js";
 /** Construct an entity with Python-style defaults. */
 export function makeExtractedEntity(init) {
     return {
@@ -316,38 +315,26 @@ function tableKey(schema, name) {
  * `error` field is set and whose arrays are empty (except `orphan_entities`
  * which is all of `entities`, because nothing validated).
  */
-export async function crossValidate(entities, envName, tableFilter = null) {
+export async function crossValidate(entities, envName, tableFilter, dbProvider) {
     const report = {
         matched: [],
         column_mismatches: [],
         unmapped_tables: [],
         orphan_entities: [],
     };
-    let conn = null;
+    if (!dbProvider) {
+        report.error = "Database provider not available for cross-validation";
+        report.orphan_entities = entities.map((ent) => ent.class_name);
+        return report;
+    }
     let tables;
     try {
-        conn = await getConnection(envName);
-        const mgr = new SchemaManager(conn.driver);
-        tables = await mgr.getSchema(conn.native, envName, "", tableFilter);
+        tables = await dbProvider.getSchema(envName, tableFilter);
     }
     catch (e) {
         report.error = e.message;
         report.orphan_entities = entities.map((ent) => ent.class_name);
-        if (conn) {
-            try {
-                releaseConnection(envName, conn);
-            }
-            catch { /* best-effort */ }
-        }
         return report;
-    }
-    finally {
-        if (conn) {
-            try {
-                releaseConnection(envName, conn);
-            }
-            catch { /* best-effort */ }
-        }
     }
     // Build lookup structures from the DB schema.
     const dbTablesByKey = new Map();

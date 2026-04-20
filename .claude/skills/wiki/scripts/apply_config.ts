@@ -13,7 +13,7 @@ import {
   KeychainProvider,
   CloudSecretsProvider,
   type CloudSubProvider,
-} from "../../../agents/lib/credential_providers/index.js";
+} from "@narai/credential-providers";
 
 /** Shape of the top-level `credentials` block emitted by init_wiki. */
 export interface CredentialsConfig {

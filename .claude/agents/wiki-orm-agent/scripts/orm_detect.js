@@ -18,6 +18,7 @@ import * as yaml from "js-yaml";
 import { loadAllProfiles, detectOrm, } from "../../lib/wiki_orm/profiles.js";
 import { crossValidate, extractEntities, } from "../../lib/wiki_orm/extractor.js";
 import { generateMappingMarkdown } from "../../lib/wiki_orm/output.js";
+import { createDbProvider } from "../../lib/wiki_orm/wiki_db_provider.js";
 const DEFAULT_IGNORE = new Set([
     "node_modules",
     ".git",
@@ -278,7 +279,8 @@ export async function main(argv = process.argv.slice(2)) {
     // (default). Disabling the flag skips validation even with --env.
     let xvalid;
     if (args.env && readCrossValidateFlag(args.codebasePath)) {
-        xvalid = await crossValidate(entities, args.env);
+        const db = createDbProvider();
+        xvalid = await crossValidate(entities, args.env, null, db);
     }
     const markdown = generateMappingMarkdown(entities, projectName, chosenProfile.name, undefined, undefined, xvalid);
     let mappingFile = null;

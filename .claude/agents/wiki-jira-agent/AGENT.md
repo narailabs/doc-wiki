@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/jira_fetch.ts]
+scripts: [scripts/jira_wrapper.ts]
 color: cyan
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["jira://"]
 source_url_patterns:
   - hostname: "*.atlassian.net"
@@ -124,3 +124,16 @@ On error:
 - **ALWAYS respect max_results cap** (default 50, max 1000)
 - **ALWAYS include issue key, summary, and status** in search results
 - **ALWAYS sanitize labels** — strip special characters
+
+## Architecture
+
+This is a **wrapper agent**. All Jira API work is delegated to
+`@narai/jira-agent-connector`. This wrapper only adds a Mermaid
+issue-status tree to `jql_search` responses — wiki-specific decoration.
+
+Resolution order:
+
+1. `JIRA_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/jira-agent-plugin*/node_modules/@narai/jira-agent-connector/dist/cli.js`
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/jira-agent-connector/dist/cli.js`
+4. `~/src/connectors/jira-agent-connector/dist/cli.js` (local dev fallback)

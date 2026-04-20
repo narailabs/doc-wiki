@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/notion_fetch.ts]
+scripts: [scripts/notion_wrapper.ts]
 color: pink
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["notion://"]
 source_url_patterns:
   - hostname: "notion.so"
@@ -140,3 +140,22 @@ On error:
 - **ALWAYS respect max_results cap** (default 25, max 100)
 - **ALWAYS convert Notion blocks to markdown** for page content
 - **ALWAYS use Notion API version 2022-06-28** or later
+
+## Architecture
+
+This is a **wrapper agent**. All Notion API work (auth, HTTP method
+whitelist, retries, rate limiting, response normalization) is delegated
+to the `@narai/notion-agent-connector` npm package. This wrapper only
+adds a Mermaid hierarchy diagram to structural responses — that
+wiki-specific decoration stays here so the standalone connector remains
+pure.
+
+The wrapper locates the notion-agent CLI in this order:
+
+1. `NOTION_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/notion-agent-plugin*/node_modules/@narai/notion-agent-connector/dist/cli.js` — Layer 2 plugin install
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/notion-agent-connector/dist/cli.js` — when doc-wiki itself is plugin-installed
+4. `~/src/connectors/notion-agent-connector/dist/cli.js` — local dev fallback
+
+Mermaid is attached for structural actions (`search`, `query_database`) with
+`status === "success"` and non-empty results.

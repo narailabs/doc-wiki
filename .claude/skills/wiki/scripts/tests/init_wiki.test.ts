@@ -435,7 +435,7 @@ describe("init_wiki — credential registry wiring", () => {
 
   it("populates the credential_providers registry from the emitted config", async () => {
     const { clearProviders, listProviders } = await import(
-      "../../../../agents/lib/credential_providers/index.js"
+      "@narai/credential-providers"
     );
     clearProviders();
 
@@ -450,7 +450,7 @@ describe("init_wiki — credential registry wiring", () => {
 
   it("honors ecosystem.credentials when the top-level block is absent", async () => {
     const { clearProviders, listProviders } = await import(
-      "../../../../agents/lib/credential_providers/index.js"
+      "@narai/credential-providers"
     );
     const wiki = tmpWiki(tmpPath);
     initWiki(wiki);
@@ -473,7 +473,7 @@ describe("init_wiki — credential registry wiring", () => {
 
   it("emits a stderr warning when the config is malformed", async () => {
     const { clearProviders } = await import(
-      "../../../../agents/lib/credential_providers/index.js"
+      "@narai/credential-providers"
     );
     const wiki = tmpWiki(tmpPath);
     initWiki(wiki);

@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/confluence_fetch.ts]
+scripts: [scripts/confluence_wrapper.ts]
 color: blue
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["confluence://"]
 source_url_patterns:
   - hostname: "*.atlassian.net"
@@ -127,3 +127,22 @@ On error:
 - **ALWAYS respect max_results cap** (default 25, max 500)
 - **ALWAYS convert storage format to markdown** for page body content
 - **ALWAYS include page title, space, and version** in results
+
+## Architecture
+
+This is a **wrapper agent**. All Confluence API work (Basic-auth, method
+whitelist, retries, storage→markdown conversion, response normalization)
+is delegated to the `@narai/confluence-agent-connector` npm package.
+This wrapper only adds a Mermaid page-hierarchy diagram to structural
+responses — that wiki-specific decoration stays here so the standalone
+connector remains pure.
+
+The wrapper locates the confluence-agent CLI in this order:
+
+1. `CONFLUENCE_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/confluence-agent-plugin*/node_modules/@narai/confluence-agent-connector/dist/cli.js` — Layer 2 plugin install
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/confluence-agent-connector/dist/cli.js` — when doc-wiki itself is plugin-installed
+4. `~/src/connectors/confluence-agent-connector/dist/cli.js` — local dev fallback
+
+Mermaid is attached for structural actions (`cql_search`, `get_page`) with
+`status === "success"`.

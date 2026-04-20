@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: haiku
 tools: [Bash, Read]
-scripts: [scripts/github_fetch.ts]
+scripts: [scripts/github_wrapper.ts]
 color: green
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["gh://", "github://"]
 source_url_patterns:
   - hostname: "github.com"
@@ -152,3 +152,17 @@ On error:
 - **ALWAYS respect max_results cap** (default 30, max 1000)
 - **ALWAYS check file size** before returning file content (cap at 1MB)
 - **ALWAYS sanitize search queries** — strip injection patterns
+
+## Architecture
+
+This is a **wrapper agent**. All GitHub API work is delegated to
+`@narai/github-agent-connector`. This wrapper only adds a Mermaid
+dependency graph to `get_file` envelopes on recognized manifest files
+(`package.json`, `requirements.txt`) — wiki-specific decoration.
+
+Resolution order:
+
+1. `GITHUB_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/github-agent-plugin*/node_modules/@narai/github-agent-connector/dist/cli.js`
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/github-agent-connector/dist/cli.js`
+4. `~/src/connectors/github-agent-connector/dist/cli.js` (local dev fallback)
