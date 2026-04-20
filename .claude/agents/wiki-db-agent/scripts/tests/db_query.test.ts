@@ -259,7 +259,8 @@ describe("db_query CLI", () => {
     if (!fs.existsSync(CLI)) return; // only runs after npm run build
     const { stdout, status } = runCli(["--help"]);
     expect(status).toBe(0);
-    expect(stdout).toContain("db_query");
+    // Help passes through from db-agent-connector's CLI.
     expect(stdout).toContain("--sqlite");
+    expect(stdout).toContain("--env");
   });
 });

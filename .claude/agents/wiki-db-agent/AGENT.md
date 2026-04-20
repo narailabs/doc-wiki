@@ -101,9 +101,20 @@ On DML (never executed):
 - **ALWAYS respect timeout and max_rows caps**
 - **ALWAYS log to audit trail when enabled**
 
-## CLI
+## Architecture
 
-The `scripts/db_query.js` shim exposes two connection modes:
+This is a **wrapper agent**. All database work (policy gate, query
+execution, schema introspection, drivers) is delegated to the
+`db-agent-connector` plugin. This wrapper only adds a Mermaid ER diagram
+to schema results — that wiki-specific formatting stays here so the
+standalone plugin remains pure.
+
+The wrapper locates the db-agent CLI in this order:
+1. `DB_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `db-agent` on `PATH` (installed plugin exposes this via `bin/`)
+3. `~/src/connectors/db-agent-connector/src/cli.js` (local dev fallback)
+
+## CLI
 
 ```bash
 # Named environment from wiki.config.yaml (ecosystem.database.environments.<name>)
@@ -114,6 +125,6 @@ node scripts/db_query.js --env dev --config ./wiki.config.yaml --action schema
 node scripts/db_query.js --sqlite ./test.db --sql "SELECT name FROM users WHERE id = 1"
 ```
 
-`--env` resolves the env's `driver`, `approval_mode`, and `grant_duration_hours`
-via `lib/wiki_db/connection.ts`. All six shipped drivers (postgresql, mysql,
-sqlite, sqlserver, mongodb, dynamodb) are wired automatically.
+Flags pass through verbatim to db-agent-connector's CLI. `--action schema`
+results are augmented with a `mermaid` ER-diagram field by this wrapper
+before being written to stdout.

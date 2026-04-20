@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: sonnet
 tools: [Bash, Read]
-scripts: [scripts/aws_query.ts]
+scripts: [scripts/aws_wrapper.ts]
 color: gold
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["aws://"]
 source_url_patterns:
   - hostname: "*.amazonaws.com"
@@ -138,3 +138,31 @@ On error:
 - **ALWAYS respect timeout and max_results caps**
 - **ALWAYS redact sensitive data** in responses (ARNs with account IDs are OK, secrets are not)
 - **ALWAYS use read-only API calls** — never call Put*, Create*, Delete*, Update* APIs
+
+## Architecture
+
+This is a **wrapper agent**. All AWS SDK work (action validation, SDK
+dispatch, response normalization, error mapping) is delegated to the
+`@narai/aws-agent-connector` npm package. This wrapper only adds a
+Mermaid infrastructure graph to structural responses — that wiki-specific
+decoration stays here so the standalone connector remains pure.
+
+The wrapper locates the aws-agent CLI in this order:
+
+1. `AWS_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/aws-agent-plugin*/node_modules/@narai/aws-agent-connector/dist/cli.js` — the Layer 2 plugin install
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/aws-agent-connector/dist/cli.js` — when doc-wiki itself is plugin-installed and its own `SessionStart` hook has populated `${CLAUDE_PLUGIN_DATA}`
+4. `~/src/connectors/aws-agent-connector/dist/cli.js` — local dev fallback
+
+Mermaid is attached for structural actions (`list_functions`, `describe_db`,
+`list_buckets`) with `status === "success"`. `get_metrics` returns pure
+time-series data — no diagram is attached (absence = "no diagram", per the
+Agent Output Contract).
+
+## CLI
+
+```bash
+# Flags pass through verbatim to the underlying connector.
+node scripts/aws_wrapper.js --action list_functions --params '{"region":"us-east-1","prefix":"acme-"}'
+node scripts/aws_wrapper.js --action describe_db --params '{"region":"us-east-1","db_identifier":"acme-rds"}'
+```

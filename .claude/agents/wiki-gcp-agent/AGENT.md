@@ -9,9 +9,9 @@ type: source
 autonomy_level: supervised
 model: sonnet
 tools: [Bash, Read]
-scripts: [scripts/gcp_query.ts]
+scripts: [scripts/gcp_wrapper.ts]
 color: purple
-version: "1.0.0"
+version: "1.0.1"
 source_schemes: ["gcp://"]
 source_url_patterns:
   - hostname: "*.cloud.google.com"
@@ -136,3 +136,22 @@ On error:
 - **ALWAYS respect timeout and max_results caps**
 - **ALWAYS sanitize log filters** — prevent injection in filter strings
 - **ALWAYS redact sensitive data** in log entries (passwords, tokens, PII)
+
+## Architecture
+
+This is a **wrapper agent**. All GCP work (binary whitelisting, command
+validation, gcloud/bq dispatch, response normalization) is delegated to
+the `@narai/gcp-agent-connector` npm package. This wrapper only adds a
+Mermaid project-topology graph to structural responses — that wiki-specific
+decoration stays here so the standalone connector remains pure.
+
+The wrapper locates the gcp-agent CLI in this order:
+
+1. `GCP_AGENT_CLI` env var (absolute path to `cli.js`)
+2. `~/.claude/plugins/cache/gcp-agent-plugin*/node_modules/@narai/gcp-agent-connector/dist/cli.js` — Layer 2 plugin install
+3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/gcp-agent-connector/dist/cli.js` — when doc-wiki itself is plugin-installed
+4. `~/src/connectors/gcp-agent-connector/dist/cli.js` — local dev fallback
+
+Mermaid is attached for structural actions (`list_services`, `describe_db`,
+`list_topics`) with `status === "success"`. `query_logs` returns
+time-series log entries — no diagram is attached.

@@ -19,11 +19,8 @@ import {
 } from "../extractor.js";
 import { loadProfile, type OrmProfile } from "../profiles.js";
 import { PROFILES_DIR, readFixtureDir } from "./fixtures.js";
-import {
-  clearEnvironments,
-  registerEnvironment,
-  SQLiteDriver,
-} from "../../wiki_db/index.js";
+import type { DbProvider, DbTable } from "../db_provider.js";
+import Database from "better-sqlite3";
 
 function loadShippedProfile(basename: string): OrmProfile {
   return loadProfile(path.join(PROFILES_DIR, basename));
@@ -291,36 +288,68 @@ describe("TestExtractEmpty", () => {
 // ======================================================================
 
 function seedSqliteFile(dbPath: string, sql: string): void {
-  // Use a fresh SQLiteDriver connection to set up the file-backed DB.
-  const driver = new SQLiteDriver();
-  const conn = driver.connect({ database: dbPath });
-  conn.exec(sql);
-  driver.close(conn);
+  const db = new Database(dbPath);
+  db.exec(sql);
+  db.close();
+}
+
+/** Create an inline DbProvider that reads schema directly from a SQLite file. */
+function createTestDbProvider(dbPath: string): DbProvider {
+  return {
+    async getSchema(_envName, tableFilter = null) {
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const tableRows = db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+          )
+          .all() as Array<{ name: string }>;
+        const tables: DbTable[] = [];
+        for (const row of tableRows) {
+          if (tableFilter && !row.name.includes(tableFilter)) continue;
+          const cols = db
+            .prepare(`PRAGMA table_info("${row.name}")`)
+            .all() as Array<{
+            name: string;
+            type: string;
+            notnull: number;
+            pk: number;
+            dflt_value: string | null;
+          }>;
+          tables.push({
+            name: row.name,
+            schema: "",
+            columns: cols.map((c) => ({
+              name: c.name,
+              data_type: c.type,
+              nullable: c.notnull === 0,
+              is_primary_key: c.pk > 0,
+              default: c.dflt_value,
+            })),
+          });
+        }
+        return tables;
+      } finally {
+        db.close();
+      }
+    },
+  };
 }
 
 describe("crossValidate (G2)", () => {
   let tmpDir: string;
   let dbPath: string;
   let envName: string;
+  let db: DbProvider;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "crossvalidate-"));
     dbPath = path.join(tmpDir, "db.sqlite");
     envName = `orm-test-${Math.random().toString(36).slice(2, 8)}`;
-
-    // Register a sqlite driver factory keyed by the env's `driver` field.
-    // wiki_db already registers a default "sqlite" factory at import time;
-    // we don't need to re-register here — just register the env itself.
-    registerEnvironment(envName, {
-      host: dbPath,
-      port: 0,
-      database: dbPath,
-      driver: "sqlite",
-    });
+    db = createTestDbProvider(dbPath);
   });
 
   afterEach(() => {
-    clearEnvironments();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
@@ -352,7 +381,7 @@ describe("crossValidate (G2)", () => {
         ],
       }),
     ];
-    const report = await crossValidate(entities, envName);
+    const report = await crossValidate(entities, envName, null, db);
     expect(report.error).toBeUndefined();
     expect(report.matched.map((m) => m.entity).sort()).toEqual(
       ["Order", "User"],
@@ -378,7 +407,7 @@ describe("crossValidate (G2)", () => {
         ],
       }),
     ];
-    const report = await crossValidate(entities, envName);
+    const report = await crossValidate(entities, envName, null, db);
     const mismatch = report.column_mismatches.find(
       (m) => m.entity_field === "phantom_field",
     );
@@ -401,7 +430,7 @@ describe("crossValidate (G2)", () => {
         ],
       }),
     ];
-    const report = await crossValidate(entities, envName);
+    const report = await crossValidate(entities, envName, null, db);
     const mismatch = report.column_mismatches.find(
       (m) => m.entity_field === "extra_col",
     );
@@ -427,17 +456,19 @@ describe("crossValidate (G2)", () => {
         columns: [],
       }),
     ];
-    const report = await crossValidate(entities, envName);
+    const report = await crossValidate(entities, envName, null, db);
     expect(report.unmapped_tables).toEqual(["audit_log"]);
     expect(report.orphan_entities).toEqual(["GhostEntity"]);
   });
 
-  it("never throws on a bad env — surfaces error in report", async () => {
+  it("never throws when no DbProvider is supplied", async () => {
     const entities: ExtractedEntity[] = [
       makeExtractedEntity({ class_name: "X", table_name: "x" }),
     ];
-    const report = await crossValidate(entities, "nonexistent-env");
-    expect(report.error).toBeDefined();
+    const report = await crossValidate(entities, "any-env");
+    expect(report.error).toBe(
+      "Database provider not available for cross-validation",
+    );
     expect(report.orphan_entities).toEqual(["X"]);
     expect(report.matched).toEqual([]);
   });

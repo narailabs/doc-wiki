@@ -12,12 +12,7 @@
  *   - relationship patterns → no flags (re.search truthiness)
  */
 import type { OrmProfile } from "./profiles.js";
-import {
-  getConnection,
-  releaseConnection,
-  SchemaManager,
-  type Table,
-} from "../wiki_db/index.js";
+import type { DbProvider, DbTable } from "./db_provider.js";
 
 /** One column on an extracted entity. */
 export interface ExtractedColumn {
@@ -440,7 +435,8 @@ function tableKey(schema: string, name: string): string {
 export async function crossValidate(
   entities: ExtractedEntity[],
   envName: string,
-  tableFilter: string | null = null,
+  tableFilter?: string | null,
+  dbProvider?: DbProvider,
 ): Promise<CrossValidationReport> {
   const report: CrossValidationReport = {
     matched: [],
@@ -449,29 +445,25 @@ export async function crossValidate(
     orphan_entities: [],
   };
 
-  let conn: Awaited<ReturnType<typeof getConnection>> | null = null;
-  let tables: Table[];
+  if (!dbProvider) {
+    report.error = "Database provider not available for cross-validation";
+    report.orphan_entities = entities.map((ent) => ent.class_name);
+    return report;
+  }
+
+  let tables: DbTable[];
   try {
-    conn = await getConnection(envName);
-    const mgr = new SchemaManager(conn.driver);
-    tables = await mgr.getSchema(conn.native, envName, "", tableFilter);
+    tables = await dbProvider.getSchema(envName, tableFilter);
   } catch (e) {
     report.error = (e as Error).message;
     report.orphan_entities = entities.map((ent) => ent.class_name);
-    if (conn) {
-      try { releaseConnection(envName, conn); } catch { /* best-effort */ }
-    }
     return report;
-  } finally {
-    if (conn) {
-      try { releaseConnection(envName, conn); } catch { /* best-effort */ }
-    }
   }
 
   // Build lookup structures from the DB schema.
-  const dbTablesByKey = new Map<string, Table>();
+  const dbTablesByKey = new Map<string, DbTable>();
   for (const t of tables) dbTablesByKey.set(tableKey(t.schema, t.name), t);
-  const dbTablesByName = new Map<string, Table>();
+  const dbTablesByName = new Map<string, DbTable>();
   for (const t of tables) {
     if (!dbTablesByName.has(t.name)) dbTablesByName.set(t.name, t);
   }

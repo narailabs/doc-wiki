@@ -14,7 +14,7 @@ import {
   clearProviders,
   listProviders,
   getProvider,
-} from "../../../../agents/lib/credential_providers/index.js";
+} from "@narai/credential-providers";
 
 describe("applyCredentialsConfig", () => {
   beforeEach(() => {
