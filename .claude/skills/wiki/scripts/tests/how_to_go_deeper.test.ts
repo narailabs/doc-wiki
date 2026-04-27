@@ -1,5 +1,10 @@
 /**
  * Tests for how_to_go_deeper.ts — the "How to Go Deeper" section builder.
+ *
+ * Hint format is uniform: `/wiki-ingest "<source>"` for any matched
+ * source. The wiki ingest pipeline routes to the right connector via
+ * `gather()`. Service-specific CLI hints (e.g. `wiki agent jira`) are
+ * gone — they were a vestige of the per-service wrappers.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -24,19 +29,21 @@ describe("buildHowToGoDeeper", () => {
     expect(buildHowToGoDeeper(sources)).toBe("");
   });
 
-  it("renders a jira:// scheme as a wiki agent jira command", () => {
+  it("renders a jira:// scheme as a /wiki-ingest hint", () => {
     const out = buildHowToGoDeeper(["jira://AUTH-123"]);
     expect(out).toContain("## How to Go Deeper");
     expect(out).toContain("**Jira:**");
-    expect(out).toContain("AUTH-123");
+    expect(out).toContain("/wiki-ingest");
+    expect(out).toContain("jira://AUTH-123");
   });
 
-  it("renders a Jira atlassian URL with the key extracted from the path", () => {
+  it("renders a Jira atlassian URL", () => {
     const out = buildHowToGoDeeper([
       "https://company.atlassian.net/browse/AUTH-456",
     ]);
     expect(out).toContain("**Jira:**");
-    expect(out).toContain("AUTH-456");
+    expect(out).toContain("/wiki-ingest");
+    expect(out).toContain("https://company.atlassian.net/browse/AUTH-456");
   });
 
   it("renders a Confluence URL", () => {
@@ -44,34 +51,39 @@ describe("buildHowToGoDeeper", () => {
       "https://company.atlassian.net/wiki/spaces/ARCH/pages/123",
     ]);
     expect(out).toContain("**Confluence:**");
+    expect(out).toContain("/wiki-ingest");
   });
 
   it("renders a GitHub URL", () => {
     const out = buildHowToGoDeeper(["https://github.com/org/repo/pull/42"]);
     expect(out).toContain("**GitHub:**");
-    expect(out).toContain("org/repo/pull/42");
+    expect(out).toContain("/wiki-ingest");
+    expect(out).toContain("https://github.com/org/repo/pull/42");
   });
 
   it("renders a Notion URL", () => {
     const out = buildHowToGoDeeper(["https://notion.so/page-abc123"]);
     expect(out).toContain("**Notion:**");
+    expect(out).toContain("/wiki-ingest");
   });
 
   it("renders a GCP URL", () => {
     const out = buildHowToGoDeeper(["https://console.cloud.google.com/run"]);
     expect(out).toContain("**GCP:**");
+    expect(out).toContain("/wiki-ingest");
   });
 
   it("renders an AWS URL", () => {
     const out = buildHowToGoDeeper(["https://console.aws.amazon.com/lambda"]);
     expect(out).toContain("**AWS:**");
+    expect(out).toContain("/wiki-ingest");
   });
 
-  it("renders a db:// scheme with env and table", () => {
+  it("renders a db:// scheme as a /wiki-ingest hint", () => {
     const out = buildHowToGoDeeper(["db://dev/users"]);
     expect(out).toContain("**Database:**");
-    expect(out).toContain("wiki agent db-query dev");
-    expect(out).toContain("DESCRIBE users");
+    expect(out).toContain("/wiki-ingest");
+    expect(out).toContain("db://dev/users");
   });
 
   it("renders a code-file reference with line range", () => {
@@ -96,23 +108,26 @@ describe("buildHowToGoDeeper", () => {
     expect(firstBullets).toBe(2);
   });
 
-  it("falls back to a disabled-agent hint when enabledAgents excludes the provider", () => {
+  it("falls back to a disabled-connector hint when enabledAgents excludes the provider", () => {
     const enabled = new Set<AgentId>(["github"]);
     const out = buildHowToGoDeeper(["jira://AUTH-123"], {
       enabledAgents: enabled,
     });
-    expect(out).toContain("enable the `wiki-jira-agent`");
-    expect(out).not.toContain('wiki agent jira --query');
+    expect(out).toContain("enable the `jira` connector");
+    expect(out).toContain(".connectors/config.yaml");
+    // No /wiki-ingest hint when the connector is disabled
+    expect(out).not.toContain("`/wiki-ingest \"jira://AUTH-123\"`");
   });
 
-  it("keeps enabled-agent bullets even when other agents are disabled", () => {
+  it("keeps enabled-connector bullets even when others are disabled", () => {
     const enabled = new Set<AgentId>(["github"]);
     const out = buildHowToGoDeeper(
       ["jira://AUTH-1", "gh://org/repo/issues/42"],
       { enabledAgents: enabled },
     );
-    expect(out).toContain("enable the `wiki-jira-agent`");
-    expect(out).toContain("wiki agent github --path");
+    expect(out).toContain("enable the `jira` connector");
+    expect(out).toContain("/wiki-ingest");
+    expect(out).toContain("gh://org/repo/issues/42");
   });
 
   it("mixes Jira + local-code + raw/ correctly — raw/ is elided", () => {
@@ -192,7 +207,7 @@ describe("how_to_go_deeper CLI", () => {
       "github",
     ]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("enable the `wiki-jira-agent`");
+    expect(result.stdout).toContain("enable the `jira` connector");
   });
 
   it("exits 2 when --sources is missing", () => {
