@@ -50,7 +50,12 @@
     "@aws-sdk/client-lambda": "^3.1030.0",
     "@aws-sdk/client-rds": "^3.1030.0",
     "@aws-sdk/client-s3": "^3.1030.0",
-    "@narai/aws-agent-connector": "file:../aws-agent-connector",
-    "@narai/gcp-agent-connector": "file:../gcp-agent-connector"
+    "@narai/aws-agent-connector": "file:../connectors/aws-agent-connector",
+    "@narai/confluence-agent-connector": "file:../connectors/confluence-agent-connector",
+    "@narai/db-agent-connector": "file:../connectors/db-agent-connector",
+    "@narai/gcp-agent-connector": "file:../connectors/gcp-agent-connector",
+    "@narai/github-agent-connector": "file:../connectors/github-agent-connector",
+    "@narai/jira-agent-connector": "file:../connectors/jira-agent-connector",
+    "@narai/notion-agent-connector": "file:../connectors/notion-agent-connector"
   }
 }
