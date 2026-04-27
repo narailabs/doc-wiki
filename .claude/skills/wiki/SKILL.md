@@ -48,7 +48,7 @@ After running the script, create initial files:
 
 ### /wiki-onboard — Interactive onboarding Q&A
 
-Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.ts` for config I/O and dispatches `wiki-orm-agent` and `wiki-db-agent` for detection.
+Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.ts` for config I/O and dispatches `wiki-orm-agent` for ORM/database detection.
 
 **Phase 1 — Auto-detect language/framework:**
 
@@ -82,13 +82,13 @@ Present detected ORM profile and entity count. Ask user to confirm.
 
 **Phase 3 — Detect database:**
 
-Dispatch `wiki-db-agent` (via Agent tool) to detect database engine from:
+Detect the database engine yourself by reading these files (no subagent dispatch needed):
 
 - Docker Compose services (`docker-compose.yml`, `compose.yaml`): image names like `postgres:`, `mysql:`, `mongo:`
 - Connection strings in config files (`.env`, `application.properties`, `database.yml`, `settings.py`)
 - ORM config (e.g., `DATABASES` dict in Django, `spring.datasource.url` in Spring Boot)
 
-Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
+When live introspection is needed (verify schema matches code), run `gather({ prompt: "describe schema for <db>", consumer: "doc-wiki" })` — `@narai/db-agent-connector` handles it via the policy gate. Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
 
 **Phase 4 — External services Q&A:**
 
@@ -158,31 +158,30 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 4. **Security check:** `node {skill_path}/scripts/security_check.js --url <url>` (for URL sources)
 5. **Read the source fully** — no skipping sections
 6. **Surface 3-5 takeaways + entity list** — your reasoning
-7. **Cross-reference active agents** — consult the agent registry to determine which agents to dispatch:
+7. **Gather context via `@narai/connector-hub`** — a single library call replaces per-agent dispatch:
 
-   ```bash
-   node {skill_path}/../agents/lib/source_registry.js list --agents-dir {skill_path}/../agents
+   ```ts
+   import { gather } from "@narai/connector-hub";
+   import { applyMermaid } from "../agents/lib/mermaid_augment.js";
+
+   const { plan, results } = await gather({
+     prompt: "<takeaways + entity list from step 6>",
+     consumer: "doc-wiki",
+   });
+   const augmented = results.map(applyMermaid);
    ```
 
-   This outputs a JSON array of all registered agents (builtin + custom from `ecosystem.agents.custom` in wiki.config.yaml). For each enabled source/database agent, dispatch in parallel via Agent tool:
+   The hub reads `~/.connectors/config.yaml` (with `consumers.doc-wiki` overrides applied), asks the Claude Agent SDK for a plan over the enabled connectors, and dispatches each step in parallel as a connector-CLI subprocess. Errors are isolated per step — `results[i].error` carries a structured `{ code, message }` instead of throwing. `applyMermaid` (in `.claude/agents/lib/mermaid_augment.ts`) walks each result and, for the seven structural-action connectors (aws, gcp, jira, confluence, notion, github, db), augments the envelope with a `mermaid: { type, title, code }` block — exactly the same shape the per-agent wrappers used to produce. The augmented `results` array is what step 8 consumes.
 
-   ```
-   Agent(
-     subagent_type = "<agent.invocation_template.subagent_type>",
-     model = "<agent.invocation_template.default_model>",
-     prompt = "<constructed from agent's AGENT.md invocation contract>"
-   )
-   ```
-
-   Custom agents registered in config work identically — the registry discovers them alongside builtins
+   Per-call setup lives in `~/.connectors/config.yaml`; doc-wiki-specific overrides go under `consumers.doc-wiki` (e.g. enabled connector allowlist, per-connector option overrides). No code change is needed to add or disable a connector — just edit the config.
 8. **Compile into wiki page(s)** — read `references/compilation.md` for rules on frontmatter, linking, code locality, claims extraction
-9. **Auto-generate Mermaid diagrams** — collect every dispatched agent's JSON `mermaid: {type, title, code}` envelope and splice each into the compiled page:
+9. **Auto-generate Mermaid diagrams** — write the augmented envelopes from step 7 to a temp JSON file (one envelope per array entry, same `mermaid: {type, title, code}` shape as before) and splice each into the compiled page:
 
    ```bash
    node {skill_path}/scripts/mermaid_inject.js --page <wiki-page.md> --agents <agent-outputs.json> --in-place
    ```
 
-   The injector is idempotent — wraps blocks in `<!-- wiki-mermaid: <title> start/end -->` markers so a second ingest replaces stale diagrams in place instead of stacking duplicates. Agents with no diagram output omit the `mermaid` field; the script skips them silently.
+   The injector is idempotent — wraps blocks in `<!-- wiki-mermaid: <title> start/end -->` markers so a second ingest replaces stale diagrams in place instead of stacking duplicates. Envelopes whose `applyMermaid` step did not attach a `mermaid` field are skipped silently.
 10. **Generate "How to Go Deeper" section** — from the page's final `sources:` frontmatter:
 
     ```bash
@@ -303,14 +302,7 @@ Scores each page 0.0-1.0 based on word count, frontmatter completeness, link den
 
 ## Sub-agent dispatch
 
-When the config has source agents enabled, dispatch them for cross-referencing during compilation:
-
-```
-Agent(subagent_type="wiki-db-agent", model="haiku", prompt="Query the dev database for schema of table X...")
-Agent(subagent_type="wiki-jira-agent", model="haiku", prompt="Fetch open issues for project AUTH...")
-```
-
-Each agent has its own AGENT.md at `.claude/agents/<agent-name>/AGENT.md`. Read it before dispatching.
+`/wiki-ingest` step 7 dispatches via `@narai/connector-hub`'s `gather()` — one library call plans and spawns the underlying connector CLIs in parallel. There are no per-service wrapper scripts or subagents in doc-wiki; the legacy `wiki-<svc>-agent` folders were removed because they only duplicated the hub's CLI resolution and the `mermaid_augment.ts` decoration. Add a new builtin connector by adding an entry to `BUILTIN_PATTERNS` in `source_registry.ts`. Add an out-of-tree connector via `wiki.config.yaml`'s `ecosystem.agents.custom` block.
 
 ## Reference files
 
