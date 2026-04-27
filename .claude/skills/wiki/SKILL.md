@@ -101,7 +101,31 @@ Ask the user about each external source integration:
 5. "Do you use **Notion** for documentation or knowledge base?"
 6. "Do you use **GitHub** wikis, discussions, or project boards?"
 
-Enable corresponding source agents in config for each "yes" answer.
+For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go into the enabled allowlist for `consumers.doc-wiki` in Phase 4b.
+
+**Phase 4b — Set up connector access:**
+
+`/wiki-ingest` step 7 calls `gather()` from `@narai/connector-hub`, which reads `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (repo overlay) to know which connectors are enabled and how to authenticate. If neither file exists yet, walk the user through creating one.
+
+1. **Check existence:**
+   ```bash
+   ls -1 ~/.connectors/config.yaml ./.connectors/config.yaml 2>/dev/null
+   ```
+
+2. **If both are missing** — bootstrap from the example:
+   - Tell the user: "Your wiki needs `~/.connectors/config.yaml` to access the external services you enabled. I'll generate a starter from `.connectors/config.example.yaml`."
+   - For each connector the user said "yes" to in Phase 4, ask one credential question:
+     - **Jira/Confluence:** "Where does your Atlassian API token live? (env var name, keychain label, or file path)"
+     - **GitHub:** "Where does your GitHub personal access token live?"
+     - **Notion:** "Where does your Notion integration token live?"
+     - **AWS:** "Use the default SDK credential chain (env / `~/.aws/credentials` / IAM role)? Or a specific profile?"
+     - **GCP:** "Use Application Default Credentials? Or a service account key file?"
+   - Compose the YAML and write it to `~/.connectors/config.yaml`. Include only the enabled connectors and a `consumers.doc-wiki` block listing them.
+   - Verify the file parses by reading it back and looking for the expected `connectors` keys (no need to invoke `loadResolvedConfig()` from a one-shot script — a bad YAML file will be obvious).
+
+3. **If at least one already exists** — just confirm the enabled connectors line up with the user's Phase 4 answers. Suggest edits if there's a gap (e.g., user said "yes Confluence" but no `confluence:` block exists). Never edit an existing config without explicit confirmation.
+
+Once the file is in place, the user's `/wiki-ingest <source>` calls will resolve credentials automatically via the connector's own credential loader — doc-wiki never reads or stores the secrets directly.
 
 **Phase 5 — Choose autonomy mode:**
 

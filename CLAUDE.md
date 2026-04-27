@@ -2,6 +2,18 @@
 
 Documentation wiki generator and maintainer. Runs entirely inside Claude Code as skills + agents + TypeScript helper scripts.
 
+## Quickstart
+
+Three slash commands take a new repo from zero to a working wiki:
+
+```
+/wiki-init         # scaffold wiki/ + wiki.config.yaml
+/wiki-onboard      # detect stack, ORM, DB; set up ~/.connectors/config.yaml
+/wiki-ingest <src> # fetch a source, compile, link, diagram, index
+```
+
+`/wiki-onboard` walks the user through configuring `@narai/connector-hub`'s `~/.connectors/config.yaml` from `.connectors/config.example.yaml` (in this repo). After that, every `/wiki-ingest <jira-url>`, `/wiki-ingest <github-repo>`, etc. routes through `gather()` to the right connector — no per-service setup needed.
+
 ## Architecture
 
 - **Main skill:** `.claude/skills/wiki/SKILL.md` — orchestrates all `/wiki-*` commands
