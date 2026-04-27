@@ -6,6 +6,7 @@ Documentation wiki generator and maintainer. Runs entirely inside Claude Code as
 
 - **Main skill:** `.claude/skills/wiki/SKILL.md` — orchestrates all `/wiki-*` commands
 - **Slash-command wrappers:** `.claude/commands/wiki-*.md` — 10 thin wrappers so `/wiki-init`, `/wiki-onboard`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
+- **Source-fetch dispatch:** `/wiki-ingest` step 7 calls `gather()` from `@narai/connector-hub`, which plans and spawns the underlying `@narai/*-agent-connector` CLIs in parallel. The wiki-side Mermaid augmentation runs on the raw envelopes via `.claude/agents/lib/mermaid_augment.ts`. There is **one path**: gather → applyMermaid. The legacy `wiki-<svc>-agent` subagents + their per-service wrappers were decommissioned — their CLI-resolution and Mermaid responsibilities are now wholly owned by `connector-hub` and `mermaid_augment.ts`.
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
@@ -31,38 +32,21 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 | `mermaid_lint.ts` | Validate Mermaid diagram syntax |
 | `security_check.ts` | URL validation, path containment, input sanitization |
 
-### Agents (10) — `.claude/agents/`
+### Agents (3) — `.claude/agents/`
 
-**Source agents (6):** fetch and normalize content from external platforms.
-
-| Agent | Platform |
-|-------|----------|
-| `wiki-confluence-agent` | Confluence pages and spaces |
-| `wiki-jira-agent` | Jira issues and epics |
-| `wiki-github-agent` | GitHub repos, PRs, issues, wikis |
-| `wiki-notion-agent` | Notion pages and databases |
-| `wiki-gcp-agent` | GCP documentation and configs |
-| `wiki-aws-agent` | AWS documentation and configs |
-
-**Maintenance agents (2):** generate derived artifacts from wiki content.
+External-source fetching is handled by `@narai/*-agent-connector` packages dispatched through `@narai/connector-hub`'s `gather()` — there are no per-service subagents in doc-wiki. The remaining agents do wiki-specific derivation that has nothing to do with the connector workspace:
 
 | Agent | Purpose |
 |-------|---------|
 | `wiki-claude-md-agent` | Generate project `CLAUDE.md` from wiki pages |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams |
-
-**Integration agents (2):** bridge wiki with database and ORM schemas.
-
-| Agent | Purpose |
-|-------|---------|
-| `wiki-db-agent` | Database schema documentation |
-| `wiki-orm-agent` | ORM model documentation |
+| `wiki-orm-agent` | ORM model detection and entity-to-table mapping (uses `wiki_db` to cross-validate schemas) |
 
 ### Shared libraries (2) — `.claude/agents/lib/`
 
 | Library | Purpose |
 |---------|---------|
-| `wiki_db` | Database agent with guard-rail policy (ALLOW / DENY / ESCALATE / PRESENT_ONLY) |
+| `wiki_db` | Connection / driver / policy code reused by `wiki-orm-agent` for schema cross-validation. Originally extracted from the now-deleted `wiki-db-agent` wrapper; the connector-side policy gate lives in `@narai/db-agent-connector`. |
 | `wiki_orm` | ORM mapper with 7 profiles: SQLAlchemy, Django, JPA, Prisma, TypeORM, ActiveRecord, Entity Framework |
 
 ORM profile definitions ship as YAML files under `.claude/agents/lib/wiki_orm/profiles/*.yaml` and are loaded by the TypeScript mapper at runtime.
@@ -71,14 +55,16 @@ Standalone helpers still live at `.claude/agents/lib/` (flat files, no subdirect
 
 | Helper | Purpose |
 |--------|---------|
-| `source_registry.ts` | Agent discovery, registration, and source-to-agent matching |
+| `source_registry.ts` | Source-to-connector matching (URL/scheme → connector ID). Builtin patterns are a static list of 7 connectors (jira, confluence, github, notion, aws, gcp, db). Custom patterns load from `wiki.config.yaml` `ecosystem.agents.custom`. Used by `how_to_go_deeper.ts` (ingest step 10) for cross-link classification — never dispatches connector calls. |
 | `parse_config.ts` | Read and validate `wiki.config.yaml` (shared with skills) |
 | `mermaid_format.ts` | Mermaid diagram formatting utilities |
+| `mermaid_augment.ts` | Apply wiki-specific `mermaid: { type, title, code }` blocks on top of raw `DispatchResult` envelopes returned by `@narai/connector-hub`'s `gather()`. Used by `/wiki-ingest` step 7. Single decoration site for all 7 connectors. |
 
 Vendor-neutral connector helpers now ship as npm packages and are consumed directly:
 
 | Package | Purpose |
 |---------|---------|
+| `@narai/connector-hub` | `gather({ prompt, consumer })` — plans + parallel-dispatches read-only connector calls. Drives `/wiki-ingest` step 7. |
 | `@narai/connector-toolkit` | `parseAgentArgs`, `fetchWithCaps`, `validateUrl`, `checkPathContainment`, `sanitizeLabel` — the CLI, fetch, and security primitives shared by every source agent. Lives at `~/src/connector-toolkit/` during dev. |
 | `@narai/credential-providers` | Env-var, keychain, file, and cloud-secret-manager providers; `resolveSecret`, `registerProvider`, `CredentialResolver`. Published to npm; installed as a regular dep. |
 
@@ -125,7 +111,7 @@ All tests use Vitest.
 | Suite | Command |
 |-------|---------|
 | Wiki scripts | `npx vitest run .claude/skills/wiki/scripts/tests/` |
-| Database agent | `npx vitest run .claude/agents/lib/wiki_db/tests/` |
+| wiki_db library | `npx vitest run .claude/agents/lib/wiki_db/tests/` |
 | ORM mapper | `npx vitest run .claude/agents/lib/wiki_orm/tests/` |
 | CLAUDE.md gen | `npx vitest run .claude/agents/wiki-claude-md-agent/scripts/tests/` |
 | Mermaid gen | `npx vitest run .claude/agents/wiki-mermaid-agent/scripts/tests/` |
@@ -134,7 +120,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **1025 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
+Current status: **878 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 
@@ -150,10 +136,9 @@ Current status: **1025 tests passed, 5 skipped (live-DB integration tests, gated
 
 Load-bearing invariants implementers must respect:
 
-- **Database drivers implement `executeReadAsync(conn, sql, params, maxRows, timeoutMs): Promise<ExecuteReadResult>`.** There is no sync `execute` path. Sync drivers (e.g. SQLite's `executeRead`) are adapted at the call site via `adaptDriver` in `.claude/agents/wiki-db-agent/scripts/db_query.ts`.
+- **Database drivers implement `executeReadAsync(conn, sql, params, maxRows, timeoutMs): Promise<ExecuteReadResult>`.** There is no sync `execute` path. Sync drivers (e.g. SQLite's `executeRead`) are adapted at the call site via `adaptDriver` (used by `wiki-orm-agent` and the `wiki_db` library tests).
 - **`getConnection(envName)` is async.** Callers must `await` it. `release` and `shutdown` use identity-based lookup on the awaited handle.
-- **Source agents share CLI parsing.** Use `parseAgentArgs` from `@narai/connector-toolkit` rather than hand-rolling. Template: `const parseArgs = (argv) => parseAgentArgs(argv, { flags: ["action", "params"] })`.
-- **Credential resolution uses the published package.** Import `resolveSecret`, `registerProvider`, and provider classes from `@narai/credential-providers` (not from a local path). The toolkit does not re-export credentials — consumers depend on that package directly so its version stays under their control.
+- **Single source-fetch path through `gather()`.** `/wiki-ingest` step 7 calls `gather()` from `@narai/connector-hub`; doc-wiki does not maintain per-service subagents or wrappers. The hub owns CLI resolution, parallel dispatch, and per-step error isolation; `mermaid_augment.ts` owns wiki-specific decoration.
+- **Credential resolution uses the published package.** Import `resolveSecret`, `registerProvider`, and provider classes from `@narai/credential-providers` (not from a local path). Connectors load their own credentials inside the connector process — doc-wiki does not pass credentials into `gather()`.
 - **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
-- **Source-to-agent matching is registry-driven.** `lookupBySource()` from `.claude/agents/lib/source_registry.ts` replaces all hardcoded agent dispatch. Agents declare their URI schemes and URL patterns in AGENT.md frontmatter (`source_schemes`, `source_url_patterns`). Custom agents are registered via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new agent. The `BUILTIN_DEFAULTS` map provides backwards compatibility for agents that lack the new frontmatter fields.
-- **AGENT.md frontmatter includes registry fields.** Every agent declares `version`, `source_schemes` (if applicable), `source_url_patterns`, and `invocation_template` with `subagent_type`, `default_model`, and `label`.
+- **Source-to-connector matching is data-driven.** `lookupBySource()` from `.claude/agents/lib/source_registry.ts` reads a static `BUILTIN_PATTERNS` list (one entry per known `@narai/<id>-agent-connector`). Custom patterns load via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new connector mapping. `lookupBySource` never dispatches a connector; it only classifies sources for `how_to_go_deeper.ts`.

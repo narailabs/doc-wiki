@@ -1,39 +1,41 @@
 #!/usr/bin/env node
 /**
- * source_registry.ts — Agent discovery, registration, and source-matching.
+ * source_registry.ts — Source-to-connector matching registry.
  *
- * Replaces the hardcoded AgentId union and switch statements in
- * how_to_go_deeper.ts with a data-driven registry. Agents are discovered
- * from AGENT.md frontmatter (builtin), config (custom), or installed
- * packages (plugin).
+ * Given a source string (URL or scheme), returns the connector that
+ * handles it. The wiki uses this to classify external sources for the
+ * "How to Go Deeper" section and to emit `/wiki-ingest` hints targeted
+ * at the right connector.
  *
- * The registry answers one key question: given a source string like
- * "jira://AUTH-123" or "https://github.com/org/repo", which agent
- * handles it?
+ * Builtin patterns are static — one entry per @narai/*-agent-connector
+ * the wiki knows about. Custom patterns can be registered via
+ * `wiki.config.yaml`'s `ecosystem.agents.custom` block (e.g. an
+ * internal kb:// scheme).
  *
  * Usage as a library:
  *   import { initRegistry, lookupBySource } from "./source_registry.js";
- *   initRegistry({ agentsDir: ".claude/agents" });
+ *   initRegistry();
  *   const agent = lookupBySource("db://dev/users");
  *
  * Usage as a CLI:
- *   node source_registry.js list --agents-dir .claude/agents
- *   node source_registry.js lookup --source "jira://AUTH-1" --agents-dir .claude/agents
+ *   node source_registry.js list
+ *   node source_registry.js lookup --source "jira://AUTH-1"
  */
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-// ── Registry state ────────────────────────────────────────────────────
-const _agents = new Map();
-const BUILTIN_DEFAULTS = {
-    "wiki-jira-agent": {
+const BUILTIN_PATTERNS = [
+    {
+        id: "jira",
+        type: "source",
         source_schemes: ["jira://"],
         source_url_patterns: [
             { hostname: "*.atlassian.net", path_prefix: "/browse/" },
         ],
         label: "Jira",
     },
-    "wiki-confluence-agent": {
+    {
+        id: "confluence",
+        type: "source",
         source_schemes: ["confluence://"],
         source_url_patterns: [
             { hostname: "*.atlassian.net", path_prefix: "/wiki/" },
@@ -41,7 +43,9 @@ const BUILTIN_DEFAULTS = {
         ],
         label: "Confluence",
     },
-    "wiki-github-agent": {
+    {
+        id: "github",
+        type: "source",
         source_schemes: ["gh://", "github://"],
         source_url_patterns: [
             { hostname: "github.com" },
@@ -49,7 +53,9 @@ const BUILTIN_DEFAULTS = {
         ],
         label: "GitHub",
     },
-    "wiki-notion-agent": {
+    {
+        id: "notion",
+        type: "source",
         source_schemes: ["notion://"],
         source_url_patterns: [
             { hostname: "notion.so" },
@@ -57,7 +63,9 @@ const BUILTIN_DEFAULTS = {
         ],
         label: "Notion",
     },
-    "wiki-gcp-agent": {
+    {
+        id: "gcp",
+        type: "source",
         source_schemes: ["gcp://"],
         source_url_patterns: [
             { hostname: "*.cloud.google.com" },
@@ -65,7 +73,9 @@ const BUILTIN_DEFAULTS = {
         ],
         label: "GCP",
     },
-    "wiki-aws-agent": {
+    {
+        id: "aws",
+        type: "source",
         source_schemes: ["aws://"],
         source_url_patterns: [
             { hostname: "*.amazonaws.com" },
@@ -73,169 +83,37 @@ const BUILTIN_DEFAULTS = {
         ],
         label: "AWS",
     },
-    "wiki-db-agent": {
+    {
+        id: "db",
+        type: "database",
         source_schemes: ["db://"],
         source_url_patterns: [],
         label: "Database",
     },
-};
-// ── AGENT.md parsing ──────────────────────────────────────────────────
-/**
- * Parse YAML frontmatter from an AGENT.md file's raw content.
- *
- * Returns the parsed frontmatter as a plain object. We avoid importing
- * js-yaml here and use a lightweight regex parser for the simple YAML
- * structure of AGENT.md frontmatter (flat key: value pairs and short
- * arrays). For nested structures we fall back to JSON-like parsing.
- */
-export function parseFrontmatter(content) {
-    const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
-    if (match === null)
-        return {};
-    const yaml = match[1] ?? "";
-    const result = {};
-    for (const line of yaml.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed === "" || trimmed.startsWith("#"))
-            continue;
-        // Handle simple key: value
-        const kv = /^(\w[\w_-]*)\s*:\s*(.*)$/.exec(trimmed);
-        if (kv === null)
-            continue;
-        const key = kv[1];
-        let val = (kv[2] ?? "").trim();
-        // Strip trailing comments
-        const commentIdx = val.indexOf(" #");
-        if (commentIdx >= 0 && !val.startsWith('"') && !val.startsWith("'")) {
-            val = val.slice(0, commentIdx).trim();
-        }
-        // Parse inline arrays: [Bash, Read, Write]
-        if (val.startsWith("[") && val.endsWith("]")) {
-            const inner = val.slice(1, -1);
-            result[key] = inner
-                .split(",")
-                .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-                .filter(Boolean);
-            continue;
-        }
-        // Quoted strings
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            result[key] = val.slice(1, -1);
-            continue;
-        }
-        // Multiline: |
-        if (val === "|") {
-            // Collect indented lines as description (simplified)
-            result[key] = "";
-            continue;
-        }
-        // Booleans / numbers
-        if (val === "true") {
-            result[key] = true;
-            continue;
-        }
-        if (val === "false") {
-            result[key] = false;
-            continue;
-        }
-        if (/^\d+$/.test(val)) {
-            result[key] = parseInt(val, 10);
-            continue;
-        }
-        // Plain string
-        result[key] = val;
-    }
-    return result;
-}
-// ── Discovery ─────────────────────────────────────────────────────────
-/**
- * Build an AgentManifest from parsed frontmatter + directory path.
- * Falls back to BUILTIN_DEFAULTS for agents that lack registry fields.
- */
-export function buildManifest(frontmatter, agentDir, origin = "builtin") {
-    const dirName = path.basename(agentDir);
-    const name = frontmatter["name"] ?? dirName;
-    const builtin = BUILTIN_DEFAULTS[dirName];
-    // Parse source_schemes from frontmatter or builtin defaults
-    let sourceSchemes = [];
-    if (Array.isArray(frontmatter["source_schemes"])) {
-        sourceSchemes = frontmatter["source_schemes"];
-    }
-    else if (builtin) {
-        sourceSchemes = builtin.source_schemes;
-    }
-    // Parse source_url_patterns from frontmatter or builtin defaults
-    let urlPatterns = [];
-    if (Array.isArray(frontmatter["source_url_patterns"])) {
-        urlPatterns = frontmatter["source_url_patterns"];
-    }
-    else if (builtin) {
-        urlPatterns = builtin.source_url_patterns;
-    }
-    // Parse invocation_template
-    const tmplRaw = frontmatter["invocation_template"];
-    const label = builtin?.label ?? name.replace(/^wiki-/, "").replace(/-agent$/, "");
-    const invocationTemplate = {
-        subagent_type: tmplRaw?.["subagent_type"] ?? name,
-        default_model: tmplRaw?.["default_model"] ?? frontmatter["model"] ?? "haiku",
-        label: tmplRaw?.["label"] ?? label,
-    };
+];
+function patternToManifest(p) {
+    const name = `wiki-${p.id}-agent`;
     return {
         name,
-        description: frontmatter["description"] ?? "",
-        type: frontmatter["type"] ?? "source",
-        autonomy_level: frontmatter["autonomy_level"] ?? "supervised",
-        model: frontmatter["model"] ?? "haiku",
-        tools: (Array.isArray(frontmatter["tools"]) ? frontmatter["tools"] : []),
-        color: frontmatter["color"],
-        version: frontmatter["version"] ?? "0.0.0",
-        repository: frontmatter["repository"],
-        source_schemes: sourceSchemes,
-        source_url_patterns: urlPatterns,
-        invocation_template: invocationTemplate,
-        agent_dir: agentDir,
-        origin,
+        description: "",
+        type: p.type,
+        autonomy_level: "supervised",
+        model: "haiku",
+        tools: [],
+        version: "1.0.0",
+        source_schemes: [...p.source_schemes],
+        source_url_patterns: p.source_url_patterns.map((u) => ({ ...u })),
+        invocation_template: {
+            subagent_type: name,
+            default_model: "haiku",
+            label: p.label,
+        },
+        agent_dir: "",
+        origin: "builtin",
     };
 }
-/**
- * Scan a directory for agent subdirectories containing AGENT.md files.
- * Returns an array of manifests for all discovered agents.
- */
-export function discoverAgents(agentsDir, origin = "builtin") {
-    if (!fs.existsSync(agentsDir))
-        return [];
-    const manifests = [];
-    let entries;
-    try {
-        entries = fs.readdirSync(agentsDir);
-    }
-    catch {
-        return [];
-    }
-    for (const entry of entries) {
-        const agentDir = path.join(agentsDir, entry);
-        const agentMd = path.join(agentDir, "AGENT.md");
-        try {
-            const stat = fs.statSync(agentDir);
-            if (!stat.isDirectory())
-                continue;
-        }
-        catch {
-            continue;
-        }
-        if (!fs.existsSync(agentMd))
-            continue;
-        try {
-            const content = fs.readFileSync(agentMd, "utf-8");
-            const fm = parseFrontmatter(content);
-            manifests.push(buildManifest(fm, agentDir, origin));
-        }
-        catch {
-            // Skip agents with unparseable AGENT.md
-        }
-    }
-    return manifests;
-}
+// ── Registry state ────────────────────────────────────────────────────
+const _agents = new Map();
 // ── Registration ──────────────────────────────────────────────────────
 export function registerAgent(manifest) {
     _agents.set(manifest.name, manifest);
@@ -325,7 +203,7 @@ export function listAgents(filter) {
         agents = agents.filter((a) => a.origin === filter.origin);
     return agents;
 }
-/** Return the set of all registered agent names (for enabledAgents filtering). */
+/** Return the set of all registered agent short IDs (for enabledAgents filtering). */
 export function registeredAgentIds() {
     const ids = new Set();
     for (const agent of _agents.values()) {
@@ -336,23 +214,19 @@ export function registeredAgentIds() {
     return ids;
 }
 /**
- * Bootstrap the registry from filesystem discovery + config.
+ * Bootstrap the registry from the static builtin pattern list + custom
+ * agents from config. Idempotent — clears any prior state first.
  *
- * Discovery order: builtins → plugins → custom (last wins on name collision).
+ * Order: builtins → custom (custom wins on name collision, allowing a
+ * user to override a builtin pattern).
  */
-export function initRegistry(options) {
+export function initRegistry(options = {}) {
     clearRegistry();
-    // 1. Discover builtin agents
-    for (const m of discoverAgents(options.agentsDir, "builtin")) {
-        registerAgent(m);
+    // 1. Builtins from the static pattern list
+    for (const p of BUILTIN_PATTERNS) {
+        registerAgent(patternToManifest(p));
     }
-    // 2. Discover plugin agents (e.g. from .claude/plugins/)
-    if (options.pluginsDir) {
-        for (const m of discoverAgents(options.pluginsDir, "plugin")) {
-            registerAgent(m);
-        }
-    }
-    // 3. Register custom agents from config
+    // 2. Custom agents from wiki.config.yaml
     if (options.customAgents) {
         for (const cfg of options.customAgents) {
             registerAgent(customConfigToManifest(cfg));
@@ -383,9 +257,8 @@ function customConfigToManifest(cfg) {
 // ── CLI ───────────────────────────────────────────────────────────────
 function cliMain(argv) {
     const cmd = argv[0];
-    const agentsDir = getFlagValue(argv, "--agents-dir") ?? ".claude/agents";
     if (cmd === "list") {
-        initRegistry({ agentsDir });
+        initRegistry();
         const filter = {};
         const typeFlag = getFlagValue(argv, "--type");
         if (typeFlag)
@@ -400,7 +273,7 @@ function cliMain(argv) {
             process.stderr.write("--source is required\n");
             return 2;
         }
-        initRegistry({ agentsDir });
+        initRegistry();
         const agent = lookupBySource(source);
         if (agent) {
             process.stdout.write(JSON.stringify(agent, null, 2) + "\n");
@@ -410,7 +283,7 @@ function cliMain(argv) {
         }
         return 0;
     }
-    process.stderr.write("usage: source_registry.js <list|lookup> [--agents-dir DIR] [--source SRC]\n");
+    process.stderr.write("usage: source_registry.js <list|lookup> [--source SRC] [--type TYPE]\n");
     return 2;
 }
 function getFlagValue(argv, flag) {

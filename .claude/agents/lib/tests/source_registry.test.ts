@@ -1,16 +1,10 @@
 /**
- * Tests for source_registry.ts — agent discovery, registration, and lookup.
+ * Tests for source_registry.ts — the static-pattern source-to-connector registry.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
 
 import {
   type AgentManifest,
-  parseFrontmatter,
-  buildManifest,
-  discoverAgents,
   registerAgent,
   unregisterAgent,
   lookupBySource,
@@ -40,72 +34,13 @@ function makeManifest(overrides: Partial<AgentManifest> = {}): AgentManifest {
       default_model: "haiku",
       label: "Test",
     },
-    agent_dir: "/tmp/test-agent",
+    agent_dir: "",
     origin: "builtin",
     ...overrides,
   };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
-
-describe("parseFrontmatter", () => {
-  it("parses simple key-value pairs", () => {
-    const fm = parseFrontmatter("---\nname: wiki-test-agent\nmodel: haiku\n---\n# Body");
-    expect(fm["name"]).toBe("wiki-test-agent");
-    expect(fm["model"]).toBe("haiku");
-  });
-
-  it("parses inline arrays", () => {
-    const fm = parseFrontmatter("---\ntools: [Bash, Read, Write]\n---");
-    expect(fm["tools"]).toEqual(["Bash", "Read", "Write"]);
-  });
-
-  it("parses quoted strings", () => {
-    const fm = parseFrontmatter('---\nversion: "1.0.0"\ncolor: \'red\'\n---');
-    expect(fm["version"]).toBe("1.0.0");
-    expect(fm["color"]).toBe("red");
-  });
-
-  it("parses scheme arrays with quotes", () => {
-    const fm = parseFrontmatter('---\nsource_schemes: ["db://", "database://"]\n---');
-    expect(fm["source_schemes"]).toEqual(["db://", "database://"]);
-  });
-
-  it("returns empty object when no frontmatter", () => {
-    expect(parseFrontmatter("# Just markdown")).toEqual({});
-  });
-
-  it("ignores comments", () => {
-    const fm = parseFrontmatter("---\nname: test\n# comment line\nmodel: haiku\n---");
-    expect(fm["name"]).toBe("test");
-    expect(fm["model"]).toBe("haiku");
-  });
-});
-
-describe("buildManifest", () => {
-  it("builds manifest from frontmatter", () => {
-    const fm = { name: "wiki-db-agent", type: "database", model: "haiku", tools: ["Bash"] };
-    const m = buildManifest(fm, "/agents/wiki-db-agent");
-    expect(m.name).toBe("wiki-db-agent");
-    expect(m.type).toBe("database");
-    expect(m.source_schemes).toEqual(["db://"]); // from BUILTIN_DEFAULTS
-    expect(m.invocation_template.label).toBe("Database");
-  });
-
-  it("falls back to BUILTIN_DEFAULTS for known agents", () => {
-    const fm = { name: "wiki-jira-agent", type: "source" };
-    const m = buildManifest(fm, "/agents/wiki-jira-agent");
-    expect(m.source_schemes).toEqual(["jira://"]);
-    expect(m.source_url_patterns).toHaveLength(1);
-    expect(m.source_url_patterns[0]!.hostname).toBe("*.atlassian.net");
-  });
-
-  it("uses frontmatter source_schemes when provided", () => {
-    const fm = { name: "custom-agent", source_schemes: ["custom://"] };
-    const m = buildManifest(fm, "/agents/custom-agent");
-    expect(m.source_schemes).toEqual(["custom://"]);
-  });
-});
 
 describe("matchHostname", () => {
   it("matches exact hostname", () => {
@@ -247,54 +182,49 @@ describe("lookupBySource", () => {
   });
 });
 
-describe("discoverAgents", () => {
-  it("discovers agents from the real .claude/agents directory", () => {
-    const agentsDir = path.resolve(__dirname, "../../");
-    const agents = discoverAgents(agentsDir);
-    // Should find at least the 10 shipped agents
-    expect(agents.length).toBeGreaterThanOrEqual(10);
-    const names = agents.map((a) => a.name);
-    expect(names).toContain("wiki-db-agent");
-    expect(names).toContain("wiki-github-agent");
-    expect(names).toContain("wiki-jira-agent");
-  });
-
-  it("returns empty array for nonexistent directory", () => {
-    expect(discoverAgents("/nonexistent/path")).toEqual([]);
-  });
-
-  it("applies BUILTIN_DEFAULTS for known agents", () => {
-    const agentsDir = path.resolve(__dirname, "../../");
-    const agents = discoverAgents(agentsDir);
-    const jira = agents.find((a) => a.name === "wiki-jira-agent");
-    expect(jira).toBeDefined();
-    expect(jira!.source_schemes).toEqual(["jira://"]);
-    expect(jira!.invocation_template.label).toBe("Jira");
-  });
-});
-
-describe("initRegistry", () => {
+describe("initRegistry — builtin patterns", () => {
   afterEach(() => clearRegistry());
 
-  it("populates registry from real agents dir", () => {
-    const agentsDir = path.resolve(__dirname, "../../");
-    initRegistry({ agentsDir });
-    expect(listAgents().length).toBeGreaterThanOrEqual(10);
+  it("populates registry with the 7 builtin connectors", () => {
+    initRegistry();
+    const agents = listAgents();
+    const names = agents.map((a) => a.name).sort();
+    expect(names).toEqual([
+      "wiki-aws-agent",
+      "wiki-confluence-agent",
+      "wiki-db-agent",
+      "wiki-gcp-agent",
+      "wiki-github-agent",
+      "wiki-jira-agent",
+      "wiki-notion-agent",
+    ]);
   });
 
   it("integrates lookup after init", () => {
-    const agentsDir = path.resolve(__dirname, "../../");
-    initRegistry({ agentsDir });
+    initRegistry();
     expect(lookupBySource("jira://AUTH-1")?.name).toBe("wiki-jira-agent");
     expect(lookupBySource("db://dev/users")?.name).toBe("wiki-db-agent");
     expect(lookupBySource("https://github.com/org/repo")?.name).toBe("wiki-github-agent");
     expect(lookupBySource("https://co.atlassian.net/browse/T-1")?.name).toBe("wiki-jira-agent");
+    expect(lookupBySource("https://co.atlassian.net/wiki/spaces/X")?.name).toBe("wiki-confluence-agent");
   });
 
-  it("registers custom agents from config", () => {
-    const agentsDir = path.resolve(__dirname, "../../");
+  it("labels each builtin connector", () => {
+    initRegistry();
+    expect(lookupByName("wiki-jira-agent")?.invocation_template.label).toBe("Jira");
+    expect(lookupByName("wiki-db-agent")?.invocation_template.label).toBe("Database");
+    expect(lookupByName("wiki-github-agent")?.invocation_template.label).toBe("GitHub");
+  });
+
+  it("classifies db as type=database, others as type=source", () => {
+    initRegistry();
+    expect(lookupByName("wiki-db-agent")?.type).toBe("database");
+    expect(lookupByName("wiki-jira-agent")?.type).toBe("source");
+    expect(lookupByName("wiki-github-agent")?.type).toBe("source");
+  });
+
+  it("registers custom agents from config alongside builtins", () => {
     initRegistry({
-      agentsDir,
       customAgents: [
         {
           name: "my-kb-agent",
@@ -305,6 +235,31 @@ describe("initRegistry", () => {
     });
     expect(lookupBySource("kb://article-42")?.name).toBe("my-kb-agent");
     expect(lookupBySource("kb://article-42")?.origin).toBe("custom");
+    // Builtins are still present
+    expect(lookupBySource("jira://X")?.name).toBe("wiki-jira-agent");
+  });
+
+  it("custom agents override builtins on name collision", () => {
+    initRegistry({
+      customAgents: [
+        {
+          name: "wiki-jira-agent",
+          source_schemes: ["custom-jira://"],
+          invocation_template: { subagent_type: "wiki-jira-agent", default_model: "sonnet", label: "Custom Jira" },
+        },
+      ],
+    });
+    const agent = lookupByName("wiki-jira-agent");
+    expect(agent?.origin).toBe("custom");
+    expect(agent?.invocation_template.label).toBe("Custom Jira");
+    expect(agent?.source_schemes).toEqual(["custom-jira://"]);
+  });
+
+  it("is idempotent — clears state on each call", () => {
+    initRegistry();
+    const before = listAgents().length;
+    initRegistry();
+    expect(listAgents().length).toBe(before);
   });
 });
 
@@ -318,5 +273,11 @@ describe("registeredAgentIds", () => {
     const ids = registeredAgentIds();
     expect(ids.has("jira")).toBe(true);
     expect(ids.has("db")).toBe(true);
+  });
+
+  it("returns the 7 builtin connector IDs after init", () => {
+    initRegistry();
+    const ids = registeredAgentIds();
+    expect(ids).toEqual(new Set(["jira", "confluence", "github", "notion", "gcp", "aws", "db"]));
   });
 });

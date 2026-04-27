@@ -26,7 +26,7 @@ node .claude/skills/wiki/scripts/init_wiki.js --path <wiki-root> --domain "<doma
 
 Detect the codebase ecosystem (language, ORM, database, external services) and configure wiki infrastructure.
 
-Detection agents are dispatched via the Agent tool (`wiki-orm-agent`, `wiki-db-agent`); no direct script invocations are needed.
+ORM detection is dispatched via the Agent tool (`wiki-orm-agent`); database introspection runs through `gather()` from `@narai/connector-hub` when live schema confirmation is needed.
 
 ### /wiki-ingest -- Fetch, extract, compile
 
@@ -111,18 +111,11 @@ All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to si
 
 ## Agent Paths
 
-Sub-agents live at `.claude/agents/` and handle platform-specific source fetching:
+Sub-agents live at `.claude/agents/`. External-source fetching is handled by `@narai/*-agent-connector` packages dispatched through `@narai/connector-hub`'s `gather()` — no per-service subagents in doc-wiki.
 
 | Agent | Purpose |
 |---|---|
-| `wiki-db-agent` | Database schema detection and queries |
 | `wiki-orm-agent` | ORM profile detection |
-| `wiki-jira-agent` | Jira issue fetching |
-| `wiki-confluence-agent` | Confluence page fetching |
-| `wiki-gcp-agent` | GCP service discovery |
-| `wiki-aws-agent` | AWS service discovery |
-| `wiki-github-agent` | GitHub wiki/discussions/boards |
-| `wiki-notion-agent` | Notion page fetching |
 | `wiki-mermaid-agent` | Mermaid diagram generation |
 | `wiki-claude-md-agent` | CLAUDE.md maintenance |
 

@@ -27,6 +27,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@narai/connector-hub": "^1.0.0",
     "@narai/connector-toolkit": "^1.0.0",
     "@narai/credential-providers": "^0.2.1",
     "better-sqlite3": "^12.9.0",

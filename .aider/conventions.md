@@ -33,16 +33,9 @@ All TypeScript scripts at `.claude/skills/wiki/scripts/` (compile to `.js` sibli
 
 ## Agent Paths
 
-Sub-agents at `.claude/agents/`:
+Sub-agents at `.claude/agents/`. External-source fetching is handled by `@narai/*-agent-connector` packages dispatched through `@narai/connector-hub`'s `gather()` — no per-service subagents in doc-wiki.
 
-- `wiki-db-agent` -- Database schema detection and queries
 - `wiki-orm-agent` -- ORM profile detection
-- `wiki-jira-agent` -- Jira issue fetching
-- `wiki-confluence-agent` -- Confluence page fetching
-- `wiki-gcp-agent` -- GCP service discovery
-- `wiki-aws-agent` -- AWS service discovery
-- `wiki-github-agent` -- GitHub wiki/discussions/boards
-- `wiki-notion-agent` -- Notion page fetching
 - `wiki-mermaid-agent` -- Mermaid diagram generation
 - `wiki-claude-md-agent` -- CLAUDE.md maintenance
 

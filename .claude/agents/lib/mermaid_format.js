@@ -12,13 +12,13 @@
  *   - Node-id sanitization (Mermaid node ids must be alphanumeric /
  *     underscore; we normalize unsafe characters to underscores and
  *     collapse runs).
- *   - Builders for the two shapes source agents need today:
+ *   - Builders for the two shapes the connector envelopes need today:
  *       * `formatGraph("TB"|"LR", nodes, edges)` — flowchart-style
  *         service topology, dependency graphs, infrastructure topology.
  *       * `formatErDiagram(tables)` — entity-relationship diagrams
- *         (wiki-db-agent's schema-introspection path).
+ *         (db schema introspection envelopes).
  *
- * Agents that don't produce diagram-worthy data MUST omit the `mermaid`
+ * Envelopes that don't produce diagram-worthy data MUST omit the `mermaid`
  * field entirely — do not emit an empty string or null. Compilation
  * treats the absence as "no diagram" rather than "empty diagram".
  */
@@ -106,10 +106,9 @@ function formatErColumn(col) {
     return `        ${type} ${col.name}${key}`;
 }
 /**
- * Format an ER diagram (`erDiagram`). Use for DB schema introspection
- * (wiki-db-agent) and ORM mapping (wiki-orm-agent — currently renders
- * its own inline; the helper is available if a future refactor wants
- * to share the output shape).
+ * Format an ER diagram (`erDiagram`). Used by `mermaid_augment.ts` for
+ * `db` connector envelopes (schema introspection) and available to
+ * `wiki-orm-agent` if it wants to share the output shape.
  */
 export function formatErDiagram(title, tables, relationships = []) {
     const lines = ["erDiagram"];
