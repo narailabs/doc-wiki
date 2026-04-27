@@ -1,0 +1,110 @@
+# .connectors/config.example.yaml
+#
+# Sample configuration for @narai/connector-hub when consumed by doc-wiki.
+#
+# Copy this file to one of:
+#   ~/.connectors/config.yaml   (user-global; applies to every project)
+#   ./.connectors/config.yaml   (per-repo overlay; wins on conflict)
+#
+# Then uncomment the connectors you want enabled, fill in the credential
+# references, and run `/wiki-ingest <source>` — gather() reads this file,
+# plans which connectors to invoke based on the prompt, and dispatches
+# them in parallel.
+#
+# Credential refs follow the @narai/credential-providers syntax:
+#   env:NAME           → process.env.NAME
+#   keychain:LABEL     → OS keychain entry (macOS Keychain / libsecret)
+#   file:/path/to/key  → contents of that file (with permission check)
+#   cloud:aws-secret/<arn>      → AWS Secrets Manager
+#   cloud:gcp-secret/<resource> → GCP Secret Manager
+#
+# Every connector ships with its own README documenting the env vars it
+# expects; the entries below are the canonical names.
+
+connectors:
+
+  # github:
+  #   enabled: true
+  #   skill: github-agent-connector
+  #   token: env:GITHUB_TOKEN
+
+  # jira:
+  #   enabled: true
+  #   skill: jira-agent-connector
+  #   server_url: env:JIRA_SERVER_URL    # e.g. https://your-org.atlassian.net
+  #   email: env:JIRA_EMAIL
+  #   api_token: env:JIRA_API_TOKEN
+
+  # confluence:
+  #   enabled: true
+  #   skill: confluence-agent-connector
+  #   server_url: env:CONFLUENCE_SERVER_URL
+  #   email: env:CONFLUENCE_EMAIL
+  #   api_token: env:CONFLUENCE_API_TOKEN
+
+  # notion:
+  #   enabled: true
+  #   skill: notion-agent-connector
+  #   token: env:NOTION_TOKEN
+
+  # aws:
+  #   enabled: true
+  #   skill: aws-agent-connector
+  #   # AWS uses the standard SDK credential chain (env, ~/.aws/credentials,
+  #   # IAM role). Override here only when you need a non-default profile.
+  #   # profile: my-profile
+  #   region: env:AWS_REGION
+
+  # gcp:
+  #   enabled: true
+  #   skill: gcp-agent-connector
+  #   project_id: env:GCP_PROJECT_ID
+  #   # Application Default Credentials are picked up from the gcloud SDK;
+  #   # set GOOGLE_APPLICATION_CREDENTIALS only when ADC isn't available.
+
+  # db:
+  #   enabled: true
+  #   skill: db-agent-connector
+  #   # The db connector takes a flat env name → connection string mapping.
+  #   # Each env is a logical alias the wiki refers to (e.g. "prod", "dev").
+  #   # See @narai/db-agent-connector README for engine-specific knobs.
+  #   environments:
+  #     dev:
+  #       driver: postgresql
+  #       host: env:DB_DEV_HOST
+  #       database: env:DB_DEV_NAME
+  #       user: env:DB_DEV_USER
+  #       password: env:DB_DEV_PASSWORD
+
+
+# ── Environment overlays (optional) ─────────────────────────────────────
+#
+# `gather({ environment: "prod" })` deep-merges `environments.prod` onto
+# the connectors block above. Use this to vary per-env behaviour without
+# duplicating the whole file. `environments.default` names the fallback.
+
+environments:
+  default: dev
+  # dev:
+  #   github:
+  #     model: claude-haiku-4-5    # cheaper model in dev
+  # prod:
+  #   github:
+  #     model: claude-sonnet-4-6
+
+
+# ── Consumer overrides ──────────────────────────────────────────────────
+#
+# `gather({ consumer: "doc-wiki" })` deep-merges `consumers.doc-wiki` onto
+# the resolved config. Use this to express wiki-specific preferences
+# (e.g. narrower allowlist, smaller models) without affecting other
+# tools that share the same connectors.
+
+consumers:
+  doc-wiki:
+    # Example: doc-wiki only ingests from public sources during /wiki-ingest;
+    # disable AWS/GCP for the wiki even if they're enabled globally.
+    # aws:
+    #   enabled: false
+    # gcp:
+    #   enabled: false
