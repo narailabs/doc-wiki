@@ -8,10 +8,13 @@
  * section that tells future readers / agents exactly which command to
  * run to pull the latest state of the source system.
  *
- * Source-to-agent matching is driven by the source_registry — agents
- * are discovered from AGENT.md frontmatter rather than hardcoded.
- * Custom agents registered in wiki.config.yaml are supported
- * automatically.
+ * Source-to-connector matching is driven by source_registry's static
+ * BUILTIN_PATTERNS. Custom connectors registered via wiki.config.yaml's
+ * `ecosystem.agents.custom` block are supported automatically.
+ *
+ * Hints emit `/wiki-ingest <source>` uniformly — the wiki ingest
+ * pipeline (step 7) calls @narai/connector-hub's `gather()`, which
+ * picks the right connector from the matched source.
  *
  * Usage as a library:
  *     import { buildHowToGoDeeper } from "./how_to_go_deeper.js";
@@ -63,10 +66,8 @@ let _initialized = false;
 function ensureRegistry(): void {
   if (_initialized) return;
   _initialized = true;
-  const thisDir = path.dirname(fileURLToPath(import.meta.url));
-  const agentsDir = path.resolve(thisDir, "../../../agents");
   try {
-    initRegistry({ agentsDir });
+    initRegistry();
   } catch {
     // Non-fatal: fall through to no-match for all sources
   }
@@ -84,88 +85,26 @@ function shortId(manifest: AgentManifest): string {
   return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
 }
 
-// ── Hint builders (per-agent, for exact output compatibility) ─────────
+// ── Hint builder ──────────────────────────────────────────────────────
 
 /**
  * Build a DeepEntry from a matched agent manifest and source string.
  *
- * Builtin agents have specific hint formats that must remain stable
- * (tested, documented, and consumed by downstream tooling). Custom
- * agents use a generic template.
+ * Hints are uniform: `/wiki-ingest <source>` regardless of connector.
+ * The ingest pipeline routes through `@narai/connector-hub`'s `gather()`,
+ * which picks the right connector for the given source. Connectors that
+ * accept richer params (e.g. Jira JQL) get them from the planner stage,
+ * not from a literal CLI hint.
  */
 function buildAgentEntry(manifest: AgentManifest, source: string): DeepEntry {
   const id = shortId(manifest);
   const label = manifest.invocation_template.label;
-
-  // Determine if this is a URL or scheme match
-  const isUrl = /^https?:\/\//i.test(source);
-
-  if (isUrl) {
-    return buildUrlHint(id, label, source);
-  }
-
-  // Scheme-based: extract the rest after scheme://
-  const schemeMatch = /^[a-z]+:\/\/(.+)$/i.exec(source);
-  const rest = schemeMatch?.[1] ?? source;
-
-  return buildSchemeHint(id, label, source, rest);
-}
-
-function buildUrlHint(id: string, label: string, source: string): DeepEntry {
-  let url: URL;
-  try {
-    url = new URL(source);
-  } catch {
-    return { agent: id, label, hint: `Open <${source}>`, source };
-  }
-
-  switch (id) {
-    case "jira": {
-      const key = url.pathname.replace(/^\/browse\//, "").split("?")[0] ?? "";
-      const query = key ? `key = ${key}` : "<JQL>";
-      return { agent: id, label, hint: `wiki agent jira --query "${query}"`, source };
-    }
-    case "confluence":
-      return { agent: id, label, hint: `wiki agent confluence --url "${source}"`, source };
-    case "github": {
-      const trimmed = url.pathname.replace(/^\/+/, "");
-      return { agent: id, label, hint: `wiki agent github --path "${trimmed}"`, source };
-    }
-    case "notion":
-      return { agent: id, label, hint: `wiki agent notion --url "${source}"`, source };
-    case "gcp":
-      return { agent: id, label, hint: `wiki agent gcp --resource "${source}"`, source };
-    case "aws":
-      return { agent: id, label, hint: `wiki agent aws --resource "${source}"`, source };
-    default:
-      // Custom agent — generic hint
-      return { agent: id, label, hint: `wiki agent ${id} --source "${source}"`, source };
-  }
-}
-
-function buildSchemeHint(id: string, label: string, source: string, rest: string): DeepEntry {
-  switch (id) {
-    case "jira":
-      return { agent: id, label, hint: `wiki agent jira --query "key = ${rest}"`, source };
-    case "confluence":
-      return { agent: id, label, hint: `wiki agent confluence --path "${rest}"`, source };
-    case "github":
-      return { agent: id, label, hint: `wiki agent github --path "${rest}"`, source };
-    case "notion":
-      return { agent: id, label, hint: `wiki agent notion --id "${rest}"`, source };
-    case "gcp":
-      return { agent: id, label, hint: `wiki agent gcp --resource "${rest}"`, source };
-    case "aws":
-      return { agent: id, label, hint: `wiki agent aws --resource "${rest}"`, source };
-    case "db": {
-      const [env = "dev", ...tail] = rest.split("/");
-      const target = tail.join("/") || "<table>";
-      return { agent: id, label, hint: `wiki agent db-query ${env} "DESCRIBE ${target}"`, source };
-    }
-    default:
-      // Custom agent — generic hint using rest
-      return { agent: id, label, hint: `wiki agent ${id} --source "${source}"`, source };
-  }
+  return {
+    agent: id,
+    label,
+    hint: `\`/wiki-ingest "${source}"\``,
+    source,
+  };
 }
 
 // ── Local source classification (non-agent) ──────────────────────────
@@ -242,7 +181,7 @@ export function buildHowToGoDeeper(
     if (entry.agent && enabled !== undefined && !enabled.has(entry.agent)) {
       bullets.push({
         label: entry.label,
-        hint: `${entry.source} — enable the \`wiki-${entry.agent}-agent\` to query this live`,
+        hint: `${entry.source} — enable the \`${entry.agent}\` connector in \`.connectors/config.yaml\` to ingest this live`,
         source: entry.source,
       });
       continue;

@@ -15,3 +15,6 @@ coverage/
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 explainer-video/
+
+# Superpowers brainstorming sessions — local mockups, ephemeral
+.superpowers/
