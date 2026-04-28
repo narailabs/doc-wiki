@@ -88,7 +88,7 @@ Detect the database engine yourself by reading these files (no subagent dispatch
 - Connection strings in config files (`.env`, `application.properties`, `database.yml`, `settings.py`)
 - ORM config (e.g., `DATABASES` dict in Django, `spring.datasource.url` in Spring Boot)
 
-When live introspection is needed (verify schema matches code), run `gather({ prompt: "describe schema for <db>", consumer: "doc-wiki" })` — `@narai/db-agent-connector` handles it via the policy gate. Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
+When live introspection is needed (verify schema matches code), run `gather({ prompt: "describe schema for <db>", consumer: "doc-wiki" })` — the `db` connector inside `narai-primitives` handles it via the policy gate. Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
 
 **Phase 4 — External services Q&A:**
 
@@ -185,7 +185,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 7. **Gather context via `@narai/connector-hub`** — a single library call replaces per-agent dispatch:
 
    ```ts
-   import { gather } from "@narai/connector-hub";
+   import { gather } from "narai-primitives";
    import { applyMermaid } from "../agents/lib/mermaid_augment.js";
 
    const { plan, results } = await gather({
