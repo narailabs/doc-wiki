@@ -27,8 +27,6 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@narai/connector-hub": "^1.0.0",
-    "@narai/connector-toolkit": "^1.0.0",
     "@narai/credential-providers": "^0.2.1",
     "better-sqlite3": "^12.9.0",
     "fast-xml-parser": "^5.5.12",
@@ -41,6 +39,7 @@
     "mongodb": "^7.1.1",
     "mssql": "^12.2.1",
     "mysql2": "^3.22.0",
+    "narai-primitives": "^2.0.0-rc.1",
     "pdfjs-dist": "^5.6.205",
     "pg": "^8.20.0"
   },
@@ -49,13 +48,6 @@
     "@aws-sdk/client-dynamodb": "^3.1030.0",
     "@aws-sdk/client-lambda": "^3.1030.0",
     "@aws-sdk/client-rds": "^3.1030.0",
-    "@aws-sdk/client-s3": "^3.1030.0",
-    "@narai/aws-agent-connector": "file:../connectors/aws-agent-connector",
-    "@narai/confluence-agent-connector": "file:../connectors/confluence-agent-connector",
-    "@narai/db-agent-connector": "file:../connectors/db-agent-connector",
-    "@narai/gcp-agent-connector": "file:../connectors/gcp-agent-connector",
-    "@narai/github-agent-connector": "file:../connectors/github-agent-connector",
-    "@narai/jira-agent-connector": "file:../connectors/jira-agent-connector",
-    "@narai/notion-agent-connector": "file:../connectors/notion-agent-connector"
+    "@aws-sdk/client-s3": "^3.1030.0"
   }
 }
