@@ -16,7 +16,7 @@
  * realistic mixed batch.
  */
 import { describe, expect, it } from "vitest";
-import type { DispatchResult } from "@narai/connector-hub";
+import type { DispatchResult } from "narai-primitives";
 
 import { applyMermaid, SUPPORTED_CONNECTORS } from "../mermaid_augment.js";
 

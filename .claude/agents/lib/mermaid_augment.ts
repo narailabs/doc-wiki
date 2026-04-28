@@ -20,7 +20,7 @@
  *       action, empty data, unknown connector), the input is returned as-is.
  *     - Never throws; permissive on malformed data.
  */
-import type { DispatchResult } from "@narai/connector-hub";
+import type { DispatchResult } from "narai-primitives";
 
 import {
   formatErDiagram,
