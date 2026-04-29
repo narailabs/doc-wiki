@@ -3,16 +3,13 @@
  *
  * Classifies SQL statements and enforces approval policies before execution.
  *
- * Parity notes vs. the Python reference (`policy.py`):
- *  - `Decision` is a string-literal union (not an enum) so JSON output is the
- *    lowercase wire value directly: `"allow" | "deny" | "escalate" |
- *    "present_only"`. Python's `Enum` values serialize the same.
- *  - `PolicyResult` is a discriminated union on `decision`; `formatted_sql`
- *    exists ONLY on the `present_only` branch, matching Python's behaviour
- *    where the field is populated just for DML.
- *  - Default-deny on unknown first-words: the classifier falls through to
- *    `"ddl"` (the most restrictive category) for anything not in the known
- *    keyword sets, matching `policy.py`.
+ * `Decision` and `PolicyResult` are imported from `narai-primitives/db` —
+ * the canonical declarations live in the published connector package. This
+ * file owns the wiki-local Policy class plus the (still-diverged) V1
+ * `OperationType` vocabulary used by the wiki-orm-agent's cross-validation
+ * path. The runtime constants (`Decision.ALLOW`, etc.) and discriminated
+ * union shape are wire-compatible with what the upstream connector emits,
+ * so consumers can switch back and forth without a codec.
  *
  * G-DB-1: the SQL keyword classifier is exported as a top-level
  * `classifySqlKeywords` so non-relational drivers (MongoDB, DynamoDB) can
@@ -21,19 +18,14 @@
  * accepts an optional driver and dispatches accordingly.
  */
 import { performance } from "node:perf_hooks";
+import { Decision, type PolicyResult } from "narai-primitives/db";
 import type { DatabaseDriver } from "./drivers/base.js";
 import { logEvent, scrubSqlSecrets } from "./audit.js";
 
-/** Possible outcomes of a policy check (wire format = lowercase string). */
-export type Decision = "allow" | "deny" | "escalate" | "present_only";
-
-/** Namespace providing Python-style attribute access (`Decision.ALLOW`). */
-export const Decision = {
-  ALLOW: "allow" as const,
-  DENY: "deny" as const,
-  ESCALATE: "escalate" as const,
-  PRESENT_ONLY: "present_only" as const,
-} satisfies Record<string, Decision>;
+// Re-export so existing `wiki_db/policy` consumers (`query.ts`,
+// `wiki-orm-agent`, tests) continue to find these here. Single source of
+// truth for the wire format lives upstream.
+export { Decision, type PolicyResult };
 
 /** Classification of SQL statements by intent. */
 export type OperationType = "read" | "dml" | "ddl" | "privilege";
@@ -45,13 +37,6 @@ export const OperationType = {
   DDL: "ddl" as const,
   PRIVILEGE: "privilege" as const,
 } satisfies Record<string, OperationType>;
-
-/** Discriminated union: `formatted_sql` is REQUIRED only when decision === "present_only". */
-export type PolicyResult =
-  | { decision: "allow"; reason: string }
-  | { decision: "deny"; reason: string }
-  | { decision: "escalate"; reason: string }
-  | { decision: "present_only"; reason: string; formatted_sql: string };
 
 // -----------------------------------------------------------------------
 // Keyword -> OperationType mapping
