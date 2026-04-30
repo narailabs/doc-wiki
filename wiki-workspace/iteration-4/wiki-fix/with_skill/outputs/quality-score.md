@@ -3,7 +3,7 @@
 Command:
 
 ```
-node .claude/skills/wiki/scripts/quality_score.js --page wiki/authentication.md
+node skills/wiki/scripts/quality_score.js --page wiki/authentication.md
 ```
 
 Output:

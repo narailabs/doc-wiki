@@ -8,7 +8,7 @@ class\s+(\w+)\s*\(\s*BaseModel\s*\)
 
 - Single capture group → class name (group 1).
 - Compiled with flags `gm` by `extractor.ts` (see comment at line 96 of
-  `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/extractor.ts`).
+  `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/extractor.ts`).
 - Applied to the full text of `example.py`.
 
 ## Matches in `example.py`

@@ -4,7 +4,7 @@ Expected for a DDL deny on `env=production`: **zero** `connect`, `pool_created`,
 
 ## Observation on the filesystem
 
-`wiki.config.yaml` sets `audit.enabled: true` and `audit.path: /tmp/eval-i3-db-deny/audit.jsonl`, but `db_query.ts` does not currently call `enableAudit(path)` — audit is only toggled on from library tests (see `.claude/agents/lib/wiki_db/tests/audit.test.ts`). As a result, the CLI run produced **no audit file at all**:
+`wiki.config.yaml` sets `audit.enabled: true` and `audit.path: /tmp/eval-i3-db-deny/audit.jsonl`, but `db_query.ts` does not currently call `enableAudit(path)` — audit is only toggled on from library tests (see `agents/lib/wiki_db/tests/audit.test.ts`). As a result, the CLI run produced **no audit file at all**:
 
 ```
 $ ls -la /tmp/eval-i3-db-deny/

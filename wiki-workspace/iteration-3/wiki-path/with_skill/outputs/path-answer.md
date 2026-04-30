@@ -3,7 +3,7 @@
 **Command executed**
 
 ```bash
-node .claude/skills/wiki/scripts/graph_ops.js path \
+node skills/wiki/scripts/graph_ops.js path \
   --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
   --from authentication \
   --to database-schema

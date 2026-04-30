@@ -1,7 +1,7 @@
 # /wiki-onboard Detection Trace
 
 Target project: `/tmp/eval-onboard-sb`
-Skill: `/Users/narayan/src/doc-wiki/.claude/skills/wiki/SKILL.md`
+Skill: `/Users/narayan/src/doc-wiki/skills/wiki/SKILL.md`
 Reference: `references/operations.md` (sections: Codebase Detection, ORM Detection, Database Detection)
 
 ## Phase 1 - Language / framework detection
@@ -51,7 +51,7 @@ Additional relationship markers observed (JPA profile `relationship_detection`):
 - `Order.java:16` `@ManyToOne` with `@JoinColumn(name = "user_id")` -> `many_to_one` (Order -> User)
 
 Entities detected: **2** (`User`, `Order`). Repositories: **1** (`UserRepository`).
-ORM profile selected: **`jpa`** (matches `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/profiles/jpa.yaml`).
+ORM profile selected: **`jpa`** (matches `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/profiles/jpa.yaml`).
 
 ## Phase 3 - Database detection
 

@@ -41,4 +41,4 @@ This page was compiled from ORM source files. Use these commands to verify or up
 - **User** (`public.users`)
   - Columns: `wiki agent db-query dev "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'"`
   - Sample rows: `wiki agent db-query dev "SELECT * FROM public.users LIMIT 5"`
-- **Live code:** Read `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/jpa/Order.java`, `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/jpa/User.java` — ORM source files this mapping was extracted from.
+- **Live code:** Read `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/jpa/Order.java`, `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/jpa/User.java` — ORM source files this mapping was extracted from.

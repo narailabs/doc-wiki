@@ -1,6 +1,6 @@
 # Mermaid ER Check — R2 external-target stub verification
 
-Fixture: `.claude/agents/lib/wiki_orm/tests/fixtures/jpa/` has `User.java`, `Order.java`, `UserRepository.java`. **`Role.java` is NOT present**, yet `User` declares `@ManyToMany List<Role> roles`. R2 requires `output.ts` to emit a **stub node** for external targets before they appear in an edge.
+Fixture: `agents/lib/wiki_orm/tests/fixtures/jpa/` has `User.java`, `Order.java`, `UserRepository.java`. **`Role.java` is NOT present**, yet `User` declares `@ManyToMany List<Role> roles`. R2 requires `output.ts` to emit a **stub node** for external targets before they appear in an edge.
 
 ## (a) No `_rel` phantom node
 

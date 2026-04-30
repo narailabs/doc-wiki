@@ -1,7 +1,7 @@
 # Eval run — /wiki-init + /wiki-ingest + /wiki-query
 
 Work area: `/tmp/eval-iiq-project/`
-Skill under test: `/Users/narayan/src/doc-wiki/.claude/skills/wiki/SKILL.md`
+Skill under test: `/Users/narayan/src/doc-wiki/skills/wiki/SKILL.md`
 Date: 2026-04-14
 
 ## User task (verbatim)
@@ -18,7 +18,7 @@ Date: 2026-04-14
 Command:
 
 ```bash
-node .claude/skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project \
+node skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project \
   --domain "backend-services" --name "eval-iiq-project"
 ```
 

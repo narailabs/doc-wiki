@@ -1,6 +1,6 @@
 # /wiki-lint — pre-fix report
 
-Raw output of `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki` before any auto-fix.
+Raw output of `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki` before any auto-fix.
 
 Summary: **5 errors, 6 warnings, 0 info** — the 5 errors split into 2 `broken_links` and 3 `missing_frontmatter` violations that the skill must heal. Every violation record names the offending file path.
 

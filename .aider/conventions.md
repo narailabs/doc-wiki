@@ -4,20 +4,20 @@ This project has a documentation wiki skill. Before searching the codebase with 
 
 ## Commands
 
-- `/wiki-init` -- Bootstrap wiki: `node .claude/skills/wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
-- `/wiki-onboard` -- Detect language, ORM, database, external services; configure wiki
-- `/wiki-ingest` -- Fetch, extract, compile sources into wiki pages
-- `/wiki-query` -- Summary-first search: read `wiki/summaries.md`, score relevance, load top pages, synthesize
-- `/wiki-lint` -- Health check: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root <wiki-root>`
-- `/wiki-fix` -- Quick corrections with diff preview
-- `/wiki-promote` -- Convert query answer from `outputs/queries/` to permanent wiki page
-- `/wiki-path` -- Shortest path: `node .claude/skills/wiki/scripts/graph_ops.js path --from "<a>" --to "<b>" --edges <wiki-root>/graph/edges.jsonl`
-- `/wiki-refresh` -- Re-fetch and update from original sources
-- `/wiki-stats` -- Token efficiency: `node .claude/skills/wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d`
+- `/doc-wiki:init` -- Bootstrap wiki: `node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
+- `/doc-wiki:onboard` -- Detect language, ORM, database, external services; configure wiki
+- `/doc-wiki:ingest` -- Fetch, extract, compile sources into wiki pages
+- `/doc-wiki:query` -- Summary-first search: read `wiki/summaries.md`, score relevance, load top pages, synthesize
+- `/doc-wiki:lint` -- Health check: `node skills/doc-wiki/scripts/lint_checks.js --wiki-root <wiki-root>`
+- `/doc-wiki:fix` -- Quick corrections with diff preview
+- `/doc-wiki:promote` -- Convert query answer from `outputs/queries/` to permanent wiki page
+- `/doc-wiki:path` -- Shortest path: `node skills/doc-wiki/scripts/graph_ops.js path --from "<a>" --to "<b>" --edges <wiki-root>/graph/edges.jsonl`
+- `/doc-wiki:refresh` -- Re-fetch and update from original sources
+- `/doc-wiki:stats` -- Token efficiency: `node skills/doc-wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d`
 
 ## Script Paths
 
-All TypeScript scripts at `.claude/skills/wiki/scripts/` (compile to `.js` siblings via `npm run build`):
+All TypeScript scripts at `skills/doc-wiki/scripts/` (compile to `.js` siblings via `npm run build`):
 
 - `init_wiki.ts` -- Bootstrap wiki scaffold
 - `parse_config.ts` -- Read/write `wiki.config.yaml`
@@ -33,7 +33,7 @@ All TypeScript scripts at `.claude/skills/wiki/scripts/` (compile to `.js` sibli
 
 ## Agent Paths
 
-Sub-agents at `.claude/agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
+Sub-agents at `agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
 
 - `wiki-orm-agent` -- ORM profile detection
 - `wiki-mermaid-agent` -- Mermaid diagram generation
@@ -42,7 +42,7 @@ Sub-agents at `.claude/agents/`. External-source fetching is handled by the conn
 ## Invocation
 
 ```bash
-node .claude/skills/wiki/scripts/<script>.js <args>
+node skills/doc-wiki/scripts/<script>.js <args>
 ```
 
 Install dependencies (Node 20 required): `npm install && npm run build`

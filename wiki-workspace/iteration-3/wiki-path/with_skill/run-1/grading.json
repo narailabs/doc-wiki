@@ -3,7 +3,7 @@
     {
       "text": "Runs graph_ops.js with the path subcommand",
       "passed": true,
-      "evidence": "outputs/graph_ops-raw-output.txt line 1-3 shows: `$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl --from authentication --to database-schema`. Also cited in path-answer.md lines 5-10 in the 'Command executed' block."
+      "evidence": "outputs/graph_ops-raw-output.txt line 1-3 shows: `$ node /Users/narayan/src/doc-wiki/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl --from authentication --to database-schema`. Also cited in path-answer.md lines 5-10 in the 'Command executed' block."
     },
     {
       "text": "Returned path starts at 'authentication' and ends at 'database-schema'",
@@ -60,7 +60,7 @@
       "claim": "graph_ops.js uses graphology's bidirectional BFS on the directed graph",
       "type": "process",
       "verified": true,
-      "evidence": ".claude/skills/wiki/scripts/graph_ops.ts line 26 imports `bidirectional` from graphology-shortest-path/unweighted.js; line 394 calls `bidirectional(graph, source, target)`. Unweighted bidirectional BFS does return the shortest-hop path."
+      "evidence": "skills/wiki/scripts/graph_ops.ts line 26 imports `bidirectional` from graphology-shortest-path/unweighted.js; line 394 calls `bidirectional(graph, source, target)`. Unweighted bidirectional BFS does return the shortest-hop path."
     },
     {
       "claim": "Exactly two simple directed paths exist from authentication to database-schema",

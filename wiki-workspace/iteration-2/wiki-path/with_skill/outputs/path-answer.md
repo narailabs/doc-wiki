@@ -33,7 +33,7 @@ The tool correctly preferred the 3-hop route because `bidirectional` unweighted 
 ## Command
 
 ```bash
-node .claude/skills/wiki/scripts/graph_ops.js path \
+node skills/wiki/scripts/graph_ops.js path \
   --edges /tmp/eval-path-wiki/graph/edges.jsonl \
   --from "authentication" \
   --to "database-schema"

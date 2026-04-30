@@ -2,7 +2,7 @@
 
 R1 verification: `enableAudit(...)` is now wired from
 `ecosystem.database.audit.{enabled,path}` inside
-`.claude/agents/wiki-db-agent/scripts/db_query.ts` (see `resolveEnv`,
+`agents/wiki-db-agent/scripts/db_query.ts` (see `resolveEnv`,
 lines ~277–291). Because the env-dispatch path runs `enableAudit` before
 the connection pool opens, real events land in the configured file.
 

@@ -46,7 +46,7 @@
       "claim": "Agent is deterministic, no-LLM, backed by scripts/mermaid_gen.ts",
       "type": "process",
       "verified": true,
-      "evidence": "report.md invocation shows direct `node .claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.js` call; no LLM call described. Matches the wiki-mermaid-agent architecture documented in CLAUDE.md (maintenance agent / deterministic TypeScript helper)."
+      "evidence": "report.md invocation shows direct `node agents/wiki-mermaid-agent/scripts/mermaid_gen.js` call; no LLM call described. Matches the wiki-mermaid-agent architecture documented in CLAUDE.md (maintenance agent / deterministic TypeScript helper)."
     },
     {
       "claim": "Injected 1 mermaid block(s) into target.md",

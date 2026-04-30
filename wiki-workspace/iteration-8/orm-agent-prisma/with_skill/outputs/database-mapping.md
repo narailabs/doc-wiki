@@ -38,4 +38,4 @@ This page was compiled from ORM source files. Use these commands to verify or up
 - **Comment** (`comments`)
   - Columns: `wiki agent db-query dev "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'comments'"`
   - Sample rows: `wiki agent db-query dev "SELECT * FROM comments LIMIT 5"`
-- **Live code:** Read `/Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma` — ORM source files this mapping was extracted from.
+- **Live code:** Read `/Users/narayan/src/doc-wiki/agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma` — ORM source files this mapping was extracted from.

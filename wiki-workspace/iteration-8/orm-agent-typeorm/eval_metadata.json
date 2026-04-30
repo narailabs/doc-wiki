@@ -2,7 +2,7 @@
   "eval_id": 5,
   "eval_name": "orm-agent-typeorm",
   "skill": "wiki-orm-agent",
-  "prompt": "Detect and map the TypeORM entities in .claude/agents/wiki-orm-agent/evals/fixtures/typeorm/ — three .ts files (Author.ts, Book.ts, Publisher.ts) using @Entity, @Column, @OneToMany, @ManyToOne.",
+  "prompt": "Detect and map the TypeORM entities in agents/wiki-orm-agent/evals/fixtures/typeorm/ — three .ts files (Author.ts, Book.ts, Publisher.ts) using @Entity, @Column, @OneToMany, @ManyToOne.",
   "assertions": [
     {
       "text": "All three entities (Author, Book, Publisher) are extracted into detected-entities.json as separate entries with table_names matching the @Entity('...') first arg (e.g., 'authors', 'books', 'publishers')",

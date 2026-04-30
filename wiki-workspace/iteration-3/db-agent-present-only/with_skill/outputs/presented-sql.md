@@ -33,7 +33,7 @@ The formatted SQL contains both required literals verbatim:
 
 ## Why this was not executed
 
-The guard-rail policy classifier at `.claude/agents/lib/wiki_db/policy.ts` identified
+The guard-rail policy classifier at `agents/lib/wiki_db/policy.ts` identified
 the leading keyword `INSERT` as `OperationType.DML`. The DML branch of
 `Policy.checkQuery` never routes to a driver — it returns a `PolicyResult`
 with `decision="present_only"` and a human-readable `formatted_sql`

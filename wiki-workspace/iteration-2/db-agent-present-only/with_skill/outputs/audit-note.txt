@@ -2,7 +2,7 @@ No audit log was written during this run.
 
 Reason: the wiki-db-agent CLI (`scripts/db_query.ts`) does not call
 `enableAudit()`. Audit logging is off by default (see
-`.claude/agents/lib/wiki_db/audit.ts` — `_state.enabled = false`). The
+`agents/lib/wiki_db/audit.ts` — `_state.enabled = false`). The
 `_writeRecord()` function short-circuits to a no-op unless a caller has
 previously invoked `enableAudit(path, sessionId)`.
 

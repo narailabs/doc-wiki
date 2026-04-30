@@ -46,7 +46,7 @@
   ],
   "final_decision": "allow",
   "final_reason": "Dev-env schema introspection approved. The schema action reads SQLite catalog tables directly via the driver (ALLOW-equivalent, no Policy gate traversal). The bounded SELECT against pragma_table_info also received ALLOW with reason 'auto-approved' from Policy._checkRead under approval_mode=auto.",
-  "policy_module": "/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_db/policy.ts",
+  "policy_module": "/Users/narayan/src/doc-wiki/agents/lib/wiki_db/policy.ts",
   "gate_functions": [
     "classifySqlKeywords(sql)",
     "Policy.checkQuery(sql, driver?)",
