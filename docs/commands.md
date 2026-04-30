@@ -330,33 +330,98 @@ Apply a focused fix to a single page with a diff preview.
 
 ### `/doc-wiki:promote` — Query answer to permanent page
 
-Convert an archived `/doc-wiki:query` answer in `outputs/queries/` into a permanent wiki page.
+Convert an archived `/doc-wiki:query` answer in `outputs/queries/` into a permanent wiki page. Has two modes: single (one archive at a time, with flexible target resolution) and review (bulk triage with per-item approval).
 
-**Synopsis:** `/doc-wiki:promote <query-output-file> [--topic <directory>]`
+#### Single mode
+
+**Synopsis:** `/doc-wiki:promote <target> [--topic <directory>]`
+
+**Target resolution** — first match wins:
+
+| Input | Resolution |
+|---|---|
+| `last`, `latest`, `last query`, `latest query` | Most-recent `outputs/queries/*.md` by mtime |
+| Bare positive integer `N` | Nth most-recent (1-indexed) |
+| Path (relative or absolute) | Use as-is |
+| Single token | Filename substring match; ambiguous → list and ask |
+| Empty | List recent + prompt |
+
+Archives in `outputs/queries/.promoted/` and `outputs/queries/.deleted/` are excluded from "most-recent" resolution.
+
+The slash form is the canonical, deterministic phrasing. Bare phrasings like `promote last query` (no slash) work best-effort while a doc-wiki conversation is in context.
 
 **Args:**
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
-| `<query-output-file>` | path | **required** | Path to the archived answer (e.g. `outputs/queries/2026-04-28T10-15.md`) |
-| `--topic` | directory | (auto) | Subdirectory under `wiki/` to place the new page; auto-inferred from content if omitted |
+| `<target>` | see above | (empty → list-and-ask) | What to promote |
+| `--topic` | directory | (auto) | Subdirectory under `wiki/` to place the new page |
 
 **What it does:**
 
-1. Reads the query archive.
-2. Compiles a wiki page from it — frontmatter, claims, links, summary.
-3. Writes to `wiki/<topic>/<slug>.md`.
-4. Updates `wiki/index.md` and `wiki/summaries.md`.
-5. Runs post-op hooks (crosslink + tag-harmonize).
+1. Resolves the target.
+2. Reads the query archive.
+3. Compiles a wiki page — frontmatter, claims, links, summary.
+4. Writes to `wiki/<topic>/<slug>.md`.
+5. Updates `wiki/index.md` and `wiki/summaries.md`.
+6. Moves the source archive to `outputs/queries/.promoted/<filename>` (preserved for audit; excluded from future suggestions).
+7. Runs post-op hooks (crosslink + tag-harmonize).
 
 **Examples:**
 
 ```text
+/doc-wiki:promote last query
+/doc-wiki:promote latest --topic auth
+/doc-wiki:promote 2
 /doc-wiki:promote outputs/queries/2026-04-28T10-15.md
 /doc-wiki:promote outputs/queries/2026-04-28T10-15.md --topic auth
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:promote](../skills/doc-wiki/SKILL.md).
+#### Review mode
+
+**Synopsis:** `/doc-wiki:promote --review [--since <duration>] [--limit <N>] [--topic <directory>]`
+
+Bulk archive triage with per-item approval. Use this for periodic cleanup after several `/doc-wiki:query` answers have accumulated.
+
+**Args:**
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `--review` | — | Switch from single to review mode |
+| `--since` | none | Only archives newer than `<duration>` (e.g. `7d`, `24h`) |
+| `--limit` | none | Cap candidates to N |
+| `--topic` | auto | Topic for every promotion in this batch |
+
+**What it does:**
+
+For each candidate archive (oldest first), the orchestrator presents `[P]romote / [S]kip / [D]elete / [A]bort batch`. `P` runs the single-mode flow; `D` moves to `outputs/queries/.deleted/`; `A` stops the batch. The mode honors the configured autonomy level:
+
+| Autonomy | Per-archive prompt | Already-covered handling |
+|---|---|---|
+| `conservative` | Always ask | Ask before promoting anyway |
+| `balanced` (default) | Always ask | Auto-skip |
+| `autonomous` | Auto-promote novel | Auto-skip |
+| `auto` | Auto-promote novel | Auto-skip |
+
+**Examples:**
+
+```text
+/doc-wiki:promote --review
+/doc-wiki:promote --review --since 7d
+/doc-wiki:promote --review --since 30d --limit 5 --topic ops
+```
+
+#### Periodic execution
+
+Use the `/schedule` skill. For interactive review (default `balanced` autonomy), schedule a reminder:
+
+```text
+/schedule "Run /doc-wiki:promote --review --since 7d" "every Monday at 9am"
+```
+
+For unattended pipelines, set autonomy to `auto` and schedule the command directly — novel archives will be batch-promoted with no prompting.
+
+**See also:** [`SKILL.md` § /doc-wiki:promote](../skills/doc-wiki/SKILL.md). The `/doc-wiki:lint` query-absorption pass uses the same coverage rule.
 
 ---
 
@@ -378,10 +443,11 @@ A few command sequences you'll use often:
 # Investigate something via the wiki
 /doc-wiki:query "How is JWT validated?"
 # (the answer is good — keep it)
-/doc-wiki:promote outputs/queries/<timestamp>.md --topic auth
+/doc-wiki:promote last query --topic auth
 
 # Periodic maintenance
 /doc-wiki:lint --fix
+/doc-wiki:promote --review --since 7d   # triage accumulated query archives
 /doc-wiki:refresh --all
 /doc-wiki:stats --since 7d --per-agent
 ```

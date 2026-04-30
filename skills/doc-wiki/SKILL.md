@@ -1,6 +1,6 @@
 ---
 name: doc-wiki
-description: Manage a documentation wiki — generate, ingest sources, query, lint, refresh. Triggers on requests about documentation, knowledge bases, ORM mapping, or database schemas.
+description: Manage a documentation wiki — generate, ingest sources, query, lint, fix, promote, refresh. Triggers on requests about documentation, knowledge bases, archived queries, ORM mapping, or database schemas, including phrasings like "promote last query", "lint the wiki", or "fix the auth page".
 ---
 
 # doc-wiki — Documentation Wiki Generator & Maintainer
@@ -279,7 +279,7 @@ node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
 
 The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
 
-**Query absorption:** after the structural pass, scan `outputs/queries/*.md` for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:promote` of the archived query.
+**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:promote --review` — same coverage rule, different entry point.
 
 **Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
 
@@ -295,7 +295,79 @@ Read `references/quality.md` for scoring rules and `references/autonomy.md` for 
 
 ### /doc-wiki:promote — Query answer -> wiki page
 
-Convert an archived query answer from `outputs/queries/` into a permanent wiki page. Convert citations to relative markdown links, add frontmatter, create in appropriate topic directory.
+Two modes — picked by argument shape:
+
+- **Single mode** (default): convert one archived query answer into a permanent wiki page.
+- **Review mode** (`--review`): bulk-triage many archived answers in one pass with per-item approval.
+
+#### Target resolution (single mode)
+
+Resolve the target argument with the first matching rule:
+
+| Input form | Resolution |
+|---|---|
+| `last`, `latest`, `last query`, `latest query` | Most-recent `outputs/queries/*.md` by mtime |
+| Bare positive integer `N` | Nth most-recent (1-indexed; `1` == latest) |
+| Existing path (relative or absolute) | Use as-is |
+| Single token, no path | Match by filename substring; if 0 or >1 match, list candidates and ask |
+| Empty | List recent + prompt the user to pick |
+
+Pick by mtime via `ls -1t <wiki-root>/outputs/queries/*.md`. Always exclude `outputs/queries/.promoted/` and `outputs/queries/.deleted/` — these subdirs hold archives that were already triaged.
+
+The slash form `/doc-wiki:promote last query` is the canonical, deterministic phrasing. The bare form (typed without the slash, e.g. `promote last query`) is best-effort — the skill description's keyword set covers it, but ambiguous contexts may need a clarifying turn.
+
+#### Single-mode flow
+
+1. Resolve the target.
+2. Read the query archive.
+3. Compile a wiki page — frontmatter, claims, links, summary; convert inline citations to relative markdown links.
+4. Write to `wiki/<topic>/<slug>.md` (`--topic` overrides; otherwise infer from content).
+5. Update `wiki/index.md` and `wiki/summaries.md`.
+6. Move the source archive to `outputs/queries/.promoted/<filename>` so it is not re-suggested by `--review` or by `/doc-wiki:lint` query-absorption.
+7. Run post-op hooks (crosslink + tag-harmonize).
+
+#### Review mode (`--review`)
+
+```
+/doc-wiki:promote --review [--since <duration>] [--limit <N>] [--topic <directory>]
+```
+
+Bulk archive triage with per-item approval. `--since` filters by mtime (e.g. `7d`, `24h`); `--limit` caps candidates; `--topic` overrides topic for every promotion in this batch.
+
+For each candidate (oldest first, skipping `.promoted/` and `.deleted/`):
+
+1. Read title + first ~30 lines of the archive.
+2. Run the same coverage check `/doc-wiki:lint` query-absorption uses: is this insight already on a wiki page?
+3. If covered → skip silently (or in `conservative`, ask "Already covered by `<page>`. Promote anyway?").
+4. If novel → present `[P]romote / [S]kip / [D]elete archive / [A]bort batch`.
+5. On `P` → run the single-mode flow (steps 1-7 above) for this archive.
+6. On `D` → move to `outputs/queries/.deleted/<filename>`. Never `rm` — preserve for audit.
+7. On `A` → stop, summarize what was done so far.
+
+End the run with one line: `<X> promoted, <Y> skipped, <Z> deleted, <W> already-covered`.
+
+#### Autonomy interaction
+
+| Mode | Per-archive prompt | "Already covered" |
+|---|---|---|
+| `conservative` | Always ask P/S/D/A | Ask before promoting anyway |
+| `balanced` (default) | Always ask P/S/D/A | Auto-skip |
+| `autonomous` | Auto-promote novel; ask only on conflicts | Auto-skip |
+| `auto` | Auto-promote novel; auto-skip everything | Auto-skip |
+
+`balanced` is the "individual user approval" workflow.
+
+#### Periodic execution
+
+For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/schedule` skill rather than an unattended run:
+
+```
+/schedule "Run /doc-wiki:promote --review --since 7d" "every Monday at 9am"
+```
+
+For unattended pipelines, set autonomy to `auto` and schedule the command directly — the orchestrator will batch-promote novel archives without prompting.
+
+See also: `/doc-wiki:lint` query-absorption (above) — same coverage rule, different entry point.
 
 ### /doc-wiki:refresh — Re-fetch and update from original sources
 
