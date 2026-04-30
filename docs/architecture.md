@@ -27,7 +27,7 @@ This document explains how the layers fit together, what each script and agent i
 
 User input flows top-down through three layers. Each layer has a narrow responsibility:
 
-- **Layer 1 — Slash commands** (10 thin wrapper files) make commands discoverable in each AI tool's autocomplete.
+- **Layer 1 — Slash commands** (9 thin wrapper files) make commands discoverable in each AI tool's autocomplete.
 - **Layer 2 — Wiki skill orchestrator** (one `SKILL.md`) is a state machine that reads config, dispatches scripts and agents, and synthesizes pages.
 - **Layer 3 — Execution** is a mix of deterministic TypeScript scripts, three derivative agents, shared libraries, and one planner (`gather()`) for external sources.
 
@@ -42,7 +42,7 @@ flowchart TB
         WIngest["/doc-wiki:ingest"]
         WQuery["/doc-wiki:query"]
         WLint["/doc-wiki:lint"]
-        WMore["…6 more"]
+        WMore["…5 more"]
     end
     subgraph L2["Layer 2: wiki skill orchestrator (skills/doc-wiki/SKILL.md)"]
         Orch["State machine:<br/>parse config → dispatch → synthesize → log"]
@@ -73,20 +73,19 @@ Reading the diagram: the user invokes a slash command, which calls into the skil
 
 ## Layer 1 — Slash commands
 
-Ten `commands/doc-wiki:*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
+Nine `commands/doc-wiki:*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
 
 | Command | What it does |
 |---|---|
-| [`/doc-wiki:init`](../commands/doc-doc-wiki-init.md) | Bootstrap the wiki directory scaffold and default config |
-| [`/doc-wiki:onboard`](../commands/doc-doc-wiki-onboard.md) | Interactive setup: detect language, ORM, DB, configure connectors |
-| [`/doc-wiki:ingest`](../commands/doc-doc-wiki-ingest.md) | Fetch, extract, and compile a source into wiki pages |
-| [`/doc-wiki:query`](../commands/doc-doc-wiki-query.md) | Summary-first search and synthesis across the wiki |
-| [`/doc-wiki:lint`](../commands/doc-doc-wiki-lint.md) | Structural health check and auto-heal |
-| [`/doc-wiki:fix`](../commands/doc-doc-wiki-fix.md) | Targeted correction to a single wiki page |
-| [`/doc-wiki:promote`](../commands/doc-doc-wiki-promote.md) | Convert an archived `/doc-wiki:query` answer into a permanent page |
-| [`/doc-wiki:refresh`](../commands/doc-doc-wiki-refresh.md) | Re-fetch and update previously ingested sources |
-| [`/doc-wiki:path`](../commands/doc-doc-wiki-path.md) | Shortest-path query between two concepts via typed edges |
-| [`/doc-wiki:stats`](../commands/doc-doc-wiki-stats.md) | Token efficiency and cost metrics from the event log |
+| [`/doc-wiki:init`](../commands/init.md) | Bootstrap the wiki directory scaffold and default config |
+| [`/doc-wiki:onboard`](../commands/onboard.md) | Interactive setup: detect language, ORM, DB, configure connectors |
+| [`/doc-wiki:ingest`](../commands/ingest.md) | Fetch, extract, and compile a source into wiki pages |
+| [`/doc-wiki:query`](../commands/query.md) | Summary-first search + synthesis (synthesis mode) or shortest-path between concepts (path mode, `--from <a> --to <b>`) |
+| [`/doc-wiki:lint`](../commands/lint.md) | Structural health check and auto-heal |
+| [`/doc-wiki:fix`](../commands/fix.md) | Targeted correction to a single wiki page |
+| [`/doc-wiki:promote`](../commands/promote.md) | Convert an archived `/doc-wiki:query` answer into a permanent page |
+| [`/doc-wiki:refresh`](../commands/refresh.md) | Re-fetch and update previously ingested sources |
+| [`/doc-wiki:stats`](../commands/stats.md) | Token efficiency and cost metrics from the event log |
 
 Each wrapper looks roughly like:
 

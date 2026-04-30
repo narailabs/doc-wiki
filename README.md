@@ -72,7 +72,7 @@ After three or four `/doc-wiki:ingest` calls you can:
 
 ## What's in the box
 
-- **10 slash commands** — `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:query`, `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:refresh`, `/doc-wiki:path`, `/doc-wiki:stats`. See [`docs/commands.md`](docs/commands.md).
+- **9 slash commands** — `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:query` (synthesis or `--from`/`--to` path mode), `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:refresh`, `/doc-wiki:stats`. See [`docs/commands.md`](docs/commands.md).
 - **3 sub-agents** — `wiki-orm-agent` (entity-to-table mapping), `wiki-mermaid-agent` (deterministic diagram generation), `wiki-claude-md-agent` (`CLAUDE.md` maintenance with managed sections).
 - **7 connectors via [`narai-primitives`](https://github.com/narailabs/narai-primitives)** — `db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`. Plus `@narai/credential-providers` for env-var / keychain / file / cloud-secret resolution.
 - **5 reference docs** at [`skills/doc-wiki/references/`](skills/doc-wiki/references/) — autonomy, code-locality, compilation, operations, quality.
@@ -118,7 +118,7 @@ doc-wiki/
 ├── CLAUDE.md, AGENTS.md, GEMINI.md           AI-platform skill manuals
 ├── docs/                                     public-facing documentation
 ├── .claude-plugin/plugin.json                Claude Code plugin manifest
-├── commands/                                 10 slash-command wrappers (init.md, onboard.md, ...)
+├── commands/                                 9 slash-command wrappers (init.md, onboard.md, ...)
 ├── skills/doc-wiki/
 │   ├── SKILL.md                              orchestrator manual
 │   ├── scripts/*.ts                          ~21 deterministic helpers

@@ -452,6 +452,31 @@ describe("TestGraphOpsCLI", () => {
     expect(nodes.has("B")).toBe(true);
   });
 
+  it("cli_path_all_paths_emits_edge_list_array", () => {
+    const js = runCli([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+    ]);
+    expect(js.status).toBe(0);
+    const data = JSON.parse(js.stdout);
+    // Output is Edge[][] — each inner array is one simple A→D path.
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeGreaterThanOrEqual(2);
+    for (const p of data) {
+      expect(Array.isArray(p)).toBe(true);
+      const first = p[0];
+      const last = p[p.length - 1];
+      expect(first.from).toBe("A");
+      expect(last.to).toBe("D");
+    }
+  });
+
   it("cli_add_writes_edge", () => {
     const fresh = path.join(tmpPath, "fresh.jsonl");
     fs.writeFileSync(fresh, "");
