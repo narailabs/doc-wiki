@@ -1,6 +1,8 @@
 # .connectors/config.example.yaml
 #
-# Sample configuration for @narai/connector-hub when consumed by doc-wiki.
+# Sample configuration for narai-primitives's connector hub when consumed by
+# doc-wiki. (The hub is the default export of narai-primitives — see
+# `gather()` at https://github.com/narailabs/narai-primitives.)
 #
 # Copy this file to one of:
 #   ~/.connectors/config.yaml   (user-global; applies to every project)
