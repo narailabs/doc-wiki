@@ -41,7 +41,7 @@ policy_result: {
 ```
 
 Only two symbols were imported: `Policy` and `classifySqlKeywords` from
-`.claude/agents/lib/wiki_db/policy.js`. The `connection.ts` module was
+`agents/lib/wiki_db/policy.js`. The `connection.ts` module was
 never imported, so:
 
 - `registerDriverFactory("sqlite", ...)` (the side-effect at

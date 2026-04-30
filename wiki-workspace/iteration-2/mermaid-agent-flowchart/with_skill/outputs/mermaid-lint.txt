@@ -3,7 +3,7 @@ Mermaid lint report
 
 Command
 -------
-$ node .claude/skills/wiki/scripts/mermaid_lint.js \
+$ node skills/wiki/scripts/mermaid_lint.js \
        --page /tmp/eval-mermaid-flow/pipeline.md
 
 Output

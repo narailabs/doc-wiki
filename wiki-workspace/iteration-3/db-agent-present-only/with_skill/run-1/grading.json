@@ -13,7 +13,7 @@
     {
       "text": "Policy decision is PRESENT_ONLY and appears in policy-decision.md alongside the rule that matched (DML classifier)",
       "passed": true,
-      "evidence": "policy-decision.md records policy_gate=PRESENT_ONLY, final_decision=present_only, operation_type=DML (INSERT), and cites the DML classifier verbatim from .claude/agents/lib/wiki_db/policy.ts including the _DML_KEYWORDS set ({INSERT, UPDATE, DELETE, REPLACE, MERGE, UPSERT}) and the PRESENT_ONLY branch of Policy.checkQuery."
+      "evidence": "policy-decision.md records policy_gate=PRESENT_ONLY, final_decision=present_only, operation_type=DML (INSERT), and cites the DML classifier verbatim from agents/lib/wiki_db/policy.ts including the _DML_KEYWORDS set ({INSERT, UPDATE, DELETE, REPLACE, MERGE, UPSERT}) and the PRESENT_ONLY branch of Policy.checkQuery."
     },
     {
       "text": "Output clearly labels the SQL as not executed (e.g., title 'NOT EXECUTED', status='present_only', executed=false)",
@@ -49,7 +49,7 @@
       "claim": "The INSERT statement was classified as DML by _DML_KEYWORDS and routed to the PRESENT_ONLY branch",
       "type": "process",
       "verified": true,
-      "evidence": "Source at .claude/agents/lib/wiki_db/policy.ts lines 64, 94, 226, 242 confirms _DML_KEYWORDS includes INSERT and the DML branch returns decision='present_only' with formatted_sql — matches the cited chain in policy-decision.md."
+      "evidence": "Source at agents/lib/wiki_db/policy.ts lines 64, 94, 226, 242 confirms _DML_KEYWORDS includes INSERT and the DML branch returns decision='present_only' with formatted_sql — matches the cited chain in policy-decision.md."
     },
     {
       "claim": "No SQLite row was inserted (row count remained 0)",

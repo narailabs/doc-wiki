@@ -2,7 +2,7 @@
 
 doc-wiki itself does not talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. All external-source fetching is delegated to a single dependency: [`narai-primitives`](https://github.com/narailabs/narai-primitives), a bundled package that ships a planner-dispatcher (`gather()`), a connector framework (the toolkit), a config loader, and seven read-only built-in connectors. Credentials are resolved by a separately published package, [`@narai/credential-providers`](#credential-providers).
 
-This document is the API and operations reference for that stack. For doc-wiki's *use* of `gather()` (the `/wiki-ingest` step 7 hook, the `mermaid_augment.ts` decoration site), see [`architecture.md`](architecture.md).
+This document is the API and operations reference for that stack. For doc-wiki's *use* of `gather()` (the `/doc-wiki:ingest` step 7 hook, the `mermaid_augment.ts` decoration site), see [`architecture.md`](architecture.md).
 
 ## Table of contents
 
@@ -153,7 +153,7 @@ Per-step errors are structured and never thrown:
 | `RATE_LIMITED` | Connector hit a rate limit |
 | `CONFIG_ERROR` | Connector misconfiguration (e.g., missing optional dep, bad params) |
 
-The caller sees `out.results[i].error.code` and decides whether to fail the operation or carry on with partial results. doc-wiki's `/wiki-ingest` carries on with whatever envelopes succeeded.
+The caller sees `out.results[i].error.code` and decides whether to fail the operation or carry on with partial results. doc-wiki's `/doc-wiki:ingest` carries on with whatever envelopes succeeded.
 
 ### Source files
 
@@ -518,7 +518,7 @@ ecosystem:
         skill: ./.connectors/connectors/stripe/cli.js
 ```
 
-doc-wiki's `source_registry.ts` will then route Stripe URLs through your connector when `/wiki-ingest` encounters them.
+doc-wiki's `source_registry.ts` will then route Stripe URLs through your connector when `/doc-wiki:ingest` encounters them.
 
 **Do not** modify an existing connector for ad-hoc behavior. If the change is general-purpose, contribute it upstream (see next section). If it's project-local, scaffold a custom connector instead.
 
@@ -526,11 +526,11 @@ doc-wiki's `source_registry.ts` will then route Stripe URLs through your connect
 
 If your connector is broadly useful (would benefit multiple Narailabs tools), open a pull request against [narailabs/narai-primitives](https://github.com/narailabs/narai-primitives). The repository's [`CONTRIBUTING.md`](https://github.com/narailabs/narai-primitives/blob/main/CONTRIBUTING.md) walks through the structure: drop your connector under `src/connectors/<name>/`, add zod schemas for actions, write tests under `tests/connectors/<name>/`, register a CLI binary in the umbrella dispatcher, and add an entry to the package's `exports` map.
 
-doc-wiki's only hook into a new built-in is its entry in `BUILTIN_PATTERNS` in [`source_registry.ts`](../.claude/agents/lib/source_registry.ts) — add it there too, so `/wiki-ingest` routes the right URLs through the new connector.
+doc-wiki's only hook into a new built-in is its entry in `BUILTIN_PATTERNS` in [`source_registry.ts`](../agents/lib/source_registry.ts) — add it there too, so `/doc-wiki:ingest` routes the right URLs through the new connector.
 
 ## Wiki-side decoration: `mermaid_augment.ts`
 
-After `gather()` returns, doc-wiki runs the results through [`mermaid_augment.ts`](../.claude/agents/lib/mermaid_augment.ts). This is the single decoration site for all 7 connectors — it inspects each `DispatchResult.envelope`, recognizes connector-specific shapes (Jira issues, GitHub PRs, schema info from `db`, etc.), and adds a `mermaid: { type, title, code }` field with a wiki-ready Mermaid block.
+After `gather()` returns, doc-wiki runs the results through [`mermaid_augment.ts`](../agents/lib/mermaid_augment.ts). This is the single decoration site for all 7 connectors — it inspects each `DispatchResult.envelope`, recognizes connector-specific shapes (Jira issues, GitHub PRs, schema info from `db`, etc.), and adds a `mermaid: { type, title, code }` field with a wiki-ready Mermaid block.
 
 The wiki page compilation step then splices these blocks into the page (idempotently, via `mermaid_inject.ts`'s `<!-- wiki-mermaid: <title> start/end -->` markers).
 

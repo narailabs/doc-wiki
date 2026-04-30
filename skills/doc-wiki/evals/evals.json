@@ -1,0 +1,202 @@
+{
+  "skill_name": "doc-wiki",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a new Python project at /tmp/test-project with some markdown docs in a docs/ folder. Initialize a documentation wiki for it with domain 'backend-services', ingest docs/architecture.md (about JWT auth and session management), and then query 'how does authentication work?'.",
+      "expected_output": "Creates wiki scaffold, ingests the architecture doc as a wiki page, and returns a synthesized answer citing the wiki page",
+      "files": [],
+      "expectations": [
+        "Runs init_wiki.js to create directory scaffold under the project root",
+        "wiki.config.yaml is created with wiki.domain: 'backend-services'",
+        "Directory scaffold includes wiki/, raw/, graph/, audit/, log/, outputs/",
+        "Source file is copied to raw/ (path preserved relative to the ingested root)",
+        "Generated wiki page has frontmatter with non-empty title, type set to 'concept' (or one of concept|index|synthesis|claim|template), sources listing the ingested file, created + updated ISO dates, a non-empty summary, and 4-8 content-only tags",
+        "Tags are content-only concepts (e.g., 'jwt', 'authentication', 'session-management') — no structural/temporal/metadata tags",
+        "summaries.md has a non-stub entry (≥ 20 chars) for the new page",
+        "Query answer includes at least two inline markdown links and each link resolves to a file that actually exists under wiki/",
+        "Query answer mentions at least two concrete facts from the source (e.g., JWT, sessions table, refresh endpoint) — hallucinated answers that cite nonexistent pages must fail",
+        "Answer is archived to outputs/queries/ as a dated .md file",
+        "events.jsonl records separate entries with op='init', op='ingest', and op='query' (one per operation), all with ISO timestamps",
+        "graph/edges.jsonl contains at least one edge with a valid provenance tag (EXTRACTED, INFERRED, or AMBIGUOUS)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run /doc-wiki:lint on my wiki at /tmp/test-wiki/. It has pages with missing frontmatter fields and broken internal links. Fix all issues found.",
+      "expected_output": "Identifies lint violations (missing frontmatter, broken links), reports them, and applies fixes to the affected pages",
+      "files": [],
+      "expectations": [
+        "lint_checks.js is invoked and its first-pass report lists at least one 'broken_links' violation and at least one 'missing_frontmatter' violation",
+        "Each violation record names the offending file path",
+        "Auto-fix applies the frontmatter fields required by the linter (title, type, tags, sources, created, updated, summary) — running the linter again after fix reports zero errors",
+        "Broken-link fixes either create a stub for the missing target OR remove the link, never rewrite the page body wholesale (original headings and primary prose are preserved byte-identically outside the fix region)",
+        "The fix action went through the wiki skill — events.jsonl records op='lint' AND op='fix' in order, each with target_page paths",
+        "Re-running /doc-wiki:lint after the fix yields zero 'broken_links' and zero 'missing_frontmatter' violations"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "In my wiki at /tmp/test-wiki/, find the shortest path between the 'authentication' concept and the 'database-schema' concept. Show all intermediate pages.",
+      "expected_output": "Returns the shortest path through the relationship graph, listing each intermediate page and edge type",
+      "files": [],
+      "expectations": [
+        "Runs graph_ops.js with the path subcommand",
+        "Returned path starts at 'authentication' and ends at 'database-schema'",
+        "Every intermediate node appears as either the source or the target of an edge in the fixture's edges.jsonl",
+        "Every consecutive (from, to) pair in the returned path exists as an edge in edges.jsonl (no hallucinated links)",
+        "The returned path is shortest — no alternative chain in edges.jsonl connects the same endpoints with fewer hops",
+        "Edge type (supports|contradicts|extends|supersedes) is reported for each hop",
+        "Provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) is reported for each edge",
+        "A no-path query (unreachable or unknown target) returns an empty result with a human-readable explanation — not a stack trace or bare []"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up wiki for a Spring Boot + PostgreSQL project",
+      "expected_output": "Detects Java/Spring Boot with JPA and PostgreSQL, writes wiki.config.yaml with the stack wired in",
+      "files": [],
+      "expectations": [
+        "Detects Java/Spring Boot by parsing pom.xml or build.gradle — wiki.config.yaml lists framework='spring-boot' AND a framework version string that matches the fixture (e.g., '3.2.0' when pom.xml pins that version)",
+        "Detects JPA by scanning .java files — ecosystem.orm.profiles includes 'jpa' AND the detection trace lists at least one concrete @Entity class name found (e.g., 'User')",
+        "Detects PostgreSQL from application.properties JDBC URL — wiki.config.yaml's database block sets driver='postgresql' AND host+port+database match the URL (e.g., localhost:5432/mydb when the fixture contains jdbc:postgresql://localhost:5432/mydb)",
+        "Credentials are referenced via secret names (e.g., user_secret: WIKI_DB_DEV_USER) — plaintext passwords anywhere in wiki.config.yaml is a failure",
+        "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated in the database section",
+        "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Set up wiki for a Django + MongoDB project",
+      "expected_output": "Detects Python/Django with MongoDB, writes wiki.config.yaml with the stack wired in",
+      "files": [],
+      "expectations": [
+        "Detects Python/Django — wiki.config.yaml lists language='python' and framework='django' with at least one evidence file cited in detection-trace (requirements.txt, pyproject.toml, or manage.py)",
+        "Detects Django ORM — ecosystem.orm.profiles includes 'django' AND the detection trace names at least one extracted model class with its db_table mapping (e.g., Article → articles)",
+        "Detects MongoDB — wiki.config.yaml's database block sets driver='mongodb' (via djongo or direct) with connection info parsed from settings.py (e.g., mongodb://localhost:27017)",
+        "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated for MongoDB",
+        "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root",
+        "Seed files (wiki/index.md, graph/edges.jsonl, log/events.jsonl) exist — not just empty directories"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Ingest all markdown files from the docs/ folder at /tmp/test-ingest-folder/ (8 files covering architecture, auth, database, caching, deployment, monitoring, sdk, and troubleshooting). Use folder batching so I can see progress per-file, and make the second run a no-op for any file whose content hasn't changed.",
+      "expected_output": "All 8 files become wiki pages; per-file events logged; re-running the ingest skips unchanged files via the content-hash cache",
+      "files": [],
+      "expectations": [
+        "All 8 source files end up as wiki pages (or 8 distinct wiki/*.md files created)",
+        "Each generated wiki page has valid frontmatter with non-empty title + sources + a 4-8 tag list",
+        "Each source file is copied into raw/ preserving the relative path (raw/architecture.md, raw/auth.md, etc.)",
+        "events.jsonl records 8 ingest events, each naming the source file and content hash",
+        ".wiki-cache/ (or the caching dir named in wiki.config.yaml) contains 8 per-file hash entries after the first run",
+        "A second run of the same ingest command logs 8 'cache_hit' or 'skipped' entries (or records zero new ingest events) — no file is reprocessed while the content is unchanged",
+        "Modifying one file and re-running processes only that one file (one new ingest event; seven cache hits)"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "In my wiki at /tmp/test-fix-wiki/, the page authentication.md says the service uses HS256 signing, but the source was recently updated to use RS256. Fix just that page — update the summary and any body mentions of HS256 to RS256.",
+      "expected_output": "Only the authentication.md page is edited; the fix is audited; no other pages change",
+      "files": [],
+      "expectations": [
+        "authentication.md content mentions RS256 and no longer mentions HS256 in the updated regions",
+        "The page's frontmatter 'updated' field is refreshed to the current date (differs from 'created')",
+        "No other wiki page is modified — a directory diff of wiki/ shows exactly one file touched",
+        "events.jsonl records op='fix' with target_page: 'wiki/authentication.md' (or equivalent), a reason/description field, and an ISO timestamp",
+        "A re-run of /doc-wiki:lint on the fixed page reports zero violations (quality is preserved)",
+        "The quality score of the page is recomputed and its value appears in the events.jsonl fix entry"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Show me the wiki stats for /tmp/test-stats-wiki/ over the last 7 days. Break it down by operation (ingest, query, lint, fix) and include total-tokens and average-duration per op.",
+      "expected_output": "Runs event_logger stats; produces a summary grouped by op with counts, totals, and averages; respects the 7-day window",
+      "files": [],
+      "expectations": [
+        "Runs the wiki's event_logger stats subcommand (event_logger.js stats --since 7d) or equivalent",
+        "Output lists counts for at least op='ingest', op='query', op='lint', op='fix' — one line per op",
+        "Each op's count matches the number of corresponding entries in the fixture's events.jsonl within the 7-day window",
+        "Output emits `total_tokens_by_op` NATIVELY from the stats subcommand (no manual post-processing) — with a per-op breakdown summing event.tokens / total_tokens / tokens_in+tokens_out fields",
+        "Output emits `avg_duration_ms_by_op` NATIVELY from the stats subcommand with a per-op average of event.duration_ms / total_duration_ms",
+        "The --since 7d window is honored — any event older than 7 days is excluded from the counts"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Promote the archived query answer at /tmp/test-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md to a permanent wiki page under wiki/auth/authentication-flow.md. Use topic 'authentication-flow'.",
+      "expected_output": "Copies/transforms the archived query into a permanent wiki page with frontmatter, registers it in the crosslink graph, logs op=promote, and leaves the original archive in place",
+      "files": [],
+      "expectations": [
+        "A new wiki page exists at wiki/auth/authentication-flow.md (or wiki/authentication-flow.md if no topic dir is configured) with frontmatter type='synthesis' OR type='concept', non-empty title, >=4 content-only tags, a sources array referencing the original query's source URLs/files",
+        "The promoted page's body is derived from (not byte-identical to) the archive — citations to wiki pages in the archive are converted to working relative markdown links, and at least 80% of the archive's prose paragraphs survive into the page",
+        "The original archive at outputs/queries/2026-04-14-how-does-authentication-work.md still exists and is unmodified (mtime and contents preserved); promote MUST NOT move or delete the archive",
+        "wiki/index.md (or summaries.md) has a new entry referencing the promoted page's path",
+        "graph/edges.jsonl gains at least one edge whose source or target is the new page, with a valid provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) and a typed-edge label (supports|extends|supersedes|contradicts)",
+        "events.jsonl records exactly one entry with op='promote' including source_query (path to the archive), target_page (path to the new wiki page), and an ISO timestamp",
+        "Re-running /doc-wiki:promote for the same archive is a no-op or surfaces a 'page already exists' warning — it does not duplicate the page or re-emit the promote event"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Refresh the previously-ingested source /tmp/test-refresh-wiki/raw/architecture.md against my wiki at /tmp/test-refresh-wiki/. The source has been edited since the last ingest; the wiki page also has a manual frontmatter field reviewer: alice that I added by hand — preserve it.",
+      "expected_output": "Detects the source has changed, re-compiles the wiki page with new content, preserves manual frontmatter additions, updates the raw/ copy, re-runs edge inference, logs op=refresh",
+      "files": [],
+      "expectations": [
+        "Re-computed content_hash for the source differs from the value stored in .wiki-cache/ from the original ingest — both values appear in the events.jsonl entry as stale_hash and fresh_hash",
+        "The corresponding wiki/architecture.md body is updated to reflect new content from the source (a phrase introduced in the modified source appears in the page body)",
+        "The page's frontmatter still contains reviewer: alice (manual field preserved); standard managed fields (updated, sources, summary) are refreshed; created is unchanged",
+        "raw/architecture.md is overwritten with the new source content (its file hash matches the new source)",
+        "events.jsonl records op='refresh' with target_page, source, stale_hash, fresh_hash, and a delta_summary string of >=20 chars describing what changed",
+        "graph/edges.jsonl is re-evaluated — at least one edge whose source is the refreshed page differs from the pre-refresh edge set (added, removed, or retyped). If no edges change, the events entry must explicitly note edges_unchanged: true",
+        "A second /doc-wiki:refresh run with no further source modification is a no-op: no new events, hash stays identical, page body unchanged byte-for-byte"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "In the wiki at /tmp/test-query-wiki/ (5 wiki pages spanning auth, request-routing, app-server, db-write-path, and audit-log), answer: what's the full request lifecycle from user authentication through DB write? Cite every page you read.",
+      "expected_output": "A synthesized answer grounded in at least three distinct wiki pages, with summary-first search visible in the trace, a knowledge-gaps section if applicable, archive dated and topic-tagged, and reduction_ratio >0.8",
+      "files": [],
+      "expectations": [
+        "The answer cites at least 3 distinct wiki pages by relative markdown link, each link resolving to a real file under wiki/",
+        "events.jsonl records op='query' with details.search_phase: 'summaries' (or equivalent flag) preceding any per-page reads, evidencing summaries-first search — no op='query' whose first read is a full wiki page is acceptable",
+        "details.reduction_ratio in the events entry is >0.8 (final synthesis token count is <20% of total tokens read)",
+        "The answer ends with a '## Knowledge gaps' (or equivalent labeled) section listing at least one specific gap when the source pages don't cover (a) request-id propagation OR (b) error-path rollback — both of which the fixture intentionally omits",
+        "The archive at outputs/queries/<YYYY-MM-DD>-<topic-slug>.md exists with frontmatter containing topic, tags, and created ISO date; filename slug derives from the question",
+        "The synthesized answer mentions concrete artifacts from at least 3 of the 5 pages (e.g., JWT, nginx, pg connection pool, audit_log table) — a generic answer that doesn't surface page-specific terms fails",
+        "The events entry includes tokens_in, tokens_out, and a non-zero pages_read[] array of length >=3"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Run /doc-wiki:stats on /tmp/test-stats-since-wiki/ three times: first with --since 1h, then with --since 30d, then with --since 2026-04-01T00:00:00Z. Report the per-op counts for each window. The fixture's events.jsonl contains entries timestamped 30 minutes ago (2 events), 5 days ago (3 events), 20 days ago (4 events), and 60 days ago (3 events).",
+      "expected_output": "Three distinct stat reports — 1h covers 2 events, 30d covers 9 events, the absolute ISO covers 5 events (everything since 2026-04-01, which excludes the 20-day-old cohort dated 2026-03-25); each report exposes per-op breakdown",
+      "files": [],
+      "expectations": [
+        "--since 1h returns total_events=2 (both within the last 30 minutes)",
+        "--since 30d returns total_events=9 (the 2+3+4 events within 30 days; the 60-day-old ones excluded)",
+        "--since 2026-04-01T00:00:00Z returns total_events=5 (only the 30-min and 5-day cohorts survive; the 20-day-old cohort is dated 2026-03-25 — which is before the 2026-04-01 ISO cutoff — so those 4 events are correctly excluded, along with the 60-day-old cohort)",
+        "All three calls invoke the same event_logger.js stats subcommand — the prompt MUST NOT massage results client-side; counts come from the script's stdout",
+        "Per-op breakdown (by_op) is present in every report — the count for each individual op (e.g., ingest, query, lint) appears separately and the sum across ops equals total_events",
+        "An invalid granularity (e.g., --since 1z) is treated as a literal string by parseRelativeSince (returns the string unchanged), and parsePythonIsoformat then fails it, so the script either errors with a non-zero exit and a human-readable message OR returns total_events=0 with an explicit warning — silent fallback to 'no filter' is a failure",
+        "Absolute ISO timestamp output (with +00:00 UTC offset) is accepted identically to its Z-suffix equivalent (2026-04-01T00:00:00+00:00 and 2026-04-01T00:00:00Z produce the same total_events)"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Onboard a wiki for the Node project at /tmp/test-onboard-node-pg/. The fixture has package.json with express + pg dependencies; src/db.js opens a new Pool({ connectionString: process.env.DATABASE_URL }) against postgres://wikiuser@db.local:5432/appdb; src/models/user.js exports a plain JS object literal (no ORM library).",
+      "expected_output": "Detects javascript + express + postgres; ORM detection finds no profile match and falls back to raw_sql; wiki.config.yaml populated with all detected fields and a policy stanza",
+      "files": [],
+      "expectations": [
+        "wiki.config.yaml has language: javascript (or nodejs) inferred from package.json",
+        "framework: express is set when express is in package.json dependencies; alternatively, framework: null (or absent) is acceptable ONLY if a detection-trace entry explicitly notes 'express detected but not configured as framework' — silent omission is a failure",
+        "ecosystem.database.driver: postgresql is set; host: db.local, port: 5432, database: appdb parsed from the connection string in src/db.js",
+        "Credentials are referenced by secret name (user_secret: WIKI_DB_DEV_USER or similar) — no plaintext password OR username appears in wiki.config.yaml",
+        "ecosystem.orm.profiles is either an empty list [] OR contains exactly ['raw_sql'] — none of the shipped ORM profile names (jpa, sqlalchemy, django, prisma, typeorm, activerecord, entity_framework) appear, since the fixture has no ORM library",
+        "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated under the database section with safe defaults (block_ddl: true, block_privilege: true, dml_mode: 'escalate' or 'deny', audit.enabled: true)",
+        "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root after onboard completes (auto-init triggered)",
+        "events.jsonl contains one op='init' event AND one op='onboard' event (or equivalent), each with ISO timestamps"
+      ]
+    }
+  ]
+}

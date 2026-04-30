@@ -69,7 +69,7 @@ BYTE-FOR-BYTE MATCH: before == prefix(after, before_size)
 ## 3. Why this is the correct preservation contract
 
 The agent's `injectMermaid` logic (see
-`.claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.ts`) operates
+`agents/wiki-mermaid-agent/scripts/mermaid_gen.ts`) operates
 under the `## Diagrams` heading. When that heading is absent it **appends**
 a new section at the end of the file — it never rewrites the prefix.
 Therefore everything outside the diagrams section (frontmatter, the

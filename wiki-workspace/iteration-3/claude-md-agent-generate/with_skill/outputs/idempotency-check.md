@@ -14,7 +14,7 @@ CLAUDE.md files (diff -ru is empty).
 
 ```bash
 # Run 2 (same flags as Run 1)
-node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
+node agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
   --project-root /tmp/eval-i3-cmd-gen --wiki-root /tmp/eval-i3-cmd-gen/wiki \
   --submodule services/api --update /tmp/eval-i3-cmd-gen/services/api/CLAUDE.md
 # (and similarly for services/worker, services/gateway, and the root)

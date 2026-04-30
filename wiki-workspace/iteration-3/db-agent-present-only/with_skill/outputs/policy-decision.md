@@ -14,7 +14,7 @@
 
 ## Rule citation (verbatim from source)
 
-File: `.claude/agents/lib/wiki_db/policy.ts`
+File: `agents/lib/wiki_db/policy.ts`
 
 ```ts
 const _DML_KEYWORDS: ReadonlySet<string> = new Set([
@@ -44,7 +44,7 @@ if (op === OperationType.DML) {
 5. **Driver call:** **never reached** — `executeQuery` returns the
    `present_only` result without invoking `driver.execute` or
    `driver.executeReadAsync`.
-   (See `.claude/agents/lib/wiki_db/query.ts`, lines 91-98.)
+   (See `agents/lib/wiki_db/query.ts`, lines 91-98.)
 
 ## Observable consequences
 

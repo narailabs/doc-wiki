@@ -3,7 +3,7 @@
 Command:
 
 ```
-node .claude/skills/wiki/scripts/lint_checks.js --wiki-root .
+node skills/wiki/scripts/lint_checks.js --wiki-root .
 ```
 
 ## Full report (all categories)
@@ -115,7 +115,7 @@ Frontmatter-only category (the check most sensitive to what a fix would
 corrupt):
 
 ```
-$ node .claude/skills/wiki/scripts/lint_checks.js --wiki-root . --category frontmatter
+$ node skills/wiki/scripts/lint_checks.js --wiki-root . --category frontmatter
 summary: {"error": 3, "warning": 0, "info": 0}
 issues: all 3 on wiki/{index,overview,summaries}.md — none on authentication.md
 ```

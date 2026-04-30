@@ -7,7 +7,7 @@
 3. Run the agent a SECOND time against the same project and file:
 
    ```bash
-   node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
+   node agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
      --project-root /tmp/eval-claude-md-preserve \
      --wiki-root   /tmp/eval-claude-md-preserve/wiki \
      --update      /tmp/eval-claude-md-preserve/CLAUDE.md

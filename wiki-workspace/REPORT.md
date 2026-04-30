@@ -128,7 +128,7 @@ Seven fixes that landed before iter-7 ran — verified transitively when the ite
 - **T3** `extractor.ts::_resolveRelationshipTarget` — TypeORM arrow-function `() => ClassName` → recovered 3 assertions
 - **P1** `prisma.yaml` capture groups + `extractor.ts` preference for `relMatch[1]` → recovered 3 assertions
 - **W1** `event_logger.ts::main` CLI validation of `--since` (rejects `1z` with exit 2) → recovered 1 assertion
-- **E1** `.claude/skills/wiki/evals/evals.json` id=12 A3 arithmetic correction → recovered 1 assertion
+- **E1** `skills/wiki/evals/evals.json` id=12 A3 arithmetic correction → recovered 1 assertion
 
 ## Gaps still open
 

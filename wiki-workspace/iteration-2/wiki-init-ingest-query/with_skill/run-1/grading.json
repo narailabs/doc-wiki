@@ -3,7 +3,7 @@
     {
       "text": "Runs init_wiki.py (or init_wiki.ts) script to create directory scaffold",
       "passed": true,
-      "evidence": "report.md Phase 1 documents the command: `node .claude/skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project --domain 'backend-services' --name 'eval-iiq-project'`, and the full scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/, wiki.config.yaml, events.jsonl, edges.jsonl, .wiki-ignore) is present under outputs/."
+      "evidence": "report.md Phase 1 documents the command: `node skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project --domain 'backend-services' --name 'eval-iiq-project'`, and the full scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/, wiki.config.yaml, events.jsonl, edges.jsonl, .wiki-ignore) is present under outputs/."
     },
     {
       "text": "wiki.config.yaml is created with domain 'backend-services'",

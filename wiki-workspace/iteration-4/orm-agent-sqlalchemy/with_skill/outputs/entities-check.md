@@ -1,6 +1,6 @@
 # Entities Check — SQLAlchemy Fixture
 
-Fixture: `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/models.py`
+Fixture: `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/models.py`
 
 All three SQLAlchemy-declarative classes live in a **single file** (`models.py`).
 Purpose: verify the extractor no longer collapses multiple classes per file (R3 fix).

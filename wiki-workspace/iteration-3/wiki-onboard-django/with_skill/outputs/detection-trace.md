@@ -1,7 +1,7 @@
 # Detection Trace — `/wiki-onboard` on the Django + MongoDB fixture
 
 Project root: `/tmp/eval-i3-onboard-django`
-Skill: `.claude/skills/wiki/SKILL.md` (`/wiki-onboard`, phases 1-6)
+Skill: `skills/wiki/SKILL.md` (`/wiki-onboard`, phases 1-6)
 
 ## Phase 1 — Language / framework
 
@@ -31,7 +31,7 @@ wiki:
 
 ## Phase 2 — ORM detection (wiki-orm-agent, `django` profile)
 
-Loaded `.claude/agents/lib/wiki_orm/profiles/django.yaml`. The profile
+Loaded `agents/lib/wiki_orm/profiles/django.yaml`. The profile
 declares three extraction regexes, each applied to `myapp/models.py`:
 
 | Profile pattern (django.yaml)                      | Match in `myapp/models.py`        |
@@ -141,7 +141,7 @@ Default `autonomy.mode = balanced` kept.
 ## Commands executed
 
 ```bash
-node .claude/skills/wiki/scripts/init_wiki.js \
+node skills/wiki/scripts/init_wiki.js \
     --path /tmp/eval-i3-onboard-django \
     --domain "django-mongodb" --name "myapp Wiki"
 
@@ -152,10 +152,10 @@ node .claude/skills/wiki/scripts/init_wiki.js \
 #   ecosystem.database: enabled=true, driver=mongodb, environments.dev=...,
 #                       policy (DDL/privilege/DML/audit), audit.enabled=true
 
-node .claude/skills/wiki/scripts/parse_config.js \
+node skills/wiki/scripts/parse_config.js \
     --config /tmp/eval-i3-onboard-django/wiki.config.yaml   # validates cleanly
 
-node .claude/skills/wiki/scripts/event_logger.js --op onboard \
+node skills/wiki/scripts/event_logger.js --op onboard \
     --wiki-root /tmp/eval-i3-onboard-django \
     --details '{"language":"python","framework":"django","orm":"django", \
                 "database":"mongodb","entities":[{"class_name":"Article", \

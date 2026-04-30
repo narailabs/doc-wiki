@@ -13,7 +13,7 @@
 
 ## Rule that matched
 
-Source: `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_db/policy.ts`
+Source: `/Users/narayan/src/doc-wiki/agents/lib/wiki_db/policy.ts`
 (`Policy.checkQuery` → DML branch, lines 226-246):
 
 ```ts
@@ -57,7 +57,7 @@ returned, triggering the PRESENT_ONLY branch above.
 
 > - **NEVER execute INSERT, UPDATE, DELETE** — return formatted SQL via PRESENT_ONLY
 
-See `/Users/narayan/src/doc-wiki/.claude/agents/wiki-db-agent/AGENT.md` §"CRITICAL RULES".
+See `/Users/narayan/src/doc-wiki/agents/wiki-db-agent/AGENT.md` §"CRITICAL RULES".
 
 ## Wire-format result
 

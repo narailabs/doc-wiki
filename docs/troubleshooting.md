@@ -31,11 +31,11 @@ If you don't use `nvm`, install Node 20 via your package manager (Homebrew: `bre
 2. **Missing dependency.** Fix: `rm -rf node_modules package-lock.json && npm install && npm run build`.
 3. **You're editing on a feature branch where `package.json` is ahead of `node_modules`.** Fix: `npm install` first.
 
-If `npm run typecheck` (which is `tsc --noEmit`) passes but `npm run build` fails, the issue is in `tsconfig.build.json`'s `include` list — usually a new `.ts` file under `.claude/skills/wiki/scripts/` that wasn't picked up. Add it there.
+If `npm run typecheck` (which is `tsc --noEmit`) passes but `npm run build` fails, the issue is in `tsconfig.build.json`'s `include` list — usually a new `.ts` file under `skills/doc-wiki/scripts/` that wasn't picked up. Add it there.
 
 ## `gather()` returns empty plan
 
-**Symptom:** During `/wiki-ingest`, step 7 reports "no connectors planned" or `out.results.length === 0` even though the source clearly has external context (a Jira link, a GitHub URL, etc.).
+**Symptom:** During `/doc-wiki:ingest`, step 7 reports "no connectors planned" or `out.results.length === 0` even though the source clearly has external context (a Jira link, a GitHub URL, etc.).
 
 **Diagnostic order:**
 
@@ -61,27 +61,27 @@ If `npm run typecheck` (which is `tsc --noEmit`) passes but `npm run build` fail
 
 **Symptom:** `npm test` shows "5 skipped" alongside the 886 passing tests, and you'd like to actually run them.
 
-**Cause:** Five tests under `.claude/agents/lib/wiki_db/tests/` and `.claude/agents/lib/wiki_orm/tests/` exercise live database connections. They're gated behind `TEST_LIVE_*` env vars to avoid breaking CI.
+**Cause:** Five tests under `agents/lib/wiki_db/tests/` and `agents/lib/wiki_orm/tests/` exercise live database connections. They're gated behind `TEST_LIVE_*` env vars to avoid breaking CI.
 
 **Fix:** Set the env vars matching the tests' expectations and re-run. The variable names are visible in the test source:
 
 ```sh
-TEST_LIVE_SQLITE=1 npx vitest run .claude/agents/lib/wiki_db/tests/
+TEST_LIVE_SQLITE=1 npx vitest run agents/lib/wiki_db/tests/
 ```
 
 Some tests need a real PostgreSQL or MySQL — provision one and set its connection string in the matching env var. Live DB tests are not required for any normal contribution; the 886 non-live tests cover the main paths.
 
-## `/wiki-lint` reports orphans or drift
+## `/doc-wiki:lint` reports orphans or drift
 
-**Symptom:** `/wiki-lint` flags pages with broken links, content-hash drift on code references, or "isolated nodes" in the graph.
+**Symptom:** `/doc-wiki:lint` flags pages with broken links, content-hash drift on code references, or "isolated nodes" in the graph.
 
 **Fix-first diagnostics:**
 
-- **Broken link** — usually a renamed file. `/wiki-lint --fix` repairs ones it can resolve unambiguously; the rest you fix by editing the page.
-- **Code-ref drift** — the code at `path:lines` has changed since the wiki page was written. `/wiki-fix <page>` lets you re-extract.
-- **Orphan / isolated node** — page has no inbound or outbound links. Either the page was deleted from `wiki/` but lingered in `graph/edges.jsonl`, or it was never crosslinked. `/wiki-lint --fix` removes stale edges; for the latter, run `/wiki-ingest --no-cache` on the same source to re-trigger the crosslink pass.
+- **Broken link** — usually a renamed file. `/doc-wiki:lint --fix` repairs ones it can resolve unambiguously; the rest you fix by editing the page.
+- **Code-ref drift** — the code at `path:lines` has changed since the wiki page was written. `/doc-wiki:fix <page>` lets you re-extract.
+- **Orphan / isolated node** — page has no inbound or outbound links. Either the page was deleted from `wiki/` but lingered in `graph/edges.jsonl`, or it was never crosslinked. `/doc-wiki:lint --fix` removes stale edges; for the latter, run `/doc-wiki:ingest --no-cache` on the same source to re-trigger the crosslink pass.
 
-See [`.claude/skills/wiki/references/quality.md`](../.claude/skills/wiki/references/quality.md) for the full lint rule list.
+See [`skills/doc-wiki/references/quality.md`](../skills/doc-wiki/references/quality.md) for the full lint rule list.
 
 ## Database connector denies a query I expected to allow
 
@@ -96,16 +96,16 @@ See [`.claude/skills/wiki/references/quality.md`](../.claude/skills/wiki/referen
 
 The full policy + outcomes are documented in [`docs/connectors.md`](connectors.md#db-connector). Never commit `allow`-everything policies to a shared config.
 
-## `/wiki-query` returns nothing useful
+## `/doc-wiki:query` returns nothing useful
 
 **Symptom:** Asking a question yields a vague answer or "no relevant pages found."
 
 **Diagnostic order:**
 
-1. **Is the wiki populated?** `/wiki-stats --since 30d` should show ingest counts. If the wiki only has an `index.md`, you need more `/wiki-ingest` runs first.
-2. **Is `wiki/summaries.md` populated?** Each page should have a one-paragraph entry. If the file is sparse, run `/wiki-lint --fix` to trigger `summaries_rebuild.ts`.
+1. **Is the wiki populated?** `/doc-wiki:stats --since 30d` should show ingest counts. If the wiki only has an `index.md`, you need more `/doc-wiki:ingest` runs first.
+2. **Is `wiki/summaries.md` populated?** Each page should have a one-paragraph entry. If the file is sparse, run `/doc-wiki:lint --fix` to trigger `summaries_rebuild.ts`.
 3. **Is your question phrased close to the source content?** Summary-first search scores against summaries, not full bodies — phrase your question with vocabulary that appears in source material.
-4. **Try `/wiki-path`** instead — if you're looking for relationships between concepts (`/wiki-path --from auth --to session`), the graph traversal is more direct.
+4. **Try `/doc-wiki:path`** instead — if you're looking for relationships between concepts (`/doc-wiki:path --from auth --to session`), the graph traversal is more direct.
 
 ## Where to file issues
 
@@ -118,4 +118,4 @@ When filing, please include:
 - Your Node version (`node --version`)
 - Output of `npm test` (passes? regressions?)
 - Sanitized excerpt of `~/.connectors/config.yaml` (redact tokens)
-- Last few entries of `log/events.jsonl` if the failure was during a `/wiki-*` op
+- Last few entries of `log/events.jsonl` if the failure was during a `/doc-wiki:*` op

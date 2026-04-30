@@ -23,7 +23,7 @@
     {
       "text": "Running the generator a second time produces byte-identical CLAUDE.md files across the board (diff -ru is empty) — idempotency holds",
       "passed": true,
-      "evidence": "idempotency-check.md documents snapshot-then-rerun-then-diff procedure across all 4 files; all four diffs returned empty. Procedure used node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js with identical flags as Run 1."
+      "evidence": "idempotency-check.md documents snapshot-then-rerun-then-diff procedure across all 4 files; all four diffs returned empty. Procedure used node agents/wiki-claude-md-agent/scripts/claude_md_gen.js with identical flags as Run 1."
     },
     {
       "text": "When the user edits content OUTSIDE the managed markers between runs (e.g., adds a new heading above the start marker), the next generation preserves that edit unchanged",

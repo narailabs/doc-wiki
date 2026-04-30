@@ -1,7 +1,7 @@
 # relationships-check — F3 target_entity assertion
 
 Source: extracted via `extractEntities(fileContents, jpaProfile)` against
-`/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/jpa/`.
+`/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/jpa/`.
 
 ## Enumerated relationships (3 total)
 

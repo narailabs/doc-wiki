@@ -1,4 +1,4 @@
-$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path \
+$ node /Users/narayan/src/doc-wiki/skills/wiki/scripts/graph_ops.js path \
     --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
     --from authentication --to database-schema
 [
@@ -29,13 +29,13 @@ $ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path
 ]
 
 # ─── No-path case 1: reverse direction (database-schema → authentication) ───
-$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path \
+$ node /Users/narayan/src/doc-wiki/skills/wiki/scripts/graph_ops.js path \
     --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
     --from database-schema --to authentication
 []
 
 # ─── No-path case 2: unknown target ───
-$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path \
+$ node /Users/narayan/src/doc-wiki/skills/wiki/scripts/graph_ops.js path \
     --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
     --from authentication --to nonexistent-concept
 []

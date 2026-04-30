@@ -9,7 +9,7 @@
 #   ./.connectors/config.yaml   (per-repo overlay; wins on conflict)
 #
 # Then uncomment the connectors you want enabled, fill in the credential
-# references, and run `/wiki-ingest <source>` — gather() reads this file,
+# references, and run `/doc-wiki:ingest <source>` — gather() reads this file,
 # plans which connectors to invoke based on the prompt, and dispatches
 # them in parallel.
 #
@@ -104,7 +104,7 @@ environments:
 
 consumers:
   doc-wiki:
-    # Example: doc-wiki only ingests from public sources during /wiki-ingest;
+    # Example: doc-wiki only ingests from public sources during /doc-wiki:ingest;
     # disable AWS/GCP for the wiki even if they're enabled globally.
     # aws:
     #   enabled: false

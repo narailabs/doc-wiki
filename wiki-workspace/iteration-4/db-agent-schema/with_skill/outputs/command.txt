@@ -10,7 +10,7 @@ Fixture setup:
   # audit.{enabled:true, path:./audit.jsonl}}
 
 Agent invocation:
-  node /Users/narayan/src/doc-wiki/.claude/agents/wiki-db-agent/scripts/db_query.js \
+  node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
     --env dev \
     --config ./wiki.config.yaml \
     --action schema \

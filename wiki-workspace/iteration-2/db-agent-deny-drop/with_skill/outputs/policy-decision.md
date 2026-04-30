@@ -14,7 +14,7 @@
 
 ## Rule source
 
-`.claude/agents/lib/wiki_db/policy.ts`, lines 211-216:
+`agents/lib/wiki_db/policy.ts`, lines 211-216:
 
 ```ts
 // ----- DDL: always denied -----
@@ -27,7 +27,7 @@ if (op === OperationType.DDL) {
 
 ## DDL keyword set
 
-`.claude/agents/lib/wiki_db/policy.ts`, line 67:
+`agents/lib/wiki_db/policy.ts`, line 67:
 
 ```ts
 const _DDL_KEYWORDS: ReadonlySet<string> = new Set([

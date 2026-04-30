@@ -37,8 +37,8 @@ The row counts independently corroborate this: `row-count-before.txt = 0` and `r
 
 R1 wired the audit sink on the env path, but the PRESENT_ONLY path does **not** emit a dedicated policy event. Specifically:
 
-1. `Policy.checkQuery` in `.claude/agents/lib/wiki_db/policy.ts` emits `policy_deny` on the DENY branches via `_emitDeny` (lines 212-223 for DDL/PRIVILEGE, lines 250-253 for READ-deny), but **does not call `logEvent` on the PRESENT_ONLY branch** (lines 225-246). There is no `policy_present_only` / `policy_eval` event at all.
-2. `executeQuery` in `.claude/agents/lib/wiki_db/query.ts` returns `status: "present_only"` at lines 91-98 without calling `logQuery` or `logEvent`.
+1. `Policy.checkQuery` in `agents/lib/wiki_db/policy.ts` emits `policy_deny` on the DENY branches via `_emitDeny` (lines 212-223 for DDL/PRIVILEGE, lines 250-253 for READ-deny), but **does not call `logEvent` on the PRESENT_ONLY branch** (lines 225-246). There is no `policy_present_only` / `policy_eval` event at all.
+2. `executeQuery` in `agents/lib/wiki_db/query.ts` returns `status: "present_only"` at lines 91-98 without calling `logQuery` or `logEvent`.
 
 Consequence for this eval: `audit.jsonl` on the PRESENT_ONLY path contains **only** `pool_created` (the side-effect of materialising the connection pool), and no positive record of the policy decision itself. If no env is named for the run, or no pool needs to be built, the file could be empty. This is a gap in audit observability: the evaluator cannot tell from `audit.jsonl` alone whether a PRESENT_ONLY decision occurred.
 

@@ -3,7 +3,7 @@
     {
       "text": "Runs lint_checks.py (or lint_checks.ts) to detect violations",
       "passed": true,
-      "evidence": "lint-report-before.md header cites the exact command: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`. The structured output (Summary table with error/warning/info counts and per-category sections) matches the linter's emit format, and events.jsonl records a corresponding {\"op\": \"lint\", \"phase\": \"before\", \"errors\": 8, \"warnings\": 6, \"info\": 0} entry."
+      "evidence": "lint-report-before.md header cites the exact command: `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`. The structured output (Summary table with error/warning/info counts and per-category sections) matches the linter's emit format, and events.jsonl records a corresponding {\"op\": \"lint\", \"phase\": \"before\", \"errors\": 8, \"warnings\": 6, \"info\": 0} entry."
     },
     {
       "text": "Reports missing frontmatter fields (title, type, tags, sources)",

@@ -14,7 +14,7 @@ production environment; the policy gate was invoked directly (offline).
 VERIFICATION COMMAND (policy-only, no connection):
   cd /tmp/eval-db-deny && node --input-type=module -e "
     import { Policy, classifySqlKeywords } from
-      '/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_db/policy.js';
+      '/Users/narayan/src/doc-wiki/agents/lib/wiki_db/policy.js';
     const sql = 'DROP TABLE users';
     const op  = classifySqlKeywords(sql);
     const p   = new Policy('grant_required');
@@ -24,7 +24,7 @@ VERIFICATION COMMAND (policy-only, no connection):
   "
 
 NOTE ON NON-INVOCATION OF db_query.js:
-`node .claude/agents/wiki-db-agent/scripts/db_query.js --env production
+`node agents/wiki-db-agent/scripts/db_query.js --env production
 --sql "DROP TABLE users"` was deliberately NOT executed. That CLI would
 call `getConnection(envName)` BEFORE `policy.checkQuery(sql)` in
 `runWithEnv`, which would attempt a TCP connect to the (unreachable)

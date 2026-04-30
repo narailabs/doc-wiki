@@ -1,1 +1,1 @@
-node /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/scripts/orm_detect.js --codebase-path /Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/ --profile sqlalchemy --output-markdown ./database-mapping.md --output-json ./detected-entities.json
+node /Users/narayan/src/doc-wiki/agents/wiki-orm-agent/scripts/orm_detect.js --codebase-path /Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/ --profile sqlalchemy --output-markdown ./database-mapping.md --output-json ./detected-entities.json

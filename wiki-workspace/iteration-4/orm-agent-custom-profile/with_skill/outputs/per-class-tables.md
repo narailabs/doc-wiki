@@ -2,7 +2,7 @@
 
 ## Setup
 
-- Extractor: `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/extractor.js`
+- Extractor: `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/extractor.js`
   (compiled from `extractor.ts` with the R3 per-class windowing fix).
 - Profile: `custom-basemodel.yaml`
   - `class_pattern`: `class\s+(\w+)\s*\(\s*BaseModel\s*\)`
