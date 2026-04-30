@@ -22,3 +22,6 @@ explainer-video/
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store
+
+# Local scratch / drafting files
+drafts.md
