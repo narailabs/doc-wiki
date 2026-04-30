@@ -5,7 +5,7 @@ mkdir -p /tmp/eval-i7-onboard-node-pg/src/models /tmp/eval-i7-onboard-node-pg/lo
 # (wrote package.json, src/db.js, src/models/user.js, .env.example, README.md)
 
 ## Step 2 — Scaffold init
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/init_wiki.js \
   --path /tmp/eval-i7-onboard-node-pg \
   --domain "onboard-node-pg" \
   --name "test-app"
@@ -15,18 +15,18 @@ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js \
 #  ecosystem.orm.profiles — see wiki-config.yaml artifact)
 
 ## Step 4 — ORM detection
-node /Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/scripts/orm_detect.js \
+node /Users/narayan/src/doc-wiki/agents/wiki-orm-agent/scripts/orm_detect.js \
   --codebase-path /tmp/eval-i7-onboard-node-pg \
   --output-json /tmp/eval-i7-onboard-node-pg/orm-detection.json
 
 ## Step 5 — Log init event
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js \
   log --op init \
   --wiki-root /tmp/eval-i7-onboard-node-pg \
   --details '{"project_root": "/tmp/eval-i7-onboard-node-pg", "domain": "onboard-node-pg", "wiki_root": "wiki/", "scaffold_created": true}'
 
 ## Step 6 — Log onboard event
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js \
   log --op onboard \
   --wiki-root /tmp/eval-i7-onboard-node-pg \
   --details '{"project_root": "/tmp/eval-i7-onboard-node-pg", "language": "javascript", "framework": "express", "database_driver": "postgresql", "database_host": "db.local", "database_port": 5432, "database_name": "appdb", "user_secret": "WIKI_DB_DEV_USER", "orm_profiles": [], "orm_detected": null, "detection_trace": "log/detection-trace.jsonl", "config_written": "wiki.config.yaml"}'

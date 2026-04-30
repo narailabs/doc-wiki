@@ -14,7 +14,7 @@
 
 The wiki-db-agent refused the request:
 
-> DDL statements are never allowed. The query `DROP TABLE users` was rejected by the policy gate on environment **production** because `DROP` is classified as a DDL operation, and the guard-rail policy (`.claude/agents/lib/wiki_db/policy.ts`) unconditionally denies DDL regardless of `approval_mode`.
+> DDL statements are never allowed. The query `DROP TABLE users` was rejected by the policy gate on environment **production** because `DROP` is classified as a DDL operation, and the guard-rail policy (`agents/lib/wiki_db/policy.ts`) unconditionally denies DDL regardless of `approval_mode`.
 
 ## What the caller should do next
 

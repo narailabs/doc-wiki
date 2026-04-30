@@ -3,7 +3,7 @@
     {
       "text": "lint_checks.js is invoked and its first-pass report lists at least one 'broken_links' violation and at least one 'missing_frontmatter' violation",
       "passed": true,
-      "evidence": "lint-report-before.md contains the raw JSON produced by `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki`. It lists 2 broken_links error rows (page-a.md -> ./page-d.md; page-c.md -> ./ghost.md) and 3 missing_frontmatter error rows (page-b.md sources; page-b.md tags; page-c.md 'No frontmatter found'). Summary: error=5, warning=6, info=0."
+      "evidence": "lint-report-before.md contains the raw JSON produced by `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki`. It lists 2 broken_links error rows (page-a.md -> ./page-d.md; page-c.md -> ./ghost.md) and 3 missing_frontmatter error rows (page-b.md sources; page-b.md tags; page-c.md 'No frontmatter found'). Summary: error=5, warning=6, info=0."
     },
     {
       "text": "Each violation record names the offending file path",

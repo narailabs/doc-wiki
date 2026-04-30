@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/security_check.js\" --tool-input-url --wiki-root \"/private/tmp/eval-onboard-django\""
+            "command": "node \"/Users/narayan/src/doc-wiki/skills/wiki/scripts/security_check.js\" --tool-input-url --wiki-root \"/private/tmp/eval-onboard-django\""
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/security_check.js\" --tool-input-url --wiki-root \"/private/tmp/eval-onboard-django\""
+            "command": "node \"/Users/narayan/src/doc-wiki/skills/wiki/scripts/security_check.js\" --tool-input-url --wiki-root \"/private/tmp/eval-onboard-django\""
           }
         ]
       },
@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/security_check.js\" --tool-input-path --wiki-root \"/private/tmp/eval-onboard-django\""
+            "command": "node \"/Users/narayan/src/doc-wiki/skills/wiki/scripts/security_check.js\" --tool-input-path --wiki-root \"/private/tmp/eval-onboard-django\""
           }
         ]
       }

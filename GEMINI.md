@@ -7,7 +7,7 @@ This project has a documentation wiki skill that generates and maintains structu
 Public-facing docs live in [`docs/`](docs/). For Gemini users:
 
 - [`docs/getting-started.md`](docs/getting-started.md) — install + first ingest
-- [`docs/commands.md`](docs/commands.md) — reference for all 10 `/wiki-*` commands
+- [`docs/commands.md`](docs/commands.md) — reference for all 10 `/doc-wiki:*` commands
 - [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` and `.connectors/config.yaml` schemas
 - [`docs/architecture.md`](docs/architecture.md) — full architecture with Mermaid diagrams
 - [`docs/connectors.md`](docs/connectors.md) — the `narai-primitives` stack
@@ -18,93 +18,93 @@ Public-facing docs live in [`docs/`](docs/). For Gemini users:
 Before searching the codebase with grep, find, or glob, check if the wiki already has the answer. Run wiki-query first:
 
 ```bash
-node .claude/skills/wiki/scripts/parse_config.js --config wiki.config.yaml
+node skills/doc-wiki/scripts/parse_config.js --config wiki.config.yaml
 ```
 
 Then search `wiki/summaries.md` for relevant pages.
 
 ## Commands
 
-### /wiki-init -- Bootstrap a wiki
+### /doc-wiki:init -- Bootstrap a wiki
 
 Create the directory scaffold and initial configuration.
 
 ```bash
-node .claude/skills/wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<wiki-name>"
+node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<wiki-name>"
 ```
 
-### /wiki-onboard -- Interactive onboarding
+### /doc-wiki:onboard -- Interactive onboarding
 
 Detect the codebase ecosystem (language, ORM, database, external services) and configure wiki infrastructure.
 
 ORM detection is dispatched via the Agent tool (`wiki-orm-agent`); database introspection runs through `gather()` from `narai-primitives` when live schema confirmation is needed.
 
-### /wiki-ingest -- Fetch, extract, compile
+### /doc-wiki:ingest -- Fetch, extract, compile
 
 Ingest a source (file, URL, folder, pasted text) into the wiki.
 
 ```bash
 # Check cache first
-node .claude/skills/wiki/scripts/cache_manager.js check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/
+node skills/doc-wiki/scripts/cache_manager.js check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/
 
 # Security check for URLs
-node .claude/skills/wiki/scripts/security_check.js --url <url>
+node skills/doc-wiki/scripts/security_check.js --url <url>
 
 # Extract binary files
-node .claude/skills/wiki/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/
+node skills/doc-wiki/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/
 
 # Log the operation
-node .claude/skills/wiki/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'
+node skills/doc-wiki/scripts/event_logger.js --op ingest --source <source> --wiki-root <wiki-root> --details '<json>'
 ```
 
-### /wiki-query -- Summary-first search and synthesis
+### /doc-wiki:query -- Summary-first search and synthesis
 
 Search the wiki for answers. Reads `wiki/summaries.md`, scores relevance, loads top pages, follows links, and synthesizes an answer.
 
 ```bash
-node .claude/skills/wiki/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
+node skills/doc-wiki/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
 ```
 
 Then read `wiki/summaries.md` and score page summaries against the question.
 
-### /wiki-lint -- Health check and auto-heal
+### /doc-wiki:lint -- Health check and auto-heal
 
 Run structural checks, then apply LLM-driven quality analysis.
 
 ```bash
-node .claude/skills/wiki/scripts/lint_checks.js --wiki-root <wiki-root>
-node .claude/skills/wiki/scripts/quality_score.js --wiki-root <wiki-root>
+node skills/doc-wiki/scripts/lint_checks.js --wiki-root <wiki-root>
+node skills/doc-wiki/scripts/quality_score.js --wiki-root <wiki-root>
 ```
 
-### /wiki-fix -- Quick corrections
+### /doc-wiki:fix -- Quick corrections
 
 Read the target page, show a diff of current vs proposed changes, and apply if appropriate.
 
-### /wiki-promote -- Query answer to wiki page
+### /doc-wiki:promote -- Query answer to wiki page
 
 Convert an archived query answer from `outputs/queries/` into a permanent wiki page with proper frontmatter and relative markdown links.
 
-### /wiki-path -- Shortest path between concepts
+### /doc-wiki:path -- Shortest path between concepts
 
 ```bash
-node .claude/skills/wiki/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
+node skills/doc-wiki/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
 ```
 
 Supports `--max-hops`, `--via`, `--all-paths`.
 
-### /wiki-refresh -- Re-fetch and update from sources
+### /doc-wiki:refresh -- Re-fetch and update from sources
 
 Re-fetch previously ingested sources, diff against stored versions, re-compile changed pages.
 
-### /wiki-stats -- Token efficiency and cost metrics
+### /doc-wiki:stats -- Token efficiency and cost metrics
 
 ```bash
-node .claude/skills/wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d
+node skills/doc-wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d
 ```
 
 ## Script Paths
 
-All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to sibling `.js` files via `npm run build`.
+All TypeScript scripts live at: `skills/doc-wiki/scripts/` and compile to sibling `.js` files via `npm run build`.
 
 | Script | Purpose |
 |---|---|
@@ -122,7 +122,7 @@ All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to si
 
 ## Agent Paths
 
-Sub-agents live at `.claude/agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
+Sub-agents live at `agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
 
 | Agent | Purpose |
 |---|---|
@@ -139,7 +139,7 @@ After any write operation (ingest, fix, promote, refresh), run crosslink and tag
 All scripts follow this pattern:
 
 ```bash
-node .claude/skills/wiki/scripts/<script>.js <args>
+node skills/doc-wiki/scripts/<script>.js <args>
 ```
 
 Install dependencies and build first (Node 20 required):

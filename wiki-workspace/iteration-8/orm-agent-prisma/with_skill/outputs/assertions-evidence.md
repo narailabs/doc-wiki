@@ -1,7 +1,7 @@
 # Assertions Evidence — orm-agent-prisma (eval id 4) — Iteration 8
 
 Run date: 2026-04-14
-Fixture: `.claude/agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma`
+Fixture: `agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma`
 Profile: prisma
 Reference: iter-7 evidence at `wiki-workspace/iteration-7/orm-agent-prisma/with_skill/outputs/assertions-evidence.md`
 

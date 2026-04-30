@@ -3,7 +3,7 @@
 Project root scanned: `/tmp/eval-onboard-django/`
 Run date: 2026-04-14
 
-This trace walks through each detection phase described in `.claude/skills/wiki/SKILL.md` and `references/operations.md`, file by file, recording which marker fired and what was concluded.
+This trace walks through each detection phase described in `skills/wiki/SKILL.md` and `references/operations.md`, file by file, recording which marker fired and what was concluded.
 
 ## Phase 1 — Language / framework detection
 
@@ -36,7 +36,7 @@ No competing markers were present (no `pom.xml`, no `package.json`, no
 
 The SKILL.md ORM table lists Django as: `models.Model` subclasses in
 `models.py` / `models/` directories, matching
-`.claude/agents/lib/wiki_orm/profiles/django.yaml`:
+`agents/lib/wiki_orm/profiles/django.yaml`:
 
 ```yaml
 detection:

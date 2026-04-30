@@ -1,7 +1,7 @@
 # Commands executed for wiki-promote eval (iteration-7, eval id 9)
 
 # 1. Initialize wiki scaffold
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/init_wiki.js \
   --path /tmp/eval-i7-promote-wiki \
   --domain test-promote \
   --name "Test Promote Wiki"
@@ -28,7 +28,7 @@ echo '{"from":"wiki/auth/authentication-flow.md","to":"wiki/auth.md","type":"ext
 # 8. Update wiki/index.md (via edit tool)
 
 # 9. Log promote event
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js log \
   --op promote \
   --wiki-root /tmp/eval-i7-promote-wiki \
   --details '{"target_page":"wiki/auth/authentication-flow.md","source_query":"outputs/queries/2026-04-14-how-does-authentication-work.md","topic":"authentication-flow"}'

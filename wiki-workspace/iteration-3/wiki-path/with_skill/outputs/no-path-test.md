@@ -7,7 +7,7 @@ The `/wiki-path` script returns an empty JSON array (`[]`) whenever no directed 
 **Command**
 
 ```bash
-node .claude/skills/wiki/scripts/graph_ops.js path \
+node skills/wiki/scripts/graph_ops.js path \
   --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
   --from database-schema \
   --to authentication
@@ -35,7 +35,7 @@ node .claude/skills/wiki/scripts/graph_ops.js path \
 **Command**
 
 ```bash
-node .claude/skills/wiki/scripts/graph_ops.js path \
+node skills/wiki/scripts/graph_ops.js path \
   --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl \
   --from authentication \
   --to nonexistent-concept

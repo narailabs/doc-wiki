@@ -12,7 +12,7 @@
     "declaration": false,
     "noEmit": false
   },
-  "include": [".claude/**/*.ts", "vitest.config.ts"],
+  "include": ["agents/**/*.ts", "skills/**/*.ts", "vitest.config.ts"],
   "exclude": [
     "node_modules",
     ".worktrees",

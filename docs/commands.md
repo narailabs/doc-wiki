@@ -1,22 +1,22 @@
 # Commands Reference
 
-Every `/wiki-*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../.claude/skills/wiki/SKILL.md) for the full procedural detail.
+Every `/doc-wiki:*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../skills/doc-wiki/SKILL.md) for the full procedural detail.
 
 The ten commands group into three lifecycles:
 
-- **Lifecycle** — set up and grow the wiki: `/wiki-init`, `/wiki-onboard`, `/wiki-ingest`, `/wiki-refresh`
-- **Search** — find and analyze: `/wiki-query`, `/wiki-path`, `/wiki-stats`
-- **Maintenance** — keep it healthy: `/wiki-lint`, `/wiki-fix`, `/wiki-promote`
+- **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
+- **Search** — find and analyze: `/doc-wiki:query`, `/doc-wiki:path`, `/doc-wiki:stats`
+- **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`
 
 ---
 
 ## Lifecycle
 
-### `/wiki-init` — Bootstrap a wiki
+### `/doc-wiki:init` — Bootstrap a wiki
 
 Create the directory scaffold and initial configuration.
 
-**Synopsis:** `/wiki-init [--path <wiki-root>] [--domain <domain>] [--name <wiki-name>]`
+**Synopsis:** `/doc-wiki:init [--path <wiki-root>] [--domain <domain>] [--name <wiki-name>]`
 
 **Args:**
 
@@ -36,26 +36,26 @@ Create the directory scaffold and initial configuration.
 **Examples:**
 
 ```text
-/wiki-init
-/wiki-init --domain "infra-platform" --name "Platform Wiki"
-/wiki-init --path ./docs/wiki --domain backend
+/doc-wiki:init
+/doc-wiki:init --domain "infra-platform" --name "Platform Wiki"
+/doc-wiki:init --path ./docs/wiki --domain backend
 ```
 
-**See also:** [`SKILL.md` § /wiki-init](../.claude/skills/wiki/SKILL.md), [`getting-started.md`](getting-started.md), [`init_wiki.ts`](../.claude/skills/wiki/scripts/init_wiki.ts).
+**See also:** [`SKILL.md` § /doc-wiki:init](../skills/doc-wiki/SKILL.md), [`getting-started.md`](getting-started.md), [`init_wiki.ts`](../skills/doc-wiki/scripts/init_wiki.ts).
 
 ---
 
-### `/wiki-onboard` — Interactive onboarding
+### `/doc-wiki:onboard` — Interactive onboarding
 
 Detect the codebase ecosystem and configure wiki + connector access. Run once per project; idempotent (safe to re-run if the project changes).
 
-**Synopsis:** `/wiki-onboard [wiki-root]`
+**Synopsis:** `/doc-wiki:onboard [wiki-root]`
 
 **Args:**
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
-| `wiki-root` | path | `./wiki` | Path to the wiki created by `/wiki-init` |
+| `wiki-root` | path | `./wiki` | Path to the wiki created by `/doc-wiki:init` |
 
 **What it does:**
 
@@ -66,31 +66,31 @@ Six interactive phases:
 3. **Detect databases** by reading Docker Compose, `.env`, ORM config (Django `DATABASES`, Spring `spring.datasource.url`, etc.). Credentials are redacted in the confirmation prompt.
 4. **Ask about external services** — six yes/no questions covering Jira, Confluence, GCP, AWS, Notion, GitHub. Your answers go into `consumers.doc-wiki` in the connector config.
 5. **Set up connector access** — checks for `~/.connectors/config.yaml` and `./.connectors/config.yaml`, generates a starter from the example if missing, then asks one credential question per enabled connector.
-6. **Pick autonomy mode** — `conservative`, `balanced`, `autonomous`, or `auto`. See [`references/autonomy.md`](../.claude/skills/wiki/references/autonomy.md). Most users start at `balanced`.
+6. **Pick autonomy mode** — `conservative`, `balanced`, `autonomous`, or `auto`. See [`references/autonomy.md`](../skills/doc-wiki/references/autonomy.md). Most users start at `balanced`.
 
 **Examples:**
 
 ```text
-/wiki-onboard
-/wiki-onboard ./docs/wiki
+/doc-wiki:onboard
+/doc-wiki:onboard ./docs/wiki
 ```
 
-**See also:** [`SKILL.md` § /wiki-onboard](../.claude/skills/wiki/SKILL.md), [`configuration.md`](configuration.md).
+**See also:** [`SKILL.md` § /doc-wiki:onboard](../skills/doc-wiki/SKILL.md), [`configuration.md`](configuration.md).
 
 ---
 
-### `/wiki-ingest` — Fetch, extract, compile
+### `/doc-wiki:ingest` — Fetch, extract, compile
 
 Ingest a source (file, URL, folder, or pasted text) into the wiki. The bread-and-butter command — most days you'll spend most of your time here.
 
-**Synopsis:** `/wiki-ingest <source> [--wiki-root <path>] [--no-crosslink] [--no-tag-harmonize]`
+**Synopsis:** `/doc-wiki:ingest <source> [--wiki-root <path>] [--no-crosslink] [--no-tag-harmonize]`
 
 **Args:**
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
 | `<source>` | string | **required** | File path, URL, folder, or pasted-text marker (e.g. `-` to read stdin) |
-| `--wiki-root` | path | `./wiki` | Path to the wiki created by `/wiki-init` |
+| `--wiki-root` | path | `./wiki` | Path to the wiki created by `/doc-wiki:init` |
 | `--no-crosslink` | flag | (off) | Skip the post-op crosslink pass |
 | `--no-tag-harmonize` | flag | (off) | Skip the post-op tag-harmonize pass |
 
@@ -117,22 +117,22 @@ A folder ingest runs the pipeline once per file, with checkpoint support — int
 **Examples:**
 
 ```text
-/wiki-ingest README.md
-/wiki-ingest src/auth/
-/wiki-ingest https://your-org.atlassian.net/browse/AUTH-123
-/wiki-ingest https://github.com/narailabs/doc-wiki
-/wiki-ingest /path/to/design-spec.pdf --no-tag-harmonize
+/doc-wiki:ingest README.md
+/doc-wiki:ingest src/auth/
+/doc-wiki:ingest https://your-org.atlassian.net/browse/AUTH-123
+/doc-wiki:ingest https://github.com/narailabs/doc-wiki
+/doc-wiki:ingest /path/to/design-spec.pdf --no-tag-harmonize
 ```
 
-**See also:** [`SKILL.md` § /wiki-ingest](../.claude/skills/wiki/SKILL.md), [`connectors.md`](connectors.md), [`architecture.md`](architecture.md#diagram-2-wiki-ingest-pipeline).
+**See also:** [`SKILL.md` § /doc-wiki:ingest](../skills/doc-wiki/SKILL.md), [`connectors.md`](connectors.md), [`architecture.md`](architecture.md#diagram-2-wiki-ingest-pipeline).
 
 ---
 
-### `/wiki-refresh` — Re-fetch and update
+### `/doc-wiki:refresh` — Re-fetch and update
 
 Re-fetch previously ingested sources, diff against stored versions, re-compile changed pages.
 
-**Synopsis:** `/wiki-refresh [--source <source>] [--all] [--wiki-root <path>]`
+**Synopsis:** `/doc-wiki:refresh [--source <source>] [--all] [--wiki-root <path>]`
 
 **Args:**
 
@@ -154,21 +154,21 @@ Either `--source` or `--all` must be given.
 **Examples:**
 
 ```text
-/wiki-refresh --source https://your-org.atlassian.net/browse/AUTH-123
-/wiki-refresh --all
+/doc-wiki:refresh --source https://your-org.atlassian.net/browse/AUTH-123
+/doc-wiki:refresh --all
 ```
 
-**See also:** [`SKILL.md` § /wiki-refresh](../.claude/skills/wiki/SKILL.md).
+**See also:** [`SKILL.md` § /doc-wiki:refresh](../skills/doc-wiki/SKILL.md).
 
 ---
 
 ## Search
 
-### `/wiki-query` — Summary-first search and synthesis
+### `/doc-wiki:query` — Summary-first search and synthesis
 
 Search the wiki for an answer. Reads `wiki/summaries.md`, scores relevance, loads top pages, follows links, and synthesizes a response.
 
-**Synopsis:** `/wiki-query <question> [--wiki-root <path>] [--max-depth <N>]`
+**Synopsis:** `/doc-wiki:query <question> [--wiki-root <path>] [--max-depth <N>]`
 
 **Args:**
 
@@ -186,24 +186,24 @@ Search the wiki for an answer. Reads `wiki/summaries.md`, scores relevance, load
 4. Follows their inline links up to `max_depth` hops.
 5. Synthesizes an answer from the loaded content.
 6. Surfaces gaps (questions the wiki couldn't answer).
-7. Archives the full transcript under `outputs/queries/<timestamp>.md` for later `/wiki-promote`.
+7. Archives the full transcript under `outputs/queries/<timestamp>.md` for later `/doc-wiki:promote`.
 
 **Examples:**
 
 ```text
-/wiki-query "How does authentication work?"
-/wiki-query "Where do we store session tokens?" --max-depth 5
+/doc-wiki:query "How does authentication work?"
+/doc-wiki:query "Where do we store session tokens?" --max-depth 5
 ```
 
-**See also:** [`SKILL.md` § /wiki-query](../.claude/skills/wiki/SKILL.md).
+**See also:** [`SKILL.md` § /doc-wiki:query](../skills/doc-wiki/SKILL.md).
 
 ---
 
-### `/wiki-path` — Shortest path between concepts
+### `/doc-wiki:path` — Shortest path between concepts
 
 Find the shortest path (or all paths) between two concepts via typed edges in `graph/edges.jsonl`.
 
-**Synopsis:** `/wiki-path --from <concept-a> --to <concept-b> [--max-hops <N>] [--via <concept>] [--all-paths]`
+**Synopsis:** `/doc-wiki:path --from <concept-a> --to <concept-b> [--max-hops <N>] [--via <concept>] [--all-paths]`
 
 **Args:**
 
@@ -217,25 +217,25 @@ Find the shortest path (or all paths) between two concepts via typed edges in `g
 
 **What it does:**
 
-Calls `graph_ops.ts path` with the given args. Edge types include `supports`, `contradicts`, `extends`, `supersedes` — see [`references/quality.md`](../.claude/skills/wiki/references/quality.md) for the full list.
+Calls `graph_ops.ts path` with the given args. Edge types include `supports`, `contradicts`, `extends`, `supersedes` — see [`references/quality.md`](../skills/doc-wiki/references/quality.md) for the full list.
 
 **Examples:**
 
 ```text
-/wiki-path --from auth --to session
-/wiki-path --from auth --to billing --via session --max-hops 4
-/wiki-path --from foo --to bar --all-paths
+/doc-wiki:path --from auth --to session
+/doc-wiki:path --from auth --to billing --via session --max-hops 4
+/doc-wiki:path --from foo --to bar --all-paths
 ```
 
-**See also:** [`SKILL.md` § /wiki-path](../.claude/skills/wiki/SKILL.md), [`graph_ops.ts`](../.claude/skills/wiki/scripts/graph_ops.ts).
+**See also:** [`SKILL.md` § /doc-wiki:path](../skills/doc-wiki/SKILL.md), [`graph_ops.ts`](../skills/doc-wiki/scripts/graph_ops.ts).
 
 ---
 
-### `/wiki-stats` — Token efficiency and cost metrics
+### `/doc-wiki:stats` — Token efficiency and cost metrics
 
 Aggregate metrics from `log/events.jsonl`.
 
-**Synopsis:** `/wiki-stats [--since <duration>] [--wiki-root <path>] [--per-agent]`
+**Synopsis:** `/doc-wiki:stats [--since <duration>] [--wiki-root <path>] [--per-agent]`
 
 **Args:**
 
@@ -252,21 +252,21 @@ Reads `log/events.jsonl`, sums tokens / costs / counts by op and (optionally) ag
 **Examples:**
 
 ```text
-/wiki-stats
-/wiki-stats --since 7d --per-agent
+/doc-wiki:stats
+/doc-wiki:stats --since 7d --per-agent
 ```
 
-**See also:** [`SKILL.md` § /wiki-stats](../.claude/skills/wiki/SKILL.md), [`event_logger.ts`](../.claude/skills/wiki/scripts/event_logger.ts).
+**See also:** [`SKILL.md` § /doc-wiki:stats](../skills/doc-wiki/SKILL.md), [`event_logger.ts`](../skills/doc-wiki/scripts/event_logger.ts).
 
 ---
 
 ## Maintenance
 
-### `/wiki-lint` — Health check and auto-heal
+### `/doc-wiki:lint` — Health check and auto-heal
 
 Run structural checks and (optionally) auto-fix what's safe.
 
-**Synopsis:** `/wiki-lint [--wiki-root <path>] [--fix] [--check <name>]`
+**Synopsis:** `/doc-wiki:lint [--wiki-root <path>] [--fix] [--check <name>]`
 
 **Args:**
 
@@ -286,27 +286,27 @@ Runs every check listed in `lint.checks.structural` from `wiki.config.yaml`:
 - `index_coverage` — pages absent from `wiki/index.md`
 - `code_ref_drift` — wiki pages whose referenced code's content hash changed
 - `provenance_gaps` — edges missing provenance tags
-- (and more — see [`references/quality.md`](../.claude/skills/wiki/references/quality.md))
+- (and more — see [`references/quality.md`](../skills/doc-wiki/references/quality.md))
 
 Then runs an LLM-driven quality pass via `quality_score.ts`. With `--fix`, applies auto-fixes for categories whose autonomy override is `auto_fix` (see [`autonomy section`](configuration.md#autonomy-section)).
 
 **Examples:**
 
 ```text
-/wiki-lint
-/wiki-lint --fix
-/wiki-lint --check broken_links
+/doc-wiki:lint
+/doc-wiki:lint --fix
+/doc-wiki:lint --check broken_links
 ```
 
-**See also:** [`SKILL.md` § /wiki-lint](../.claude/skills/wiki/SKILL.md), [`lint_checks.ts`](../.claude/skills/wiki/scripts/lint_checks.ts), [`quality_score.ts`](../.claude/skills/wiki/scripts/quality_score.ts).
+**See also:** [`SKILL.md` § /doc-wiki:lint](../skills/doc-wiki/SKILL.md), [`lint_checks.ts`](../skills/doc-wiki/scripts/lint_checks.ts), [`quality_score.ts`](../skills/doc-wiki/scripts/quality_score.ts).
 
 ---
 
-### `/wiki-fix` — Quick targeted correction
+### `/doc-wiki:fix` — Quick targeted correction
 
 Apply a focused fix to a single page with a diff preview.
 
-**Synopsis:** `/wiki-fix <page-path> <issue-description>`
+**Synopsis:** `/doc-wiki:fix <page-path> <issue-description>`
 
 **Args:**
 
@@ -326,19 +326,19 @@ Apply a focused fix to a single page with a diff preview.
 **Examples:**
 
 ```text
-/wiki-fix wiki/auth/jwt.md "frontmatter is missing tags"
-/wiki-fix wiki/billing/invoices.md "the SQL example uses the old schema"
+/doc-wiki:fix wiki/auth/jwt.md "frontmatter is missing tags"
+/doc-wiki:fix wiki/billing/invoices.md "the SQL example uses the old schema"
 ```
 
-**See also:** [`SKILL.md` § /wiki-fix](../.claude/skills/wiki/SKILL.md).
+**See also:** [`SKILL.md` § /doc-wiki:fix](../skills/doc-wiki/SKILL.md).
 
 ---
 
-### `/wiki-promote` — Query answer to permanent page
+### `/doc-wiki:promote` — Query answer to permanent page
 
-Convert an archived `/wiki-query` answer in `outputs/queries/` into a permanent wiki page.
+Convert an archived `/doc-wiki:query` answer in `outputs/queries/` into a permanent wiki page.
 
-**Synopsis:** `/wiki-promote <query-output-file> [--topic <directory>]`
+**Synopsis:** `/doc-wiki:promote <query-output-file> [--topic <directory>]`
 
 **Args:**
 
@@ -358,11 +358,11 @@ Convert an archived `/wiki-query` answer in `outputs/queries/` into a permanent 
 **Examples:**
 
 ```text
-/wiki-promote outputs/queries/2026-04-28T10-15.md
-/wiki-promote outputs/queries/2026-04-28T10-15.md --topic auth
+/doc-wiki:promote outputs/queries/2026-04-28T10-15.md
+/doc-wiki:promote outputs/queries/2026-04-28T10-15.md --topic auth
 ```
 
-**See also:** [`SKILL.md` § /wiki-promote](../.claude/skills/wiki/SKILL.md).
+**See also:** [`SKILL.md` § /doc-wiki:promote](../skills/doc-wiki/SKILL.md).
 
 ---
 
@@ -372,24 +372,24 @@ A few command sequences you'll use often:
 
 ```text
 # First-time setup
-/wiki-init
-/wiki-onboard
-/wiki-ingest README.md
+/doc-wiki:init
+/doc-wiki:onboard
+/doc-wiki:ingest README.md
 
 # Ingest an entire codebase area
-/wiki-ingest src/auth/
-/wiki-ingest docs/auth-design.md
-/wiki-ingest https://your-org.atlassian.net/browse/AUTH-123
+/doc-wiki:ingest src/auth/
+/doc-wiki:ingest docs/auth-design.md
+/doc-wiki:ingest https://your-org.atlassian.net/browse/AUTH-123
 
 # Investigate something via the wiki
-/wiki-query "How is JWT validated?"
+/doc-wiki:query "How is JWT validated?"
 # (the answer is good — keep it)
-/wiki-promote outputs/queries/<timestamp>.md --topic auth
+/doc-wiki:promote outputs/queries/<timestamp>.md --topic auth
 
 # Periodic maintenance
-/wiki-lint --fix
-/wiki-refresh --all
-/wiki-stats --since 7d --per-agent
+/doc-wiki:lint --fix
+/doc-wiki:refresh --all
+/doc-wiki:stats --since 7d --per-agent
 ```
 
-For full procedural detail beyond this reference, the canonical source is [`SKILL.md`](../.claude/skills/wiki/SKILL.md).
+For full procedural detail beyond this reference, the canonical source is [`SKILL.md`](../skills/doc-wiki/SKILL.md).

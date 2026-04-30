@@ -8,7 +8,7 @@
 
 ## Rule citation
 
-The matching rule is the DML branch of `Policy.checkQuery` in `.claude/agents/lib/wiki_db/policy.ts` (lines 225-246 at commit `d208468`):
+The matching rule is the DML branch of `Policy.checkQuery` in `agents/lib/wiki_db/policy.ts` (lines 225-246 at commit `d208468`):
 
 ```ts
 // ----- DML: present only (show the SQL, do not execute) -----
@@ -40,7 +40,7 @@ const _DML_KEYWORDS: ReadonlySet<string> = new Set([
 | DDL (CREATE/DROP/ALTER/TRUNCATE/RENAME) | always denied | first token isn't DDL |
 | PRIVILEGE (GRANT/REVOKE) | always denied | first token isn't privilege |
 
-The guard-rail policy therefore returns `present_only` before the driver is ever asked to execute anything. The `executeQuery` wrapper in `.claude/agents/lib/wiki_db/query.ts` short-circuits on `decision === "present_only"` and reports `status=present_only` without calling the driver's `execute` path.
+The guard-rail policy therefore returns `present_only` before the driver is ever asked to execute anything. The `executeQuery` wrapper in `agents/lib/wiki_db/query.ts` short-circuits on `decision === "present_only"` and reports `status=present_only` without calling the driver's `execute` path.
 
 ## Evidence of the short-circuit
 

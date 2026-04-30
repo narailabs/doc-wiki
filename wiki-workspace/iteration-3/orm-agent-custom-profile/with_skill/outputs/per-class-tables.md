@@ -7,8 +7,8 @@ corresponding `__table__`** literal in the fixture.
 ## Extraction command
 
 ```js
-import { loadProfile } from '.claude/agents/lib/wiki_orm/profiles.js';
-import { extractEntities } from '.claude/agents/lib/wiki_orm/extractor.js';
+import { loadProfile } from 'agents/lib/wiki_orm/profiles.js';
+import { extractEntities } from 'agents/lib/wiki_orm/extractor.js';
 import * as fs from 'node:fs';
 
 const profile = loadProfile('.../custom-basemodel.yaml');

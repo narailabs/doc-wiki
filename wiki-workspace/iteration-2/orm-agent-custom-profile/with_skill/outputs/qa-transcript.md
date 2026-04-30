@@ -2,14 +2,14 @@
 
 Simulated walkthrough between `wiki-orm-agent` (scaffold mode) and a user
 adopting a custom in-house BaseModel ORM. The agent's questions follow the
-fields declared in `OrmProfile` (see `.claude/agents/lib/wiki_orm/profiles.ts`
+fields declared in `OrmProfile` (see `agents/lib/wiki_orm/profiles.ts`
 — required: `name`, `language`, `detection`, `entity_extraction`).
 
 ---
 
 **Agent:** I can scaffold a custom ORM profile YAML for you. It will follow
 the same shape as the seven built-in profiles under
-`.claude/agents/lib/wiki_orm/profiles/`. A handful of questions to fill the
+`agents/lib/wiki_orm/profiles/`. A handful of questions to fill the
 required fields.
 
 **Q1. What short name should I use for this profile?** (Lowercase, no
@@ -120,7 +120,7 @@ snake_case in the code, so `column_from_field: snake_case`.
 ---
 
 **Agent:** Great — writing the profile now. You can drop it at either:
-- `.claude/agents/lib/wiki_orm/profiles/custom-basemodel.yaml` (ships
+- `agents/lib/wiki_orm/profiles/custom-basemodel.yaml` (ships
   alongside the seven built-ins), or
 - a project-local `wiki/profiles/custom-basemodel.yaml` if you want to
   keep it out of the shared library.

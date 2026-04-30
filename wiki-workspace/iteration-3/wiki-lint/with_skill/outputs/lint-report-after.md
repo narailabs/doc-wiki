@@ -1,6 +1,6 @@
 # /wiki-lint — post-fix report
 
-Raw output of `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki` after `/wiki-fix` applied the auto-heal actions.
+Raw output of `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki` after `/wiki-fix` applied the auto-heal actions.
 
 Summary: **0 errors, 7 warnings, 0 info** — zero `broken_links` and zero `missing_frontmatter` violations remain. The remaining warnings are `orphan_page` / `isolated_node` signals that fall outside the scope of this eval's lint targets (graph connectivity rather than structural lint).
 
