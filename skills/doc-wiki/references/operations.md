@@ -223,7 +223,9 @@ Convert `outputs/queries/<slug>.md` into a canonically-located wiki page.
 
 ---
 
-## /doc-wiki:path — Shortest-Path Between Concepts
+## /doc-wiki:query — Path Mode (Shortest-Path Between Concepts)
+
+`/doc-wiki:query` has two modes. The default synthesis flow is covered above; this section covers **path mode**, which is triggered when the user passes `--from` and `--to` instead of a positional question.
 
 ```bash
 node {skill_path}/scripts/graph_ops.js path \
@@ -235,8 +237,8 @@ node {skill_path}/scripts/graph_ops.js path \
 The shim walks `edges.jsonl` (typed relationships: `supports`, `contradicts`, `extends`, `supersedes`, `references`, …) and returns an edge chain connecting the two concepts.
 
 ### Output shape
-- Default: single shortest path with edge types annotated per hop.
-- `--all-paths`: up to 5 alternative paths, ranked by total edge weight.
+- Default: single shortest path with edge types annotated per hop, returned as `Edge[]`.
+- `--all-paths`: up to 5 simple paths from `--from` to `--to` in graph-traversal (depth-first) order, returned as `Edge[][]`. Count-bounded, not hop-bounded; `--max-hops` and `--via` are ignored in this mode.
 - `--via <concept>`: constrain the shortest path to pass through the named concept; useful for "how does X relate to Y through Z" queries.
 - `--max-hops N`: cap path length; if no path exists within the cap, return `{"status": "no_path", "max_hops": N}`.
 
@@ -245,7 +247,7 @@ The shim walks `edges.jsonl` (typed relationships: `supports`, `contradicts`, `e
 - "Is the new caching proposal connected to any deprecated design we replaced?"
 - "What path links a recent bug page to the original architecture decision?"
 
-No autonomy gate — `wiki-path` is read-only and never writes.
+No autonomy gate — path mode is read-only and never writes.
 
 ---
 

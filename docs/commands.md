@@ -2,10 +2,10 @@
 
 Every `/doc-wiki:*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../skills/doc-wiki/SKILL.md) for the full procedural detail.
 
-The ten commands group into three lifecycles:
+The nine commands group into three lifecycles:
 
 - **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
-- **Search** — find and analyze: `/doc-wiki:query`, `/doc-wiki:path`, `/doc-wiki:stats`
+- **Search** — find and analyze: `/doc-wiki:query` (synthesis or path mode), `/doc-wiki:stats`
 - **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`
 
 ---
@@ -164,13 +164,21 @@ Either `--source` or `--all` must be given.
 
 ## Search
 
-### `/doc-wiki:query` — Summary-first search and synthesis
+### `/doc-wiki:query` — Summary-first search, synthesis, and shortest-path
 
-Search the wiki for an answer. Reads `wiki/summaries.md`, scores relevance, loads top pages, follows links, and synthesizes a response.
+Two modes — picked by argument shape:
 
-**Synopsis:** `/doc-wiki:query <question> [--wiki-root <path>] [--max-depth <N>]`
+- **Synthesis mode** (default): natural-language question → summary-first search → synthesized answer.
+- **Path mode** (`--from` and `--to` instead of a question): shortest-path traversal over `graph/edges.jsonl`.
 
-**Args:**
+#### Synopsis
+
+```text
+/doc-wiki:query <question> [--wiki-root <path>] [--max-depth <N>]
+/doc-wiki:query --from <a> --to <b> [--max-hops <N>] [--via <c>] [--all-paths] [--wiki-root <path>]
+```
+
+#### Synthesis-mode args
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
@@ -178,7 +186,7 @@ Search the wiki for an answer. Reads `wiki/summaries.md`, scores relevance, load
 | `--wiki-root` | path | `./wiki` | Path to the wiki |
 | `--max-depth` | integer | `3` (from config) | Maximum hop depth for link-following |
 
-**What it does:**
+What it does:
 
 1. Reads `wiki/summaries.md` (one ~50-token summary per page).
 2. Scores each summary against the question.
@@ -188,24 +196,7 @@ Search the wiki for an answer. Reads `wiki/summaries.md`, scores relevance, load
 6. Surfaces gaps (questions the wiki couldn't answer).
 7. Archives the full transcript under `outputs/queries/<timestamp>.md` for later `/doc-wiki:promote`.
 
-**Examples:**
-
-```text
-/doc-wiki:query "How does authentication work?"
-/doc-wiki:query "Where do we store session tokens?" --max-depth 5
-```
-
-**See also:** [`SKILL.md` § /doc-wiki:query](../skills/doc-wiki/SKILL.md).
-
----
-
-### `/doc-wiki:path` — Shortest path between concepts
-
-Find the shortest path (or all paths) between two concepts via typed edges in `graph/edges.jsonl`.
-
-**Synopsis:** `/doc-wiki:path --from <concept-a> --to <concept-b> [--max-hops <N>] [--via <concept>] [--all-paths]`
-
-**Args:**
+#### Path-mode args
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
@@ -213,21 +204,24 @@ Find the shortest path (or all paths) between two concepts via typed edges in `g
 | `--to` | string | **required** | Ending concept |
 | `--max-hops` | integer | `5` | Limit on path length |
 | `--via` | string | (none) | Force the path to pass through this concept |
-| `--all-paths` | flag | (off) | Return all paths up to `max-hops`, not just the shortest |
+| `--all-paths` | flag | (off) | Return up to 5 simple paths in DFS order (`Edge[][]`) instead of the single shortest path. `--max-hops` and `--via` are ignored in this mode. |
 
-**What it does:**
+What it does: calls `graph_ops.ts path` with the given args. Edge types include `supports`, `contradicts`, `extends`, `supersedes` — see [`references/quality.md`](../skills/doc-wiki/references/quality.md) for the full list. Path mode is read-only — no archive, no synthesis.
 
-Calls `graph_ops.ts path` with the given args. Edge types include `supports`, `contradicts`, `extends`, `supersedes` — see [`references/quality.md`](../skills/doc-wiki/references/quality.md) for the full list.
-
-**Examples:**
+#### Examples
 
 ```text
-/doc-wiki:path --from auth --to session
-/doc-wiki:path --from auth --to billing --via session --max-hops 4
-/doc-wiki:path --from foo --to bar --all-paths
+# synthesis mode
+/doc-wiki:query "How does authentication work?"
+/doc-wiki:query "Where do we store session tokens?" --max-depth 5
+
+# path mode
+/doc-wiki:query --from auth --to session
+/doc-wiki:query --from auth --to billing --via session --max-hops 4
+/doc-wiki:query --from foo --to bar --all-paths
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:path](../skills/doc-wiki/SKILL.md), [`graph_ops.ts`](../skills/doc-wiki/scripts/graph_ops.ts).
+**See also:** [`SKILL.md` § /doc-wiki:query](../skills/doc-wiki/SKILL.md), [`graph_ops.ts`](../skills/doc-wiki/scripts/graph_ops.ts).
 
 ---
 

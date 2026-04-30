@@ -29,14 +29,14 @@ Three slash commands take a new repo from zero to a working wiki:
 ## Architecture
 
 - **Main skill:** `skills/doc-wiki/SKILL.md` — orchestrates all `/doc-wiki:*` commands
-- **Slash-command wrappers:** `commands/doc-wiki:*.md` — 10 thin wrappers so `/doc-wiki:init`, `/doc-wiki:onboard`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
+- **Slash-command wrappers:** `commands/doc-wiki:*.md` — 9 thin wrappers so `/doc-wiki:init`, `/doc-wiki:onboard`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
 - **Source-fetch dispatch:** `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which plans and spawns the bundled connector CLIs in parallel. The wiki-side Mermaid augmentation runs on the raw envelopes via `agents/lib/mermaid_augment.ts`. There is **one path**: gather → applyMermaid. The legacy `wiki-<svc>-agent` subagents + their per-service wrappers were decommissioned — their CLI-resolution and Mermaid responsibilities are now wholly owned by the hub and `mermaid_augment.ts`.
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Slash commands (10) — `commands/`
+### Slash commands (9) — `commands/`
 
-Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `path.md`, `stats.md`.
+Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (Shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
 
 ### TypeScript scripts (11) — `skills/doc-wiki/scripts/`
 
@@ -109,7 +109,7 @@ The wiki skill is accessible from multiple AI coding tools via wrapper files:
 |------|----------|
 | `AGENTS.md` | Codex / OpenAI agents |
 | `GEMINI.md` | Gemini / Google AI |
-| `.cursor/rules/wiki.mdc` | Cursor IDE |
+| `.cursor/rules/doc-wiki.mdc` | Cursor IDE |
 | `.aider/conventions.md` | Aider |
 
 ## Design reference

@@ -85,13 +85,15 @@ Read the target page, show a diff of current vs proposed changes, and apply if a
 
 Convert an archived query answer from `outputs/queries/` into a permanent wiki page with proper frontmatter and relative markdown links.
 
-### /doc-wiki:path -- Shortest path between concepts
+### /doc-wiki:query path mode -- Shortest path between concepts
+
+When `/doc-wiki:query` is given `--from <a>` and `--to <b>` instead of a positional question, it runs in path mode:
 
 ```bash
 node skills/doc-wiki/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
 ```
 
-Supports `--max-hops`, `--via`, `--all-paths`.
+Supports `--max-hops`, `--via`, `--all-paths`. Read-only — no archive, no synthesis.
 
 ### /doc-wiki:refresh -- Re-fetch and update from sources
 
