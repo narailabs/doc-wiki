@@ -65,7 +65,7 @@
       "claim": "Cache uses SHA256 content hashes (64 hex chars)",
       "type": "factual",
       "verified": true,
-      "evidence": "All content_hash values in events.jsonl are 64-character hex strings; run_ingest.mjs imports computeHash from .claude/skills/wiki/scripts/cache_manager.js."
+      "evidence": "All content_hash values in events.jsonl are 64-character hex strings; run_ingest.mjs imports computeHash from skills/wiki/scripts/cache_manager.js."
     },
     {
       "claim": "Run 3 keeps the old auth.md cache entry alongside the new one (9 total entries, not 8)",

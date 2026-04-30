@@ -53,4 +53,4 @@ This page was compiled from ORM source files. Use these commands to verify or up
 - **Role** (`roles`)
   - Columns: `wiki agent db-query dev "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'roles'"`
   - Sample rows: `wiki agent db-query dev "SELECT * FROM roles LIMIT 5"`
-- **Live code:** Read `/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/models.py` — ORM source files this mapping was extracted from.
+- **Live code:** Read `/Users/narayan/src/doc-wiki/agents/lib/wiki_orm/tests/fixtures/sqlalchemy/models.py` — ORM source files this mapping was extracted from.

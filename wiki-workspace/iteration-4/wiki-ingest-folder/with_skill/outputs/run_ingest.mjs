@@ -18,8 +18,8 @@ import {
   computeHash,
   checkCache,
   storeCache,
-} from "/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/cache_manager.js";
-import { logEvent } from "/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js";
+} from "/Users/narayan/src/doc-wiki/skills/wiki/scripts/cache_manager.js";
+import { logEvent } from "/Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js";
 
 const [docsDir, wikiRoot, runLabel] = process.argv.slice(2);
 if (!docsDir || !wikiRoot || !runLabel) {

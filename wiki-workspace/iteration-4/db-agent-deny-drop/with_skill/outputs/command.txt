@@ -2,7 +2,7 @@ cwd: /tmp/eval-i4-db-deny
 
 command (run via `time` in zsh builtin form):
 
-time node /Users/narayan/src/doc-wiki/.claude/agents/wiki-db-agent/scripts/db_query.js \
+time node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
   --env production \
   --config ./wiki.config.yaml \
   --sql "DROP TABLE users" \

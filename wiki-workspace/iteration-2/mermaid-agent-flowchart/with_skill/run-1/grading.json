@@ -8,7 +8,7 @@
     {
       "text": "Handles nodes with quotes and special characters via safe escaping",
       "passed": true,
-      "evidence": "Line 23 renders the `Checkout \"main\" branch` label as `checkout[\"Checkout #quot;main#quot; branch\"]`, using the `#quot;` HTML-entity escape for the nested double-quotes inside the bracketed label. mermaid-lint.txt shows `node .claude/skills/wiki/scripts/mermaid_lint.js --page pipeline.md` returned `[]` with exit 0, confirming the diagram parses cleanly and bracket balance is preserved. The `&` in `Build & test` (line 24) is left literal — acceptable inside a Mermaid `[\"...\"]` string label."
+      "evidence": "Line 23 renders the `Checkout \"main\" branch` label as `checkout[\"Checkout #quot;main#quot; branch\"]`, using the `#quot;` HTML-entity escape for the nested double-quotes inside the bracketed label. mermaid-lint.txt shows `node skills/wiki/scripts/mermaid_lint.js --page pipeline.md` returned `[]` with exit 0, confirming the diagram parses cleanly and bracket balance is preserved. The `&` in `Build & test` (line 24) is left literal — acceptable inside a Mermaid `[\"...\"]` string label."
     },
     {
       "text": "Updates pipeline.md idempotently (re-running on the same input produces no diff)",

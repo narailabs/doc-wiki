@@ -2,7 +2,7 @@
   "eval_id": 4,
   "eval_name": "orm-agent-prisma",
   "skill": "wiki-orm-agent",
-  "prompt": "Detect and map the ORM entities in this Prisma project. The schema lives at .claude/agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma — three models (User, Post, Comment) with explicit @relation declarations linking them.",
+  "prompt": "Detect and map the ORM entities in this Prisma project. The schema lives at agents/wiki-orm-agent/evals/fixtures/prisma/schema.prisma — three models (User, Post, Comment) with explicit @relation declarations linking them.",
   "assertions": [
     {
       "text": "All three models (User, Post, Comment) are extracted into detected-entities.json as separate entries",

@@ -12,8 +12,8 @@ import sys
 import json
 import sqlite3
 
-sys.path.insert(0, "/Users/narayan/src/doc-wiki/.claude/agents/lib/wiki_db")
-sys.path.insert(0, "/Users/narayan/src/doc-wiki/.claude/agents/lib")
+sys.path.insert(0, "/Users/narayan/src/doc-wiki/agents/lib/wiki_db")
+sys.path.insert(0, "/Users/narayan/src/doc-wiki/agents/lib")
 
 from wiki_db.policy import Policy, Decision
 from wiki_db.query import execute_query

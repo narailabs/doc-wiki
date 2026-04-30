@@ -42,7 +42,7 @@
         {
           "text": "Runs init_wiki.py (or init_wiki.ts) script to create directory scaffold",
           "passed": true,
-          "evidence": "report.md Phase 1 documents the command: `node .claude/skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project --domain 'backend-services' --name 'eval-iiq-project'`, and the full scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/, wiki.config.yaml, events.jsonl, edges.jsonl, .wiki-ignore) is present under outputs/."
+          "evidence": "report.md Phase 1 documents the command: `node skills/wiki/scripts/init_wiki.js --path /tmp/eval-iiq-project --domain 'backend-services' --name 'eval-iiq-project'`, and the full scaffold (wiki/, raw/, graph/, audit/, log/, outputs/, .wiki-cache/, wiki.config.yaml, events.jsonl, edges.jsonl, .wiki-ignore) is present under outputs/."
         },
         {
           "text": "wiki.config.yaml is created with domain 'backend-services'",
@@ -193,7 +193,7 @@
         {
           "text": "Handles nodes with quotes and special characters via safe escaping",
           "passed": true,
-          "evidence": "Line 23 renders the `Checkout \"main\" branch` label as `checkout[\"Checkout #quot;main#quot; branch\"]`, using the `#quot;` HTML-entity escape for the nested double-quotes inside the bracketed label. mermaid-lint.txt shows `node .claude/skills/wiki/scripts/mermaid_lint.js --page pipeline.md` returned `[]` with exit 0, confirming the diagram parses cleanly and bracket balance is preserved. The `&` in `Build & test` (line 24) is left literal — acceptable inside a Mermaid `[\"...\"]` string label."
+          "evidence": "Line 23 renders the `Checkout \"main\" branch` label as `checkout[\"Checkout #quot;main#quot; branch\"]`, using the `#quot;` HTML-entity escape for the nested double-quotes inside the bracketed label. mermaid-lint.txt shows `node skills/wiki/scripts/mermaid_lint.js --page pipeline.md` returned `[]` with exit 0, confirming the diagram parses cleanly and bracket balance is preserved. The `&` in `Build & test` (line 24) is left literal — acceptable inside a Mermaid `[\"...\"]` string label."
         },
         {
           "text": "Updates pipeline.md idempotently (re-running on the same input produces no diff)",
@@ -302,7 +302,7 @@
         {
           "text": "Runs lint_checks.py (or lint_checks.ts) to detect violations",
           "passed": true,
-          "evidence": "lint-report-before.md header cites the exact command: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`. The structured output (Summary table with error/warning/info counts and per-category sections) matches the linter's emit format, and events.jsonl records a corresponding {\"op\": \"lint\", \"phase\": \"before\", \"errors\": 8, \"warnings\": 6, \"info\": 0} entry."
+          "evidence": "lint-report-before.md header cites the exact command: `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`. The structured output (Summary table with error/warning/info counts and per-category sections) matches the linter's emit format, and events.jsonl records a corresponding {\"op\": \"lint\", \"phase\": \"before\", \"errors\": 8, \"warnings\": 6, \"info\": 0} entry."
         },
         {
           "text": "Reports missing frontmatter fields (title, type, tags, sources)",
@@ -355,7 +355,7 @@
         {
           "text": "Runs graph_ops.py (or graph_ops.ts) to query the relationship graph",
           "passed": true,
-          "evidence": "path-answer.md shows the command: `node .claude/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-path-wiki/graph/edges.jsonl --from \"authentication\" --to \"database-schema\"`. graph_ops-raw-output.txt contains a JSON array of edge objects consistent with graph_ops.ts `shortestPath` output. events.jsonl also records `{\"op\": \"path\", ...}` entries, matching the script's event-logging contract."
+          "evidence": "path-answer.md shows the command: `node skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-path-wiki/graph/edges.jsonl --from \"authentication\" --to \"database-schema\"`. graph_ops-raw-output.txt contains a JSON array of edge objects consistent with graph_ops.ts `shortestPath` output. events.jsonl also records `{\"op\": \"path\", ...}` entries, matching the script's event-logging contract."
         },
         {
           "text": "Reads edges.jsonl for typed relationships",
@@ -565,7 +565,7 @@
         {
           "text": "Policy decision is DENY",
           "passed": true,
-          "evidence": "policy-decision.md row: '| `policy_gate`      | **`DENY`**' and '| `error_code`       | `POLICY_DENY`'. stdout.txt contains: 'policy_result: { \"decision\": \"deny\", \"reason\": \"DDL statements are never allowed\" }'. deny-message.md Status: 'denied', error_code 'POLICY_DENY'. The decision is unambiguously DENY, confirmed via three independent output files and verified against the actual rule at .claude/agents/lib/wiki_db/policy.ts:211-216 which I read to confirm the code quote is accurate."
+          "evidence": "policy-decision.md row: '| `policy_gate`      | **`DENY`**' and '| `error_code`       | `POLICY_DENY`'. stdout.txt contains: 'policy_result: { \"decision\": \"deny\", \"reason\": \"DDL statements are never allowed\" }'. deny-message.md Status: 'denied', error_code 'POLICY_DENY'. The decision is unambiguously DENY, confirmed via three independent output files and verified against the actual rule at agents/lib/wiki_db/policy.ts:211-216 which I read to confirm the code quote is accurate."
         },
         {
           "text": "DDL operation is never executed",

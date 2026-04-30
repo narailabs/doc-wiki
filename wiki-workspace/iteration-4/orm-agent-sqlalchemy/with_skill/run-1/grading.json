@@ -18,7 +18,7 @@
     {
       "text": "Mermaid erDiagram contains one node per extracted entity with its columns, and at least one edge between two of them",
       "passed": false,
-      "evidence": "FAIL on edge sub-check. database-mapping.md erDiagram has all 3 nodes with correct columns (users: id/username/email; orders: id/total_amount/user_id; roles: id/name) but 0 edges. mermaid-er-check.md: 'Edges in the emitted block: 0 (no ||--o{, ||--||, }o--o{, or similar ER connectors).' Ground-truth expected edges (users||--o{orders and users}o--o{roles) are missing. Root cause in .claude/agents/lib/wiki_orm/output.ts lines 198 and 220: edge rendering only fires when rel.type === 'one_to_many' || 'many_to_many', but SQLAlchemy profile emits generic type 'relationship', so no edges are drawn."
+      "evidence": "FAIL on edge sub-check. database-mapping.md erDiagram has all 3 nodes with correct columns (users: id/username/email; orders: id/total_amount/user_id; roles: id/name) but 0 edges. mermaid-er-check.md: 'Edges in the emitted block: 0 (no ||--o{, ||--||, }o--o{, or similar ER connectors).' Ground-truth expected edges (users||--o{orders and users}o--o{roles) are missing. Root cause in agents/lib/wiki_orm/output.ts lines 198 and 220: edge rendering only fires when rel.type === 'one_to_many' || 'many_to_many', but SQLAlchemy profile emits generic type 'relationship', so no edges are drawn."
     },
     {
       "text": "Generated markdown has frontmatter with type='entity' and orm_profile='sqlalchemy'",
@@ -72,13 +72,13 @@
       "claim": "Missing Mermaid edges are a renderer feature gap, not an extraction bug",
       "type": "quality",
       "verified": true,
-      "evidence": "Relationships are captured correctly in detected-entities.json (User has 2 relationship entries, Order has 1 + 1 FK). Confirmed in .claude/agents/lib/wiki_orm/output.ts: edge emission at lines 198 and 220 is gated on rel.type === 'one_to_many' || 'many_to_many', but the SQLAlchemy profile emits type 'relationship'. So extraction is complete but the renderer filter drops generic relationships."
+      "evidence": "Relationships are captured correctly in detected-entities.json (User has 2 relationship entries, Order has 1 + 1 FK). Confirmed in agents/lib/wiki_orm/output.ts: edge emission at lines 198 and 220 is gated on rel.type === 'one_to_many' || 'many_to_many', but the SQLAlchemy profile emits type 'relationship'. So extraction is complete but the renderer filter drops generic relationships."
     }
   ],
   "user_notes_summary": {
     "uncertainties": [],
     "needs_review": [
-      "Mermaid renderer in .claude/agents/lib/wiki_orm/output.ts only emits edges for rel.type of 'one_to_many' or 'many_to_many'. The SQLAlchemy profile's relationship_patterns classify declarations as generic 'relationship' type, causing zero edges in the erDiagram despite relationships being correctly extracted."
+      "Mermaid renderer in agents/lib/wiki_orm/output.ts only emits edges for rel.type of 'one_to_many' or 'many_to_many'. The SQLAlchemy profile's relationship_patterns classify declarations as generic 'relationship' type, causing zero edges in the erDiagram despite relationships being correctly extracted."
     ],
     "workarounds": []
   },

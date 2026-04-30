@@ -4,7 +4,7 @@
 Generate a Mermaid ER diagram from a structured JSON payload describing User / Order / Product and their relationships, and inject it into a wiki page without disturbing surrounding content.
 
 ## Agent
-`.claude/agents/wiki-mermaid-agent/` — deterministic, no-LLM, backed by `scripts/mermaid_gen.ts`.
+`agents/wiki-mermaid-agent/` — deterministic, no-LLM, backed by `scripts/mermaid_gen.ts`.
 
 ## Schema learned from source
 AGENT.md + `mermaid_gen.ts` show the expected input JSON shape is:
@@ -16,7 +16,7 @@ The script does not parse an abstract entity/relationship DSL — it formats a p
 - Attribute blocks (`{ int id PK, string email }` etc.) per entity.
 
 ## Invocation
-`node .claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.js --input /tmp/eval-mermaid-er/input.json --page /tmp/eval-mermaid-er/target.md`
+`node agents/wiki-mermaid-agent/scripts/mermaid_gen.js --input /tmp/eval-mermaid-er/input.json --page /tmp/eval-mermaid-er/target.md`
 → stdout: `Injected 1 mermaid block(s) into target.md`, exit 0.
 
 ## Validation

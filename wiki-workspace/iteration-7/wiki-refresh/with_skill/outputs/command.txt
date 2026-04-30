@@ -6,7 +6,7 @@
 rm -rf /tmp/eval-i7-refresh-wiki
 
 # Scaffold wiki
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/init_wiki.js \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/init_wiki.js \
   --path /tmp/eval-i7-refresh-wiki \
   --domain test-refresh
 
@@ -29,7 +29,7 @@ console.log('Hash:', hash);
 ## Step 4: Store original hash in cache
 
 node -e "
-const { storeCache, computeHash } = await import('/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/cache_manager.js');
+const { storeCache, computeHash } = await import('/Users/narayan/src/doc-wiki/skills/wiki/scripts/cache_manager.js');
 const fs = (await import('fs')).default;
 const content = fs.readFileSync('/tmp/eval-i7-refresh-wiki/raw/architecture.md', 'utf8');
 const hash = computeHash(content);
@@ -58,7 +58,7 @@ EOF
 
 ## Step 8: Emit initial ingest event
 
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js log \
   --wiki-root /tmp/eval-i7-refresh-wiki \
   --op ingest \
   --details '{"source": "raw/architecture.md", "page": "wiki/architecture.md", "hash": "e4bffe9b83d97bfa297e4ae1e8e2e801b9b928dc492fcd9971e98b767c9d8ee0"}'
@@ -70,7 +70,7 @@ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log
 ## Step 10: Cache check — detect staleness
 
 node -e "
-const { computeHash, checkCache } = await import('/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/cache_manager.js');
+const { computeHash, checkCache } = await import('/Users/narayan/src/doc-wiki/skills/wiki/scripts/cache_manager.js');
 const fs = (await import('fs')).default;
 const content = fs.readFileSync('/tmp/eval-i7-refresh-wiki/raw/architecture.md', 'utf8');
 const hash = computeHash(content);
@@ -88,7 +88,7 @@ console.log('Cache hit:', cached !== null);
 ## Step 12: Store fresh hash in cache
 
 node -e "
-const { storeCache, computeHash } = await import('/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/cache_manager.js');
+const { storeCache, computeHash } = await import('/Users/narayan/src/doc-wiki/skills/wiki/scripts/cache_manager.js');
 const fs = (await import('fs')).default;
 const content = fs.readFileSync('/tmp/eval-i7-refresh-wiki/raw/architecture.md', 'utf8');
 const hash = computeHash(content);
@@ -110,7 +110,7 @@ EOF
 
 ## Step 14: Emit refresh event
 
-node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log \
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js log \
   --wiki-root /tmp/eval-i7-refresh-wiki \
   --op refresh \
   --details '{
@@ -127,7 +127,7 @@ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js log
 ## Step 15: No-op probe (second refresh)
 
 node -e "
-const { computeHash, checkCache } = await import('/Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/cache_manager.js');
+const { computeHash, checkCache } = await import('/Users/narayan/src/doc-wiki/skills/wiki/scripts/cache_manager.js');
 const fs = (await import('fs')).default;
 const content = fs.readFileSync('/tmp/eval-i7-refresh-wiki/raw/architecture.md', 'utf8');
 const hash = computeHash(content);

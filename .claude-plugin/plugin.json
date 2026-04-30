@@ -1,0 +1,19 @@
+{
+  "name": "doc-wiki",
+  "version": "0.1.0",
+  "description": "Documentation wiki generator and maintainer for Claude Code. Bootstrap, ingest, query, lint, refresh — all driven by the doc-wiki skill and 10 namespaced slash commands.",
+  "author": {
+    "name": "NarAI Labs",
+    "url": "https://github.com/narailabs"
+  },
+  "homepage": "https://github.com/narailabs/doc-wiki",
+  "repository": "https://github.com/narailabs/doc-wiki",
+  "license": "Apache-2.0",
+  "keywords": [
+    "documentation",
+    "wiki",
+    "knowledge-base",
+    "orm-mapping",
+    "claude-code"
+  ]
+}

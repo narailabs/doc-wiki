@@ -47,4 +47,4 @@ This page was compiled from ORM source files. Use these commands to verify or up
 - **Publisher** (`publishers`)
   - Columns: `wiki agent db-query dev "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'publishers'"`
   - Sample rows: `wiki agent db-query dev "SELECT * FROM publishers LIMIT 5"`
-- **Live code:** Read `/Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/typeorm/Author.ts`, `/Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/typeorm/Book.ts`, `/Users/narayan/src/doc-wiki/.claude/agents/wiki-orm-agent/evals/fixtures/typeorm/Publisher.ts` — ORM source files this mapping was extracted from.
+- **Live code:** Read `/Users/narayan/src/doc-wiki/agents/wiki-orm-agent/evals/fixtures/typeorm/Author.ts`, `/Users/narayan/src/doc-wiki/agents/wiki-orm-agent/evals/fixtures/typeorm/Book.ts`, `/Users/narayan/src/doc-wiki/agents/wiki-orm-agent/evals/fixtures/typeorm/Publisher.ts` — ORM source files this mapping was extracted from.

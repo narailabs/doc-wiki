@@ -38,7 +38,7 @@ The policy gate short-circuits DML on the PRESENT_ONLY branch of
 `Policy.checkQuery` before any driver call:
 
 ```ts
-// .claude/agents/lib/wiki_db/policy.ts
+// agents/lib/wiki_db/policy.ts
 if (op === OperationType.DML) {
   // ... format the SQL ...
   return {
@@ -49,7 +49,7 @@ if (op === OperationType.DML) {
 }
 ```
 
-`executeQuery` (`.claude/agents/lib/wiki_db/query.ts`) then returns
+`executeQuery` (`agents/lib/wiki_db/query.ts`) then returns
 immediately with `status: "present_only"` without calling
 `driver.execute` or `driver.executeReadAsync`. No INSERT ever reaches
 the SQLite driver, so there is nothing to log with an "executed" shape.
@@ -62,7 +62,7 @@ SQL in the return value and the policy decision is visible in stdout.
 ### 3. What a write/executed event would look like (and isn't present)
 
 The audit module writes the following JSON shape for executed queries
-(via `logQuery` in `.claude/agents/lib/wiki_db/audit.ts`):
+(via `logQuery` in `agents/lib/wiki_db/audit.ts`):
 
 ```json
 {"event_type":"query","timestamp":"...","session_id":"...","env":"dev","query":"INSERT INTO users ...","status":"ok","row_count":1,"execution_time_ms":3.2}

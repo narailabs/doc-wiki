@@ -12,7 +12,7 @@ generation preserves that edit unchanged.
    marker. Root CLAUDE.md now begins with 2 lines before the managed section.
 3. Re-run the generator against root:
    ```bash
-   node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
+   node agents/wiki-claude-md-agent/scripts/claude_md_gen.js \
      --project-root /tmp/eval-i3-cmd-gen \
      --wiki-root /tmp/eval-i3-cmd-gen/wiki \
      --update /tmp/eval-i3-cmd-gen/CLAUDE.md

@@ -278,7 +278,7 @@
         {
           "text": "Running the generator a second time produces byte-identical CLAUDE.md files across the board (diff -ru is empty) — idempotency holds",
           "passed": true,
-          "evidence": "idempotency-check.md documents snapshot-then-rerun-then-diff procedure across all 4 files; all four diffs returned empty. Procedure used node .claude/agents/wiki-claude-md-agent/scripts/claude_md_gen.js with identical flags as Run 1."
+          "evidence": "idempotency-check.md documents snapshot-then-rerun-then-diff procedure across all 4 files; all four diffs returned empty. Procedure used node agents/wiki-claude-md-agent/scripts/claude_md_gen.js with identical flags as Run 1."
         },
         {
           "text": "When the user edits content OUTSIDE the managed markers between runs (e.g., adds a new heading above the start marker), the next generation preserves that edit unchanged",
@@ -354,7 +354,7 @@
         {
           "text": "lint_checks.js is invoked and its first-pass report lists at least one 'broken_links' violation and at least one 'missing_frontmatter' violation",
           "passed": true,
-          "evidence": "lint-report-before.md contains the raw JSON produced by `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki`. It lists 2 broken_links error rows (page-a.md -> ./page-d.md; page-c.md -> ./ghost.md) and 3 missing_frontmatter error rows (page-b.md sources; page-b.md tags; page-c.md 'No frontmatter found'). Summary: error=5, warning=6, info=0."
+          "evidence": "lint-report-before.md contains the raw JSON produced by `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki`. It lists 2 broken_links error rows (page-a.md -> ./page-d.md; page-c.md -> ./ghost.md) and 3 missing_frontmatter error rows (page-b.md sources; page-b.md tags; page-c.md 'No frontmatter found'). Summary: error=5, warning=6, info=0."
         },
         {
           "text": "Each violation record names the offending file path",
@@ -402,7 +402,7 @@
         {
           "text": "Runs graph_ops.js with the path subcommand",
           "passed": true,
-          "evidence": "outputs/graph_ops-raw-output.txt line 1-3 shows: `$ node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl --from authentication --to database-schema`. Also cited in path-answer.md lines 5-10 in the 'Command executed' block."
+          "evidence": "outputs/graph_ops-raw-output.txt line 1-3 shows: `$ node /Users/narayan/src/doc-wiki/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-i3-path-wiki/graph/edges.jsonl --from authentication --to database-schema`. Also cited in path-answer.md lines 5-10 in the 'Command executed' block."
         },
         {
           "text": "Returned path starts at 'authentication' and ends at 'database-schema'",
@@ -614,7 +614,7 @@
         {
           "text": "Policy decision is PRESENT_ONLY and appears in policy-decision.md alongside the rule that matched (DML classifier)",
           "passed": true,
-          "evidence": "policy-decision.md records policy_gate=PRESENT_ONLY, final_decision=present_only, operation_type=DML (INSERT), and cites the DML classifier verbatim from .claude/agents/lib/wiki_db/policy.ts including the _DML_KEYWORDS set ({INSERT, UPDATE, DELETE, REPLACE, MERGE, UPSERT}) and the PRESENT_ONLY branch of Policy.checkQuery."
+          "evidence": "policy-decision.md records policy_gate=PRESENT_ONLY, final_decision=present_only, operation_type=DML (INSERT), and cites the DML classifier verbatim from agents/lib/wiki_db/policy.ts including the _DML_KEYWORDS set ({INSERT, UPDATE, DELETE, REPLACE, MERGE, UPSERT}) and the PRESENT_ONLY branch of Policy.checkQuery."
         },
         {
           "text": "Output clearly labels the SQL as not executed (e.g., title 'NOT EXECUTED', status='present_only', executed=false)",

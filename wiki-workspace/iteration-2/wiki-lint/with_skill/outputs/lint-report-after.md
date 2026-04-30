@@ -1,7 +1,7 @@
 # Lint Report — AFTER fixes
 
 Wiki root: `/tmp/eval-lint-wiki/`
-Command: `node .claude/skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`
+Command: `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-lint-wiki/`
 
 ## Summary
 

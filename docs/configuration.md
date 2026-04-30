@@ -2,7 +2,7 @@
 
 Two YAML files configure doc-wiki:
 
-- **`wiki.config.yaml`** — lives in the wiki root (created by `/wiki-init`, refined by `/wiki-onboard`). Controls per-wiki behavior: domain, autonomy mode, ORM detection, lint thresholds, custom source agents.
+- **`wiki.config.yaml`** — lives in the wiki root (created by `/doc-wiki:init`, refined by `/doc-wiki:onboard`). Controls per-wiki behavior: domain, autonomy mode, ORM detection, lint thresholds, custom source agents.
 - **`.connectors/config.yaml`** — lives at `~/.connectors/config.yaml` (user-global) and/or `./.connectors/config.yaml` (per-repo overlay). Read by [`narai-primitives`](connectors.md) to know which connectors are enabled and how to authenticate.
 
 This document is the schema reference for both, plus the credential-ref grammar and resolution order.
@@ -28,7 +28,7 @@ This document is the schema reference for both, plus the credential-ref grammar 
 
 ## `wiki.config.yaml`
 
-Created by `/wiki-init`, validated by [`parse_config.ts`](../.claude/agents/lib/parse_config.ts), refined by `/wiki-onboard`. The only strictly required field is `wiki.name`; everything else has defaults.
+Created by `/doc-wiki:init`, validated by [`parse_config.ts`](../agents/lib/parse_config.ts), refined by `/doc-wiki:onboard`. The only strictly required field is `wiki.name`; everything else has defaults.
 
 ### `wiki` section
 
@@ -36,7 +36,7 @@ Created by `/wiki-init`, validated by [`parse_config.ts`](../.claude/agents/lib/
 wiki:
   name: my-project          # REQUIRED — used as wiki title and in frontmatter
   domain: backend-services  # default: "general" — broad topic, used to bias compilation
-  max_depth: 3              # default: 3 — recursion depth for /wiki-query graph traversal
+  max_depth: 3              # default: 3 — recursion depth for /doc-wiki:query graph traversal
   ignore_file: .wiki-ignore # default: ".wiki-ignore" — gitignore-style file inside wiki root
 ```
 
@@ -44,7 +44,7 @@ wiki:
 |---|---|---|---|
 | `wiki.name` | string | **required** | Wiki name; appears in page frontmatter and `wiki/overview.md` |
 | `wiki.domain` | string | `general` | Broad topic; biases page-type selection during compilation |
-| `wiki.max_depth` | integer | `3` | Maximum hop depth for `/wiki-query` graph traversal |
+| `wiki.max_depth` | integer | `3` | Maximum hop depth for `/doc-wiki:query` graph traversal |
 | `wiki.ignore_file` | string | `.wiki-ignore` | Path (inside the wiki root) to a gitignore-style file used by ingest passes |
 
 ### `ecosystem` section
@@ -54,7 +54,7 @@ The `ecosystem` block describes the project's stack and the agents available for
 ```yaml
 ecosystem:
   agents:
-    source: {}                # populated by /wiki-onboard with one entry per enabled connector
+    source: {}                # populated by /doc-wiki:onboard with one entry per enabled connector
     custom:                   # zero or more custom-connector entries
       - name: stripe
         source_schemes: ["stripe://"]
@@ -74,7 +74,7 @@ ecosystem:
   database:
     enabled: false
     driver: sqlite            # postgresql | mysql | sqlite | sqlserver | mongodb | dynamodb
-    environments: {}          # populated by /wiki-onboard
+    environments: {}          # populated by /doc-wiki:onboard
     policy:
       block_ddl: true
       block_privilege: true
@@ -86,7 +86,7 @@ ecosystem:
 
   orm:
     enabled: true
-    profiles: []              # populated by /wiki-onboard (one of: jpa, sqlalchemy, django, prisma, typeorm, ef, activerecord)
+    profiles: []              # populated by /doc-wiki:onboard (one of: jpa, sqlalchemy, django, prisma, typeorm, ef, activerecord)
     custom_profiles: []       # paths to additional profile YAML files
     cross_validate_against_db: true
 
@@ -102,7 +102,7 @@ ecosystem:
     lint_syntax: true
 ```
 
-The `ecosystem.agents.custom` block is how you register a custom local connector with doc-wiki — see [`connectors.md`](connectors.md#adding-a-custom-local-connector). Each entry maps URL patterns (or scheme prefixes) to the connector's invocation template; `source_registry.ts` uses these to classify sources during `/wiki-ingest`.
+The `ecosystem.agents.custom` block is how you register a custom local connector with doc-wiki — see [`connectors.md`](connectors.md#adding-a-custom-local-connector). Each entry maps URL patterns (or scheme prefixes) to the connector's invocation template; `source_registry.ts` uses these to classify sources during `/doc-wiki:ingest`.
 
 The `ecosystem.database` block configures `wiki-orm-agent`'s cross-validation flow against a live DB. The actual connection lives under `connectors.db` in `.connectors/config.yaml`; this block just enables the cross-validation behavior and defines a wiki-side audit log.
 
@@ -127,7 +127,7 @@ autonomy:
 
 `autonomy.mode` must match exactly one of the four values; `parse_config.ts` validates this at load time. Per-category overrides take precedence over the mode default for that category.
 
-See [`.claude/skills/wiki/references/autonomy.md`](../.claude/skills/wiki/references/autonomy.md) for the full decision flow.
+See [`skills/doc-wiki/references/autonomy.md`](../skills/doc-wiki/references/autonomy.md) for the full decision flow.
 
 ### `sources` section
 
@@ -167,7 +167,7 @@ lint:
       # ... see references/quality.md for the full list
 ```
 
-For the full set of structural and LLM-driven checks, see [`.claude/skills/wiki/references/quality.md`](../.claude/skills/wiki/references/quality.md).
+For the full set of structural and LLM-driven checks, see [`skills/doc-wiki/references/quality.md`](../skills/doc-wiki/references/quality.md).
 
 ---
 
@@ -356,7 +356,7 @@ export JIRA_EMAIL=you@your-org.com
 export JIRA_API_TOKEN=ATATT3xx...
 ```
 
-A minimal `wiki.config.yaml` (created by `/wiki-init` then refined by `/wiki-onboard`):
+A minimal `wiki.config.yaml` (created by `/doc-wiki:init` then refined by `/doc-wiki:onboard`):
 
 ```yaml
 wiki:
@@ -373,4 +373,4 @@ autonomy:
   mode: balanced
 ```
 
-Together, these two files are enough to start running `/wiki-ingest` against GitHub and Jira sources.
+Together, these two files are enough to start running `/doc-wiki:ingest` against GitHub and Jira sources.

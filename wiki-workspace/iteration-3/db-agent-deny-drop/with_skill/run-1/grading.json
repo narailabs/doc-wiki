@@ -43,7 +43,7 @@
   },
   "claims": [
     {
-      "claim": "DROP is classified as OperationType.DDL by classifySqlKeywords in .claude/agents/lib/wiki_db/policy.ts",
+      "claim": "DROP is classified as OperationType.DDL by classifySqlKeywords in agents/lib/wiki_db/policy.ts",
       "type": "factual",
       "verified": true,
       "evidence": "Read policy.ts lines 200-216: the OperationType.DDL branch returns reason 'DDL statements are never allowed', matching the stdout payload verbatim."

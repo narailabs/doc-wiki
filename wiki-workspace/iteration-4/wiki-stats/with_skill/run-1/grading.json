@@ -3,7 +3,7 @@
     {
       "text": "Runs the wiki's event_logger stats subcommand (event_logger.js stats --since 7d) or equivalent",
       "passed": true,
-      "evidence": "outputs/command.txt shows: `node /Users/narayan/src/doc-wiki/.claude/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i4-stats-wiki/ --since 7d`. stdout.txt contains the canonical stats JSON (total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost); stderr.txt is empty; exit code reported as 0."
+      "evidence": "outputs/command.txt shows: `node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i4-stats-wiki/ --since 7d`. stdout.txt contains the canonical stats JSON (total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost); stderr.txt is empty; exit code reported as 0."
     },
     {
       "text": "Output lists counts for at least op='ingest', op='query', op='lint', op='fix' — one line per op",
@@ -53,7 +53,7 @@
       "claim": "The built-in event_logger.js stats subcommand emits total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost — and nothing else per-op",
       "type": "factual",
       "verified": true,
-      "evidence": "Confirmed by reading .claude/skills/wiki/scripts/event_logger.ts::getStats (lines 258-332). The returned object has exactly those five keys. stdout.txt matches."
+      "evidence": "Confirmed by reading skills/wiki/scripts/event_logger.ts::getStats (lines 258-332). The returned object has exactly those five keys. stdout.txt matches."
     },
     {
       "claim": "17 fixture events fall within the 7-day window; 4 are excluded",

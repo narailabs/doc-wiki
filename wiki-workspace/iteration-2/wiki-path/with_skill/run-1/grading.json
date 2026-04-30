@@ -3,7 +3,7 @@
     {
       "text": "Runs graph_ops.py (or graph_ops.ts) to query the relationship graph",
       "passed": true,
-      "evidence": "path-answer.md shows the command: `node .claude/skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-path-wiki/graph/edges.jsonl --from \"authentication\" --to \"database-schema\"`. graph_ops-raw-output.txt contains a JSON array of edge objects consistent with graph_ops.ts `shortestPath` output. events.jsonl also records `{\"op\": \"path\", ...}` entries, matching the script's event-logging contract."
+      "evidence": "path-answer.md shows the command: `node skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-path-wiki/graph/edges.jsonl --from \"authentication\" --to \"database-schema\"`. graph_ops-raw-output.txt contains a JSON array of edge objects consistent with graph_ops.ts `shortestPath` output. events.jsonl also records `{\"op\": \"path\", ...}` entries, matching the script's event-logging contract."
     },
     {
       "text": "Reads edges.jsonl for typed relationships",

@@ -8,7 +8,7 @@ Procedure
 2. Wrote fixture /tmp/eval-mermaid-flow/agent-output.json (the agent-format
    input: a `mermaid` array with one `{type, title, code}` entry derived
    from the user's nodes/edges input.json).
-3. Ran: node .claude/agents/wiki-mermaid-agent/scripts/mermaid_gen.js \
+3. Ran: node agents/wiki-mermaid-agent/scripts/mermaid_gen.js \
           --input agent-output.json --page pipeline.md
 4. Captured sha256.
 5. Re-ran the identical command.

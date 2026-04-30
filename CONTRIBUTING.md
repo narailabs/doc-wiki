@@ -27,26 +27,26 @@ npm test                # vitest run — 886 tests + 5 skipped (live DB) is the 
 npm run build           # tsc -b tsconfig.build.json (emits .js siblings)
 ```
 
-If you touched a script under `.claude/skills/wiki/scripts/` or an agent under `.claude/agents/`, also run the matching focused suite:
+If you touched a script under `skills/doc-wiki/scripts/` or an agent under `agents/`, also run the matching focused suite:
 
 ```sh
-npx vitest run .claude/skills/wiki/scripts/tests/
-npx vitest run .claude/agents/lib/wiki_db/tests/
-npx vitest run .claude/agents/lib/wiki_orm/tests/
-npx vitest run .claude/agents/wiki-claude-md-agent/scripts/tests/
-npx vitest run .claude/agents/wiki-mermaid-agent/scripts/tests/
+npx vitest run skills/doc-wiki/scripts/tests/
+npx vitest run agents/lib/wiki_db/tests/
+npx vitest run agents/lib/wiki_orm/tests/
+npx vitest run agents/wiki-claude-md-agent/scripts/tests/
+npx vitest run agents/wiki-mermaid-agent/scripts/tests/
 ```
 
 ## Where things live
 
 Read [`docs/architecture.md`](docs/architecture.md) for the three-layer model. The short version:
 
-- **Slash commands** live at `.claude/commands/wiki-*.md` — thin wrappers that route into the `wiki` skill.
-- **The orchestrator skill** lives at `.claude/skills/wiki/SKILL.md` — state machine that dispatches scripts and agents.
-- **TypeScript scripts** live at `.claude/skills/wiki/scripts/` — deterministic operations, compiled to `.js` and invoked via `node`.
-- **Agents** live at `.claude/agents/` — three of them: `wiki-orm-agent`, `wiki-mermaid-agent`, `wiki-claude-md-agent`.
-- **Shared libraries** live at `.claude/agents/lib/` — `wiki_db`, `wiki_orm`, plus standalone modules.
-- **Reference docs** live at `.claude/skills/wiki/references/` — autonomy, code-locality, compilation, operations, quality.
+- **Slash commands** live at `commands/doc-wiki:*.md` — thin wrappers that route into the `doc-wiki` skill.
+- **The orchestrator skill** lives at `skills/doc-wiki/SKILL.md` — state machine that dispatches scripts and agents.
+- **TypeScript scripts** live at `skills/doc-wiki/scripts/` — deterministic operations, compiled to `.js` and invoked via `node`.
+- **Agents** live at `agents/` — three of them: `wiki-orm-agent`, `wiki-mermaid-agent`, `wiki-claude-md-agent`.
+- **Shared libraries** live at `agents/lib/` — `wiki_db`, `wiki_orm`, plus standalone modules.
+- **Reference docs** live at `skills/doc-wiki/references/` — autonomy, code-locality, compilation, operations, quality.
 
 External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the seven bundled connectors. See [`docs/connectors.md`](docs/connectors.md).
 
@@ -54,9 +54,9 @@ External-source fetching does **not** live in doc-wiki. It is delegated to `nara
 
 | Goal | Where to start |
 |---|---|
-| Add or modify a `/wiki-*` command | Edit `.claude/skills/wiki/SKILL.md` (the command's section) and the wrapper at `.claude/commands/wiki-<name>.md` |
-| Add a TypeScript script | Add `.ts` under `.claude/skills/wiki/scripts/`, add tests under `tests/`, update `docs/architecture.md` script inventory |
-| Add an ORM profile | Drop a YAML file under `.claude/agents/lib/wiki_orm/profiles/` — `loadProfile()` validates regexes at load time |
+| Add or modify a `/doc-wiki:*` command | Edit `skills/doc-wiki/SKILL.md` (the command's section) and the wrapper at `commands/wiki-<name>.md` |
+| Add a TypeScript script | Add `.ts` under `skills/doc-wiki/scripts/`, add tests under `tests/`, update `docs/architecture.md` script inventory |
+| Add an ORM profile | Drop a YAML file under `agents/lib/wiki_orm/profiles/` — `loadProfile()` validates regexes at load time |
 | Add a custom local connector | Use the `/create-connector` skill — scaffolds at `.connectors/connectors/<name>/`. **Do not** add it inside doc-wiki sources. |
 | Contribute a builtin connector | Open a PR against [narailabs/narai-primitives](https://github.com/narailabs/narai-primitives), not this repo |
 | Update documentation | See [`docs/`](docs/) — keep in mind that `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md` are platform wrappers and may need a sync |
