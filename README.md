@@ -20,6 +20,25 @@ doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / 
 
 ## Install
 
+### From the NarAI marketplace (recommended)
+
+doc-wiki ships as a [Claude Code plugin](https://github.com/narailabs/narai-claude-plugins). One-time marketplace setup, then install:
+
+```sh
+claude plugin marketplace add narailabs/narai-claude-plugins
+claude plugin install doc-wiki@narai
+```
+
+After install, the ten `/doc-wiki:*` slash commands are available in every Claude Code session — no per-project clone, no per-project build.
+
+### Direct from GitHub (no marketplace)
+
+```sh
+claude plugin install narailabs/doc-wiki
+```
+
+### From source (contributors)
+
 Requires **Node 20.x** (see [`package.json` engines](package.json) — Node 21+ is not yet supported by upstream deps).
 
 ```sh
@@ -29,7 +48,7 @@ npm install
 npm run build
 ```
 
-That's it for local install. The TypeScript scripts compile to sibling `.js` files; the slash commands are picked up automatically when you open this repo (or any project that uses doc-wiki) in Claude Code.
+The TypeScript scripts compile to sibling `.js` files; the plugin layout under [`commands/`](commands/), [`skills/doc-wiki/`](skills/doc-wiki/), and [`agents/`](agents/) is what Claude Code picks up after `claude plugin install --local <path>`.
 
 For full setup including connector access — Jira, GitHub, Confluence, and friends — see [`docs/getting-started.md`](docs/getting-started.md).
 
@@ -86,7 +105,7 @@ doc-wiki is primarily a Claude Code project, but the same skill is exposed in ot
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Codex / OpenAI agents |
 | [`GEMINI.md`](GEMINI.md) | Gemini / Google AI |
-| [`.cursor/rules/wiki.mdc`](.cursor/rules/wiki.mdc) | Cursor IDE |
+| [`.cursor/rules/doc-wiki.mdc`](.cursor/rules/doc-wiki.mdc) | Cursor IDE |
 | [`.aider/conventions.md`](.aider/conventions.md) | Aider |
 
 All four point back to the same scripts and agents under `agents/` and `skills/`.
@@ -98,15 +117,15 @@ doc-wiki/
 ├── README.md, LICENSE, CONTRIBUTING.md       this file + project boilerplate
 ├── CLAUDE.md, AGENTS.md, GEMINI.md           AI-platform skill manuals
 ├── docs/                                     public-facing documentation
-├── .claude/
-│   ├── commands/doc-wiki:*.md                    10 slash-command wrappers
-│   ├── skills/wiki/
-│   │   ├── SKILL.md                          orchestrator manual
-│   │   ├── scripts/*.ts                      ~21 deterministic helpers
-│   │   └── references/*.md                   5 ref docs (autonomy, quality, ...)
-│   └── agents/                               3 wiki agents + shared libs (wiki_db, wiki_orm)
+├── .claude-plugin/plugin.json                Claude Code plugin manifest
+├── commands/                                 10 slash-command wrappers (init.md, onboard.md, ...)
+├── skills/doc-wiki/
+│   ├── SKILL.md                              orchestrator manual
+│   ├── scripts/*.ts                          ~21 deterministic helpers
+│   └── references/*.md                       5 ref docs (autonomy, quality, ...)
+├── agents/                                   3 wiki agents + shared libs (wiki_db, wiki_orm)
 ├── .connectors/config.example.yaml           starter for ~/.connectors/config.yaml
-├── .cursor/rules/wiki.mdc                    Cursor wrapper
+├── .cursor/rules/doc-wiki.mdc                Cursor wrapper
 ├── .aider/conventions.md                     Aider wrapper
 ├── package.json, tsconfig.json               Node + TypeScript setup
 └── wiki-workspace/                           archived eval iteration reports
