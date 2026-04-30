@@ -105,7 +105,7 @@ The full policy + outcomes are documented in [`docs/connectors.md`](connectors.m
 1. **Is the wiki populated?** `/doc-wiki:stats --since 30d` should show ingest counts. If the wiki only has an `index.md`, you need more `/doc-wiki:ingest` runs first.
 2. **Is `wiki/summaries.md` populated?** Each page should have a one-paragraph entry. If the file is sparse, run `/doc-wiki:lint --fix` to trigger `summaries_rebuild.ts`.
 3. **Is your question phrased close to the source content?** Summary-first search scores against summaries, not full bodies — phrase your question with vocabulary that appears in source material.
-4. **Try `/doc-wiki:path`** instead — if you're looking for relationships between concepts (`/doc-wiki:path --from auth --to session`), the graph traversal is more direct.
+4. **Try path mode** instead — if you're looking for relationships between concepts (`/doc-wiki:query --from auth --to session`), the graph traversal is more direct than summary-first synthesis.
 
 ## Where to file issues
 

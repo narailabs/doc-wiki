@@ -243,6 +243,13 @@ The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If t
 
 ### /doc-wiki:query — Summary-first search + synthesis
 
+Two modes — picked by argument shape:
+
+- **Synthesis mode** (positional `<question>`): the default flow, steps 1–8 below.
+- **Path mode** (`--from <a> --to <b>` instead of a question): shortest-path traversal over `graph/edges.jsonl`. Skips steps 1–6.
+
+#### Synthesis mode
+
 1. Read `wiki/summaries.md` (one file, ~50 tokens per page)
 2. Score relevance of all page summaries against the question
 3. Load top-N full pages (typically 3-5)
@@ -253,6 +260,14 @@ The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If t
 8. Offer to promote to wiki page via `/doc-wiki:promote`
 
 Log token efficiency: `node {skill_path}/scripts/event_logger.js --op query --wiki-root <wiki-root> --details '{"tokens_in": N, "tokens_out": M, "reduction_ratio": R}'`
+
+#### Path mode
+
+```bash
+node {skill_path}/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
+```
+
+Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--via`, `--all-paths`. Read-only — no autonomy gate, no archive, no synthesis.
 
 ### /doc-wiki:lint — Health check + auto-heal
 
@@ -287,14 +302,6 @@ Convert an archived query answer from `outputs/queries/` into a permanent wiki p
 Re-fetch previously-ingested sources, diff against stored versions, re-compile changed pages.
 
 **Batch resumption:** use `scripts/checkpoint.ts` with opName `"refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation. See `/doc-wiki:ingest` above for the pattern.
-
-### /doc-wiki:path — Shortest-path query between concepts
-
-```bash
-node {skill_path}/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-b>" --edges <wiki-root>/graph/edges.jsonl
-```
-
-Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--via`, `--all-paths`.
 
 ### /doc-wiki:stats — Token efficiency and cost metrics
 
