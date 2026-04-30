@@ -40,7 +40,7 @@ All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to `.
 
 ## Agent Paths
 
-Sub-agents at `.claude/agents/`. External-source fetching is handled by `@narai/*-agent-connector` packages dispatched through `@narai/connector-hub`'s `gather()` — no per-service subagents in doc-wiki.
+Sub-agents at `.claude/agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
 
 - `wiki-orm-agent` -- ORM profile detection
 - `wiki-mermaid-agent` -- Mermaid diagram generation
@@ -57,3 +57,7 @@ Install dependencies (Node 20 required): `npm install && npm run build`
 ## Post-Operation Hooks
 
 After write operations (ingest, fix, promote, refresh), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+
+## Documentation
+
+Public-facing docs live in [`docs/`](docs/) at the repo root: [`getting-started.md`](docs/getting-started.md), [`commands.md`](docs/commands.md), [`configuration.md`](docs/configuration.md), [`architecture.md`](docs/architecture.md), [`connectors.md`](docs/connectors.md), [`troubleshooting.md`](docs/troubleshooting.md).

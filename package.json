@@ -1,8 +1,21 @@
 {
   "name": "doc-wiki",
   "version": "0.1.0",
-  "private": true,
-  "license": "UNLICENSED",
+  "description": "Documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helpers.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/narailabs/doc-wiki.git"
+  },
+  "keywords": [
+    "claude-code",
+    "documentation",
+    "wiki",
+    "agent",
+    "skill",
+    "narai-primitives",
+    "knowledge-base"
+  ],
   "type": "module",
   "engines": {
     "node": ">=20.0.0 <21.0.0"
