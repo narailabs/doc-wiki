@@ -450,6 +450,11 @@ function parseArgs(argv) {
             i++;
             continue;
         }
+        if (a === "--all-paths") {
+            out.allPaths = true;
+            i++;
+            continue;
+        }
         let name;
         let value;
         if (a.startsWith("--")) {
@@ -551,6 +556,11 @@ export function main(argv = process.argv.slice(2)) {
             return 0;
         }
         if (args.command === "path") {
+            if (args.allPaths) {
+                const result = allPaths(args.edges ?? "", args.fromConcept ?? "", args.toConcept ?? "");
+                process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+                return 0;
+            }
             const result = shortestPath(args.edges ?? "", args.fromConcept ?? "", args.toConcept ?? "", args.maxHops ?? 6, args.via ?? null);
             process.stdout.write(JSON.stringify(result, null, 2) + "\n");
             return 0;
