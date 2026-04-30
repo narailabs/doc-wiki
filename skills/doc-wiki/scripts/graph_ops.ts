@@ -534,6 +534,7 @@ interface ParsedArgs {
   maxHops?: number;
   via?: string | null;
   top?: number;
+  allPaths?: boolean;
   help?: boolean;
 }
 
@@ -569,6 +570,11 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     }
     if (a === "-h" || a === "--help") {
       out.help = true;
+      i++;
+      continue;
+    }
+    if (a === "--all-paths") {
+      out.allPaths = true;
       i++;
       continue;
     }
@@ -680,6 +686,15 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       return 0;
     }
     if (args.command === "path") {
+      if (args.allPaths) {
+        const result = allPaths(
+          args.edges ?? "",
+          args.fromConcept ?? "",
+          args.toConcept ?? "",
+        );
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+        return 0;
+      }
       const result = shortestPath(
         args.edges ?? "",
         args.fromConcept ?? "",
