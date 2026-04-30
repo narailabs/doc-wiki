@@ -29,7 +29,7 @@ node skills/doc-wiki/scripts/parse_config.js --help 2>&1 | head
 npm test
 ```
 
-The first command should print usage info (it loads cleanly). The second command should report **886 tests passed, 5 skipped** (the skipped ones are live-database integration tests gated behind `TEST_LIVE_*` env vars — see [troubleshooting.md](troubleshooting.md) for how to enable them).
+The first command should print usage info (it loads cleanly). The second command should report **934 tests passed, 5 skipped** (the skipped ones are live-database integration tests gated behind `TEST_LIVE_*` env vars — see [troubleshooting.md](troubleshooting.md) for how to enable them).
 
 ## Configure connector access (one-time)
 

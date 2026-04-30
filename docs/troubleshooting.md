@@ -59,7 +59,7 @@ If `npm run typecheck` (which is `tsc --noEmit`) passes but `npm run build` fail
 
 ## Live-DB tests skipped
 
-**Symptom:** `npm test` shows "5 skipped" alongside the 886 passing tests, and you'd like to actually run them.
+**Symptom:** `npm test` shows "5 skipped" alongside the 934 passing tests, and you'd like to actually run them.
 
 **Cause:** Five tests under `agents/lib/wiki_db/tests/` and `agents/lib/wiki_orm/tests/` exercise live database connections. They're gated behind `TEST_LIVE_*` env vars to avoid breaking CI.
 
@@ -69,7 +69,7 @@ If `npm run typecheck` (which is `tsc --noEmit`) passes but `npm run build` fail
 TEST_LIVE_SQLITE=1 npx vitest run agents/lib/wiki_db/tests/
 ```
 
-Some tests need a real PostgreSQL or MySQL — provision one and set its connection string in the matching env var. Live DB tests are not required for any normal contribution; the 886 non-live tests cover the main paths.
+Some tests need a real PostgreSQL or MySQL — provision one and set its connection string in the matching env var. Live DB tests are not required for any normal contribution; the 934 non-live tests cover the main paths.
 
 ## `/doc-wiki:lint` reports orphans or drift
 

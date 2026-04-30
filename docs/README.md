@@ -6,6 +6,7 @@ This directory holds the public-facing documentation for doc-wiki. The internal 
 
 | You want to... | Read |
 |---|---|
+| Run through the full lifecycle on a new codebase, step by step | [`../WALKTHROUGH.md`](../WALKTHROUGH.md) |
 | Install doc-wiki and run your first command | [`getting-started.md`](getting-started.md) |
 | Look up what a `/doc-wiki:*` command does | [`commands.md`](commands.md) |
 | Configure `wiki.config.yaml` or connector access | [`configuration.md`](configuration.md) |

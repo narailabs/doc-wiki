@@ -2,9 +2,9 @@
 
 Every `/doc-wiki:*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../skills/doc-wiki/SKILL.md) for the full procedural detail.
 
-The nine commands group into three lifecycles:
+The ten commands group into three lifecycles:
 
-- **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
+- **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
 - **Search** — find and analyze: `/doc-wiki:query` (synthesis or path mode), `/doc-wiki:stats`
 - **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`
 
@@ -79,11 +79,70 @@ Six interactive phases:
 
 ---
 
+### `/doc-wiki:atlas` — Full application documentation
+
+Generate a comprehensive wiki for the entire codebase in one orchestrated pass. A meta-orchestrator over `/doc-wiki:ingest` — discovers topics from multiple signals, batches ingest across topics × facets, synthesizes global aggregation pages, and on existing wikis validates content against current source state via gitlog and semantic checks.
+
+**Synopsis:** `/doc-wiki:atlas [--facets <list>] [--scope <topic>] [--yes] [--dry-run] [--max-cost <usd>] [--since <duration>] [--validate-mode shallow|full] [--resume] [--wiki-root <path>]`
+
+**Args:**
+
+| Arg | Type | Default | Purpose |
+|---|---|---|---|
+| `--facets` | csv | `architecture,data-model,environments,api,operations` | Per-topic facets to generate. **Additive** — never deletes pages outside this set from prior runs. |
+| `--scope` | string | (all topics) | Restrict to one topic for incremental runs |
+| `--yes` | flag | (off) | Skip phase confirmation gates (CI/unattended) |
+| `--dry-run` | flag | (off) | Show planned ingests + cost estimate, write nothing (validation pass still runs read-only) |
+| `--max-cost` | usd | `200.00` | Abort pre-write if estimate exceeds; re-run with explicit higher value to override |
+| `--since` | duration | last `op: atlas` event timestamp, else all-time | Window for the gitlog drift scan |
+| `--validate-mode` | `shallow` \| `full` | `shallow` | `shallow`: structural + gitlog + semantic on sampled pages. `full`: semantic on every existing atlas page. |
+| `--resume` | flag | (off) | Continue from `.wiki-checkpoint.json` (`opName: atlas`) without prompting |
+| `--wiki-root` | path | `./wiki` | Path to the wiki |
+
+**What it does:**
+
+The eight-phase pipeline (full description in [`SKILL.md` § /doc-wiki:atlas](../skills/doc-wiki/SKILL.md)):
+
+1. Detect state (fresh / existing / hybrid) by counting atlas-tagged pages and reading `events.jsonl`.
+2. Discover topics by unioning four signals: top-level code dirs, ORM domains via `wiki-orm-agent`, existing `wiki/<topic>/` dirs, gitlog churn hotspots.
+3. Confirm topic list (gated by autonomy mode; `--yes` skips).
+4. Estimate cost; abort pre-write if over `--max-cost`.
+5. Validate existing atlas pages (existing/hybrid wikis only) — structural lint + gitlog drift + semantic LLM check with `(page-hash, source-hash)` cache.
+6. Bootstrap or refresh — dispatch `/doc-wiki:ingest <source> --output <path>` per `(topic, facet)` not cached, plus `/doc-wiki:refresh` for drift-flagged pages.
+7. Synthesize the three global pages (`overview.md`, `integrations.md`, `deploy.md`) by aggregating per-topic content.
+8. Finalize — lint, update `wiki/index.md`, run global crosslink + tag-harmonize, log `op: atlas` event, clear checkpoint, write drift + cost reports under `wiki/outputs/atlas/<run-id>/`.
+
+Each atlas-generated page carries two extra frontmatter fields: `atlas_facet` (e.g., `architecture`) and `atlas_run_id` (timestamp). These let atlas recognize its own pages on re-runs.
+
+**Examples:**
+
+```text
+# Fresh-wiki bootstrap with default comprehensive facets
+/doc-wiki:atlas
+
+# Show what would be generated, no writes
+/doc-wiki:atlas --dry-run
+
+# Cheap re-run focused on architecture pages only — won't delete data-model
+# pages from a prior comprehensive run
+/doc-wiki:atlas --facets architecture
+
+# Single-topic refresh for incremental work
+/doc-wiki:atlas --scope auth
+
+# Unattended CI run with a larger cost ceiling
+/doc-wiki:atlas --yes --max-cost 500
+```
+
+**See also:** [`SKILL.md` § /doc-wiki:atlas](../skills/doc-wiki/SKILL.md), [`atlas_orchestrator.ts`](../skills/doc-wiki/scripts/atlas_orchestrator.ts), [`atlas_gitlog.ts`](../skills/doc-wiki/scripts/atlas_gitlog.ts), [`atlas_validate.ts`](../skills/doc-wiki/scripts/atlas_validate.ts), [`atlas_synthesize.ts`](../agents/lib/atlas_synthesize.ts).
+
+---
+
 ### `/doc-wiki:ingest` — Fetch, extract, compile
 
 Ingest a source (file, URL, folder, or pasted text) into the wiki. The bread-and-butter command — most days you'll spend most of your time here.
 
-**Synopsis:** `/doc-wiki:ingest <source> [--wiki-root <path>] [--no-crosslink] [--no-tag-harmonize]`
+**Synopsis:** `/doc-wiki:ingest <source> [--wiki-root <path>] [--output <relative-path>] [--no-crosslink] [--no-tag-harmonize]`
 
 **Args:**
 
@@ -91,6 +150,7 @@ Ingest a source (file, URL, folder, or pasted text) into the wiki. The bread-and
 |---|---|---|---|
 | `<source>` | string | **required** | File path, URL, folder, or pasted-text marker (e.g. `-` to read stdin) |
 | `--wiki-root` | path | `./wiki` | Path to the wiki created by `/doc-wiki:init` |
+| `--output` | path | (inferred) | Wiki-relative path to write the compiled page to. When absent, the destination is inferred from content (existing behavior). Used by `/doc-wiki:atlas` to pin per-topic destinations. |
 | `--no-crosslink` | flag | (off) | Skip the post-op crosslink pass |
 | `--no-tag-harmonize` | flag | (off) | Skip the post-op tag-harmonize pass |
 

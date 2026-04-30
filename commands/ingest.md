@@ -1,6 +1,6 @@
 ---
 description: Ingest a source
-argument-hint: '<source> [--wiki-root <path>] [--no-crosslink] [--no-tag-harmonize]'
+argument-hint: '<source> [--wiki-root <path>] [--output <relative-path>] [--no-crosslink] [--no-tag-harmonize]'
 allowed-tools: Skill(doc-wiki)
 ---
 
