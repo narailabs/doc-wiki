@@ -2,6 +2,17 @@
 
 This project has a documentation wiki skill that generates and maintains structured documentation from code, external sources, and manual input. All wiki operations are driven by TypeScript scripts (compiled to JavaScript, invoked via `node`) and sub-agents.
 
+## Documentation
+
+Public-facing docs live in [`docs/`](docs/). For Codex users:
+
+- [`docs/getting-started.md`](docs/getting-started.md) — install + first ingest
+- [`docs/commands.md`](docs/commands.md) — reference for all 10 `/wiki-*` commands
+- [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` and `.connectors/config.yaml` schemas
+- [`docs/architecture.md`](docs/architecture.md) — full architecture with Mermaid diagrams
+- [`docs/connectors.md`](docs/connectors.md) — the `narai-primitives` stack
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — common failures
+
 ## Before You Search
 
 Before searching the codebase with grep, find, or glob, check if the wiki already has the answer. Run wiki-query first:
@@ -26,7 +37,7 @@ node .claude/skills/wiki/scripts/init_wiki.js --path <wiki-root> --domain "<doma
 
 Detect the codebase ecosystem (language, ORM, database, external services) and configure wiki infrastructure. This is an interactive flow -- scan for marker files, dispatch detection agents, then ask the user to confirm findings.
 
-ORM detection is dispatched via the Agent tool (`wiki-orm-agent`); database introspection runs through `gather()` from `@narai/connector-hub` when live schema confirmation is needed.
+ORM detection is dispatched via the Agent tool (`wiki-orm-agent`); database introspection runs through `gather()` from `narai-primitives` when live schema confirmation is needed.
 
 ### /wiki-ingest -- Fetch, extract, compile
 
@@ -112,7 +123,7 @@ All TypeScript scripts live at: `.claude/skills/wiki/scripts/` and compile to si
 
 ## Agent Paths
 
-Sub-agents live at `.claude/agents/`. External-source fetching is handled by `@narai/*-agent-connector` packages dispatched through `@narai/connector-hub`'s `gather()` — no per-service subagents in doc-wiki.
+Sub-agents live at `.claude/agents/`. External-source fetching is handled by the connectors bundled inside `narai-primitives` and dispatched through its `gather()` planner — no per-service subagents in doc-wiki.
 
 | Agent | Purpose |
 |---|---|

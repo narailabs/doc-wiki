@@ -18,3 +18,7 @@ explainer-video/
 
 # Superpowers brainstorming sessions — local mockups, ephemeral
 .superpowers/
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store

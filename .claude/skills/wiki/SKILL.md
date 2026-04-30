@@ -105,7 +105,7 @@ For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go
 
 **Phase 4b — Set up connector access:**
 
-`/wiki-ingest` step 7 calls `gather()` from `@narai/connector-hub`, which reads `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (repo overlay) to know which connectors are enabled and how to authenticate. If neither file exists yet, walk the user through creating one.
+`/wiki-ingest` step 7 calls `gather()` from `narai-primitives`, which reads `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (repo overlay) to know which connectors are enabled and how to authenticate. If neither file exists yet, walk the user through creating one.
 
 1. **Check existence:**
    ```bash
@@ -182,7 +182,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
 4. **Security check:** `node {skill_path}/scripts/security_check.js --url <url>` (for URL sources)
 5. **Read the source fully** — no skipping sections
 6. **Surface 3-5 takeaways + entity list** — your reasoning
-7. **Gather context via `@narai/connector-hub`** — a single library call replaces per-agent dispatch:
+7. **Gather context via `narai-primitives`** — a single library call replaces per-agent dispatch:
 
    ```ts
    import { gather } from "narai-primitives";
@@ -326,7 +326,7 @@ Scores each page 0.0-1.0 based on word count, frontmatter completeness, link den
 
 ## Sub-agent dispatch
 
-`/wiki-ingest` step 7 dispatches via `@narai/connector-hub`'s `gather()` — one library call plans and spawns the underlying connector CLIs in parallel. There are no per-service wrapper scripts or subagents in doc-wiki; the legacy `wiki-<svc>-agent` folders were removed because they only duplicated the hub's CLI resolution and the `mermaid_augment.ts` decoration. Add a new builtin connector by adding an entry to `BUILTIN_PATTERNS` in `source_registry.ts`. Add an out-of-tree connector via `wiki.config.yaml`'s `ecosystem.agents.custom` block.
+`/wiki-ingest` step 7 dispatches via `narai-primitives`'s `gather()` — one library call plans and spawns the bundled connector CLIs in parallel. There are no per-service wrapper scripts or subagents in doc-wiki; the legacy `wiki-<svc>-agent` folders were removed because they only duplicated the hub's CLI resolution and the `mermaid_augment.ts` decoration. Add a new builtin connector by adding an entry to `BUILTIN_PATTERNS` in `source_registry.ts`. Add an out-of-tree connector via `wiki.config.yaml`'s `ecosystem.agents.custom` block.
 
 ## Reference files
 
