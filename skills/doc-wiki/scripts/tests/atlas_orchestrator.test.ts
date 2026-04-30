@@ -1,0 +1,371 @@
+/**
+ * Tests for atlas_orchestrator.ts — the deterministic helpers used by the
+ * `/doc-wiki:atlas` skill orchestrator. State detection, page counting,
+ * cost estimation, and plan-snapshot persistence.
+ */
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as yaml from "js-yaml";
+
+import {
+  countAtlasPages,
+  countAllPages,
+  getLastAtlasRunId,
+  detectState,
+  estimateCost,
+  savePlanSnapshot,
+  loadPlanSnapshot,
+  getRollingPerIngestAvg,
+} from "../atlas_orchestrator.js";
+import {
+  makeTmpPath,
+  cleanupTmpPath,
+  makeInitializedWiki,
+} from "./fixtures.js";
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+function writeAtlasPage(
+  wikiRoot: string,
+  relPath: string,
+  facet: string,
+  runId: string,
+  sources: string[] = [],
+): void {
+  const full = path.join(wikiRoot, relPath);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(
+    full,
+    "---\n" +
+      yaml.dump({
+        title: facet,
+        atlas_facet: facet,
+        atlas_run_id: runId,
+        sources,
+      }) +
+      "---\n\nbody\n",
+  );
+}
+
+function writeNonAtlasPage(wikiRoot: string, relPath: string): void {
+  const full = path.join(wikiRoot, relPath);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(
+    full,
+    "---\n" +
+      yaml.dump({ title: "manual", sources: ["src/manual.md"] }) +
+      "---\n\nbody\n",
+  );
+}
+
+function writeEvent(
+  wikiRoot: string,
+  event: Record<string, unknown>,
+): void {
+  fs.appendFileSync(
+    path.join(wikiRoot, "log", "events.jsonl"),
+    JSON.stringify(event) + "\n",
+  );
+}
+
+// ── countAtlasPages / countAllPages ─────────────────────────────────
+
+describe("countAtlasPages", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-count-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns 0 when the wiki content dir has no atlas-tagged pages", () => {
+    expect(countAtlasPages(wikiRoot)).toBe(0);
+  });
+
+  it("counts only pages with atlas_run_id frontmatter", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    writeAtlasPage(wikiRoot, "wiki/billing/data-model.md", "data-model", "r1");
+    writeNonAtlasPage(wikiRoot, "wiki/auth/manual.md");
+    expect(countAtlasPages(wikiRoot)).toBe(2);
+  });
+});
+
+describe("countAllPages", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-all-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("counts every .md page including non-atlas ones", () => {
+    // makeInitializedWiki creates index.md, summaries.md, overview.md
+    const baseline = countAllPages(wikiRoot);
+    writeNonAtlasPage(wikiRoot, "wiki/auth/manual.md");
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    expect(countAllPages(wikiRoot)).toBe(baseline + 2);
+  });
+});
+
+// ── getLastAtlasRunId ───────────────────────────────────────────────
+
+describe("getLastAtlasRunId", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-runid-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns null when no atlas events exist", () => {
+    expect(getLastAtlasRunId(wikiRoot)).toBeNull();
+  });
+
+  it("reads atlas_run_id at the top level of the event", () => {
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "2026-04-30T10-00-00" });
+    expect(getLastAtlasRunId(wikiRoot)).toBe("2026-04-30T10-00-00");
+  });
+
+  it("reads atlas_run_id under details", () => {
+    writeEvent(wikiRoot, {
+      op: "atlas",
+      details: { atlas_run_id: "2026-04-30T11-00-00" },
+    });
+    expect(getLastAtlasRunId(wikiRoot)).toBe("2026-04-30T11-00-00");
+  });
+
+  it("returns the most recent atlas event", () => {
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "older" });
+    writeEvent(wikiRoot, { op: "ingest" });
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "newer" });
+    expect(getLastAtlasRunId(wikiRoot)).toBe("newer");
+  });
+
+  it("returns empty string when the event exists but lacks a run_id", () => {
+    writeEvent(wikiRoot, { op: "atlas" });
+    expect(getLastAtlasRunId(wikiRoot)).toBe("");
+  });
+});
+
+// ── detectState ────────────────────────────────────────────────────
+
+describe("detectState", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-state-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    // makeInitializedWiki writes 3 starter pages (index/summaries/overview)
+    // so countAllPages() > 0 by default. Remove them to get a truly fresh wiki.
+    for (const f of ["index.md", "summaries.md", "overview.md"]) {
+      fs.unlinkSync(path.join(wikiRoot, "wiki", f));
+    }
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns 'fresh' when wiki is empty and no atlas events", () => {
+    expect(detectState(wikiRoot)).toBe("fresh");
+  });
+
+  it("returns 'fresh' when atlas pages < threshold even with prior atlas event", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "r1" });
+    expect(detectState(wikiRoot)).toBe("fresh");
+  });
+
+  it("returns 'existing' when atlas pages >= threshold AND atlas event exists", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    writeAtlasPage(wikiRoot, "wiki/billing/architecture.md", "architecture", "r1");
+    writeAtlasPage(wikiRoot, "wiki/admin/architecture.md", "architecture", "r1");
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "r1" });
+    expect(detectState(wikiRoot)).toBe("existing");
+  });
+
+  it("returns 'hybrid' when wiki has manual pages but no atlas events", () => {
+    writeNonAtlasPage(wikiRoot, "wiki/auth/manual.md");
+    writeNonAtlasPage(wikiRoot, "wiki/billing/manual.md");
+    expect(detectState(wikiRoot)).toBe("hybrid");
+  });
+
+  it("respects custom threshold", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "r1" });
+    expect(detectState(wikiRoot, /* threshold */ 1)).toBe("existing");
+  });
+});
+
+// ── estimateCost ───────────────────────────────────────────────────
+
+describe("estimateCost", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-cost-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("counts every entry as expected when nothing is cached", () => {
+    const plan = {
+      topics: ["auth", "billing"],
+      facets: ["architecture", "data-model"],
+      entries: [
+        { topic: "auth", facet: "architecture", sources: [], output: "wiki/auth/architecture.md" },
+        { topic: "auth", facet: "data-model", sources: [], output: "wiki/auth/data-model.md" },
+        { topic: "billing", facet: "architecture", sources: [], output: "wiki/billing/architecture.md" },
+        { topic: "billing", facet: "data-model", sources: [], output: "wiki/billing/data-model.md" },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    const est = estimateCost(wikiRoot, plan, /* avg */ 0.20);
+    expect(est.expected_ingests).toBe(4);
+    expect(est.cache_hits).toBe(0);
+    expect(est.topic_cost_usd).toBe(0.80); // 4 * 0.20
+    expect(est.global_cost_usd).toBe(0.60); // 3 * 0.20
+    expect(est.total_estimated_usd).toBe(1.40);
+    expect(est.breakdown).toHaveLength(4);
+    for (const b of est.breakdown) {
+      expect(b.expected).toBe(true);
+      expect(b.cached).toBe(false);
+    }
+  });
+
+  it("returns zero topic cost when all entries have empty source lists and avg is positive", () => {
+    // Empty sources => never cached => always counted as expected.
+    const plan = {
+      topics: ["x"],
+      facets: ["a"],
+      entries: [{ topic: "x", facet: "a", sources: [], output: "wiki/x/a.md" }],
+      created_at: new Date().toISOString(),
+    };
+    const est = estimateCost(wikiRoot, plan, 0);
+    expect(est.expected_ingests).toBe(1);
+    expect(est.topic_cost_usd).toBe(0);
+  });
+});
+
+// ── savePlanSnapshot / loadPlanSnapshot ────────────────────────────
+
+describe("plan snapshot round-trip", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-snap-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns null when no snapshot exists", () => {
+    expect(loadPlanSnapshot(wikiRoot, "missing")).toBeNull();
+  });
+
+  it("persists and reads back the same plan", () => {
+    const plan = {
+      topics: ["auth", "billing"],
+      facets: ["architecture"],
+      entries: [
+        { topic: "auth", facet: "architecture", sources: ["src/auth/"], output: "wiki/auth/architecture.md" },
+      ],
+      created_at: "2026-04-30T12-00-00",
+    };
+    savePlanSnapshot(wikiRoot, "run-1", plan);
+    expect(loadPlanSnapshot(wikiRoot, "run-1")).toEqual(plan);
+  });
+
+  it("creates the run-id directory tree if missing", () => {
+    const plan = {
+      topics: [],
+      facets: [],
+      entries: [],
+      created_at: "x",
+    };
+    savePlanSnapshot(wikiRoot, "run-2", plan);
+    expect(
+      fs.existsSync(path.join(wikiRoot, "outputs", "atlas", "run-2", "plan-snapshot.json")),
+    ).toBe(true);
+  });
+
+  it("returns null for a malformed snapshot file", () => {
+    const dir = path.join(wikiRoot, "outputs", "atlas", "broken");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "plan-snapshot.json"), "not-json{{{");
+    expect(loadPlanSnapshot(wikiRoot, "broken")).toBeNull();
+  });
+});
+
+// ── getRollingPerIngestAvg ─────────────────────────────────────────
+
+describe("getRollingPerIngestAvg", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-avg-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns the default when events.jsonl is empty", () => {
+    const avg = getRollingPerIngestAvg(wikiRoot);
+    expect(avg).toBeGreaterThan(0);
+  });
+
+  it("averages cost_usd across recent ingest events", () => {
+    writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.10 });
+    writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.20 });
+    writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.30 });
+    expect(getRollingPerIngestAvg(wikiRoot)).toBeCloseTo(0.20, 5);
+  });
+
+  it("falls back to details.total_cost_usd when present", () => {
+    writeEvent(wikiRoot, { op: "ingest", details: { total_cost_usd: 0.40 } });
+    writeEvent(wikiRoot, { op: "ingest", details: { total_cost_usd: 0.60 } });
+    expect(getRollingPerIngestAvg(wikiRoot)).toBeCloseTo(0.50, 5);
+  });
+
+  it("ignores non-ingest events", () => {
+    writeEvent(wikiRoot, { op: "lint", cost_usd: 5.0 });
+    writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.10 });
+    expect(getRollingPerIngestAvg(wikiRoot)).toBeCloseTo(0.10, 5);
+  });
+
+  it("respects sample-size cap", () => {
+    for (let i = 0; i < 10; i++) {
+      writeEvent(wikiRoot, { op: "ingest", cost_usd: 1.0 });
+    }
+    writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.0 });
+    // sampleSize=1 → only the most recent event counts
+    expect(getRollingPerIngestAvg(wikiRoot, 1)).toBe(0.0);
+  });
+});

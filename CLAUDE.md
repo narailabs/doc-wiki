@@ -29,16 +29,16 @@ Three slash commands take a new repo from zero to a working wiki:
 ## Architecture
 
 - **Main skill:** `skills/doc-wiki/SKILL.md` — orchestrates all `/doc-wiki:*` commands
-- **Slash-command wrappers:** `commands/doc-wiki:*.md` — 9 thin wrappers so `/doc-wiki:init`, `/doc-wiki:onboard`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
+- **Slash-command wrappers:** `commands/doc-wiki:*.md` — 10 thin wrappers so `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
 - **Source-fetch dispatch:** `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which plans and spawns the bundled connector CLIs in parallel. The wiki-side Mermaid augmentation runs on the raw envelopes via `agents/lib/mermaid_augment.ts`. There is **one path**: gather → applyMermaid. The legacy `wiki-<svc>-agent` subagents + their per-service wrappers were decommissioned — their CLI-resolution and Mermaid responsibilities are now wholly owned by the hub and `mermaid_augment.ts`.
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Slash commands (9) — `commands/`
+### Slash commands (10) — `commands/`
 
-Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (Shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (`/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
 
-### TypeScript scripts (11) — `skills/doc-wiki/scripts/`
+### TypeScript scripts (14) — `skills/doc-wiki/scripts/`
 
 Deterministic operations: hashing, parsing, graph ops, lint, security.
 
@@ -55,6 +55,9 @@ Deterministic operations: hashing, parsing, graph ops, lint, security.
 | `extract_binary.ts` | Extract text from binary files (PDF, DOCX, etc.) |
 | `mermaid_lint.ts` | Validate Mermaid diagram syntax |
 | `security_check.ts` | URL validation, path containment, input sanitization |
+| `atlas_orchestrator.ts` | `/doc-wiki:atlas` state detection, plan-snapshot persistence, cost estimation |
+| `atlas_gitlog.ts` | `git log --since` parser; classifies changed paths as stale / uncovered / unrelated against atlas-page sources and current topic list |
+| `atlas_validate.ts` | `(page-hash, source-hash)` cache for atlas semantic validation; structural-check wrapper over `lint_checks.ts` |
 
 ### Agents (3) — `agents/`
 
@@ -83,6 +86,7 @@ Standalone helpers still live at `agents/lib/` (flat files, no subdirectory):
 | `parse_config.ts` | Read and validate `wiki.config.yaml` (shared with skills) |
 | `mermaid_format.ts` | Mermaid diagram formatting utilities |
 | `mermaid_augment.ts` | Apply wiki-specific `mermaid: { type, title, code }` blocks on top of raw `DispatchResult` envelopes returned by `narai-primitives`'s `gather()`. Used by `/doc-wiki:ingest` step 7. Single decoration site for all 7 connectors. |
+| `atlas_synthesize.ts` | Read-only input assembly for `/doc-wiki:atlas` Phase 7 (global synthesis). Three subcommands — `overview` (concatenated topic architecture pages + per-facet TL;DRs), `integrations` (api pages + external-service mentions + connector config), `deploy` (Dockerfile, compose, workflows, terraform). |
 
 Vendor-neutral connector code ships as two npm packages and is consumed directly:
 
@@ -141,7 +145,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **886 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
+Current status: **934 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 

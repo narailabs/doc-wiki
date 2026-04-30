@@ -2,7 +2,7 @@
 
 > A documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helpers. Point it at a codebase, your Jira/Confluence/Notion/GitHub, and your databases — get a structured, queryable, self-healing wiki you can grow over time.
 
-doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Ten `/doc-wiki:*` slash commands cover the full lifecycle: bootstrap, ingest, query, lint, fix, refresh, and cross-link the wiki as your project evolves. External services are reached through a single planner — [`gather()`](docs/connectors.md#gather) from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
+doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Ten `/doc-wiki:*` slash commands cover the full lifecycle: bootstrap, atlas (full-codebase documentation in one pass), ingest, query, lint, fix, refresh, and cross-link the wiki as your project evolves. External services are reached through a single planner — [`gather()`](docs/connectors.md#gather) from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
 
 ## What it is good for
 
@@ -59,10 +59,17 @@ In Claude Code, from the project you want to document:
 ```text
 /doc-wiki:init                  # scaffold wiki/, raw/, graph/, log/, wiki.config.yaml
 /doc-wiki:onboard               # detect language, ORM, DB; configure connectors; ask 6 setup questions
-/doc-wiki:ingest <source>       # ingest a file, URL, folder, or pasted text — repeat to grow the wiki
+/doc-wiki:ingest <source>       # ingest one file/URL/folder; repeat to grow the wiki incrementally
 ```
 
-After three or four `/doc-wiki:ingest` calls you can:
+Or, for a comprehensive documentation pass in one shot:
+
+```text
+/doc-wiki:atlas                 # auto-discover topics; ingest per topic × facet; synthesize globals
+/doc-wiki:atlas --dry-run       # show planned ingests + cost estimate, write nothing
+```
+
+After three or four `/doc-wiki:ingest` (or one `/doc-wiki:atlas`) call you can:
 
 ```text
 /doc-wiki:query "How does authentication work?"   # summary-first search across the wiki
@@ -72,17 +79,18 @@ After three or four `/doc-wiki:ingest` calls you can:
 
 ## What's in the box
 
-- **9 slash commands** — `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:ingest`, `/doc-wiki:query` (synthesis or `--from`/`--to` path mode), `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:refresh`, `/doc-wiki:stats`. See [`docs/commands.md`](docs/commands.md).
+- **10 slash commands** — `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query` (synthesis or `--from`/`--to` path mode), `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:refresh`, `/doc-wiki:stats`. See [`docs/commands.md`](docs/commands.md).
 - **3 sub-agents** — `wiki-orm-agent` (entity-to-table mapping), `wiki-mermaid-agent` (deterministic diagram generation), `wiki-claude-md-agent` (`CLAUDE.md` maintenance with managed sections).
 - **7 connectors via [`narai-primitives`](https://github.com/narailabs/narai-primitives)** — `db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`. Plus `@narai/credential-providers` for env-var / keychain / file / cloud-secret resolution.
 - **5 reference docs** at [`skills/doc-wiki/references/`](skills/doc-wiki/references/) — autonomy, code-locality, compilation, operations, quality.
 - **~21 TypeScript helper scripts** — deterministic ops (cache, lint, scoring, graph queries, security, extraction).
-- **886 vitest tests** (5 skipped, gated behind `TEST_LIVE_*` env vars).
+- **934 vitest tests** (5 skipped, gated behind `TEST_LIVE_*` env vars).
 
 ## Documentation
 
 | Doc | When to read it |
 |---|---|
+| [`WALKTHROUGH.md`](WALKTHROUGH.md) | Run-along tutorial — install through query, promote, refresh, lint on a new codebase |
 | [`docs/getting-started.md`](docs/getting-started.md) | First time setup — install, onboard, first ingest |
 | [`docs/commands.md`](docs/commands.md) | Reference for every `/doc-wiki:*` command (args, examples) |
 | [`docs/configuration.md`](docs/configuration.md) | `wiki.config.yaml` and `.connectors/config.yaml` schemas |
@@ -118,7 +126,7 @@ doc-wiki/
 ├── CLAUDE.md, AGENTS.md, GEMINI.md           AI-platform skill manuals
 ├── docs/                                     public-facing documentation
 ├── .claude-plugin/plugin.json                Claude Code plugin manifest
-├── commands/                                 9 slash-command wrappers (init.md, onboard.md, ...)
+├── commands/                                 10 slash-command wrappers (init.md, onboard.md, atlas.md, ...)
 ├── skills/doc-wiki/
 │   ├── SKILL.md                              orchestrator manual
 │   ├── scripts/*.ts                          ~21 deterministic helpers

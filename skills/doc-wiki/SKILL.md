@@ -171,6 +171,125 @@ When the user says yes, print the exact commands (but DO NOT run them — Claude
 
 **Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
 
+### /doc-wiki:atlas — Full application documentation
+
+Generate a comprehensive wiki for the entire codebase in one orchestrated pass: discover topics, ingest curated sources per topic × facet, synthesize global aggregation pages, validate existing content against current source state, produce drift/cost audit artifacts.
+
+This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the per-source ingest workflow — it batches it across all detected topics and facets, then runs a synthesis pass for the three global pages (`wiki/overview.md`, `wiki/integrations.md`, `wiki/deploy.md`) that aggregate per-topic content.
+
+**Synopsis:**
+
+```text
+/doc-wiki:atlas [--facets <list>] [--scope <topic>] [--yes] [--dry-run]
+                [--max-cost <usd>] [--since <duration>]
+                [--validate-mode shallow|full] [--resume]
+                [--wiki-root <path>]
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--facets <list>` | `architecture,data-model,environments,api,operations` | Per-topic facets to generate. **Additive** — never deletes pages outside this set from prior runs. |
+| `--scope <topic>` | (all detected) | Restrict to one topic for incremental runs. |
+| `--yes` | off | Skip phase confirmation gates (CI/unattended). |
+| `--dry-run` | off | Show planned ingests + cost estimate, write nothing. Validation pass still runs (read-only). |
+| `--max-cost <usd>` | `200.00` | Abort pre-write if estimate exceeds. Re-run with explicit higher value to override. |
+| `--since <duration>` | Smart default: timestamp of last `op: atlas` event in `events.jsonl`; else **all-time** (no `git log --since`). | Window for the gitlog drift scan. |
+| `--validate-mode shallow\|full` | `shallow` | `shallow`: structural + gitlog + semantic on sampled pages. `full`: semantic on every existing atlas page. |
+| `--resume` | off | Continue from `.wiki-checkpoint.json` (opName `"atlas"`) without prompting. |
+
+**Phases:**
+
+1. **Detect state** — call `node {skill_path}/scripts/atlas_orchestrator.js detect-state --wiki-root <root>`. Output JSON (`{state, atlas_pages, all_pages, last_run_id}`) drives the branch:
+   - `state == "fresh"` → wiki is empty or has < 3 atlas-tagged pages and no prior `op: atlas` event. Skip Phase 5.
+   - `state == "existing"` → wiki has ≥ 3 atlas pages AND prior atlas event. Run all phases.
+   - `state == "hybrid"` → pages exist but no prior atlas event (manual ingests only). Existing-mode discovery; Phase 5's semantic check skips non-atlas pages (those lacking `atlas_run_id` frontmatter).
+
+2. **Discover topics** — union four signals into a deduplicated list:
+   - **Code dirs**: enumerate top-level subdirs of `src/`, `app/`, `services/`, etc. Skip vendor / `node_modules` / `.git`.
+   - **ORM domains**: dispatch `wiki-orm-agent` and group entities into topic candidates (e.g., `User` → `auth`; `Invoice` → `billing`).
+   - **Existing wiki dirs**: list `wiki/<topic>/` subdirectories (excluding `wiki/outputs/` and similar).
+   - **Gitlog churn**: `node {skill_path}/scripts/atlas_gitlog.js classify --wiki-root <root> --since <window> --topics <csv>` flags paths whose changes haven't propagated.
+
+   Canonicalize each topic name: lowercase-kebab-case, strip `-service`, `-svc`, `-module` suffixes. Deduplicate by canonical name.
+
+3. **Confirm topics** — present the merged list with provenance (which signals contributed each topic). Under `balanced+`, ask "Generate atlas pages for these topics? [Y/n/edit]". Under `auto`/`autonomous`, proceed silently. With `--yes`, skip the prompt.
+
+4. **Estimate cost**:
+   - Build a `Plan` JSON: `{ topics, facets, entries: [{topic, facet, sources, output}], created_at }`. Source heuristics: `architecture` → `src/<topic>/`; `data-model` → ORM model files; `environments` → `.env*`, `config/<topic>*`; `api` → controllers/routes; `operations` → runbooks if present.
+   - `node {skill_path}/scripts/atlas_orchestrator.js estimate-cost --wiki-root <root> --plan '<plan-json>'`.
+   - Display the estimate; if `total_estimated_usd > --max-cost`, abort with a clear hint to re-run with a higher `--max-cost`.
+
+5. **Validate existing** (skip when `state == "fresh"`):
+   - **Structural**: for each atlas page, `node {skill_path}/scripts/atlas_validate.js structural --wiki-root <root> --page <page>`.
+   - **Gitlog drift**: `node {skill_path}/scripts/atlas_gitlog.js classify --wiki-root <root> --since <since> --topics <csv>` returns `{stale_pages, uncovered_files, unrelated_files}`.
+   - **Semantic**: for each atlas page (sampled if `--validate-mode shallow`, all if `full`), compute `pageHash = sha256(body)` and `sourceHash = sha256(concat(sources))`. Probe `atlas_validate.js cache-check`; on miss, read page + sources and ask yourself: "Does this page still accurately describe the source(s)? List divergences." Store the result via `atlas_validate.js cache-store`.
+   - Merge findings into `wiki/outputs/atlas/<run-id>/drift-report.md`.
+
+6. **Bootstrap / refresh** — for each plan entry not cached:
+   - Save the plan snapshot first: `atlas_orchestrator.js save-plan --wiki-root <root> --run-id <id> --plan '<json>'`. The snapshot drives `--resume` so re-discovery doesn't change scope mid-run.
+   - For `entry.facet == "data-model"`: dispatch `wiki-orm-agent` and write the result to `entry.output` with atlas frontmatter.
+   - For other facets: dispatch `/doc-wiki:ingest <source-list> --output <entry.output> --no-crosslink --no-tag-harmonize` (defer post-op hooks to Phase 8).
+   - For drift-flagged stale pages: dispatch `/doc-wiki:refresh --source <source>`.
+   - For uncovered files matching a current-run topic (per autonomy mode): `/doc-wiki:ingest <file> --output <inferred>`.
+   - Use `scripts/checkpoint.ts` with `opName: "atlas"` to record completed `(topic, facet)` pairs as `<topic>:<facet>`. On `--resume`, load the snapshot via `load-plan` and skip recorded pairs.
+
+7. **Synthesize globals** — always regenerated, regardless of `--facets` and `--scope`:
+   - `wiki/overview.md`: `node agents/lib/atlas_synthesize.js overview --wiki-root <root>` returns a JSON bundle (`{sources, text, notes}`). LLM-synthesize the master architecture narrative; write to `wiki/overview.md` with `atlas_facet: overview` and the run id in frontmatter.
+   - `wiki/integrations.md`: `atlas_synthesize.js integrations --wiki-root <root>`. LLM-synthesize the external-services map.
+   - `wiki/deploy.md`: `atlas_synthesize.js deploy --wiki-root <root>`. Hand the bundle to `/doc-wiki:ingest <synthetic-source> --output wiki/deploy.md`.
+
+8. **Finalize**:
+   - Run `/doc-wiki:lint` (no `--fix`) and append findings to the drift report.
+   - Update `wiki/index.md` (re-list all atlas pages by facet).
+   - Run global crosslink + tag-harmonize over the entire wiki.
+   - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
+   - Clear the checkpoint via `clearCheckpoint(wikiRoot, "atlas")`.
+   - Write `wiki/outputs/atlas/<run-id>/cost-report.md` with the planned breakdown from `estimate-cost` plus actual costs from this run's events.
+
+**Atlas frontmatter conventions** — every atlas-generated page carries two extra fields beyond the standard set:
+
+- `atlas_facet`: one of `architecture`, `data-model`, `environments`, `api`, `operations`, `overview`, `integrations`, `deploy`.
+- `atlas_run_id`: timestamp of the generating atlas run (`YYYY-MM-DDTHH-MM-SS`).
+
+These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
+
+**Page template** (every atlas page; targets 300–800 lines, splits to sibling subpages beyond):
+
+```text
+---
+<frontmatter incl. atlas_facet, atlas_run_id, sources, summary>
+---
+
+# <Title>
+
+## TL;DR
+<3–5 sentences>
+
+## <body sections>
+
+## How to Go Deeper
+<links to deeper sources or sibling pages>
+
+## Related Pages
+<auto-managed by crosslink hook>
+```
+
+**Additive re-runs invariant**: pages from prior runs are NEVER deleted by a smaller-`--facets` re-run. Validation (Phase 5) runs on every existing atlas page regardless of current `--facets`. (Re-)generation (Phase 6) only touches facets in the current `--facets` set that are stale or missing.
+
+**Drift handling** honors `autonomy.mode` from `wiki.config.yaml`:
+
+| Autonomy | Stale (gitlog) | Structural | Semantic | Uncovered files |
+|---|---|---|---|---|
+| `conservative` | Ask before refresh | Report only | Report only | Ask before ingest |
+| `balanced` (default) | Auto-refresh | Auto-fix safe; report structural | Report; ask | Auto-ingest if matches current topic; else report |
+| `autonomous` / `auto` | Auto-refresh | Auto-fix all | Auto-fix; ask on conflicts | Auto-ingest |
+
+**Cost ceiling**: pre-run estimate aborts if over `--max-cost`. Mid-run, if cumulative actual exceeds `1.5 × --max-cost`, finish the current page, save checkpoint, abort gracefully.
+
+**Partial failures — continue, don't halt**: `gather()` already isolates per-step errors; `/doc-wiki:ingest` errors on a single source are skipped (logged to drift report); LLM timeouts retry once with backoff. Only disk/permission errors hard-abort. Always save the checkpoint before any abort.
+
+**Cancellation (Ctrl+C)**: in-flight LLM call finishes (can't kill cleanly); checkpoint saved; resume hint printed. Re-run `/doc-wiki:atlas --resume` to continue.
+
 ### /doc-wiki:ingest — Fetch + Extract + Compile
 
 Ingest sources into the wiki. The source can be a file, URL, folder, or pasted text.
@@ -197,7 +316,7 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
    The hub reads `~/.connectors/config.yaml` (with `consumers.doc-wiki` overrides applied), asks the Claude Agent SDK for a plan over the enabled connectors, and dispatches each step in parallel as a connector-CLI subprocess. Errors are isolated per step — `results[i].error` carries a structured `{ code, message }` instead of throwing. `applyMermaid` (in `agents/lib/mermaid_augment.ts`) walks each result and, for the seven structural-action connectors (aws, gcp, jira, confluence, notion, github, db), augments the envelope with a `mermaid: { type, title, code }` block — exactly the same shape the per-agent wrappers used to produce. The augmented `results` array is what step 8 consumes.
 
    Per-call setup lives in `~/.connectors/config.yaml`; doc-wiki-specific overrides go under `consumers.doc-wiki` (e.g. enabled connector allowlist, per-connector option overrides). No code change is needed to add or disable a connector — just edit the config.
-8. **Compile into wiki page(s)** — read `references/compilation.md` for rules on frontmatter, linking, code locality, claims extraction
+8. **Compile into wiki page(s)** — read `references/compilation.md` for rules on frontmatter, linking, code locality, claims extraction. **`--output <relative-path>` flag**: when present, write the compiled page to the given wiki-relative path verbatim instead of inferring a topic/slug from content. Used by `/doc-wiki:atlas` to pin per-topic destinations (e.g., `wiki/auth/architecture.md`) and by direct calls like `/doc-wiki:ingest Dockerfile --output wiki/deploy.md`. Backward compatible — content-based inference remains the default when the flag is absent.
 9. **Auto-generate Mermaid diagrams** — write the augmented envelopes from step 7 to a temp JSON file (one envelope per array entry, same `mermaid: {type, title, code}` shape as before) and splice each into the compiled page:
 
    ```bash

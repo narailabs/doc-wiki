@@ -16,6 +16,7 @@ This document explains how the layers fit together, what each script and agent i
   - [3d. `gather()` from `narai-primitives`](#3d-gather-from-narai-primitives)
 - [Diagram 2 — `/doc-wiki:ingest` pipeline](#diagram-2-wiki-ingest-pipeline)
 - [Diagram 3 — `gather()` internals](#diagram-3-gather-internals)
+- [Diagram 4 — `/doc-wiki:atlas` pipeline](#diagram-4-doc-wikiatlas-pipeline)
 - [Reference docs](#reference-docs)
 - [Multi-platform wrappers](#multi-platform-wrappers)
 - [Architecture contracts](#architecture-contracts)
@@ -310,6 +311,53 @@ Three things worth highlighting:
 
 For the full `gather()` API, plan validation rules, and per-connector envelopes, see [`connectors.md`](connectors.md).
 
+## Diagram 4: `/doc-wiki:atlas` pipeline
+
+`/doc-wiki:atlas` is a meta-orchestrator: it doesn't replace `/doc-wiki:ingest`, it batches it. The eight phases below run serially; per-topic ingests in Phase 6 may run in parallel within the phase boundary (default concurrency 3).
+
+```mermaid
+flowchart TD
+    A[/doc-wiki:atlas/] --> P1
+    P1[Phase 1: Detect state\natlas_orchestrator.js detect-state] --> P2
+    P2[Phase 2: Discover topics\ncode dirs + ORM domains +\nexisting wiki + gitlog churn] --> P3
+    P3[Phase 3: Confirm topics\nautonomy-gated, --yes skips] --> P4
+    P4[Phase 4: Estimate cost\natlas_orchestrator.js estimate-cost] --> P4D{over --max-cost?}
+    P4D -- yes --> ABORT[Abort with hint]
+    P4D -- no --> P5{state == fresh?}
+    P5 -- yes --> P6
+    P5 -- no --> P5V[Phase 5: Validate existing\nstructural + gitlog +\nsemantic with cache]
+    P5V --> P6
+    P6[Phase 6: Bootstrap / refresh\nper topic × facet:\n/doc-wiki:ingest --output ...\n/doc-wiki:refresh --source ...]
+    P6 --> P7
+    P7[Phase 7: Synthesize globals\nwiki/overview.md\nwiki/integrations.md\nwiki/deploy.md]
+    P7 --> P8
+    P8[Phase 8: Finalize\n/doc-wiki:lint, update index,\nglobal crosslink + tag-harmonize,\nlog op:atlas, write reports]
+    P8 --> DONE[atlas complete]
+
+    classDef llm fill:#fff3cd,stroke:#856404
+    classDef det fill:#d4edda,stroke:#155724
+    classDef gate fill:#f8d7da,stroke:#721c24
+    class P1,P4,P8 det
+    class P2,P3,P5V,P6,P7 llm
+    class P4D,P5 gate
+```
+
+Green = deterministic (TypeScript helpers); yellow = LLM-driven (the orchestrator skill itself); red = decision gates that may abort or branch.
+
+The eight phases map to the orchestrator's instructions in [`SKILL.md`](../skills/doc-wiki/SKILL.md) (search for `### /doc-wiki:atlas`). The new TypeScript helpers under `skills/doc-wiki/scripts/` are:
+
+- [`atlas_orchestrator.ts`](../skills/doc-wiki/scripts/atlas_orchestrator.ts) — state detection (Phase 1), cost estimation (Phase 4), plan-snapshot persistence (Phase 6 entry / `--resume`).
+- [`atlas_gitlog.ts`](../skills/doc-wiki/scripts/atlas_gitlog.ts) — `git log --since` parser; classifies changed paths as **stale** (referenced by an existing atlas page), **uncovered** (under a current-run topic but no atlas page), or **unrelated**.
+- [`atlas_validate.ts`](../skills/doc-wiki/scripts/atlas_validate.ts) — `(page-hash, source-hash)` cache for the Phase 5 semantic check, plus a thin wrapper around `lint_checks.ts` for single-page structural validation.
+- [`agents/lib/atlas_synthesize.ts`](../agents/lib/atlas_synthesize.ts) — read-only input bundles for Phase 7 (`overview`, `integrations`, `deploy`).
+
+A few subtle behaviors worth knowing:
+
+- **Plan snapshot is the contract for `--resume`.** Phase 6 saves the topic+facet plan before any ingest; resume reads the snapshot, never re-discovers topics. This prevents mid-run scope creep when gitlog churn arrives between attempts.
+- **The additive-re-runs invariant is enforced by `--facets` semantics, not by deletion suppression.** A re-run with `--facets architecture` simply doesn't iterate the other facets in Phase 6 — out-of-scope pages aren't touched, period. Validation (Phase 5) still walks every existing atlas page regardless of `--facets`.
+- **Globals are always regenerated.** Phase 7 runs every time, independent of `--facets` and `--scope`. Reading already-on-disk topic pages is cheap (~$0.30 total).
+- **Errors are non-fatal except disk/permission.** Connector errors (per-step `gather()` isolation), `/doc-wiki:ingest` errors on a single source, and LLM timeouts (one retry with backoff) all log and continue. Only out-of-disk or permission errors hard-abort with a checkpoint save.
+
 ## Reference docs
 
 Five operator manuals live at [`skills/doc-wiki/references/`](../skills/doc-wiki/references/). The orchestrator skill reads these on demand — they are not loaded upfront.
@@ -386,7 +434,7 @@ The `db` connector adds a guard-rail policy on top of all this — see [`connect
 | ORM mapper | `agents/lib/wiki_orm/tests/` | ~100 |
 | `wiki-claude-md-agent` | `agents/wiki-claude-md-agent/scripts/tests/` | ~30 |
 | `wiki-mermaid-agent` | `agents/wiki-mermaid-agent/scripts/tests/` | ~20 |
-| **Full suite** | `.claude/**/*.test.ts` | **886 passed + 5 skipped** |
+| **Full suite** | `.claude/**/*.test.ts` | **934 passed + 5 skipped** |
 
 The 5 skipped tests are live-database integration tests, gated behind `TEST_LIVE_*` environment variables. They are intentionally not part of CI.
 
