@@ -8,15 +8,18 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import * as yaml from "js-yaml";
+
 import {
   computeValidationKey,
   checkValidationCache,
   storeValidationCache,
   clearValidationCache,
+  findDuplicateDiagrams,
   VALIDATE_CACHE_SUBDIR,
   VALIDATE_CACHE_VERSION,
 } from "../atlas_validate.js";
-import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { makeTmpPath, cleanupTmpPath, makeInitializedWiki } from "./fixtures.js";
 
 describe("computeValidationKey", () => {
   it("is deterministic for identical inputs", () => {
@@ -111,5 +114,116 @@ describe("validation cache CRUD", () => {
     storeValidationCache(tmpPath, "p1", "s1", "first");
     storeValidationCache(tmpPath, "p1", "s1", "second");
     expect(checkValidationCache(tmpPath, "p1", "s1")?.result).toBe("second");
+  });
+});
+
+// ── findDuplicateDiagrams (cross-doc ownership) ─────────────────────
+
+function writeArchPage(
+  wikiRoot: string,
+  relPath: string,
+  sources: string[],
+  diagramTitles: string[],
+): void {
+  const full = path.join(wikiRoot, relPath);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  const fm = yaml.dump({
+    title: "page",
+    type: "concept",
+    atlas_facet: "architecture",
+    atlas_run_id: "r1",
+    sources,
+  });
+  const diagrams = diagramTitles
+    .map(
+      (t) =>
+        `<!-- wiki-mermaid: ${t} start -->\n\`\`\`mermaid\nflowchart TD\n  A --> B\n\`\`\`\n<!-- wiki-mermaid: ${t} end -->`,
+    )
+    .join("\n\n");
+  fs.writeFileSync(full, "---\n" + fm + "---\n\nbody\n\n" + diagrams + "\n");
+}
+
+describe("findDuplicateDiagrams", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-validate-cross-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns empty when no architecture pages exist", () => {
+    expect(findDuplicateDiagrams(wikiRoot)).toEqual([]);
+  });
+
+  it("does NOT flag pages that share only sources OR only diagram titles", () => {
+    // Same source, different diagram titles → no finding.
+    writeArchPage(wikiRoot, "wiki/auth/architecture.md", ["src/auth/"], ["Auth Topology"]);
+    writeArchPage(wikiRoot, "wiki/billing/architecture.md", ["src/auth/"], ["Billing Topology"]);
+    expect(findDuplicateDiagrams(wikiRoot)).toEqual([]);
+    // Same title, different sources → no finding.
+    writeArchPage(wikiRoot, "wiki/users/architecture.md", ["src/users/"], ["Service Topology"]);
+    writeArchPage(wikiRoot, "wiki/orders/architecture.md", ["src/orders/"], ["Service Topology"]);
+    expect(findDuplicateDiagrams(wikiRoot)).toEqual([]);
+  });
+
+  it("flags pages that share both ≥1 source AND ≥1 diagram title", () => {
+    writeArchPage(
+      wikiRoot,
+      "wiki/auth/architecture.md",
+      ["src/shared/", "src/auth/"],
+      ["Service Topology", "Login Flow"],
+    );
+    writeArchPage(
+      wikiRoot,
+      "wiki/users/architecture.md",
+      ["src/shared/", "src/users/"],
+      ["Service Topology", "User Profile"],
+    );
+    const findings = findDuplicateDiagrams(wikiRoot);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.pages).toEqual([
+      "wiki/auth/architecture.md",
+      "wiki/users/architecture.md",
+    ]);
+    expect(findings[0]!.sharedSources).toEqual(["src/shared/"]);
+    expect(findings[0]!.sharedDiagramTitles).toEqual(["service topology"]);
+  });
+
+  it("matches diagram titles case-insensitively", () => {
+    writeArchPage(wikiRoot, "wiki/a/architecture.md", ["src/x/"], ["Service Topology"]);
+    writeArchPage(wikiRoot, "wiki/b/architecture.md", ["src/x/"], ["service topology"]);
+    const findings = findDuplicateDiagrams(wikiRoot);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.sharedDiagramTitles).toEqual(["service topology"]);
+  });
+
+  it("only considers architecture-facet pages — ignores data-model, api, etc.", () => {
+    // Two pages with shared source + title but one is api facet → not flagged.
+    writeArchPage(wikiRoot, "wiki/auth/architecture.md", ["src/auth/"], ["Login Flow"]);
+    const apiPage = path.join(wikiRoot, "wiki", "auth", "api.md");
+    fs.writeFileSync(
+      apiPage,
+      "---\n" +
+        yaml.dump({
+          atlas_facet: "api",
+          atlas_run_id: "r1",
+          sources: ["src/auth/"],
+        }) +
+        "---\n\n<!-- wiki-mermaid: Login Flow start -->\n\nbody\n\n<!-- wiki-mermaid: Login Flow end -->\n",
+    );
+    expect(findDuplicateDiagrams(wikiRoot)).toEqual([]);
+  });
+
+  it("flags a triangle as three separate pairs", () => {
+    writeArchPage(wikiRoot, "wiki/a/architecture.md", ["src/shared/"], ["Topology"]);
+    writeArchPage(wikiRoot, "wiki/b/architecture.md", ["src/shared/"], ["Topology"]);
+    writeArchPage(wikiRoot, "wiki/c/architecture.md", ["src/shared/"], ["Topology"]);
+    const findings = findDuplicateDiagrams(wikiRoot);
+    expect(findings).toHaveLength(3); // pairs: (a,b), (a,c), (b,c)
   });
 });

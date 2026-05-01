@@ -30,6 +30,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseFlags } from "./_cli_args.js";
+import { parseFrontmatter } from "./_frontmatter.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -233,6 +234,121 @@ export function validateStructural(
   return out;
 }
 
+// ── Cross-doc ownership ────────────────────────────────────────────
+
+/**
+ * Title of a Mermaid block on an atlas page. Extracted from the
+ * `<!-- wiki-mermaid: <title> start -->` marker that `mermaid_inject.ts`
+ * wraps every spliced diagram in. The trailing ` start` token is stripped.
+ */
+const _MERMAID_TITLE_RE = /<!--\s*wiki-mermaid:\s*(.*?)\s+start\s*-->/g;
+
+/** Pair of atlas pages flagged as covering overlapping ground. */
+export interface DuplicateDiagramFinding {
+  /** Wiki-relative paths of the two pages, sorted lexicographically. */
+  pages: [string, string];
+  /** Source paths both pages declare in their `sources:` frontmatter. */
+  sharedSources: string[];
+  /** Mermaid block titles present on both pages (case-insensitive match). */
+  sharedDiagramTitles: string[];
+}
+
+interface _ArchPageScan {
+  page: string;
+  sources: Set<string>;
+  diagramTitles: Set<string>;
+}
+
+function _scanArchPages(wikiRoot: string): _ArchPageScan[] {
+  const wikiContent = path.join(wikiRoot, "wiki");
+  if (!fs.existsSync(wikiContent)) return [];
+  const out: _ArchPageScan[] = [];
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!e.isFile() || !full.endsWith(".md")) continue;
+      let body: string;
+      try {
+        body = fs.readFileSync(full, "utf-8");
+      } catch {
+        continue;
+      }
+      const { frontmatter, body: pageBody } = parseFrontmatter(body);
+      if (!frontmatter) continue;
+      if (frontmatter["atlas_facet"] !== "architecture") continue;
+      const sources = new Set<string>();
+      const sourcesRaw = frontmatter["sources"];
+      if (Array.isArray(sourcesRaw)) {
+        for (const s of sourcesRaw) {
+          if (typeof s === "string" && s.length > 0) sources.add(s);
+        }
+      }
+      const diagramTitles = new Set<string>();
+      _MERMAID_TITLE_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = _MERMAID_TITLE_RE.exec(pageBody)) !== null) {
+        const title = (m[1] ?? "").trim().toLowerCase();
+        if (title.length > 0) diagramTitles.add(title);
+      }
+      out.push({
+        page: path.relative(wikiRoot, full).split(path.sep).join("/"),
+        sources,
+        diagramTitles,
+      });
+    }
+  };
+  walk(wikiContent);
+  out.sort((a, b) => a.page.localeCompare(b.page));
+  return out;
+}
+
+/**
+ * Find pairs of architecture-facet atlas pages that likely duplicate each
+ * other's coverage. The heuristic: two pages are flagged when they share
+ * at least one source path AND at least one Mermaid diagram title. Either
+ * signal alone is too noisy (shared-source happens for thin slices that
+ * legitimately overlap; same-title happens for boilerplate "Service
+ * Topology" labels). Both together is a strong signal one page should
+ * own the topic and the other should `[link](../path/to/owner.md)`.
+ *
+ * Mirrors the "Cross-doc concerns" registry pattern from `docs/README.md`.
+ */
+export function findDuplicateDiagrams(wikiRoot: string): DuplicateDiagramFinding[] {
+  const arch = _scanArchPages(wikiRoot);
+  const findings: DuplicateDiagramFinding[] = [];
+  for (let i = 0; i < arch.length; i++) {
+    const a = arch[i];
+    if (!a) continue;
+    for (let j = i + 1; j < arch.length; j++) {
+      const b = arch[j];
+      if (!b) continue;
+      const sharedSources: string[] = [];
+      for (const s of a.sources) if (b.sources.has(s)) sharedSources.push(s);
+      const sharedTitles: string[] = [];
+      for (const t of a.diagramTitles) if (b.diagramTitles.has(t)) sharedTitles.push(t);
+      if (sharedSources.length === 0 || sharedTitles.length === 0) continue;
+      sharedSources.sort();
+      sharedTitles.sort();
+      findings.push({
+        pages: [a.page, b.page],
+        sharedSources,
+        sharedDiagramTitles: sharedTitles,
+      });
+    }
+  }
+  return findings;
+}
+
 // ── CLI ────────────────────────────────────────────────────────────
 
 const FLAG_SPEC = {
@@ -243,7 +359,7 @@ const FLAG_SPEC = {
   "--page": "page",
 } as const;
 
-const HELP_TEXT = `usage: atlas_validate.js {cache-check,cache-store,cache-clear,structural} [...]
+const HELP_TEXT = `usage: atlas_validate.js {cache-check,cache-store,cache-clear,structural,cross-doc} [...]
 
 Validation cache and structural checks for /doc-wiki:atlas Phase 5.
 
@@ -256,6 +372,9 @@ Subcommands:
                  Remove every cached validation entry. Stdout: {removed: N}.
   structural     --wiki-root <p> --page <relpath>
                  Run lint_checks on one page. Stdout: {findings: [...]}.
+  cross-doc      --wiki-root <p>
+                 Find architecture pages with overlapping diagrams + sources.
+                 Stdout: {findings: [{pages, sharedSources, sharedDiagramTitles}]}.
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -338,6 +457,12 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       process.stderr.write(`structural check failed: ${(e as Error).message}\n`);
       return 1;
     }
+    process.stdout.write(JSON.stringify({ findings }) + "\n");
+    return 0;
+  }
+
+  if (sub === "cross-doc") {
+    const findings = findDuplicateDiagrams(wikiRoot);
     process.stdout.write(JSON.stringify({ findings }) + "\n");
     return 0;
   }

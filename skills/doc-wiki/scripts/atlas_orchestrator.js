@@ -237,8 +237,34 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     return sum / samples.length;
 }
 // ── Cost estimation ────────────────────────────────────────────────
-const GLOBAL_PAGES_COUNT = 3; // overview, integrations, deploy
+/**
+ * Names of every global synthesis page Phase 7 regenerates. Three were
+ * added in the audience-aware coverage tranche (commands, configuration,
+ * getting-started, troubleshooting) on top of the original three
+ * (overview, integrations, deploy). Every entry costs `GLOBAL_PAGE_AVG_USD`
+ * once per atlas run.
+ */
+const STATIC_GLOBAL_PAGES = [
+    "overview",
+    "integrations",
+    "deploy",
+    "commands",
+    "configuration",
+    "getting-started",
+    "troubleshooting",
+];
 const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
+/**
+ * Count of global synthesis pages that will be regenerated unconditionally
+ * in Phase 7 for a given plan. The `facets` argument is reserved for
+ * future per-facet-driven globals (e.g., a `data-model-overview` page only
+ * when the `data-model` facet is in scope). Today every global is
+ * unconditional, so the count is fixed regardless of facets.
+ */
+export function expectedGlobalCount(facets) {
+    void facets;
+    return STATIC_GLOBAL_PAGES.length;
+}
 /**
  * Estimate the cost of running a plan on a wiki. For each `(topic, facet)`
  * entry whose first source resolves to existing readable content with a
@@ -265,7 +291,7 @@ export function estimateCost(wikiRoot, plan, perIngestAvgUsd) {
         }
     }
     const topicCost = expectedIngests * avg;
-    const globalCost = GLOBAL_PAGES_COUNT * GLOBAL_PAGE_AVG_USD;
+    const globalCost = expectedGlobalCount(plan.facets) * GLOBAL_PAGE_AVG_USD;
     return {
         expected_ingests: expectedIngests,
         cache_hits: cacheHits,
@@ -396,6 +422,195 @@ export function loadPlanSnapshot(wikiRoot, runId) {
         created_at: typeof rec["created_at"] === "string" ? rec["created_at"] : "",
     };
 }
+/** Builtin connector ids minus `db` — matches the integration-keyword set
+ *  used by `atlas_synthesize.assembleIntegrationsInputs`. Inlined here to
+ *  avoid cross-package coupling between scripts/ and agents/lib/. */
+const _GAP_REPORT_KNOWN_CONNECTORS = [
+    "jira",
+    "confluence",
+    "github",
+    "notion",
+    "gcp",
+    "aws",
+];
+/**
+ * Build a gap report for the given plan. Read-only — does not write
+ * anything. The orchestrator (Phase 8) is responsible for serializing the
+ * returned object to `wiki/outputs/atlas/<run-id>/gap-report.md`.
+ */
+export function assembleGapReport(wikiRoot, plan, gitlog) {
+    const wikiContent = path.join(wikiRoot, "wiki");
+    // 1. Topics whose directory holds no .md page at all.
+    const topicsWithPages = new Set();
+    if (fs.existsSync(wikiContent)) {
+        for (const topic of plan.topics) {
+            const topicDir = path.join(wikiContent, topic);
+            if (!fs.existsSync(topicDir))
+                continue;
+            let entries;
+            try {
+                entries = fs.readdirSync(topicDir, { withFileTypes: true });
+            }
+            catch {
+                continue;
+            }
+            if (entries.some((e) => e.isFile() && e.name.endsWith(".md"))) {
+                topicsWithPages.add(topic);
+            }
+        }
+    }
+    const topicsWithoutPages = plan.topics.filter((t) => !topicsWithPages.has(t));
+    // 2. (topic, facet) pairs whose expected output page is missing.
+    const facetsWithoutCoverage = [];
+    for (const topic of plan.topics) {
+        for (const facet of plan.facets) {
+            const expected = path.join(wikiContent, topic, `${facet}.md`);
+            if (!fs.existsSync(expected)) {
+                facetsWithoutCoverage.push({ topic, facet });
+            }
+        }
+    }
+    // 3. Source paths from plan entries whose output page wasn't produced.
+    const missingSources = new Set();
+    for (const entry of plan.entries) {
+        const outAbs = path.isAbsolute(entry.output)
+            ? entry.output
+            : path.join(wikiRoot, entry.output);
+        if (fs.existsSync(outAbs))
+            continue;
+        for (const src of entry.sources)
+            missingSources.add(src);
+    }
+    const sourceFilesWithNoPage = [...missingSources].sort();
+    // 4. Gitlog uncovered_files — pass through if provided.
+    const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
+    // 5. Connectors mentioned in atlas pages but missing from integrations.md.
+    const externalServicesWithoutDocumentation = [];
+    const integrationsPath = path.join(wikiContent, "integrations.md");
+    let integrationsBody = "";
+    if (fs.existsSync(integrationsPath)) {
+        try {
+            integrationsBody = fs.readFileSync(integrationsPath, "utf-8").toLowerCase();
+        }
+        catch {
+            integrationsBody = "";
+        }
+    }
+    const archMentions = new Set();
+    if (fs.existsSync(wikiContent)) {
+        const walk = (dir) => {
+            let entries;
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true });
+            }
+            catch {
+                return;
+            }
+            for (const e of entries) {
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) {
+                    walk(full);
+                    continue;
+                }
+                if (!e.isFile() || !full.endsWith(".md"))
+                    continue;
+                let body;
+                try {
+                    body = fs.readFileSync(full, "utf-8").toLowerCase();
+                }
+                catch {
+                    continue;
+                }
+                for (const k of _GAP_REPORT_KNOWN_CONNECTORS) {
+                    if (body.includes(k))
+                        archMentions.add(k);
+                }
+            }
+        };
+        walk(wikiContent);
+    }
+    for (const k of archMentions) {
+        if (!integrationsBody.includes(k))
+            externalServicesWithoutDocumentation.push(k);
+    }
+    externalServicesWithoutDocumentation.sort();
+    return {
+        topicsWithoutPages,
+        facetsWithoutCoverage,
+        sourceFilesWithNoPage,
+        uncoveredFiles,
+        externalServicesWithoutDocumentation,
+    };
+}
+/** Render a {@link GapReport} as a Markdown document for `gap-report.md`. */
+export function renderGapReportMarkdown(report, runId) {
+    const lines = [];
+    lines.push(`# Atlas gap report — ${runId}`);
+    lines.push("");
+    lines.push("Items below were in scope for this atlas run but did not land as wiki pages. " +
+        "Use this list to drive a follow-up `--scope` ingest, file a tracking issue, " +
+        "or accept the gap as out-of-scope.");
+    lines.push("");
+    lines.push("## Topics without any pages");
+    if (report.topicsWithoutPages.length === 0) {
+        lines.push("");
+        lines.push("_(none)_");
+    }
+    else {
+        lines.push("");
+        for (const t of report.topicsWithoutPages)
+            lines.push(`- ${t}`);
+    }
+    lines.push("");
+    lines.push("## Facets without coverage");
+    if (report.facetsWithoutCoverage.length === 0) {
+        lines.push("");
+        lines.push("_(none)_");
+    }
+    else {
+        lines.push("");
+        lines.push("| topic | facet |");
+        lines.push("|---|---|");
+        for (const { topic, facet } of report.facetsWithoutCoverage) {
+            lines.push(`| ${topic} | ${facet} |`);
+        }
+    }
+    lines.push("");
+    lines.push("## Source files with no wiki page");
+    if (report.sourceFilesWithNoPage.length === 0) {
+        lines.push("");
+        lines.push("_(none)_");
+    }
+    else {
+        lines.push("");
+        for (const s of report.sourceFilesWithNoPage)
+            lines.push(`- \`${s}\``);
+    }
+    lines.push("");
+    lines.push("## Uncovered files (gitlog)");
+    if (report.uncoveredFiles.length === 0) {
+        lines.push("");
+        lines.push("_(none)_");
+    }
+    else {
+        lines.push("");
+        for (const f of report.uncoveredFiles)
+            lines.push(`- \`${f}\``);
+    }
+    lines.push("");
+    lines.push("## External services mentioned but undocumented");
+    if (report.externalServicesWithoutDocumentation.length === 0) {
+        lines.push("");
+        lines.push("_(none)_");
+    }
+    else {
+        lines.push("");
+        for (const s of report.externalServicesWithoutDocumentation)
+            lines.push(`- ${s}`);
+    }
+    lines.push("");
+    return lines.join("\n");
+}
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
     "--wiki-root": "wikiRoot",
@@ -403,8 +618,9 @@ const FLAG_SPEC = {
     "--run-id": "runId",
     "--sample-size": "sampleSize",
     "--per-ingest-avg-usd": "perIngestAvgUsd",
+    "--gitlog": "gitlog",
 };
-const HELP_TEXT = `usage: atlas_orchestrator.js {detect-state,estimate-cost,save-plan,load-plan,per-ingest-avg} [...]
+const HELP_TEXT = `usage: atlas_orchestrator.js {detect-state,estimate-cost,save-plan,load-plan,per-ingest-avg,gap-report} [...]
 
 Deterministic helpers for the /doc-wiki:atlas orchestrator.
 
@@ -419,6 +635,10 @@ Subcommands:
                     Load a saved snapshot. Stdout: the Plan, or null.
   per-ingest-avg    --wiki-root <p> [--sample-size <n>]
                     Print the rolling per-ingest cost average. Stdout: {avg_usd}.
+  gap-report        --wiki-root <p> --plan '<json>' [--run-id <id>] [--gitlog '<json>']
+                    Build the gap report. With --run-id, also writes
+                    wiki/outputs/atlas/<run-id>/gap-report.md.
+                    Stdout: GapReport JSON (and {written: path} when --run-id is given).
 `;
 export function main(argv = process.argv.slice(2)) {
     if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
@@ -516,6 +736,45 @@ export function main(argv = process.argv.slice(2)) {
             : undefined;
         const avg = getRollingPerIngestAvg(wikiRoot, sampleSize);
         process.stdout.write(JSON.stringify({ avg_usd: round2(avg) }) + "\n");
+        return 0;
+    }
+    if (sub === "gap-report") {
+        const planRaw = parsed.values["plan"];
+        if (typeof planRaw !== "string" || planRaw.length === 0) {
+            process.stderr.write("--plan is required\n");
+            return 2;
+        }
+        let plan;
+        try {
+            plan = JSON.parse(planRaw);
+        }
+        catch (e) {
+            process.stderr.write(`--plan is not valid JSON: ${e.message}\n`);
+            return 2;
+        }
+        let gitlog;
+        const gitlogRaw = parsed.values["gitlog"];
+        if (typeof gitlogRaw === "string" && gitlogRaw.length > 0) {
+            try {
+                gitlog = JSON.parse(gitlogRaw);
+            }
+            catch (e) {
+                process.stderr.write(`--gitlog is not valid JSON: ${e.message}\n`);
+                return 2;
+            }
+        }
+        const report = assembleGapReport(wikiRoot, plan, gitlog);
+        const runIdRaw = parsed.values["runId"];
+        if (typeof runIdRaw === "string" && runIdRaw.length > 0) {
+            const md = renderGapReportMarkdown(report, runIdRaw);
+            const target = path.join(wikiRoot, "outputs", "atlas", runIdRaw, "gap-report.md");
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, md);
+            process.stdout.write(JSON.stringify({ ...report, written: target }) + "\n");
+        }
+        else {
+            process.stdout.write(JSON.stringify(report) + "\n");
+        }
         return 0;
     }
     process.stderr.write(`unknown subcommand: ${sub}\n`);

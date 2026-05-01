@@ -40,13 +40,83 @@ const WIKI_IGNORE_DEFAULTS = [
     "node_modules/",
     ".DS_Store",
 ];
-/** Initial seeded pages under wiki/. Insertion order matches Python's dict
- *  literal so `created_files` lists them in the same order. */
-const INITIAL_WIKI_FILES = [
-    ["wiki/index.md", "# Index\n\nWiki entry point.\n"],
-    ["wiki/summaries.md", "# Summaries\n\nHigh-level summaries of wiki topics.\n"],
-    ["wiki/overview.md", "# Overview\n\nOverview of the knowledge domain.\n"],
-];
+/**
+ * Build the YAML frontmatter block + markdown body for one of the three
+ * seeded index pages. The frontmatter is conformant with the schema in
+ * `references/compilation.md` (every required field is populated and
+ * non-empty) so `/doc-wiki:lint` does not flag the stub as
+ * `missing_frontmatter` on a fresh wiki.
+ *
+ * `seedDate` is the ISO-8601 date stamped into `created` and `updated`;
+ * defaults to today, but tests inject a fixed value for byte-stable
+ * snapshot comparisons.
+ */
+function _seedPage(args) {
+    const { title, type, tags, summary, body, seedDate } = args;
+    // Quote the date values so YAML loaders return strings (not `Date`
+    // objects) — matches the convention used by the lint / quality-score
+    // test fixtures and by every hand-authored wiki page.
+    return [
+        "---",
+        `title: ${title}`,
+        `type: ${type}`,
+        `tags: [${tags.join(", ")}]`,
+        "sources:",
+        "  - wiki/",
+        `created: "${seedDate}"`,
+        `updated: "${seedDate}"`,
+        "quality: 0.0",
+        "summary: >",
+        `  ${summary}`,
+        "audience: contributor",
+        "---",
+        "",
+        body,
+    ].join("\n");
+}
+/**
+ * Insertion-ordered list of seeded pages under `wiki/`. Each emits a
+ * frontmatter+body string built by `_seedPage`. The `audience: contributor`
+ * default reflects that these are auto-managed indices read primarily by
+ * agents; humans rarely open them directly.
+ */
+function _initialWikiFiles(seedDate) {
+    return [
+        [
+            "wiki/index.md",
+            _seedPage({
+                title: "Wiki Index",
+                type: "index",
+                tags: ["wiki-meta", "navigation"],
+                summary: "Master catalog of every wiki page. Auto-managed by /doc-wiki:* operations; hand-edits outside the marked regions are preserved on re-runs.",
+                body: "# Index\n\nWiki entry point.\n",
+                seedDate,
+            }),
+        ],
+        [
+            "wiki/summaries.md",
+            _seedPage({
+                title: "Page Summaries",
+                type: "index",
+                tags: ["wiki-meta", "progressive-disclosure"],
+                summary: "Approximately 50-token summary per wiki page. Used by /doc-wiki:query for progressive-disclosure search. Auto-managed by summaries_rebuild.ts.",
+                body: "# Summaries\n\nHigh-level summaries of wiki topics.\n",
+                seedDate,
+            }),
+        ],
+        [
+            "wiki/overview.md",
+            _seedPage({
+                title: "Wiki Overview",
+                type: "concept",
+                tags: ["wiki-meta", "architecture"],
+                summary: "Global architecture narrative. Initially empty; populated by /doc-wiki:atlas Phase 7 from per-topic atlas pages.",
+                body: "# Overview\n\nOverview of the knowledge domain.\n",
+                seedDate,
+            }),
+        ],
+    ];
+}
 // ── Helpers ─────────────────────────────────────────────────────────
 /**
  * Return the default wiki.config.yaml structure. Shape mirrors the v2
@@ -320,8 +390,12 @@ function touchFile(target) {
  * Create the wiki scaffold at `wikiPath`. Idempotent — re-running on an
  * existing wiki leaves user edits intact and returns empty `created_*`
  * arrays for anything that already existed.
+ *
+ * `seedDate` controls the `created`/`updated` value stamped into the
+ * three seeded index pages' frontmatter; defaults to today. Tests inject
+ * a fixed value to keep snapshots byte-stable.
  */
-export function initWiki(wikiPath, domain = "general", name = "My Wiki") {
+export function initWiki(wikiPath, domain = "general", name = "My Wiki", seedDate = new Date().toISOString().slice(0, 10)) {
     const root = pythonResolve(wikiPath);
     const createdDirs = [];
     const createdFiles = [];
@@ -344,7 +418,7 @@ export function initWiki(wikiPath, domain = "general", name = "My Wiki") {
         createdFiles.push("wiki.config.yaml");
     }
     // 3. Create initial wiki files (skip if exists)
-    for (const [relPath, content] of INITIAL_WIKI_FILES) {
+    for (const [relPath, content] of _initialWikiFiles(seedDate)) {
         const target = path.join(root, relPath);
         if (!fs.existsSync(target)) {
             fs.writeFileSync(target, content);

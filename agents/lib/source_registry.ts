@@ -159,6 +159,16 @@ const BUILTIN_PATTERNS: readonly BuiltinPattern[] = [
   },
 ];
 
+/**
+ * Builtin connector short IDs (e.g. "jira", "confluence", "github").
+ * Read-only view over `BUILTIN_PATTERNS` — does NOT mutate the global
+ * registry. Use this when you only need the connector names (atlas
+ * integration-keyword detection, doc generation), not full manifests.
+ */
+export function builtinConnectorIds(): string[] {
+  return BUILTIN_PATTERNS.map((p) => p.id);
+}
+
 function patternToManifest(p: BuiltinPattern): AgentManifest {
   const name = `wiki-${p.id}-agent`;
   return {
