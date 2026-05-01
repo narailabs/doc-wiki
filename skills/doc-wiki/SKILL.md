@@ -204,6 +204,10 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - `state == "existing"` → wiki has ≥ 3 atlas pages AND prior atlas event. Run all phases.
    - `state == "hybrid"` → pages exist but no prior atlas event (manual ingests only). Existing-mode discovery; Phase 5's semantic check skips non-atlas pages (those lacking `atlas_run_id` frontmatter).
 
+   At this point, also **mint the `atlas_run_id`** for the rest of the run — `YYYY-MM-DDTHH-MM-SS` — and reuse it for every artifact below (inventory, plan snapshot, drift report, cost report, gap report).
+
+1b. **Inventory the repo** — call `node agents/lib/atlas_inventory.js generate --wiki-root <root> --repo-root <repo-root> --run-id <id>` once, before topic discovery. The manifest at `wiki/outputs/atlas/<run-id>/code-inventory.json` carries four buckets: `project_metadata` (name / version / language / runtime from `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`); `orm_entities` (via the `wiki_orm` library); `rest_endpoints` (Express profile shipped, others as the YAML profile set grows); `code_clients` (`gather()` and `fetchWithCaps()` callsites). Pass `--enable-rest` to populate the REST bucket; off by default until profiles stabilize. Consumers in this PR: Phase 8 gap-report (REST endpoints + clients without documentation). Reserved for follow-ups: Phase 4 cost-estimate, Phase 6 source heuristics, the `assembleX` helpers in `agents/lib/atlas_synthesize.ts`. Missing-manifest is non-fatal — every consumer falls back to its pre-inventory behavior.
+
 2. **Discover topics** — union five signals into a deduplicated list:
    - **Code dirs**: enumerate top-level subdirs of `src/`, `app/`, `services/`, etc. Skip vendor / `node_modules` / `.git`.
    - **ORM domains**: dispatch `wiki-orm-agent` and group entities into topic candidates (e.g., `User` → `auth`; `Invoice` → `billing`).
@@ -246,7 +250,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 8. **Finalize**:
    - Run `/doc-wiki:lint` (no `--fix`) and append findings to the drift report.
    - **Cross-doc-ownership scan**: `node {skill_path}/scripts/atlas_validate.js cross-doc --wiki-root <root>` flags pairs of architecture pages that share both ≥1 source path AND ≥1 Mermaid diagram title. Surface as drift findings — one page should own each shared concept (mirrors the "Cross-doc concerns" registry pattern in `docs/README.md`).
-   - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, and external-services-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
+   - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, external-services-without-documentation, and (when the Phase 1b inventory manifest is present at the canonical path) REST-endpoints-without-documentation + code-clients-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
