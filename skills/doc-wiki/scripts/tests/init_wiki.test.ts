@@ -127,9 +127,62 @@ describe("init_wiki — initial files", () => {
     expect(fs.existsSync(summaries)).toBe(true);
     expect(fs.existsSync(overview)).toBe(true);
 
-    expect(fs.readFileSync(index, "utf-8").startsWith("#")).toBe(true);
-    expect(fs.readFileSync(summaries, "utf-8").startsWith("#")).toBe(true);
-    expect(fs.readFileSync(overview, "utf-8").startsWith("#")).toBe(true);
+    // Each seeded page now opens with YAML frontmatter so /doc-wiki:lint
+    // does not flag them as `missing_frontmatter` on a fresh wiki.
+    for (const p of [index, summaries, overview]) {
+      const body = fs.readFileSync(p, "utf-8");
+      expect(body.startsWith("---\n"), `${p} should start with frontmatter`).toBe(true);
+      // Required compilation.md fields plus the audience field added in the
+      // audience-aware-coverage tranche.
+      for (const field of [
+        "title:",
+        "type:",
+        "tags:",
+        "sources:",
+        "created:",
+        "updated:",
+        "quality:",
+        "summary:",
+        "audience:",
+      ]) {
+        expect(body, `${p} should declare ${field}`).toContain(field);
+      }
+      // The body heading is preserved after the closing frontmatter delimiter.
+      expect(body, `${p} should still carry its # heading`).toMatch(/^---\n[\s\S]+?\n---\n\n# /);
+    }
+  });
+
+  it("test_seed_date_param_overrides_today", () => {
+    // initWiki accepts a fixed seedDate so test snapshots are byte-stable.
+    const wiki = tmpWiki(tmpPath);
+    initWiki(wiki, "general", "My Wiki", "2026-01-15");
+    const body = fs.readFileSync(path.join(wiki, "wiki", "index.md"), "utf-8");
+    expect(body).toContain('created: "2026-01-15"');
+    expect(body).toContain('updated: "2026-01-15"');
+  });
+
+  it("test_seeded_frontmatter_parses_to_valid_yaml", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    for (const name of ["index.md", "summaries.md", "overview.md"]) {
+      const body = fs.readFileSync(path.join(wiki, "wiki", name), "utf-8");
+      // Extract the frontmatter block (between the two `---` delimiters)
+      // and verify it parses as a YAML object with the required scalar
+      // and list fields populated.
+      const match = body.match(/^---\n([\s\S]*?)\n---\n/);
+      expect(match, `${name} frontmatter delimiters`).toBeTruthy();
+      const fm = yaml.load(match![1] as string) as Record<string, unknown>;
+      expect(fm["title"]).toBeTypeOf("string");
+      expect(fm["type"]).toBeTypeOf("string");
+      expect(Array.isArray(fm["tags"])).toBe(true);
+      expect(Array.isArray(fm["sources"])).toBe(true);
+      expect((fm["sources"] as string[]).length).toBeGreaterThan(0);
+      expect(fm["created"]).toMatch(/^\d{4}-\d{2}-\d{2}/);
+      expect(fm["updated"]).toMatch(/^\d{4}-\d{2}-\d{2}/);
+      expect(fm["quality"]).toBe(0);
+      expect(fm["summary"]).toBeTypeOf("string");
+      expect(fm["audience"]).toBe("contributor");
+    }
   });
 
   it("test_creates_wiki_ignore", () => {

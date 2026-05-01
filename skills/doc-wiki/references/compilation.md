@@ -56,6 +56,31 @@ references:
     content_hash: e3b0c44298fc...
 ```
 
+### Additional frontmatter for atlas pages (audience targeting)
+
+Atlas-generated pages should include an `audience` field so readers can route to the
+right depth. Five values are recognized:
+
+- `new-user` — Reader is installing or running for the first time.
+- `operator` — Reader is using the tool day-to-day; needs args, examples, recipes.
+- `contributor` — Reader is modifying internals; needs architecture and contracts.
+- `integrator` — Reader is wiring an external system into the project.
+- `debugger` — Reader is diagnosing a failure; wants symptom → cause → fix.
+
+Defaults inferred from `atlas_facet` when the field is absent:
+
+| Facet | Default audience |
+|---|---|
+| `getting-started` | `new-user` |
+| `commands`, `configuration`, `operations` | `operator` |
+| `architecture`, `data-model`, `environments` | `contributor` |
+| `api`, `integrations`, `deploy` | `integrator` |
+| `troubleshooting` | `debugger` |
+| `overview` | `contributor` |
+
+The audience drives the page-template variant chosen for the body (see `SKILL.md`
+page template) and the routing table at the top of `wiki/overview.md`.
+
 ## Link Enrichment
 
 Before compiling a page, load ~300 characters from the top 2-3 linked pages as context. This produces better cross-references and catches contradictions at write time.

@@ -14,9 +14,12 @@ import {
   getLastAtlasRunId,
   detectState,
   estimateCost,
+  expectedGlobalCount,
   savePlanSnapshot,
   loadPlanSnapshot,
   getRollingPerIngestAvg,
+  assembleGapReport,
+  renderGapReportMarkdown,
 } from "../atlas_orchestrator.js";
 import {
   makeTmpPath,
@@ -245,8 +248,10 @@ describe("estimateCost", () => {
     expect(est.expected_ingests).toBe(4);
     expect(est.cache_hits).toBe(0);
     expect(est.topic_cost_usd).toBe(0.80); // 4 * 0.20
-    expect(est.global_cost_usd).toBe(0.60); // 3 * 0.20
-    expect(est.total_estimated_usd).toBe(1.40);
+    // 7 globals (overview + integrations + deploy + commands + configuration +
+    // getting-started + troubleshooting) × $0.20 each.
+    expect(est.global_cost_usd).toBe(1.40);
+    expect(est.total_estimated_usd).toBe(2.20);
     expect(est.breakdown).toHaveLength(4);
     for (const b of est.breakdown) {
       expect(b.expected).toBe(true);
@@ -323,6 +328,15 @@ describe("plan snapshot round-trip", () => {
 
 // ── getRollingPerIngestAvg ─────────────────────────────────────────
 
+describe("expectedGlobalCount", () => {
+  it("returns the static count regardless of facets argument", () => {
+    expect(expectedGlobalCount()).toBe(7);
+    expect(expectedGlobalCount([])).toBe(7);
+    expect(expectedGlobalCount(["architecture", "data-model"])).toBe(7);
+    expect(expectedGlobalCount(["architecture"])).toBe(7);
+  });
+});
+
 describe("getRollingPerIngestAvg", () => {
   let tmpPath: string;
   let wikiRoot: string;
@@ -367,5 +381,190 @@ describe("getRollingPerIngestAvg", () => {
     writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.0 });
     // sampleSize=1 → only the most recent event counts
     expect(getRollingPerIngestAvg(wikiRoot, 1)).toBe(0.0);
+  });
+});
+
+// ── assembleGapReport / renderGapReportMarkdown ────────────────────
+
+describe("assembleGapReport", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-gap-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    // Drop the starter pages so wiki content reflects only what tests create.
+    for (const f of ["index.md", "summaries.md", "overview.md"]) {
+      const p = path.join(wikiRoot, "wiki", f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("flags topics whose directory has no pages", () => {
+    const plan = {
+      topics: ["auth", "billing"],
+      facets: ["architecture"],
+      entries: [
+        {
+          topic: "auth",
+          facet: "architecture",
+          sources: ["src/auth/"],
+          output: "wiki/auth/architecture.md",
+        },
+        {
+          topic: "billing",
+          facet: "architecture",
+          sources: ["src/billing/"],
+          output: "wiki/billing/architecture.md",
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    // Only auth has a page on disk.
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+
+    const report = assembleGapReport(wikiRoot, plan);
+    expect(report.topicsWithoutPages).toEqual(["billing"]);
+    // Auth/architecture is covered, billing/architecture is not.
+    expect(report.facetsWithoutCoverage).toEqual([
+      { topic: "billing", facet: "architecture" },
+    ]);
+    // Billing's source paths are flagged because the output page is missing.
+    expect(report.sourceFilesWithNoPage).toContain("src/billing/");
+    expect(report.sourceFilesWithNoPage).not.toContain("src/auth/");
+  });
+
+  it("dedupes source paths repeated across plan entries", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["architecture", "data-model"],
+      entries: [
+        {
+          topic: "auth",
+          facet: "architecture",
+          sources: ["src/auth/", "shared/lib/"],
+          output: "wiki/auth/architecture.md",
+        },
+        {
+          topic: "auth",
+          facet: "data-model",
+          sources: ["src/auth/", "shared/lib/"],
+          output: "wiki/auth/data-model.md",
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    const report = assembleGapReport(wikiRoot, plan);
+    expect(report.sourceFilesWithNoPage).toEqual(["shared/lib/", "src/auth/"]);
+  });
+
+  it("passes through gitlog uncovered_files when provided", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["architecture"],
+      entries: [],
+      created_at: new Date().toISOString(),
+    };
+    const report = assembleGapReport(wikiRoot, plan, {
+      uncovered_files: ["src/new-thing.ts", "src/another.ts"],
+      stale_pages: [],
+      unrelated_files: [],
+    });
+    expect(report.uncoveredFiles).toEqual(["src/new-thing.ts", "src/another.ts"]);
+  });
+
+  it("flags connectors mentioned in atlas pages but missing from integrations.md", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["architecture"],
+      entries: [],
+      created_at: new Date().toISOString(),
+    };
+    // architecture page mentions jira and github
+    fs.mkdirSync(path.join(wikiRoot, "wiki", "auth"), { recursive: true });
+    fs.writeFileSync(
+      path.join(wikiRoot, "wiki", "auth", "architecture.md"),
+      "---\n" +
+        yaml.dump({ atlas_facet: "architecture", atlas_run_id: "r1" }) +
+        "---\n\nWe sync to JIRA and emit to GitHub Actions.\n",
+    );
+    // integrations.md exists but only documents jira
+    fs.writeFileSync(
+      path.join(wikiRoot, "wiki", "integrations.md"),
+      "---\n" +
+        yaml.dump({ atlas_facet: "integrations", atlas_run_id: "r1" }) +
+        "---\n\nJira sync.\n",
+    );
+
+    const report = assembleGapReport(wikiRoot, plan);
+    expect(report.externalServicesWithoutDocumentation).toContain("github");
+    expect(report.externalServicesWithoutDocumentation).not.toContain("jira");
+  });
+
+  it("returns empty arrays when everything is documented", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["architecture"],
+      entries: [
+        {
+          topic: "auth",
+          facet: "architecture",
+          sources: ["src/auth/"],
+          output: "wiki/auth/architecture.md",
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    const report = assembleGapReport(wikiRoot, plan);
+    expect(report.topicsWithoutPages).toEqual([]);
+    expect(report.facetsWithoutCoverage).toEqual([]);
+    expect(report.sourceFilesWithNoPage).toEqual([]);
+    expect(report.uncoveredFiles).toEqual([]);
+  });
+});
+
+describe("renderGapReportMarkdown", () => {
+  it("emits all five sections with placeholder text when empty", () => {
+    const md = renderGapReportMarkdown(
+      {
+        topicsWithoutPages: [],
+        facetsWithoutCoverage: [],
+        sourceFilesWithNoPage: [],
+        uncoveredFiles: [],
+        externalServicesWithoutDocumentation: [],
+      },
+      "2026-04-30T12-00-00",
+    );
+    expect(md).toContain("Atlas gap report — 2026-04-30T12-00-00");
+    expect(md).toContain("## Topics without any pages");
+    expect(md).toContain("## Facets without coverage");
+    expect(md).toContain("## Source files with no wiki page");
+    expect(md).toContain("## Uncovered files (gitlog)");
+    expect(md).toContain("## External services mentioned but undocumented");
+    expect(md.match(/_\(none\)_/g)?.length).toBe(5);
+  });
+
+  it("formats facets-without-coverage as a markdown table", () => {
+    const md = renderGapReportMarkdown(
+      {
+        topicsWithoutPages: [],
+        facetsWithoutCoverage: [
+          { topic: "auth", facet: "data-model" },
+          { topic: "billing", facet: "api" },
+        ],
+        sourceFilesWithNoPage: [],
+        uncoveredFiles: [],
+        externalServicesWithoutDocumentation: [],
+      },
+      "r1",
+    );
+    expect(md).toContain("| topic | facet |");
+    expect(md).toContain("| auth | data-model |");
+    expect(md).toContain("| billing | api |");
   });
 });
