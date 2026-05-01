@@ -26,6 +26,8 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
+import { formatPhaseFlow, } from "./mermaid_format.js";
+import { builtinConnectorIds } from "./source_registry.js";
 /**
  * Walk `<wikiRoot>/wiki/` and yield every `.md` page whose frontmatter has a
  * `atlas_facet` field matching one of `wantedFacets`. The wanted facets
@@ -93,26 +95,87 @@ function _extractTldr(body) {
         return "";
     return (m[1] ?? "").trim();
 }
+/**
+ * Resolve the page's audience for routing purposes. Honors an explicit
+ * `audience` frontmatter field if present; otherwise falls back to a default
+ * derived from the `atlas_facet`. Mirrors the table documented in
+ * `references/compilation.md` ("Additional frontmatter for atlas pages").
+ */
+function _inferAudience(facet, frontmatterAudience) {
+    if (typeof frontmatterAudience === "string" && frontmatterAudience.length > 0) {
+        return frontmatterAudience;
+    }
+    switch (facet) {
+        case "getting-started":
+            return "new-user";
+        case "commands":
+        case "configuration":
+        case "operations":
+            return "operator";
+        case "architecture":
+        case "data-model":
+        case "environments":
+        case "overview":
+            return "contributor";
+        case "api":
+        case "integrations":
+        case "deploy":
+            return "integrator";
+        case "troubleshooting":
+            return "debugger";
+        default:
+            return "contributor";
+    }
+}
 // ── Overview bundle ────────────────────────────────────────────────
 /**
  * Assemble the input for `wiki/overview.md` synthesis: every per-topic
  * `architecture.md` body in full, plus the TL;DR sections of the other per-
- * topic facets. The intent is to give the LLM the full architecture story
- * for each topic plus a one-paragraph snapshot of every other facet (data
- * model, environments, api, operations) so the synthesized narrative can
- * cross-reference without needing every page in full.
+ * topic facets, prefixed by an audience-routing table generated from each
+ * page's `audience` frontmatter field (default-inferred from facet). The
+ * routing table mirrors `docs/README.md`'s "Where to start" section so the
+ * synthesized overview can route human readers to the right depth.
  */
 export function assembleOverviewInputs(wikiRoot) {
-    const arch = _findAtlasPages(wikiRoot, ["architecture"]);
-    const others = _findAtlasPages(wikiRoot, [
-        "data-model",
-        "environments",
-        "api",
-        "operations",
-    ]);
+    const allPages = _findAtlasPages(wikiRoot);
+    const arch = allPages.filter((p) => p.facet === "architecture");
+    const others = allPages.filter((p) => p.facet === "data-model" ||
+        p.facet === "environments" ||
+        p.facet === "api" ||
+        p.facet === "operations");
     const sources = [];
     const parts = [];
     const notes = [];
+    // Audience-routing table at the top — gives the LLM a structural anchor
+    // for the synthesized page's "Where to start" section.
+    if (allPages.length > 0) {
+        const grouped = new Map();
+        for (const page of allPages) {
+            const audience = _inferAudience(page.facet, page.frontmatter["audience"]);
+            const list = grouped.get(audience);
+            if (list)
+                list.push(page.page);
+            else
+                grouped.set(audience, [page.page]);
+        }
+        parts.push("## Audience routing\n");
+        parts.push("| Audience | Pages |");
+        parts.push("|---|---|");
+        const order = ["new-user", "operator", "contributor", "integrator", "debugger"];
+        for (const audience of order) {
+            const pages = grouped.get(audience);
+            if (!pages || pages.length === 0)
+                continue;
+            parts.push(`| ${audience} | ${pages.join(", ")} |`);
+        }
+        // Surface any audience labels not in the canonical order at the end.
+        for (const [audience, pages] of grouped) {
+            if (order.includes(audience))
+                continue;
+            parts.push(`| ${audience} | ${pages.join(", ")} |`);
+        }
+        parts.push("");
+    }
     if (arch.length === 0) {
         notes.push("no architecture.md pages found — overview will be sparse");
     }
@@ -163,10 +226,7 @@ export function assembleIntegrationsInputs(wikiRoot, connectorsConfigPath) {
     }
     // Architecture pages — extract external-service-ish lines.
     const archPages = _findAtlasPages(wikiRoot, ["architecture"]);
-    const integrationKeywords = [
-        "jira", "github", "confluence", "notion", "aws", "gcp",
-        "stripe", "datadog", "sentry", "auth0", "okta", "twilio", "sendgrid",
-    ];
+    const integrationKeywords = _getIntegrationKeywords();
     for (const page of archPages) {
         const lines = page.body.split("\n");
         const hits = [];
@@ -290,23 +350,456 @@ export function assembleDeployInputs(repoRoot) {
     }
     return { sources, text: parts.join("\n"), notes };
 }
+/**
+ * Sourced integration-keyword list. Used by `assembleIntegrationsInputs`
+ * to scan architecture pages for external-service mentions. Pulls
+ * builtin connector ids from `source_registry` (data-driven; satisfies
+ * architecture invariant #6) and unions in a curated list of common SaaS
+ * integrations that aren't bundled connectors but are still worth
+ * surfacing in the synthesized integrations page.
+ *
+ * The `db` connector is filtered out — it's a database connector, not an
+ * external service in the sense the integrations page covers.
+ */
+const _COMMON_SAAS_KEYWORDS = [
+    "stripe",
+    "datadog",
+    "sentry",
+    "auth0",
+    "okta",
+    "twilio",
+    "sendgrid",
+];
+function _getIntegrationKeywords() {
+    const fromRegistry = builtinConnectorIds().filter((id) => id !== "db");
+    return [...new Set([...fromRegistry, ..._COMMON_SAAS_KEYWORDS])];
+}
+// ── Commands bundle ────────────────────────────────────────────────
+/**
+ * Build a Mermaid `flowchart TD` showing the slash-command fan-out:
+ * User → each `/<command>` → skill orchestrator. Project-agnostic — the
+ * shape is identical for any repo, only the command list varies.
+ *
+ * Returned as a fenced Mermaid block wrapped in `<!-- mermaid-seed -->`
+ * markers so the synthesis step (the orchestrator LLM) preserves it
+ * verbatim or refines without re-deriving the topology from the bundle
+ * text. Idempotent: passing the same slug list yields the same code.
+ */
+function _commandsLifecycleSeed(slugs) {
+    if (slugs.length === 0)
+        return "";
+    const nodes = [
+        { id: "user", label: "User", className: "actor" },
+        { id: "orch", label: "doc-wiki<br/>skill orchestrator", className: "orch" },
+    ];
+    const edges = [];
+    for (const slug of slugs) {
+        const id = "cmd_" + slug.replace(/[^a-z0-9]/gi, "_");
+        nodes.push({ id, label: `/${slug}`, className: "cmd" });
+        edges.push({ from: "user", to: id });
+        edges.push({ from: id, to: "orch" });
+    }
+    const classDefs = [
+        { name: "actor", fill: "#cfe2f3", stroke: "#0c5394" },
+        { name: "cmd", fill: "#fff3cd", stroke: "#856404" },
+        { name: "orch", fill: "#d4edda", stroke: "#155724" },
+    ];
+    const block = formatPhaseFlow("slash-command fan-out", nodes, edges, classDefs);
+    return [
+        "<!-- mermaid-seed: slash-command fan-out — preserve in synthesized page -->",
+        "```mermaid",
+        block.code,
+        "```",
+        "<!-- /mermaid-seed -->",
+        "",
+    ].join("\n");
+}
+/**
+ * Assemble the input for `wiki/commands.md` synthesis: a Mermaid flowchart
+ * seed of the slash-command fan-out, every `commands/*.md` wrapper file in
+ * the repo, plus any `### /` headings extracted from the project's
+ * `SKILL.md` files. The intent is to give the LLM all the slash-command
+ * surface area plus a structural anchor for the diagram, so it can produce
+ * a single operator-friendly reference page with a real Mermaid block.
+ */
+export function assembleCommandsInputs(repoRoot) {
+    const sources = [];
+    const parts = [];
+    const notes = [];
+    const slugs = [];
+    // commands/*.md wrappers
+    const commandsDir = path.join(repoRoot, "commands");
+    if (fs.existsSync(commandsDir)) {
+        let files;
+        try {
+            files = fs
+                .readdirSync(commandsDir)
+                .filter((f) => f.endsWith(".md"))
+                .sort();
+        }
+        catch {
+            files = [];
+            notes.push(`could not read ${commandsDir}`);
+        }
+        for (const f of files) {
+            const abs = path.join(commandsDir, f);
+            try {
+                const body = fs.readFileSync(abs, "utf-8");
+                const rel = path.posix.join("commands", f);
+                sources.push(rel);
+                parts.push(`## ${rel}\n\n${body.trim()}\n`);
+                slugs.push(f.replace(/\.md$/, ""));
+            }
+            catch {
+                notes.push(`could not read commands/${f}`);
+            }
+        }
+    }
+    else {
+        notes.push("no commands/ directory — commands page will be sparse");
+    }
+    // Prepend the Mermaid seed so the LLM sees the diagram before the
+    // per-command bodies. Skipped silently when no commands/ exists.
+    const seed = _commandsLifecycleSeed(slugs);
+    if (seed.length > 0)
+        parts.unshift(seed);
+    // ### / headings extracted from any SKILL.md under skills/
+    const skillsDir = path.join(repoRoot, "skills");
+    if (fs.existsSync(skillsDir)) {
+        const skillFiles = [];
+        const walk = (d) => {
+            let entries;
+            try {
+                entries = fs.readdirSync(d, { withFileTypes: true });
+            }
+            catch {
+                return;
+            }
+            for (const e of entries) {
+                const full = path.join(d, e.name);
+                if (e.isDirectory())
+                    walk(full);
+                else if (e.isFile() && e.name === "SKILL.md")
+                    skillFiles.push(full);
+            }
+        };
+        walk(skillsDir);
+        for (const skillFile of skillFiles) {
+            let body;
+            try {
+                body = fs.readFileSync(skillFile, "utf-8");
+            }
+            catch {
+                continue;
+            }
+            const headings = [];
+            for (const line of body.split("\n")) {
+                if (/^###\s+\//.test(line))
+                    headings.push(line.trim());
+            }
+            if (headings.length > 0) {
+                const rel = path.relative(repoRoot, skillFile).split(path.sep).join("/");
+                sources.push(rel);
+                parts.push(`## Slash-command headings in ${rel}\n\n${headings.join("\n")}\n`);
+            }
+        }
+    }
+    return { sources, text: parts.join("\n"), notes };
+}
+// ── Getting-started bundle ─────────────────────────────────────────
+const _BOOTSTRAP_FILE_CANDIDATES = [
+    "setup.sh",
+    "bootstrap.sh",
+    "install.sh",
+    "Makefile",
+];
+/**
+ * Assemble the input for `wiki/getting-started.md` synthesis: top-level
+ * README + package.json scripts + any common bootstrap files (setup.sh,
+ * Makefile, etc.). Gives the LLM enough raw material to produce a
+ * numbered first-run walkthrough for new users.
+ */
+export function assembleGettingStartedInputs(repoRoot) {
+    const sources = [];
+    const parts = [];
+    const notes = [];
+    // README.md (truncated if huge)
+    const readmePath = path.join(repoRoot, "README.md");
+    if (fs.existsSync(readmePath)) {
+        try {
+            const body = fs.readFileSync(readmePath, "utf-8");
+            const truncated = body.length > 50 * 1024
+                ? body.slice(0, 50 * 1024) + "\n... [truncated]\n"
+                : body;
+            sources.push("README.md");
+            parts.push(`## README.md\n\n${truncated}\n`);
+        }
+        catch {
+            notes.push("could not read README.md");
+        }
+    }
+    else {
+        notes.push("no README.md — getting-started will be sparse");
+    }
+    // package.json scripts (Node projects)
+    const pkgPath = path.join(repoRoot, "package.json");
+    if (fs.existsSync(pkgPath)) {
+        try {
+            const body = fs.readFileSync(pkgPath, "utf-8");
+            const json = JSON.parse(body);
+            if (json.scripts && Object.keys(json.scripts).length > 0) {
+                sources.push("package.json");
+                parts.push("## package.json scripts\n\n```json\n" +
+                    JSON.stringify(json.scripts, null, 2) +
+                    "\n```\n");
+            }
+        }
+        catch {
+            notes.push("could not parse package.json");
+        }
+    }
+    // Bootstrap-y top-level files
+    for (const name of _BOOTSTRAP_FILE_CANDIDATES) {
+        const p = path.join(repoRoot, name);
+        if (!fs.existsSync(p))
+            continue;
+        try {
+            const body = fs.readFileSync(p, "utf-8");
+            const truncated = body.length > 50 * 1024
+                ? body.slice(0, 50 * 1024) + "\n... [truncated]\n"
+                : body;
+            sources.push(name);
+            parts.push(`## ${name}\n\n\`\`\`\n${truncated}\n\`\`\`\n`);
+        }
+        catch {
+            notes.push(`could not read ${name}`);
+        }
+    }
+    return { sources, text: parts.join("\n"), notes };
+}
+// ── Configuration bundle ───────────────────────────────────────────
+const _CONFIGURATION_FILE_GLOBS = [
+    /^[a-z][a-z0-9-]*\.config\.(ya?ml|json|toml)$/i,
+    /^wiki\.config\.ya?ml$/i,
+    /^\.env\.example$/i,
+    /^\.env\.template$/i,
+    /^\.env\.sample$/i,
+    /^pyproject\.toml$/i,
+    /^Cargo\.toml$/i,
+    /^setup\.cfg$/i,
+    /^settings\.gradle(\.kts)?$/i,
+    /^application\.(properties|ya?ml)$/i,
+];
+const _CONFIGURATION_DIR_PATTERNS = [
+    { dir: "config", rx: /\.(ya?ml|json|toml|conf|ini|properties)$/i },
+    { dir: ".connectors", rx: /\.ya?ml$/i },
+];
+/**
+ * Assemble the input for `wiki/configuration.md` synthesis: top-level
+ * configuration files (wiki.config.yaml, *.config.yaml, .env.example, …)
+ * plus the contents of `config/` and `.connectors/` directories. Gives
+ * the LLM enough surface to produce an operator-facing schema reference.
+ *
+ * Big files (>200 KB) are truncated; a `... [truncated]` marker is left
+ * inline so the synthesis step can note the truncation when relevant.
+ */
+export function assembleConfigurationInputs(repoRoot) {
+    const sources = [];
+    const parts = [];
+    const notes = [];
+    // Top-level files matching configuration globs.
+    let topLevel;
+    try {
+        topLevel = fs.readdirSync(repoRoot, { withFileTypes: true });
+    }
+    catch {
+        notes.push(`could not read repo root: ${repoRoot}`);
+        return { sources, text: "", notes };
+    }
+    for (const e of topLevel) {
+        if (!e.isFile())
+            continue;
+        if (_CONFIGURATION_FILE_GLOBS.some((rx) => rx.test(e.name))) {
+            sources.push(e.name);
+        }
+    }
+    // Directory patterns.
+    for (const { dir, rx } of _CONFIGURATION_DIR_PATTERNS) {
+        const abs = path.join(repoRoot, dir);
+        if (!fs.existsSync(abs))
+            continue;
+        const walk = (d, relBase) => {
+            let entries;
+            try {
+                entries = fs.readdirSync(d, { withFileTypes: true });
+            }
+            catch {
+                return;
+            }
+            for (const e of entries) {
+                const full = path.join(d, e.name);
+                const rel = path.posix.join(relBase, e.name);
+                if (e.isDirectory())
+                    walk(full, rel);
+                else if (e.isFile() && rx.test(e.name))
+                    sources.push(rel);
+            }
+        };
+        walk(abs, dir);
+    }
+    sources.sort();
+    if (sources.length === 0) {
+        notes.push("no configuration files matched — wiki/configuration.md will be sparse");
+        return { sources, text: "", notes };
+    }
+    for (const rel of sources) {
+        const abs = path.join(repoRoot, rel);
+        let body;
+        try {
+            body = fs.readFileSync(abs, "utf-8");
+        }
+        catch {
+            notes.push(`could not read ${rel}`);
+            continue;
+        }
+        const truncated = body.length > 200 * 1024
+            ? body.slice(0, 200 * 1024) + "\n... [truncated]\n"
+            : body;
+        parts.push(`## ${rel}\n\n\`\`\`\n${truncated}\n\`\`\`\n`);
+    }
+    return { sources, text: parts.join("\n"), notes };
+}
+// ── Troubleshooting bundle ─────────────────────────────────────────
+const _TROUBLESHOOTING_EVENT_LIMIT = 30;
+function _isErrorEvent(rec) {
+    if (rec["error"] !== undefined && rec["error"] !== null)
+        return true;
+    if (rec["status"] === "failed" || rec["status"] === "error")
+        return true;
+    const details = rec["details"];
+    if (details && typeof details === "object" && !Array.isArray(details)) {
+        const d = details;
+        if (d["error"] !== undefined && d["error"] !== null)
+            return true;
+        if (d["status"] === "failed" || d["status"] === "error")
+            return true;
+    }
+    return false;
+}
+/**
+ * Assemble the input for `wiki/troubleshooting.md` synthesis: the most
+ * recent error/failure events from `events.jsonl` plus the latest atlas
+ * drift report (if present). Gives the LLM symptom signals the page can
+ * organize into symptom → cause → fix triplets.
+ */
+export function assembleTroubleshootingInputs(wikiRoot) {
+    const sources = [];
+    const parts = [];
+    const notes = [];
+    // Recent error events from events.jsonl
+    const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
+    if (fs.existsSync(eventsPath)) {
+        let lines;
+        try {
+            lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        }
+        catch {
+            lines = [];
+        }
+        const errors = [];
+        for (let i = lines.length - 1; i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT; i--) {
+            const line = lines[i];
+            if (!line)
+                continue;
+            let parsed;
+            try {
+                parsed = JSON.parse(line);
+            }
+            catch {
+                continue;
+            }
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+                continue;
+            const rec = parsed;
+            if (_isErrorEvent(rec)) {
+                errors.push({ raw: line, parsed: rec });
+            }
+        }
+        if (errors.length > 0) {
+            sources.push("log/events.jsonl");
+            parts.push("## Recent error/failure events\n");
+            parts.push("```jsonl");
+            // Reverse so oldest-first within the recent window
+            for (const e of [...errors].reverse())
+                parts.push(e.raw);
+            parts.push("```\n");
+        }
+        else {
+            notes.push("no error events in events.jsonl — troubleshooting will be sparse");
+        }
+    }
+    else {
+        notes.push("no log/events.jsonl found");
+    }
+    // Latest atlas drift report
+    const atlasOutputs = path.join(wikiRoot, "outputs", "atlas");
+    if (fs.existsSync(atlasOutputs)) {
+        let runs;
+        try {
+            runs = fs
+                .readdirSync(atlasOutputs, { withFileTypes: true })
+                .filter((e) => e.isDirectory())
+                .map((e) => e.name)
+                .sort()
+                .reverse();
+        }
+        catch {
+            runs = [];
+        }
+        for (const run of runs) {
+            const driftPath = path.join(atlasOutputs, run, "drift-report.md");
+            if (!fs.existsSync(driftPath))
+                continue;
+            try {
+                const body = fs.readFileSync(driftPath, "utf-8");
+                const rel = path.posix.join("outputs", "atlas", run, "drift-report.md");
+                sources.push(rel);
+                parts.push(`## Drift report (${run})\n\n${body.trim()}\n`);
+                break; // only the most recent
+            }
+            catch {
+                notes.push(`could not read ${driftPath}`);
+            }
+        }
+    }
+    return { sources, text: parts.join("\n"), notes };
+}
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
     "--wiki-root": "wikiRoot",
     "--repo-root": "repoRoot",
     "--connectors-config": "connectorsConfig",
 };
-const HELP_TEXT = `usage: atlas_synthesize.js {overview,integrations,deploy} [...]
+const HELP_TEXT = `usage: atlas_synthesize.js {overview,integrations,deploy,commands,configuration,getting-started,troubleshooting} [...]
 
 Read-only input assembly for /doc-wiki:atlas global synthesis.
 
 Subcommands:
-  overview       --wiki-root <p>
-                 Concatenated architecture pages + per-facet TL;DRs.
-  integrations   --wiki-root <p> [--connectors-config <p>]
-                 api.md pages + external-service mentions + connector config.
-  deploy         --wiki-root <p> [--repo-root <p>]
-                 Build/deploy files: Dockerfile, compose, workflows, terraform.
+  overview          --wiki-root <p>
+                    Audience-routing table + concatenated architecture pages +
+                    per-facet TL;DRs.
+  integrations      --wiki-root <p> [--connectors-config <p>]
+                    api.md pages + external-service mentions + connector config.
+  deploy            --wiki-root <p> [--repo-root <p>]
+                    Build/deploy files: Dockerfile, compose, workflows, terraform.
+  commands          --repo-root <p>
+                    commands/*.md wrappers + ### / headings from SKILL.md files.
+  configuration     --repo-root <p>
+                    Top-level config files + config/ + .connectors/ dirs.
+  getting-started   --repo-root <p>
+                    README + package.json scripts + bootstrap files.
+  troubleshooting   --wiki-root <p>
+                    Recent error events + latest atlas drift report.
 
 Each prints one JSON object on stdout with keys: sources, text, notes.
 `;
@@ -329,28 +822,49 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const wikiRoot = parsed.values["wikiRoot"];
-    if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
-        process.stderr.write("--wiki-root is required\n");
-        return 2;
-    }
-    if (sub === "overview") {
-        const bundle = assembleOverviewInputs(wikiRoot);
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+        ? parsed.values["repoRoot"]
+        : process.cwd();
+    // Subcommands that need --wiki-root.
+    if (sub === "overview" || sub === "integrations" || sub === "troubleshooting") {
+        if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
+            process.stderr.write("--wiki-root is required\n");
+            return 2;
+        }
+        let bundle;
+        if (sub === "overview") {
+            bundle = assembleOverviewInputs(wikiRoot);
+        }
+        else if (sub === "integrations") {
+            const cfg = typeof parsed.values["connectorsConfig"] === "string"
+                ? parsed.values["connectorsConfig"]
+                : undefined;
+            bundle = assembleIntegrationsInputs(wikiRoot, cfg);
+        }
+        else {
+            bundle = assembleTroubleshootingInputs(wikiRoot);
+        }
         process.stdout.write(JSON.stringify(bundle) + "\n");
         return 0;
     }
-    if (sub === "integrations") {
-        const cfg = typeof parsed.values["connectorsConfig"] === "string"
-            ? parsed.values["connectorsConfig"]
-            : undefined;
-        const bundle = assembleIntegrationsInputs(wikiRoot, cfg);
-        process.stdout.write(JSON.stringify(bundle) + "\n");
-        return 0;
-    }
+    // Subcommands that work off repoRoot (cwd by default).
     if (sub === "deploy") {
-        const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
-            ? parsed.values["repoRoot"]
-            : process.cwd();
         const bundle = assembleDeployInputs(repoRoot);
+        process.stdout.write(JSON.stringify(bundle) + "\n");
+        return 0;
+    }
+    if (sub === "commands") {
+        const bundle = assembleCommandsInputs(repoRoot);
+        process.stdout.write(JSON.stringify(bundle) + "\n");
+        return 0;
+    }
+    if (sub === "getting-started") {
+        const bundle = assembleGettingStartedInputs(repoRoot);
+        process.stdout.write(JSON.stringify(bundle) + "\n");
+        return 0;
+    }
+    if (sub === "configuration") {
+        const bundle = assembleConfigurationInputs(repoRoot);
         process.stdout.write(JSON.stringify(bundle) + "\n");
         return 0;
     }

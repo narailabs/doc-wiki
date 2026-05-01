@@ -361,6 +361,23 @@ describe("TestScorePageStructural", () => {
     expect(signals.has("missing_mermaid")).toBe(true);
     expect(signals.get("missing_mermaid")).toBeCloseTo(-0.1);
   });
+
+  it("missing-mermaid penalty fires for new audience-flavor facet tags", () => {
+    // Each new tag added to MERMAID_EXPECTED_TAGS should fire the penalty
+    // in isolation. Validates the extension to cover audience-flavor facets.
+    for (const tag of ["troubleshooting", "runbook", "pipeline", "workflow", "commands"]) {
+      const fm = fullFrontmatter({
+        type: "concept",
+        tags: [tag, "extra-1", "extra-2", "extra-3"],
+      });
+      const page = path.join(tmpPath, "wiki", "audience", `${tag}.md`);
+      writePage(page, fm, new Array(200).fill("word").join(" "));
+      const result = scorePage(page, edges);
+      const signals = new Map(result.signals.map((s) => [s.signal, s.delta]));
+      expect(signals.has("missing_mermaid"), `missing_mermaid for tag ${tag}`).toBe(true);
+      expect(signals.get("missing_mermaid")).toBeCloseTo(-0.1);
+    }
+  });
 });
 
 // ── Clamping tests ──────────────────────────────────────────────────

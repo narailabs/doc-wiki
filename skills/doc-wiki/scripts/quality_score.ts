@@ -48,6 +48,11 @@ const MERMAID_EXPECTED_TAGS: ReadonlySet<string> = new Set([
   "infrastructure",
   "erd",
   "topology",
+  "troubleshooting",
+  "runbook",
+  "pipeline",
+  "workflow",
+  "commands",
 ]);
 
 /** Python: `re.compile(r"\[.*?\]\((?!http|#)(.*?\.md)\)")` — global. */

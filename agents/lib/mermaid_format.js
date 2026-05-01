@@ -123,3 +123,85 @@ export function formatErDiagram(title, tables, relationships = []) {
     }
     return { type: "erDiagram", title, code: lines.join("\n") };
 }
+/**
+ * Sanitize a phase-pipeline node label. Same character-escape policy as
+ * `sanitizeLabel`, but preserves multi-line content by converting real
+ * newlines to `<br/>` so Mermaid renders them as line breaks inside the
+ * node box.
+ */
+function sanitizePhaseLabel(label) {
+    return label
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/\|/g, "&#124;")
+        .replace(/\[/g, "&#91;")
+        .replace(/\]/g, "&#93;")
+        .replace(/\{/g, "&#123;")
+        .replace(/\}/g, "&#125;")
+        .replace(/\r\n|\n|\r/g, "<br/>")
+        .trim();
+}
+/**
+ * Format a `flowchart TD` phase-pipeline diagram with optional classDef
+ * styling. Use for self-describing process diagrams: orchestrator phases,
+ * decision gates, lifecycle flows. Mirrors the styled-flowchart pattern
+ * documented in `docs/architecture.md` (the atlas-pipeline diagram).
+ *
+ *   - Rectangular nodes (default): `${id}["label"]`
+ *   - Diamond decision nodes: `${id}{"label"}`
+ *   - Edges: `from --> to` or `from -- label --> to`
+ *   - Per-class color via `classDef name fill:#hex,stroke:#hex`
+ *   - Class assignment grouped: `class id1,id2 className`
+ *
+ * Multi-line labels are preserved (real `\n` becomes `<br/>`).
+ */
+export function formatPhaseFlow(title, nodes, edges, classDefs = []) {
+    const lines = ["flowchart TD"];
+    const seen = new Set();
+    for (const n of nodes) {
+        const id = sanitizeNodeId(n.id);
+        if (seen.has(id))
+            continue;
+        seen.add(id);
+        const label = sanitizePhaseLabel(n.label);
+        if (n.shape === "diamond") {
+            lines.push(`    ${id}{"${label}"}`);
+        }
+        else {
+            lines.push(`    ${id}["${label}"]`);
+        }
+    }
+    for (const e of edges) {
+        const from = sanitizeNodeId(e.from);
+        const to = sanitizeNodeId(e.to);
+        if (e.label !== undefined && e.label !== "") {
+            lines.push(`    ${from} -- ${sanitizePhaseLabel(e.label)} --> ${to}`);
+        }
+        else {
+            lines.push(`    ${from} --> ${to}`);
+        }
+    }
+    for (const c of classDefs) {
+        lines.push(`    classDef ${c.name} fill:${c.fill},stroke:${c.stroke}`);
+    }
+    // Group class assignments by className so each className gets one line.
+    const byClass = new Map();
+    for (const n of nodes) {
+        if (!n.className)
+            continue;
+        const id = sanitizeNodeId(n.id);
+        const list = byClass.get(n.className);
+        if (list)
+            list.push(id);
+        else
+            byClass.set(n.className, [id]);
+    }
+    for (const [name, ids] of byClass) {
+        lines.push(`    class ${ids.join(",")} ${name}`);
+    }
+    return {
+        type: "flowchart TD",
+        title,
+        code: lines.join("\n"),
+    };
+}
