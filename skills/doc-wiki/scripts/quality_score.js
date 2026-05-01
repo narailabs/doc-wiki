@@ -45,6 +45,11 @@ const MERMAID_EXPECTED_TAGS = new Set([
     "infrastructure",
     "erd",
     "topology",
+    "troubleshooting",
+    "runbook",
+    "pipeline",
+    "workflow",
+    "commands",
 ]);
 /** Python: `re.compile(r"\[.*?\]\((?!http|#)(.*?\.md)\)")` — global. */
 const _LINK_RE = /\[.*?\]\((?!http|#)(.*?\.md)\)/g;

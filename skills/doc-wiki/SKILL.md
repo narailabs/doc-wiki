@@ -204,11 +204,12 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - `state == "existing"` → wiki has ≥ 3 atlas pages AND prior atlas event. Run all phases.
    - `state == "hybrid"` → pages exist but no prior atlas event (manual ingests only). Existing-mode discovery; Phase 5's semantic check skips non-atlas pages (those lacking `atlas_run_id` frontmatter).
 
-2. **Discover topics** — union four signals into a deduplicated list:
+2. **Discover topics** — union five signals into a deduplicated list:
    - **Code dirs**: enumerate top-level subdirs of `src/`, `app/`, `services/`, etc. Skip vendor / `node_modules` / `.git`.
    - **ORM domains**: dispatch `wiki-orm-agent` and group entities into topic candidates (e.g., `User` → `auth`; `Invoice` → `billing`).
    - **Existing wiki dirs**: list `wiki/<topic>/` subdirectories (excluding `wiki/outputs/` and similar).
    - **Gitlog churn**: `node {skill_path}/scripts/atlas_gitlog.js classify --wiki-root <root> --since <window> --topics <csv>` flags paths whose changes haven't propagated.
+   - **Tooling / CLI repos** (`domain: tooling` in `wiki.config.yaml` AND a top-level `commands/` directory): also enumerate `commands/*.md` slugs as topic candidates so each slash-command can have its own per-command architecture page. The four audience-flavor pages (commands / configuration / getting-started / troubleshooting) are emitted as Phase 7 globals regardless — this signal only adds per-command topic depth.
 
    Canonicalize each topic name: lowercase-kebab-case, strip `-service`, `-svc`, `-module` suffixes. Deduplicate by canonical name.
 
@@ -233,13 +234,19 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - For uncovered files matching a current-run topic (per autonomy mode): `/doc-wiki:ingest <file> --output <inferred>`.
    - Use `scripts/checkpoint.ts` with `opName: "atlas"` to record completed `(topic, facet)` pairs as `<topic>:<facet>`. On `--resume`, load the snapshot via `load-plan` and skip recorded pairs.
 
-7. **Synthesize globals** — always regenerated, regardless of `--facets` and `--scope`:
-   - `wiki/overview.md`: `node agents/lib/atlas_synthesize.js overview --wiki-root <root>` returns a JSON bundle (`{sources, text, notes}`). LLM-synthesize the master architecture narrative; write to `wiki/overview.md` with `atlas_facet: overview` and the run id in frontmatter.
-   - `wiki/integrations.md`: `atlas_synthesize.js integrations --wiki-root <root>`. LLM-synthesize the external-services map.
-   - `wiki/deploy.md`: `atlas_synthesize.js deploy --wiki-root <root>`. Hand the bundle to `/doc-wiki:ingest <synthetic-source> --output wiki/deploy.md`.
+7. **Synthesize globals** — always regenerated, regardless of `--facets` and `--scope`. **Seven global pages**, in this order; each carries `atlas_facet: <slug>` plus the run id in frontmatter, and a default `audience` derived from the slug (see `references/compilation.md` "Additional frontmatter for atlas pages"):
+   - `wiki/overview.md` (audience: `contributor`): `node agents/lib/atlas_synthesize.js overview --wiki-root <root>` returns a JSON bundle (`{sources, text, notes}`) prefixed with an audience-routing table. LLM-synthesize the master architecture narrative.
+   - `wiki/integrations.md` (audience: `integrator`): `atlas_synthesize.js integrations --wiki-root <root>`. Integration-keyword detection is data-driven from `BUILTIN_PATTERNS` (in `agents/lib/source_registry.ts`) plus a curated SaaS list — adding a connector via `wiki.config.yaml`'s `ecosystem.agents.custom` automatically extends the scan. LLM-synthesize the external-services map.
+   - `wiki/deploy.md` (audience: `integrator`): `atlas_synthesize.js deploy --wiki-root <root>`. Hand the bundle to `/doc-wiki:ingest <synthetic-source> --output wiki/deploy.md`.
+   - `wiki/commands.md` (audience: `operator`): `atlas_synthesize.js commands --repo-root <root>` walks `commands/*.md` plus `### /` headings from any `SKILL.md`. LLM-synthesize a synopsis-table-per-command operator reference.
+   - `wiki/configuration.md` (audience: `operator`): `atlas_synthesize.js configuration --repo-root <root>` walks top-level config files (`wiki.config.yaml`, `*.config.*`, `.env.example`, `pyproject.toml`, …) plus `config/` and `.connectors/` directories. LLM-synthesize a configuration schema reference.
+   - `wiki/getting-started.md` (audience: `new-user`): `atlas_synthesize.js getting-started --repo-root <root>` walks README + `package.json` scripts + bootstrap files (`setup.sh`, `Makefile`, …). LLM-synthesize a numbered first-run walkthrough.
+   - `wiki/troubleshooting.md` (audience: `debugger`): `atlas_synthesize.js troubleshooting --wiki-root <root>` walks recent error events from `events.jsonl` plus the latest atlas drift report. LLM-synthesize symptom → cause → fix triplets.
 
 8. **Finalize**:
    - Run `/doc-wiki:lint` (no `--fix`) and append findings to the drift report.
+   - **Cross-doc-ownership scan**: `node {skill_path}/scripts/atlas_validate.js cross-doc --wiki-root <root>` flags pairs of architecture pages that share both ≥1 source path AND ≥1 Mermaid diagram title. Surface as drift findings — one page should own each shared concept (mirrors the "Cross-doc concerns" registry pattern in `docs/README.md`).
+   - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, and external-services-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
@@ -253,11 +260,11 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 
 These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
 
-**Page template** (every atlas page; targets 300–800 lines, splits to sibling subpages beyond):
+**Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with auto-managed cross-links. The body section is **facet-conditional** so each audience gets the structure it needs.
 
 ```text
 ---
-<frontmatter incl. atlas_facet, atlas_run_id, sources, summary>
+<frontmatter incl. atlas_facet, atlas_run_id, sources, summary, audience>
 ---
 
 # <Title>
@@ -265,7 +272,7 @@ These let atlas recognize its own pages on re-runs and skip semantic-cache inval
 ## TL;DR
 <3–5 sentences>
 
-## <body sections>
+<body sections — see facet table below>
 
 ## How to Go Deeper
 <links to deeper sources or sibling pages>
@@ -273,6 +280,25 @@ These let atlas recognize its own pages on re-runs and skip semantic-cache inval
 ## Related Pages
 <auto-managed by crosslink hook>
 ```
+
+**Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
+
+| Facet | Audience | Body sections (mandatory unless noted) |
+|---|---|---|
+| `architecture` | `contributor` | A layered model section + Mermaid `flowchart` or `sequenceDiagram` + `## Architecture contracts` (numbered load-bearing invariants) |
+| `data-model` | `contributor` | Summary-metrics table + entity↔table mapping + `erDiagram` (mandatory) + unmapped-tables list |
+| `environments` | `contributor` | Per-env table + secret-resolution rules + network topology |
+| `api` | `integrator` | Per-endpoint synopsis + request/response samples + `sequenceDiagram` (recommended) |
+| `operations` | `operator` | Runbook with triggers + recovery steps + escalation contacts |
+| `commands` | `operator` | Per-command `## /<command>:<sub>` with synopsis + args table + examples (shell blocks) |
+| `configuration` | `operator` | One `## <filename>` heading per config file (with a `field \| type \| default \| meaning` table). Then a top-level `## Credential reference grammar` heading (table mapping schemes — `env:`, `keychain:`, `file:`, `cloud:aws-secret/`, `cloud:gcp-secret/` — to resolution targets). Then a top-level `## Resolution order` heading (numbered list, most-specific-wins). Then a top-level `## Worked example`. Subsections like "credential grammar" must NOT live inside the per-file headings — keep them top-level so readers can link directly. |
+| `getting-started` | `new-user` | Numbered prereq → install → first-command walkthrough |
+| `troubleshooting` | `debugger` | `### Symptom / ### Cause / ### Fix` triplets, one per common failure mode |
+| `overview` | `contributor` | Audience-routing table at top, then a layered architecture narrative |
+| `integrations` | `integrator` | Per-service subsection: credentials + actions + sample CLI |
+| `deploy` | `integrator` | Per-target build/deploy sequence + environment matrix |
+
+The `audience` frontmatter drives the section choice; the `atlas_facet` drives which Mermaid diagrams are mandatory (per `quality_score.ts` `MERMAID_EXPECTED_TAGS`). When an existing page contradicts this template (e.g., an `architecture` page with `### Symptom` headings), Phase 5 surfaces it as a structural drift finding.
 
 **Additive re-runs invariant**: pages from prior runs are NEVER deleted by a smaller-`--facets` re-run. Validation (Phase 5) runs on every existing atlas page regardless of current `--facets`. (Re-)generation (Phase 6) only touches facets in the current `--facets` set that are stale or missing.
 
