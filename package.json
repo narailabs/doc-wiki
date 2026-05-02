@@ -54,7 +54,8 @@
     "mysql2": "^3.22.0",
     "narai-primitives": "^2.0.0-rc.1",
     "pdfjs-dist": "^5.6.205",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "smol-toml": "^1.6.1"
   },
   "optionalDependencies": {
     "@aws-sdk/client-cloudwatch": "^3.1030.0",

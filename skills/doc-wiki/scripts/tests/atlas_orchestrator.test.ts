@@ -525,11 +525,151 @@ describe("assembleGapReport", () => {
     expect(report.facetsWithoutCoverage).toEqual([]);
     expect(report.sourceFilesWithNoPage).toEqual([]);
     expect(report.uncoveredFiles).toEqual([]);
+    // Manifest-driven fields default to [] when no inventory is passed.
+    expect(report.endpointsWithoutDocumentation).toEqual([]);
+    expect(report.clientsWithoutDocumentation).toEqual([]);
+  });
+
+  it("flags REST endpoints whose file is not in any page's frontmatter sources", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["api"],
+      entries: [],
+      created_at: new Date().toISOString(),
+    };
+    // auth/api.md sources only src/auth/login.ts — NOT src/users/list.ts
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/auth/api.md",
+      "api",
+      "r1",
+      ["src/auth/login.ts"],
+    );
+    const inventory = {
+      atlas_run_id: "r1",
+      generated_at: "2026-05-01T00:00:00Z",
+      repo_root: "/x",
+      project_metadata: {
+        name: "x",
+        version: "0",
+        language: "typescript",
+        runtime: "node",
+        manifests_seen: ["package.json"],
+      },
+      orm_entities: [],
+      rest_endpoints: [
+        {
+          framework: "express",
+          method: "POST",
+          path: "/api/login",
+          file: "src/auth/login.ts",
+          line: 12,
+        },
+        {
+          framework: "express",
+          method: "GET",
+          path: "/api/users",
+          file: "src/users/list.ts",
+          line: 8,
+        },
+      ],
+      code_clients: [],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const report = assembleGapReport(wikiRoot, plan, undefined, inventory);
+    expect(report.endpointsWithoutDocumentation).toEqual([
+      "GET /api/users (src/users/list.ts:8)",
+    ]);
+  });
+
+  it("flags code clients whose file is not in any page's frontmatter sources", () => {
+    const plan = {
+      topics: [],
+      facets: [],
+      entries: [],
+      created_at: new Date().toISOString(),
+    };
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/orchestration/architecture.md",
+      "architecture",
+      "r1",
+      ["src/orchestrator.ts"],
+    );
+    const inventory = {
+      atlas_run_id: "r1",
+      generated_at: "2026-05-01T00:00:00Z",
+      repo_root: "/x",
+      project_metadata: {
+        name: "x",
+        version: "0",
+        language: "typescript",
+        runtime: "node",
+        manifests_seen: ["package.json"],
+      },
+      orm_entities: [],
+      rest_endpoints: [],
+      code_clients: [
+        { kind: "gather", file: "src/orchestrator.ts", line: 18 },
+        { kind: "fetchWithCaps", file: "src/fetch.ts", line: 7 },
+      ],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const report = assembleGapReport(wikiRoot, plan, undefined, inventory);
+    expect(report.clientsWithoutDocumentation).toEqual([
+      "fetchWithCaps() at src/fetch.ts:7",
+    ]);
+  });
+
+  it("treats a directory in a page's sources as covering descendant files", () => {
+    const plan = {
+      topics: [],
+      facets: [],
+      entries: [],
+      created_at: new Date().toISOString(),
+    };
+    // Page sources `src/auth/` (directory) — should cover src/auth/anything.ts
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/auth/architecture.md",
+      "architecture",
+      "r1",
+      ["src/auth/"],
+    );
+    const inventory = {
+      atlas_run_id: "r1",
+      generated_at: "2026-05-01T00:00:00Z",
+      repo_root: "/x",
+      project_metadata: {
+        name: "x",
+        version: "0",
+        language: "typescript",
+        runtime: "node",
+        manifests_seen: ["package.json"],
+      },
+      orm_entities: [],
+      rest_endpoints: [
+        {
+          framework: "express",
+          method: "POST",
+          path: "/api/login",
+          file: "src/auth/login.ts",
+          line: 12,
+        },
+      ],
+      code_clients: [],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const report = assembleGapReport(wikiRoot, plan, undefined, inventory);
+    expect(report.endpointsWithoutDocumentation).toEqual([]);
   });
 });
 
 describe("renderGapReportMarkdown", () => {
-  it("emits all five sections with placeholder text when empty", () => {
+  it("emits all seven sections with placeholder text when empty", () => {
     const md = renderGapReportMarkdown(
       {
         topicsWithoutPages: [],
@@ -537,6 +677,8 @@ describe("renderGapReportMarkdown", () => {
         sourceFilesWithNoPage: [],
         uncoveredFiles: [],
         externalServicesWithoutDocumentation: [],
+        endpointsWithoutDocumentation: [],
+        clientsWithoutDocumentation: [],
       },
       "2026-04-30T12-00-00",
     );
@@ -546,7 +688,9 @@ describe("renderGapReportMarkdown", () => {
     expect(md).toContain("## Source files with no wiki page");
     expect(md).toContain("## Uncovered files (gitlog)");
     expect(md).toContain("## External services mentioned but undocumented");
-    expect(md.match(/_\(none\)_/g)?.length).toBe(5);
+    expect(md).toContain("## REST endpoints without documentation");
+    expect(md).toContain("## Code clients without documentation");
+    expect(md.match(/_\(none\)_/g)?.length).toBe(7);
   });
 
   it("formats facets-without-coverage as a markdown table", () => {
@@ -560,11 +704,34 @@ describe("renderGapReportMarkdown", () => {
         sourceFilesWithNoPage: [],
         uncoveredFiles: [],
         externalServicesWithoutDocumentation: [],
+        endpointsWithoutDocumentation: [],
+        clientsWithoutDocumentation: [],
       },
       "r1",
     );
     expect(md).toContain("| topic | facet |");
     expect(md).toContain("| auth | data-model |");
     expect(md).toContain("| billing | api |");
+  });
+
+  it("renders REST endpoints + code clients sections when populated", () => {
+    const md = renderGapReportMarkdown(
+      {
+        topicsWithoutPages: [],
+        facetsWithoutCoverage: [],
+        sourceFilesWithNoPage: [],
+        uncoveredFiles: [],
+        externalServicesWithoutDocumentation: [],
+        endpointsWithoutDocumentation: [
+          "GET /api/users (src/routes/users.ts:42)",
+        ],
+        clientsWithoutDocumentation: [
+          "gather() at src/orchestrator.ts:18",
+        ],
+      },
+      "r1",
+    );
+    expect(md).toContain("- GET /api/users (src/routes/users.ts:42)");
+    expect(md).toContain("- gather() at src/orchestrator.ts:18");
   });
 });

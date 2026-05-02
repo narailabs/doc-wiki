@@ -1,0 +1,35 @@
+name: express
+language: typescript
+description: "Express / Node.js HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.mjs"
+    - "**/*.cjs"
+  markers:
+    - pattern: "from \"express\""
+      type: import
+    - pattern: "from 'express'"
+      type: import
+    - pattern: "require('express')"
+      type: import
+    - pattern: "require(\"express\")"
+      type: import
+
+# Each pattern is a JavaScript-flavour regex applied PER LINE so the
+# captured line number is meaningful. method_group / path_group are
+# 1-indexed offsets into the regex's capture groups.
+endpoint_extraction:
+  patterns:
+    # app.get('/path', ...), router.post("/path"), api.put(`/x/:id`)
+    - regex: "(?:app|router|api)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+      method_group: 1
+      path_group: 2
+    # express.Router().get('/path', ...)
+    - regex: "Router\\(\\)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+      method_group: 1
+      path_group: 2

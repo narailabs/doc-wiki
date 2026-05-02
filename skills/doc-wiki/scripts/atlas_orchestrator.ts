@@ -34,6 +34,10 @@ import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 import { computeHash, checkCache } from "./cache_manager.js";
+import {
+  loadInventory,
+  type CodeInventory,
+} from "../../../agents/lib/atlas_inventory.js";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -508,6 +512,18 @@ export interface GapReport {
   uncoveredFiles: string[];
   /** Connector ids mentioned in atlas pages whose connector has no surfaced documentation. */
   externalServicesWithoutDocumentation: string[];
+  /**
+   * REST endpoints from the inventory manifest whose `file` is not
+   * referenced by any atlas page's frontmatter `sources:`. Empty when no
+   * manifest was provided.
+   */
+  endpointsWithoutDocumentation: string[];
+  /**
+   * Code-client callsites (`gather()`, `fetchWithCaps()`) from the
+   * inventory manifest whose `file` is not referenced by any atlas
+   * page's frontmatter `sources:`. Empty when no manifest was provided.
+   */
+  clientsWithoutDocumentation: string[];
 }
 
 /** Builtin connector ids minus `db` — matches the integration-keyword set
@@ -526,11 +542,18 @@ const _GAP_REPORT_KNOWN_CONNECTORS: readonly string[] = [
  * Build a gap report for the given plan. Read-only — does not write
  * anything. The orchestrator (Phase 8) is responsible for serializing the
  * returned object to `wiki/outputs/atlas/<run-id>/gap-report.md`.
+ *
+ * When `inventory` is supplied (typically loaded from
+ * `<wikiRoot>/outputs/atlas/<runId>/code-inventory.json` by the caller),
+ * the report also surfaces REST endpoints and code-client callsites
+ * whose source file is not referenced from any atlas page's frontmatter
+ * `sources:` array. Without an inventory, both new fields are empty.
  */
 export function assembleGapReport(
   wikiRoot: string,
   plan: Plan,
   gitlog?: GitlogClassification,
+  inventory?: CodeInventory,
 ): GapReport {
   const wikiContent = path.join(wikiRoot, "wiki");
 
@@ -579,6 +602,8 @@ export function assembleGapReport(
   const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
 
   // 5. Connectors mentioned in atlas pages but missing from integrations.md.
+  // Single wiki walk also collects every page's `sources:` frontmatter so
+  // step 6 (manifest-driven) doesn't re-walk.
   const externalServicesWithoutDocumentation: string[] = [];
   const integrationsPath = path.join(wikiContent, "integrations.md");
   let integrationsBody = "";
@@ -590,6 +615,7 @@ export function assembleGapReport(
     }
   }
   const archMentions = new Set<string>();
+  const pageSources = new Set<string>();
   if (fs.existsSync(wikiContent)) {
     const walk = (dir: string): void => {
       let entries: fs.Dirent[];
@@ -607,12 +633,22 @@ export function assembleGapReport(
         if (!e.isFile() || !full.endsWith(".md")) continue;
         let body: string;
         try {
-          body = fs.readFileSync(full, "utf-8").toLowerCase();
+          body = fs.readFileSync(full, "utf-8");
         } catch {
           continue;
         }
+        // Frontmatter sources — used by step 6 below.
+        const { frontmatter } = parseFrontmatter(body);
+        const fmSources = frontmatter?.["sources"];
+        if (Array.isArray(fmSources)) {
+          for (const s of fmSources) {
+            if (typeof s === "string" && s.length > 0) pageSources.add(s);
+          }
+        }
+        // Connector keyword scan (lowercased body).
+        const lower = body.toLowerCase();
         for (const k of _GAP_REPORT_KNOWN_CONNECTORS) {
-          if (body.includes(k)) archMentions.add(k);
+          if (lower.includes(k)) archMentions.add(k);
         }
       }
     };
@@ -623,12 +659,45 @@ export function assembleGapReport(
   }
   externalServicesWithoutDocumentation.sort();
 
+  // 6. Manifest-driven: REST endpoints + code clients whose source file
+  // is not referenced by any atlas page. Empty arrays when `inventory`
+  // is undefined, matching the shape callers without inventory expect.
+  const endpointsWithoutDocumentation: string[] = [];
+  const clientsWithoutDocumentation: string[] = [];
+  if (inventory) {
+    const isFileDocumented = (file: string): boolean => {
+      if (file.length === 0) return true; // ignore empty paths
+      if (pageSources.has(file)) return true;
+      for (const src of pageSources) {
+        const dir = src.endsWith("/") ? src : src + "/";
+        if (file.startsWith(dir)) return true;
+      }
+      return false;
+    };
+    for (const ep of inventory.rest_endpoints) {
+      if (!isFileDocumented(ep.file)) {
+        endpointsWithoutDocumentation.push(
+          `${ep.method} ${ep.path} (${ep.file}:${ep.line})`,
+        );
+      }
+    }
+    for (const c of inventory.code_clients) {
+      if (!isFileDocumented(c.file)) {
+        clientsWithoutDocumentation.push(`${c.kind}() at ${c.file}:${c.line}`);
+      }
+    }
+    endpointsWithoutDocumentation.sort();
+    clientsWithoutDocumentation.sort();
+  }
+
   return {
     topicsWithoutPages,
     facetsWithoutCoverage,
     sourceFilesWithNoPage,
     uncoveredFiles,
     externalServicesWithoutDocumentation,
+    endpointsWithoutDocumentation,
+    clientsWithoutDocumentation,
   };
 }
 
@@ -695,6 +764,26 @@ export function renderGapReportMarkdown(report: GapReport, runId: string): strin
   } else {
     lines.push("");
     for (const s of report.externalServicesWithoutDocumentation) lines.push(`- ${s}`);
+  }
+  lines.push("");
+
+  lines.push("## REST endpoints without documentation");
+  if (report.endpointsWithoutDocumentation.length === 0) {
+    lines.push("");
+    lines.push("_(none)_");
+  } else {
+    lines.push("");
+    for (const e of report.endpointsWithoutDocumentation) lines.push(`- ${e}`);
+  }
+  lines.push("");
+
+  lines.push("## Code clients without documentation");
+  if (report.clientsWithoutDocumentation.length === 0) {
+    lines.push("");
+    lines.push("_(none)_");
+  } else {
+    lines.push("");
+    for (const c of report.clientsWithoutDocumentation) lines.push(`- ${c}`);
   }
   lines.push("");
 
@@ -861,8 +950,15 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
         return 2;
       }
     }
-    const report = assembleGapReport(wikiRoot, plan, gitlog);
+    // Load the per-run inventory manifest if --run-id is given. It's
+    // optional — a missing manifest leaves the manifest-driven report
+    // fields empty, matching the gitlog-omitted shape.
     const runIdRaw = parsed.values["runId"];
+    let inventory: CodeInventory | undefined;
+    if (typeof runIdRaw === "string" && runIdRaw.length > 0) {
+      inventory = loadInventory(wikiRoot, runIdRaw) ?? undefined;
+    }
+    const report = assembleGapReport(wikiRoot, plan, gitlog, inventory);
     if (typeof runIdRaw === "string" && runIdRaw.length > 0) {
       const md = renderGapReportMarkdown(report, runIdRaw);
       const target = path.join(
