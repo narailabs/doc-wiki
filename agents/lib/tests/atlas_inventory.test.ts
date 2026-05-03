@@ -355,7 +355,7 @@ describe("Flask profile", () => {
     expect(p?.language).toBe("python");
   });
 
-  it("extracts @app.route(methods=) and @app.<verb> shorthand", () => {
+  it("extracts @app.route(methods=), @app.<verb> shorthand, and bare @app.route default-GET", () => {
     fs.writeFileSync(
       path.join(tmpPath, "app.py"),
       `from flask import Flask
@@ -372,6 +372,12 @@ def show(user_id): pass
 
 @app.delete('/api/users/<int:user_id>')
 def remove(user_id): pass
+
+@app.route("/api/health")
+def health(): pass
+
+@app.route('/api/version')
+def version(): pass
 `,
     );
     const profile = loadRestProfile("flask")!;
@@ -381,6 +387,25 @@ def remove(user_id): pass
     expect(tuples).toContain("POST /api/users");
     expect(tuples).toContain("GET /api/users/<int:user_id>");
     expect(tuples).toContain("DELETE /api/users/<int:user_id>");
+    expect(tuples).toContain("GET /api/health");
+    expect(tuples).toContain("GET /api/version");
+  });
+
+  it("does not double-count the explicit-methods= form via the bare-route pattern", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.py"),
+      `from flask import Flask
+app = Flask(__name__)
+
+@app.route("/api/users", methods=["POST"])
+def create_user(): pass
+`,
+    );
+    const profile = loadRestProfile("flask")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    expect(eps).toHaveLength(1);
+    expect(eps[0]?.method).toBe("POST");
+    expect(eps[0]?.path).toBe("/api/users");
   });
 });
 
