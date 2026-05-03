@@ -22,11 +22,13 @@ import {
   checkOrmMappingFreshness,
   checkOrphans,
   checkProvenanceCompleteness,
+  checkReferencesInventory,
   checkStaleContent,
   checkSummariesSync,
   checkThinClusters,
   lintWiki,
 } from "../lint_checks.js";
+import { type CodeInventory } from "../../../../agents/lib/atlas_inventory.js";
 import {
   SCRIPTS_DIR,
   makeInitializedWiki,
@@ -307,6 +309,140 @@ describe("TestCheckCodeRefDrift", () => {
     const issues = checkCodeRefDrift(wiki);
     const refIssues = issues.filter((i) => i.page.includes("ref.md"));
     expect(refIssues).toEqual([]);
+  });
+});
+
+describe("TestCheckReferencesInventory", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-refs-inv-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function makeInventory(overrides: {
+    orm?: string[];
+    rest?: string[];
+    clients?: string[];
+    manifests?: string[];
+  } = {}): CodeInventory {
+    return {
+      atlas_run_id: "2026-05-03T00-00-00",
+      generated_at: "2026-05-03T00:00:00.000Z",
+      repo_root: wiki,
+      project_metadata: {
+        name: "x",
+        version: "0.0.0",
+        language: "unknown",
+        runtime: "",
+        manifests_seen: overrides.manifests ?? [],
+      },
+      orm_entities: (overrides.orm ?? []).map((source_file) => ({
+        profile: "sqlalchemy",
+        class_name: "X",
+        table_name: "x",
+        schema_name: "",
+        source_file,
+        columns: [],
+        relationships: [],
+      })),
+      rest_endpoints: (overrides.rest ?? []).map((file) => ({
+        framework: "fastapi",
+        method: "GET",
+        path: "/x",
+        file,
+        line: 1,
+      })),
+      code_clients: (overrides.clients ?? []).map((file) => ({
+        kind: "gather",
+        file,
+        line: 1,
+      })),
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+  }
+
+  function pageWithRefs(name: string, refs: Array<{ path: string }>): void {
+    const fm = fullFm({ references: refs });
+    writePage(path.join(wiki, "wiki", name), fm, "body\n");
+  }
+
+  it("flags references whose path is absent from every inventory bucket", () => {
+    pageWithRefs("ref.md", [{ path: "src/missing.py" }]);
+    const inv = makeInventory({ orm: ["src/auth.py"] });
+    const issues = checkReferencesInventory(wiki, undefined, inv);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.severity).toBe("warning");
+    expect(issues[0]?.category).toBe("references_inventory");
+    expect(issues[0]?.detail).toContain("src/missing.py");
+  });
+
+  it("accepts paths in orm_entities, rest_endpoints, code_clients, and manifests_seen", () => {
+    pageWithRefs("p1.md", [{ path: "src/auth/models.py" }]);
+    pageWithRefs("p2.md", [{ path: "src/billing/api.ts" }]);
+    pageWithRefs("p3.md", [{ path: "src/orchestrator.ts" }]);
+    pageWithRefs("p4.md", [{ path: "package.json" }]);
+    const inv = makeInventory({
+      orm: ["src/auth/models.py"],
+      rest: ["src/billing/api.ts"],
+      clients: ["src/orchestrator.ts"],
+      manifests: ["package.json"],
+    });
+    const issues = checkReferencesInventory(wiki, undefined, inv);
+    expect(issues).toEqual([]);
+  });
+
+  it("returns no issues when no inventory is provided", () => {
+    pageWithRefs("ref.md", [{ path: "src/missing.py" }]);
+    expect(checkReferencesInventory(wiki, undefined, null)).toEqual([]);
+    expect(checkReferencesInventory(wiki)).toEqual([]);
+  });
+
+  it("flags only the offending refs when a page mixes valid and invalid", () => {
+    pageWithRefs("ref.md", [
+      { path: "src/auth/models.py" },
+      { path: "src/missing.py" },
+      { path: "src/also-missing.py" },
+    ]);
+    const inv = makeInventory({ orm: ["src/auth/models.py"] });
+    const issues = checkReferencesInventory(wiki, undefined, inv);
+    expect(issues).toHaveLength(2);
+    const detailJoined = issues.map((i) => i.detail).join("|");
+    expect(detailJoined).toContain("src/missing.py");
+    expect(detailJoined).toContain("src/also-missing.py");
+    expect(detailJoined).not.toContain("src/auth/models.py");
+  });
+
+  it("ignores pages without a references field", () => {
+    writePage(
+      path.join(wiki, "wiki", "plain.md"),
+      fullFm(),
+      "no references frontmatter\n",
+    );
+    const inv = makeInventory();
+    expect(checkReferencesInventory(wiki, undefined, inv)).toEqual([]);
+  });
+
+  it("skips malformed references entries silently", () => {
+    pageWithRefs("ref.md", [
+      { path: "src/missing.py" },
+    ]);
+    // Append a non-object entry directly so YAML preserves the malformed shape.
+    const refsManual = path.join(wiki, "wiki", "weird.md");
+    const fm = fullFm({ references: [null, "string-not-object", { other: "no-path" }] });
+    writePage(refsManual, fm, "weird refs\n");
+
+    const inv = makeInventory();
+    const issues = checkReferencesInventory(wiki, undefined, inv);
+    // Only ref.md's missing.py should fire; weird.md's malformed entries
+    // are silently skipped (no path field, no string entry, no null entry).
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.page.endsWith("ref.md")).toBe(true);
   });
 });
 
@@ -869,6 +1005,72 @@ describe("TestLintChecksCLI", () => {
     const result = runCli(CLI, ["--help"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--page PAGE");
+  });
+
+  it("test_cli_inventory_run_id_drives_references_inventory_check", () => {
+    // Persist a manifest at <wiki>/outputs/atlas/<run-id>/code-inventory.json
+    // that knows about src/auth/models.py. Then write a wiki page that
+    // references both that file (valid) and src/missing.py (invalid).
+    const runId = "2026-05-03T00-00-00";
+    const inv = {
+      atlas_run_id: runId,
+      generated_at: "2026-05-03T00:00:00.000Z",
+      repo_root: wiki,
+      project_metadata: {
+        name: "x",
+        version: "0.0.0",
+        language: "unknown",
+        runtime: "",
+        manifests_seen: ["package.json"],
+      },
+      orm_entities: [
+        {
+          profile: "sqlalchemy",
+          class_name: "User",
+          table_name: "users",
+          schema_name: "",
+          source_file: "src/auth/models.py",
+          columns: [],
+          relationships: [],
+        },
+      ],
+      rest_endpoints: [],
+      code_clients: [],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const manifestPath = path.join(
+      wiki,
+      "outputs",
+      "atlas",
+      runId,
+      "code-inventory.json",
+    );
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.writeFileSync(manifestPath, JSON.stringify(inv));
+
+    const fm = fullFm({
+      references: [
+        { path: "src/auth/models.py" },
+        { path: "src/missing.py" },
+      ],
+    });
+    writePage(path.join(wiki, "wiki", "ref.md"), fm, "body\n");
+
+    const result = runCli(CLI, [
+      "--wiki-root", wiki,
+      "--category", "references_inventory",
+      "--inventory-run-id", runId,
+    ]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout) as {
+      issues: Array<{ category: string; detail: string }>;
+    };
+    const refIssues = data.issues.filter(
+      (i) => i.category === "references_inventory",
+    );
+    expect(refIssues).toHaveLength(1);
+    expect(refIssues[0]?.detail).toContain("src/missing.py");
   });
 
 });
