@@ -1,0 +1,33 @@
+name: hono
+language: typescript
+description: "Hono (Cloudflare Workers / Deno / Bun / Node) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.mjs"
+  markers:
+    - pattern: "from \"hono\""
+      type: import
+    - pattern: "from 'hono'"
+      type: import
+    - pattern: "from \"hono/"
+      type: import
+    - pattern: "from 'hono/"
+      type: import
+    - pattern: "new Hono("
+      type: instantiation
+
+# Hono's surface is intentionally Express-like: `app.get('/x', c => ...)`
+# and chainable `.get()`/`.post()` etc. The marker check disambiguates
+# from Express: the inventory dedup keeps the first-matched profile's
+# framework field, so on a true Hono file (with `from "hono"` but not
+# `from "express"`), the framework correctly reads `hono`.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:app|router|api|hono)\\.(get|post|put|delete|patch|options|head|all)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+      method_group: 1
+      path_group: 2
