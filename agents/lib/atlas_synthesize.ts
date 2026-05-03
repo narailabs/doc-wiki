@@ -33,6 +33,7 @@ import {
   type PhaseEdge,
   type PhaseNode,
 } from "./mermaid_format.js";
+import { walkRepoTargets } from "./repo_walker.js";
 import { builtinConnectorIds } from "./source_registry.js";
 
 // ── Shared types ───────────────────────────────────────────────────
@@ -324,61 +325,28 @@ const DEPLOY_DIR_PATTERNS: ReadonlyArray<{ dir: string; rx: RegExp }> = [
 ];
 
 /**
- * Walk the repo root looking for canonical build/deploy files. Returns the
- * relative paths (sorted) plus a concatenated text bundle the orchestrator
- * passes to `/doc-wiki:ingest --output wiki/deploy.md`.
- *
- * Big files (>200 KB) are truncated with a marker line — full inclusion
- * would blow the synthesis context budget for little additional value.
+ * Body-truncation cap for files inlined into a synthesis bundle. Beyond
+ * this, the file is sliced and a marker line is appended so the LLM sees
+ * the truncation. Tuned to keep a single bundle well under the synthesis
+ * context budget while preserving most real-world config / Dockerfile /
+ * workflow content.
  */
-export function assembleDeployInputs(repoRoot: string): SynthesisBundle {
-  const sources: string[] = [];
+const _BUNDLE_FILE_TRUNCATE_BYTES = 200 * 1024;
+
+/**
+ * Read each `paths` entry under `repoRoot`, truncate at
+ * {@link _BUNDLE_FILE_TRUNCATE_BYTES}, and format as a fenced
+ * `## <rel>` section. Per-file read failures append to `notes` and skip
+ * the file. Shared by `assembleDeployInputs` and
+ * `assembleConfigurationInputs`.
+ */
+function _readAndFormatBundleFiles(
+  repoRoot: string,
+  paths: readonly string[],
+  notes: string[],
+): string[] {
   const parts: string[] = [];
-  const notes: string[] = [];
-
-  // Top-level files.
-  let topLevel: fs.Dirent[];
-  try {
-    topLevel = fs.readdirSync(repoRoot, { withFileTypes: true });
-  } catch {
-    notes.push(`could not read repo root: ${repoRoot}`);
-    return { sources, text: "", notes };
-  }
-  for (const e of topLevel) {
-    if (!e.isFile()) continue;
-    if (DEPLOY_FILE_GLOBS.some((rx) => rx.test(e.name))) {
-      sources.push(e.name);
-    }
-  }
-
-  // Directory patterns.
-  for (const { dir, rx } of DEPLOY_DIR_PATTERNS) {
-    const abs = path.join(repoRoot, dir);
-    if (!fs.existsSync(abs)) continue;
-    const walk = (d: string, relBase: string): void => {
-      let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(d, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
-        const full = path.join(d, e.name);
-        const rel = path.posix.join(relBase, e.name);
-        if (e.isDirectory()) walk(full, rel);
-        else if (e.isFile() && rx.test(e.name)) sources.push(rel);
-      }
-    };
-    walk(abs, dir);
-  }
-
-  sources.sort();
-  if (sources.length === 0) {
-    notes.push("no build/deploy files matched — wiki/deploy.md will be sparse");
-    return { sources, text: "", notes };
-  }
-
-  for (const rel of sources) {
+  for (const rel of paths) {
     const abs = path.join(repoRoot, rel);
     let body: string;
     try {
@@ -387,10 +355,34 @@ export function assembleDeployInputs(repoRoot: string): SynthesisBundle {
       notes.push(`could not read ${rel}`);
       continue;
     }
-    const truncated = body.length > 200 * 1024 ? body.slice(0, 200 * 1024) + "\n... [truncated]\n" : body;
+    const truncated =
+      body.length > _BUNDLE_FILE_TRUNCATE_BYTES
+        ? body.slice(0, _BUNDLE_FILE_TRUNCATE_BYTES) + "\n... [truncated]\n"
+        : body;
     parts.push(`## ${rel}\n\n\`\`\`\n${truncated}\n\`\`\`\n`);
   }
-  return { sources, text: parts.join("\n"), notes };
+  return parts;
+}
+
+/**
+ * Walk the repo root looking for canonical build/deploy files. Returns
+ * the relative paths (sorted) plus a concatenated text bundle the
+ * orchestrator passes to `/doc-wiki:ingest --output wiki/deploy.md`.
+ *
+ * Big files (>200 KB) are truncated with a marker line — full inclusion
+ * would blow the synthesis context budget for little additional value.
+ */
+export function assembleDeployInputs(repoRoot: string): SynthesisBundle {
+  const { paths, notes } = walkRepoTargets(repoRoot, {
+    topLevelBasenames: DEPLOY_FILE_GLOBS,
+    subdirPatterns: DEPLOY_DIR_PATTERNS,
+  });
+  if (paths.length === 0) {
+    notes.push("no build/deploy files matched — wiki/deploy.md will be sparse");
+    return { sources: [], text: "", notes };
+  }
+  const parts = _readAndFormatBundleFiles(repoRoot, paths, notes);
+  return { sources: [...paths], text: parts.join("\n"), notes };
 }
 
 /**
@@ -657,68 +649,18 @@ const _CONFIGURATION_DIR_PATTERNS: ReadonlyArray<{ dir: string; rx: RegExp }> = 
  * inline so the synthesis step can note the truncation when relevant.
  */
 export function assembleConfigurationInputs(repoRoot: string): SynthesisBundle {
-  const sources: string[] = [];
-  const parts: string[] = [];
-  const notes: string[] = [];
-
-  // Top-level files matching configuration globs.
-  let topLevel: fs.Dirent[];
-  try {
-    topLevel = fs.readdirSync(repoRoot, { withFileTypes: true });
-  } catch {
-    notes.push(`could not read repo root: ${repoRoot}`);
-    return { sources, text: "", notes };
+  const { paths, notes } = walkRepoTargets(repoRoot, {
+    topLevelBasenames: _CONFIGURATION_FILE_GLOBS,
+    subdirPatterns: _CONFIGURATION_DIR_PATTERNS,
+  });
+  if (paths.length === 0) {
+    notes.push(
+      "no configuration files matched — wiki/configuration.md will be sparse",
+    );
+    return { sources: [], text: "", notes };
   }
-  for (const e of topLevel) {
-    if (!e.isFile()) continue;
-    if (_CONFIGURATION_FILE_GLOBS.some((rx) => rx.test(e.name))) {
-      sources.push(e.name);
-    }
-  }
-
-  // Directory patterns.
-  for (const { dir, rx } of _CONFIGURATION_DIR_PATTERNS) {
-    const abs = path.join(repoRoot, dir);
-    if (!fs.existsSync(abs)) continue;
-    const walk = (d: string, relBase: string): void => {
-      let entries: fs.Dirent[];
-      try {
-        entries = fs.readdirSync(d, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const e of entries) {
-        const full = path.join(d, e.name);
-        const rel = path.posix.join(relBase, e.name);
-        if (e.isDirectory()) walk(full, rel);
-        else if (e.isFile() && rx.test(e.name)) sources.push(rel);
-      }
-    };
-    walk(abs, dir);
-  }
-
-  sources.sort();
-  if (sources.length === 0) {
-    notes.push("no configuration files matched — wiki/configuration.md will be sparse");
-    return { sources, text: "", notes };
-  }
-
-  for (const rel of sources) {
-    const abs = path.join(repoRoot, rel);
-    let body: string;
-    try {
-      body = fs.readFileSync(abs, "utf-8");
-    } catch {
-      notes.push(`could not read ${rel}`);
-      continue;
-    }
-    const truncated =
-      body.length > 200 * 1024
-        ? body.slice(0, 200 * 1024) + "\n... [truncated]\n"
-        : body;
-    parts.push(`## ${rel}\n\n\`\`\`\n${truncated}\n\`\`\`\n`);
-  }
-  return { sources, text: parts.join("\n"), notes };
+  const parts = _readAndFormatBundleFiles(repoRoot, paths, notes);
+  return { sources: [...paths], text: parts.join("\n"), notes };
 }
 
 // ── Troubleshooting bundle ─────────────────────────────────────────
