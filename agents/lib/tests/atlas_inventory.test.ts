@@ -277,19 +277,27 @@ const ignored = "app.delete('/x')"; // string literal, but still matches by rege
 // ── discoverShippedRestProfiles + per-profile fixtures ─────────────
 
 describe("discoverShippedRestProfiles", () => {
-  it("returns all ten shipped profiles, sorted", () => {
+  it("returns all eighteen shipped profiles, sorted", () => {
     const names = discoverShippedRestProfiles();
     expect(names).toEqual([
+      "actix",
       "aspnet",
       "django",
+      "echo",
       "express",
       "fastapi",
+      "fastify",
       "flask",
       "gin",
       "hono",
+      "koa",
       "laravel",
+      "phoenix",
       "rails",
+      "rocket",
+      "slim",
       "spring",
+      "vapor",
     ]);
   });
 });
@@ -674,6 +682,343 @@ end
   });
 });
 
+describe("Fastify profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-fastify-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("fastify");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("typescript");
+  });
+
+  it("extracts fastify.* / app.* / server.* verb routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "server.ts"),
+      `import Fastify from 'fastify';
+const fastify = Fastify();
+fastify.get('/api/users', async () => []);
+fastify.post("/api/users", async () => ({}));
+app.put(\`/api/users/:id\`, async () => ({}));
+server.delete('/api/users/:id', async () => undefined);
+`,
+    );
+    const profile = loadRestProfile("fastify")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/:id");
+    expect(tuples).toContain("DELETE /api/users/:id");
+    const get = eps.find((e) => e.method === "GET")!;
+    expect(get.line).toBe(3);
+  });
+
+  it("skips files without a fastify import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "x.ts"),
+      `app.get('/api/users', async () => []);\n`,
+    );
+    const profile = loadRestProfile("fastify")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Koa profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-koa-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("koa");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("typescript");
+  });
+
+  it("extracts router.* / api.* / app.* verb routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "routes.ts"),
+      `import Router from "@koa/router";
+const router = new Router();
+router.get('/api/users', (ctx) => {});
+router.post("/api/users", (ctx) => {});
+api.put(\`/api/users/:id\`, (ctx) => {});
+app.delete('/api/users/:id', (ctx) => {});
+`,
+    );
+    const profile = loadRestProfile("koa")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/:id");
+    expect(tuples).toContain("DELETE /api/users/:id");
+    const get = eps.find((e) => e.method === "GET")!;
+    expect(get.line).toBe(3);
+  });
+
+  it("skips files without a koa-router import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "x.ts"),
+      `router.get('/api/users', (ctx) => {});\n`,
+    );
+    const profile = loadRestProfile("koa")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Echo profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-echo-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("echo");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("go");
+  });
+
+  it("extracts e.* / g.* SHOUTING-CASE verb routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "main.go"),
+      `package main
+
+import "github.com/labstack/echo/v4"
+
+func main() {
+    e := echo.New()
+    e.GET("/api/users", listUsers)
+    e.POST("/api/users", createUser)
+    g := e.Group("/v2")
+    g.PUT("/api/users/:id", updateUser)
+    api.DELETE("/api/users/:id", deleteUser)
+    e.Start(":8080")
+}
+`,
+    );
+    const profile = loadRestProfile("echo")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/:id");
+    expect(tuples).toContain("DELETE /api/users/:id");
+  });
+});
+
+describe("Rocket profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-rocket-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("rocket");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("rust");
+  });
+
+  it("extracts #[verb(\"/path\")] attribute-macro routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "main.rs"),
+      `#[macro_use] extern crate rocket;
+use rocket::*;
+
+#[get("/api/users")]
+fn list() -> &'static str { "" }
+
+#[post("/api/users")]
+fn create() {}
+
+#[put("/api/users/<id>")]
+fn update() {}
+
+#[delete("/api/users/<id>")]
+fn destroy() {}
+`,
+    );
+    const profile = loadRestProfile("rocket")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/<id>");
+    expect(tuples).toContain("DELETE /api/users/<id>");
+    const get = eps.find((e) => e.method === "GET")!;
+    expect(get.line).toBe(4);
+  });
+});
+
+describe("Actix profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-actix-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("actix");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("rust");
+  });
+
+  it("extracts .route(\"/path\", web::verb()) registration routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "main.rs"),
+      `use actix_web::{web, App, HttpServer};
+
+fn main() {
+    let app = App::new()
+        .route("/api/users", web::get().to(list_users))
+        .route("/api/users", web::post().to(create_user))
+        .route("/api/users/{id}", web::put().to(update_user))
+        .route("/api/users/{id}", web::delete().to(delete_user));
+}
+`,
+    );
+    const profile = loadRestProfile("actix")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/{id}");
+    expect(tuples).toContain("DELETE /api/users/{id}");
+  });
+
+  it("skips Rust files without an actix_web import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "x.rs"),
+      `app.route("/x", web::get().to(h));\n`,
+    );
+    const profile = loadRestProfile("actix")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Slim profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-slim-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("slim");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("php");
+  });
+
+  it("extracts $app->verb('/path') routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "index.php"),
+      `<?php
+use Slim\\App;
+use Slim\\Factory\\AppFactory;
+
+$app = AppFactory::create();
+$app->get('/api/users', function ($req, $res) {});
+$app->post("/api/users", function ($req, $res) {});
+$app->put('/api/users/{id}', function ($req, $res) {});
+$app->delete("/api/users/{id}", function ($req, $res) {});
+`,
+    );
+    const profile = loadRestProfile("slim")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/{id}");
+    expect(tuples).toContain("DELETE /api/users/{id}");
+    const get = eps.find((e) => e.method === "GET")!;
+    expect(get.line).toBe(6);
+  });
+});
+
+describe("Phoenix profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-phoenix-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("phoenix");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("elixir");
+  });
+
+  it("extracts router-block verb declarations", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "router.ex"),
+      `defmodule MyAppWeb.Router do
+  use Phoenix.Router
+
+  scope "/api", MyAppWeb do
+    get "/users", UserController, :index
+    post "/users", UserController, :create
+    put "/users/:id", UserController, :update
+    delete "/users/:id", UserController, :delete
+  end
+end
+`,
+    );
+    const profile = loadRestProfile("phoenix")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /users");
+    expect(tuples).toContain("POST /users");
+    expect(tuples).toContain("PUT /users/:id");
+    expect(tuples).toContain("DELETE /users/:id");
+  });
+
+  it("skips Elixir files without a Phoenix.Router marker", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "x.ex"),
+      `get "/internal", Handler, :run\n`,
+    );
+    const profile = loadRestProfile("phoenix")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Vapor profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-vapor-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("vapor");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("swift");
+  });
+
+  it("extracts app.* / routes.* / grouped.* verb routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "routes.swift"),
+      `import Vapor
+
+func routes(_ app: Application) throws {
+    app.get("users") { req in [] }
+    app.post("users") { req in "" }
+    routes.put("users/:id") { req in "" }
+    let grouped = app.grouped("v2")
+    grouped.delete("users/:id") { req in "" }
+}
+`,
+    );
+    const profile = loadRestProfile("vapor")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET users");
+    expect(tuples).toContain("POST users");
+    expect(tuples).toContain("PUT users/:id");
+    expect(tuples).toContain("DELETE users/:id");
+  });
+
+  it("skips Swift files without a Vapor marker", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "x.swift"),
+      `app.get("internal") { req in [] }\n`,
+    );
+    const profile = loadRestProfile("vapor")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
 // ── resolveRestProfiles ─────────────────────────────────────────────
 
 describe("resolveRestProfiles", () => {
@@ -689,20 +1034,28 @@ describe("resolveRestProfiles", () => {
     cleanupTmpPath(tmpPath);
   });
 
-  it("returns all ten shipped profiles when no name list is given", () => {
+  it("returns all eighteen shipped profiles when no name list is given", () => {
     const out = resolveRestProfiles({});
     const names = out.map((p) => p.name).sort();
     expect(names).toEqual([
+      "actix",
       "aspnet",
       "django",
+      "echo",
       "express",
       "fastapi",
+      "fastify",
       "flask",
       "gin",
       "hono",
+      "koa",
       "laravel",
+      "phoenix",
       "rails",
+      "rocket",
+      "slim",
       "spring",
+      "vapor",
     ]);
   });
 
@@ -776,16 +1129,24 @@ ecosystem:
     fs.writeFileSync(configPath, `wiki:\n  name: x\n`);
     const out = resolveRestProfiles({ wikiConfigPath: configPath });
     expect(out.map((p) => p.name).sort()).toEqual([
+      "actix",
       "aspnet",
       "django",
+      "echo",
       "express",
       "fastapi",
+      "fastify",
       "flask",
       "gin",
       "hono",
+      "koa",
       "laravel",
+      "phoenix",
       "rails",
+      "rocket",
+      "slim",
       "spring",
+      "vapor",
     ]);
   });
 
