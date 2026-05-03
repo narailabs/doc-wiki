@@ -20,7 +20,7 @@ npm install
 npm run build
 ```
 
-`npm install` pulls down the `narai-primitives` package (which bundles the connector hub, toolkit, config loader, and seven connectors) and `@narai/credential-providers` (kept as a separate package). `npm run build` invokes `tsc -b tsconfig.build.json`, which emits `.js` siblings next to every `.ts` file under `skills/doc-wiki/scripts/` and `agents/lib/`. The TypeScript scripts are then ready to be invoked via `node`.
+`npm install` pulls down the `narai-primitives` package, which bundles the connector hub, toolkit, config loader, seven connectors, and the credential-resolution layer (exposed at the `narai-primitives/credentials` subpath). `npm run build` invokes `tsc -b tsconfig.build.json`, which emits `.js` siblings next to every `.ts` file under `skills/doc-wiki/scripts/` and `agents/lib/`. The TypeScript scripts are then ready to be invoked via `node`.
 
 Verify the build worked:
 

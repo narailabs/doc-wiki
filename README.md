@@ -81,7 +81,7 @@ After three or four `/doc-wiki:ingest` (or one `/doc-wiki:atlas`) call you can:
 
 - **10 slash commands** — `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query` (synthesis or `--from`/`--to` path mode), `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:refresh`, `/doc-wiki:stats`. See [`docs/commands.md`](docs/commands.md).
 - **3 sub-agents** — `wiki-orm-agent` (entity-to-table mapping), `wiki-mermaid-agent` (deterministic diagram generation), `wiki-claude-md-agent` (`CLAUDE.md` maintenance with managed sections).
-- **7 connectors via [`narai-primitives`](https://github.com/narailabs/narai-primitives)** — `db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`. Plus `@narai/credential-providers` for env-var / keychain / file / cloud-secret resolution.
+- **7 connectors via [`narai-primitives`](https://github.com/narailabs/narai-primitives)** — `db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`. The `narai-primitives/credentials` subpath provides env-var / keychain / file / cloud-secret resolution.
 - **5 reference docs** at [`skills/doc-wiki/references/`](skills/doc-wiki/references/) — autonomy, code-locality, compilation, operations, quality.
 - **~21 TypeScript helper scripts** — deterministic ops (cache, lint, scoring, graph queries, security, extraction).
 - **934 vitest tests** (5 skipped, gated behind `TEST_LIVE_*` env vars).

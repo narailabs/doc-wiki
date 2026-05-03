@@ -1,6 +1,6 @@
 # Connectors and the `narai-primitives` Stack
 
-doc-wiki itself does not talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. All external-source fetching is delegated to a single dependency: [`narai-primitives`](https://github.com/narailabs/narai-primitives), a bundled package that ships a planner-dispatcher (`gather()`), a connector framework (the toolkit), a config loader, and seven read-only built-in connectors. Credentials are resolved by a separately published package, [`@narai/credential-providers`](#credential-providers).
+doc-wiki itself does not talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. All external-source fetching is delegated to a single dependency: [`narai-primitives`](https://github.com/narailabs/narai-primitives), a bundled package that ships a planner-dispatcher (`gather()`), a connector framework (the toolkit), a config loader, seven read-only built-in connectors, and the [credential-resolution layer](#credential-providers).
 
 This document is the API and operations reference for that stack. For doc-wiki's *use* of `gather()` (the `/doc-wiki:ingest` step 7 hook, the `mermaid_augment.ts` decoration site), see [`architecture.md`](architecture.md).
 
@@ -26,9 +26,9 @@ This document is the API and operations reference for that stack. For doc-wiki's
 
 ## Why `narai-primitives`
 
-Pre-2.0, doc-wiki depended on eight separate `@narai/*` packages: `connector-hub`, `connector-toolkit`, `connector-config`, and one `*-agent-connector` package per service (`db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`). Maintaining eight packages with synchronized release cadences was a tax on every change.
+Pre-2.0, doc-wiki depended on eight separate `@narai/*` packages: `connector-hub`, `connector-toolkit`, `connector-config`, and one `*-agent-connector` package per service (`db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`), plus `@narai/credential-providers` as a ninth. Maintaining nine packages with synchronized release cadences was a tax on every change.
 
-With `narai-primitives@2.0.0`, all eight are bundled into a single deliverable. The eight legacy packages are deprecated on npm. `@narai/credential-providers` stays separate because it is reused by other tools (not just `narai-primitives`).
+With `narai-primitives@2.0.0`, the eight connector packages were bundled into a single deliverable. With `narai-primitives@2.1.0`, `@narai/credential-providers` was absorbed too — its API is now reachable at the `narai-primitives/credentials` subpath. All nine legacy packages are deprecated on npm.
 
 Practical effect for doc-wiki:
 
@@ -249,7 +249,7 @@ The resolution order is: user-global → per-repo overlay (wins on conflict) →
 
 ## Credential providers
 
-`@narai/credential-providers` is a separate npm package, kept out of `narai-primitives` because it's reused by other Narailabs tools. doc-wiki has it as a direct dependency (`@narai/credential-providers@^0.2.1`).
+The credential-resolution layer ships as the `narai-primitives/credentials` subpath (absorbed into the bundle in v2.1; previously published as the standalone `@narai/credential-providers` package, now deprecated on npm). doc-wiki imports it directly from the `narai-primitives` dependency it already declares — no separate install.
 
 ### Reference grammar
 
@@ -277,7 +277,7 @@ import {
   FileProvider,
   CloudSecretsProvider,
   parseCredentialRef,
-} from "@narai/credential-providers";
+} from "narai-primitives/credentials";
 
 // Resolve a single ref:
 const token = await resolveSecret("env:GITHUB_TOKEN");
@@ -302,7 +302,7 @@ Every connector follows the same pattern:
 - Has a CLI binary (e.g., `db-agent-connector`, accessible via `npx narai db <action>`).
 - Returns a JSON envelope on success: `{ status: "ok", data: {...} }`.
 - Returns a structured envelope on failure: `{ status: "denied" | "escalate" | "error", reason: ..., code: ... }`.
-- Loads credentials lazily via `@narai/credential-providers`.
+- Loads credentials lazily via `narai-primitives/credentials`.
 - Lazy-imports its SDK (so installing `narai-primitives` doesn't pull every cloud SDK upfront).
 
 ### `db` connector

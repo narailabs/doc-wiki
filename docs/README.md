@@ -26,7 +26,7 @@ This directory holds the public-facing documentation for doc-wiki. The internal 
 | [`configuration.md`](configuration.md) | Operators / contributors | Schema reference for `wiki.config.yaml` and `.connectors/config.yaml`, plus credential-ref grammar |
 | [`rest-profiles.md`](rest-profiles.md) | Contributors / integrators | How to author a custom REST profile — schema, regex grouping, `default_method`, `file_prefix`, with worked examples |
 | [`architecture.md`](architecture.md) | Contributors / integrators | Three-layer model, ingest pipeline, scripts/agents/libraries inventory, Mermaid diagrams, architecture contracts |
-| [`connectors.md`](connectors.md) | Contributors / integrators | The `narai-primitives` stack — hub, toolkit, config, 7 connectors, `@narai/credential-providers` |
+| [`connectors.md`](connectors.md) | Contributors / integrators | The `narai-primitives` stack — hub, toolkit, config, 7 connectors, credential providers |
 | [`troubleshooting.md`](troubleshooting.md) | Anyone hitting an error | Common failures and how to fix them |
 
 ## Cross-doc concerns

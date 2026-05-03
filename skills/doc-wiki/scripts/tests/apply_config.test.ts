@@ -14,7 +14,7 @@ import {
   clearProviders,
   listProviders,
   getProvider,
-} from "@narai/credential-providers";
+} from "narai-primitives/credentials";
 
 describe("applyCredentialsConfig", () => {
   beforeEach(() => {

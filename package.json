@@ -40,7 +40,6 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@narai/credential-providers": "^0.2.1",
     "better-sqlite3": "^12.9.0",
     "fast-xml-parser": "^5.5.12",
     "graphology": "^0.26.0",
@@ -52,7 +51,7 @@
     "mongodb": "^7.1.1",
     "mssql": "^12.2.1",
     "mysql2": "^3.22.0",
-    "narai-primitives": "^2.0.0-rc.1",
+    "narai-primitives": "^2.1.0",
     "pdfjs-dist": "^5.6.205",
     "pg": "^8.20.0",
     "smol-toml": "^1.6.1"

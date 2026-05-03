@@ -13,7 +13,7 @@ import {
   KeychainProvider,
   CloudSecretsProvider,
   type CloudSubProvider,
-} from "@narai/credential-providers";
+} from "narai-primitives/credentials";
 
 /** Shape of the top-level `credentials` block emitted by init_wiki. */
 export interface CredentialsConfig {
