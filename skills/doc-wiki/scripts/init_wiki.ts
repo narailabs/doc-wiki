@@ -191,6 +191,18 @@ function buildConfig(domain: string, name: string): Record<string, unknown> {
         custom_profiles: [],
         cross_validate_against_db: true,
       },
+      rest: {
+        // Atlas Phase 1b inventory consumes this. `enabled: false` means
+        // /doc-wiki:atlas does not pass --enable-rest by default; flip to
+        // `true` to populate the rest_endpoints bucket on every run.
+        enabled: false,
+        // `custom_profiles` accepts inline RestProfile objects (same shape
+        // as agents/lib/rest_profiles/*.yaml). Custom names override
+        // shipped profiles on collision — useful for in-house frameworks
+        // or when teaching atlas about a new pattern without modifying
+        // doc-wiki itself.
+        custom_profiles: [],
+      },
       claude_md: {
         enabled: true,
         submodule_support: true,

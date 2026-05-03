@@ -13,12 +13,16 @@ import {
   detectOrmEntities,
   detectRestEndpoints,
   detectCodeClients,
+  discoverShippedRestProfiles,
   generateInventory,
   inventoryPath,
   persistInventory,
   loadInventory,
+  loadCustomRestProfiles,
   loadRestProfile,
+  resolveRestProfiles,
   type CodeInventory,
+  type RestProfile,
 } from "../atlas_inventory.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
@@ -244,7 +248,8 @@ router.put('/api/users/:id', (req, res) => res.end());
 const ignored = "app.delete('/x')"; // string literal, but still matches by regex
 `,
     );
-    const eps = detectRestEndpoints(tmpPath);
+    const profile = loadRestProfile("express")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
     const tuples = eps.map((e) => `${e.method} ${e.path}`);
     expect(tuples).toContain("GET /api/users");
     expect(tuples).toContain("POST /api/users");
@@ -260,11 +265,359 @@ const ignored = "app.delete('/x')"; // string literal, but still matches by rege
       path.join(tmpPath, "src", "routes.ts"),
       `app.get('/api/users', (req, res) => res.json([]));\n`,
     );
-    expect(detectRestEndpoints(tmpPath)).toEqual([]);
+    const profile = loadRestProfile("express")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
   });
 
-  it("returns empty when no profile names are passed", () => {
+  it("returns empty when an empty profile list is passed", () => {
     expect(detectRestEndpoints(tmpPath, [])).toEqual([]);
+  });
+});
+
+// ── discoverShippedRestProfiles + per-profile fixtures ─────────────
+
+describe("discoverShippedRestProfiles", () => {
+  it("returns the four shipped profiles, sorted", () => {
+    const names = discoverShippedRestProfiles();
+    expect(names).toEqual(["express", "fastapi", "rails", "spring"]);
+  });
+});
+
+describe("FastAPI profile", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-fastapi-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("fastapi");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("python");
+  });
+
+  it("extracts decorator-style FastAPI routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "main.py"),
+      `from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/api/users")
+async def list_users():
+    return []
+
+@app.post('/api/users')
+async def create_user():
+    return {}
+
+@router.put(f"/api/users/{user_id}")
+async def update_user():
+    return {}
+`,
+    );
+    const profile = loadRestProfile("fastapi")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples.find((t) => t.startsWith("PUT "))).toBeTruthy();
+  });
+
+  it("skips Python files without a fastapi import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "tasks.py"),
+      `@app.get("/internal")\ndef handler(): pass\n`,
+    );
+    const profile = loadRestProfile("fastapi")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Spring profile", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-spring-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("spring");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("java");
+  });
+
+  it("extracts @VerbMapping-style Spring routes", () => {
+    fs.mkdirSync(path.join(tmpPath, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "src", "UserController.java"),
+      `import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class UserController {
+    @GetMapping("/api/users")
+    public List<User> list() { return null; }
+
+    @PostMapping(value = "/api/users")
+    public User create() { return null; }
+
+    @PutMapping(path = "/api/users/{id}")
+    public User update() { return null; }
+}
+`,
+    );
+    const profile = loadRestProfile("spring")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/{id}");
+  });
+});
+
+describe("Rails profile", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-rails-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("rails");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("ruby");
+  });
+
+  it("extracts routes from config/routes.rb verb declarations", () => {
+    fs.mkdirSync(path.join(tmpPath, "config"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "config", "routes.rb"),
+      `Rails.application.routes.draw do
+  get "/api/users", to: "users#index"
+  post '/api/users', to: 'users#create'
+  put "/api/users/:id", to: "users#update"
+  delete '/api/users/:id', to: 'users#destroy'
+  resources :posts  # block — intentionally NOT extracted in v1
+end
+`,
+    );
+    const profile = loadRestProfile("rails")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/:id");
+    expect(tuples).toContain("DELETE /api/users/:id");
+  });
+});
+
+// ── resolveRestProfiles ─────────────────────────────────────────────
+
+describe("resolveRestProfiles", () => {
+  let tmpPath: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-resolve-");
+    configPath = path.join(tmpPath, "wiki.config.yaml");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns all four shipped profiles when no name list is given", () => {
+    const out = resolveRestProfiles({});
+    const names = out.map((p) => p.name).sort();
+    expect(names).toEqual(["express", "fastapi", "rails", "spring"]);
+  });
+
+  it("filters to the named subset when profileNames is given", () => {
+    const out = resolveRestProfiles({ profileNames: ["express", "fastapi"] });
+    const names = out.map((p) => p.name).sort();
+    expect(names).toEqual(["express", "fastapi"]);
+  });
+
+  it("silently drops unknown profile names", () => {
+    const out = resolveRestProfiles({ profileNames: ["express", "nonexistent"] });
+    expect(out.map((p) => p.name)).toEqual(["express"]);
+  });
+
+  it("loads custom profiles from wiki.config.yaml (default-set mode)", () => {
+    fs.writeFileSync(
+      configPath,
+      `wiki:
+  name: x
+ecosystem:
+  rest:
+    custom_profiles:
+      - name: hono
+        language: typescript
+        detection:
+          file_patterns: ["**/*.ts"]
+          markers:
+            - pattern: 'from "hono"'
+        endpoint_extraction:
+          patterns:
+            - regex: "app\\\\.(get|post)\\\\(['\\"]([^'\\"]+)"
+              method_group: 1
+              path_group: 2
+`,
+    );
+    const out = resolveRestProfiles({ wikiConfigPath: configPath });
+    const names = out.map((p) => p.name);
+    expect(names).toContain("hono");
+    expect(names).toContain("express"); // shipped
+    expect(names).toContain("fastapi"); // shipped
+  });
+
+  it("custom profile wins on name collision with shipped", () => {
+    fs.writeFileSync(
+      configPath,
+      `wiki:
+  name: x
+ecosystem:
+  rest:
+    custom_profiles:
+      - name: express
+        language: typescript
+        description: "OVERRIDDEN-EXPRESS"
+        detection:
+          file_patterns: ["**/*.ts"]
+          markers:
+            - pattern: 'from "express"'
+        endpoint_extraction:
+          patterns:
+            - regex: "app\\\\.(get)\\\\(['\\"]([^'\\"]+)"
+              method_group: 1
+              path_group: 2
+`,
+    );
+    const out = resolveRestProfiles({ wikiConfigPath: configPath });
+    const express = out.find((p) => p.name === "express")!;
+    expect(express.description).toBe("OVERRIDDEN-EXPRESS");
+  });
+
+  it("returns shipped-only when wiki.config.yaml has no custom_profiles", () => {
+    fs.writeFileSync(configPath, `wiki:\n  name: x\n`);
+    const out = resolveRestProfiles({ wikiConfigPath: configPath });
+    expect(out.map((p) => p.name).sort()).toEqual([
+      "express",
+      "fastapi",
+      "rails",
+      "spring",
+    ]);
+  });
+
+  it("ignores malformed custom_profiles entries silently", () => {
+    fs.writeFileSync(
+      configPath,
+      `ecosystem:
+  rest:
+    custom_profiles:
+      - name: ok
+        language: typescript
+        detection:
+          file_patterns: ["**/*.ts"]
+          markers: []
+        endpoint_extraction:
+          patterns: []
+      - this-is-not-a-profile
+      - name: 42
+        language: invalid
+`,
+    );
+    const out = resolveRestProfiles({ wikiConfigPath: configPath });
+    const names = out.map((p) => p.name);
+    expect(names).toContain("ok");
+    expect(names).not.toContain("42");
+  });
+});
+
+// ── loadCustomRestProfiles ─────────────────────────────────────────
+
+describe("loadCustomRestProfiles", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-custom-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns [] when the config file is missing", () => {
+    expect(loadCustomRestProfiles(path.join(tmpPath, "missing.yaml"))).toEqual([]);
+  });
+
+  it("returns [] when the YAML is malformed", () => {
+    const p = path.join(tmpPath, "bad.yaml");
+    fs.writeFileSync(p, "{not: yaml::: ::");
+    expect(loadCustomRestProfiles(p)).toEqual([]);
+  });
+
+  it("returns [] when ecosystem.rest is absent", () => {
+    const p = path.join(tmpPath, "config.yaml");
+    fs.writeFileSync(p, "wiki:\n  name: x\n");
+    expect(loadCustomRestProfiles(p)).toEqual([]);
+  });
+});
+
+// ── Dedup across profiles ──────────────────────────────────────────
+
+describe("dedup across profiles", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-dedup-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("does not double-count an endpoint matched by two profiles", () => {
+    // Custom profile that overlaps with Express on `app.get('/x', ...)`.
+    const customProfile: RestProfile = {
+      name: "custom-overlap",
+      language: "typescript",
+      detection: {
+        file_patterns: ["**/*.ts"],
+        markers: [{ pattern: 'from "express"', type: "import" }],
+      },
+      endpoint_extraction: {
+        patterns: [
+          {
+            regex: "app\\.(get|post)\\(['\"]([^'\"]+)['\"]",
+            method_group: 1,
+            path_group: 2,
+          },
+        ],
+      },
+    };
+    fs.writeFileSync(
+      path.join(tmpPath, "routes.ts"),
+      `import express from "express";\nconst app = express();\napp.get('/x', () => {});\n`,
+    );
+    const expressProfile = loadRestProfile("express")!;
+    const eps = detectRestEndpoints(tmpPath, [expressProfile, customProfile]);
+    const xRoutes = eps.filter((e) => e.path === "/x" && e.method === "GET");
+    expect(xRoutes).toHaveLength(1);
+    // First profile (express) wins on the framework field.
+    expect(xRoutes[0]!.framework).toBe("express");
   });
 });
 
