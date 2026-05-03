@@ -277,9 +277,260 @@ const ignored = "app.delete('/x')"; // string literal, but still matches by rege
 // ── discoverShippedRestProfiles + per-profile fixtures ─────────────
 
 describe("discoverShippedRestProfiles", () => {
-  it("returns the four shipped profiles, sorted", () => {
+  it("returns all ten shipped profiles, sorted", () => {
     const names = discoverShippedRestProfiles();
-    expect(names).toEqual(["express", "fastapi", "rails", "spring"]);
+    expect(names).toEqual([
+      "aspnet",
+      "django",
+      "express",
+      "fastapi",
+      "flask",
+      "gin",
+      "hono",
+      "laravel",
+      "rails",
+      "spring",
+    ]);
+  });
+});
+
+describe("Django profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-django-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("django");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("python");
+  });
+
+  it("extracts URLconf entries (path / re_path)", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "urls.py"),
+      `from django.urls import path, re_path
+from . import views
+
+urlpatterns = [
+    path("api/users/", views.UserList.as_view(), name="user-list"),
+    path("api/users/<int:pk>/", views.UserDetail.as_view()),
+    re_path(r"^api/legacy/$", views.legacy_handler),
+]
+`,
+    );
+    const profile = loadRestProfile("django")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const urls = eps.map((e) => e.path).sort();
+    expect(urls).toContain("api/users/");
+    expect(urls).toContain("api/users/<int:pk>/");
+    expect(urls).toContain("^api/legacy/$");
+  });
+
+  it("skips Python files without a django.urls import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "tasks.py"),
+      `path("/internal/", lambda: None)\n`,
+    );
+    const profile = loadRestProfile("django")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+});
+
+describe("Flask profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-flask-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("flask");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("python");
+  });
+
+  it("extracts @app.route(methods=) and @app.<verb> shorthand", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.py"),
+      `from flask import Flask
+app = Flask(__name__)
+
+@app.route("/api/users", methods=["GET"])
+def list_users(): pass
+
+@app.route('/api/users', methods=['POST'])
+def create_user(): pass
+
+@app.get("/api/users/<int:user_id>")
+def show(user_id): pass
+
+@app.delete('/api/users/<int:user_id>')
+def remove(user_id): pass
+`,
+    );
+    const profile = loadRestProfile("flask")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("GET /api/users/<int:user_id>");
+    expect(tuples).toContain("DELETE /api/users/<int:user_id>");
+  });
+});
+
+describe("ASP.NET profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-aspnet-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("aspnet");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("csharp");
+  });
+
+  it("extracts [HttpVerb] attribute routes", () => {
+    fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "Controllers", "UsersController.cs"),
+      `using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    [HttpGet("/api/users")]
+    public IActionResult List() => Ok();
+
+    [HttpPost("/api/users")]
+    public IActionResult Create() => Created("/", null);
+
+    [HttpDelete("/api/users/{id:int}")]
+    public IActionResult Delete(int id) => NoContent();
+}
+`,
+    );
+    const profile = loadRestProfile("aspnet")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("DELETE /api/users/{id:int}");
+  });
+});
+
+describe("Gin profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-gin-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("gin");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("go");
+  });
+
+  it("extracts r.GET / r.POST etc. routes", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "main.go"),
+      `package main
+
+import "github.com/gin-gonic/gin"
+
+func main() {
+    r := gin.Default()
+    r.GET("/api/users", listUsers)
+    r.POST("/api/users", createUser)
+    r.PUT("/api/users/:id", updateUser)
+    api := r.Group("/v2")
+    api.DELETE("/api/users/:id", deleteUser)
+    r.Run()
+}
+`,
+    );
+    const profile = loadRestProfile("gin")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/:id");
+    expect(tuples).toContain("DELETE /api/users/:id");
+  });
+});
+
+describe("Laravel profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-laravel-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("laravel");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("php");
+  });
+
+  it("extracts Route::verb declarations", () => {
+    fs.mkdirSync(path.join(tmpPath, "routes"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "routes", "api.php"),
+      `<?php
+use Illuminate\\Support\\Facades\\Route;
+
+Route::get('/api/users', [UserController::class, 'index']);
+Route::post("/api/users", [UserController::class, 'store']);
+Route::put('/api/users/{user}', [UserController::class, 'update']);
+Route::delete("/api/users/{user}", [UserController::class, 'destroy']);
+`,
+    );
+    const profile = loadRestProfile("laravel")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("PUT /api/users/{user}");
+    expect(tuples).toContain("DELETE /api/users/{user}");
+  });
+});
+
+describe("Hono profile", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-hono-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("loads cleanly from disk", () => {
+    const p = loadRestProfile("hono");
+    expect(p).not.toBeNull();
+    expect(p?.language).toBe("typescript");
+  });
+
+  it("extracts Hono routes from a file with the hono import", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.ts"),
+      `import { Hono } from "hono";
+
+const app = new Hono();
+
+app.get('/api/users', (c) => c.json([]));
+app.post("/api/users", (c) => c.json({}, 201));
+app.delete(\`/api/users/:id\`, (c) => c.text(""));
+`,
+    );
+    const profile = loadRestProfile("hono")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET /api/users");
+    expect(tuples).toContain("POST /api/users");
+    expect(tuples).toContain("DELETE /api/users/:id");
+  });
+
+  it("does NOT match files that import express, not hono", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.ts"),
+      `import express from "express";
+const app = express();
+app.get('/x', () => {});
+`,
+    );
+    const profile = loadRestProfile("hono")!;
+    expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
   });
 });
 
@@ -438,10 +689,21 @@ describe("resolveRestProfiles", () => {
     cleanupTmpPath(tmpPath);
   });
 
-  it("returns all four shipped profiles when no name list is given", () => {
+  it("returns all ten shipped profiles when no name list is given", () => {
     const out = resolveRestProfiles({});
     const names = out.map((p) => p.name).sort();
-    expect(names).toEqual(["express", "fastapi", "rails", "spring"]);
+    expect(names).toEqual([
+      "aspnet",
+      "django",
+      "express",
+      "fastapi",
+      "flask",
+      "gin",
+      "hono",
+      "laravel",
+      "rails",
+      "spring",
+    ]);
   });
 
   it("filters to the named subset when profileNames is given", () => {
@@ -514,8 +776,14 @@ ecosystem:
     fs.writeFileSync(configPath, `wiki:\n  name: x\n`);
     const out = resolveRestProfiles({ wikiConfigPath: configPath });
     expect(out.map((p) => p.name).sort()).toEqual([
+      "aspnet",
+      "django",
       "express",
       "fastapi",
+      "flask",
+      "gin",
+      "hono",
+      "laravel",
       "rails",
       "spring",
     ]);

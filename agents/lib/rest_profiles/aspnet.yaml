@@ -1,0 +1,27 @@
+name: aspnet
+language: csharp
+description: "ASP.NET Core MVC + Web API attribute-routed controllers"
+
+detection:
+  file_patterns:
+    - "**/*.cs"
+  markers:
+    - pattern: "using Microsoft.AspNetCore"
+      type: import
+    - pattern: "[ApiController]"
+      type: attribute
+    - pattern: ": ControllerBase"
+      type: base_class
+    - pattern: ": Controller"
+      type: base_class
+
+# `[HttpGet("/api/users")]`, `[HttpPost("/api/users")]`, etc. The
+# `Http<Verb>` capture group is normalized to the verb; the path is the
+# first quoted string argument. Routes declared via `[Route("...")]`
+# at the controller level are intentionally NOT extracted here — the
+# inventory cares about ENDPOINT routes, not controller prefixes.
+endpoint_extraction:
+  patterns:
+    - regex: "\\[Http(Get|Post|Put|Delete|Patch|Options|Head)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      path_group: 2
