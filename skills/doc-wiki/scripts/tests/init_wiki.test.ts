@@ -339,6 +339,9 @@ describe("init_wiki — v2 config blocks", () => {
     expect(cfg.ecosystem.database.policy.block_ddl).toBe(true);
     expect(cfg.ecosystem.database.policy.dml_mode).toBe("present_only");
     expect(cfg.ecosystem.orm.enabled).toBe(true);
+    expect(cfg.ecosystem.rest).toBeDefined();
+    expect(cfg.ecosystem.rest.enabled).toBe(false);
+    expect(cfg.ecosystem.rest.custom_profiles).toEqual([]);
     expect(cfg.ecosystem.claude_md.enabled).toBe(true);
     expect(cfg.ecosystem.mermaid.auto_generate).toBe(true);
     expect(cfg.ecosystem.mermaid.types).toContain("erDiagram");
