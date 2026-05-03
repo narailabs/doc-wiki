@@ -32,6 +32,11 @@ import {
   detectOrm,
   type OrmProfile,
 } from "../../../agents/lib/wiki_orm/index.js";
+import {
+  loadInventory,
+  type CodeInventory,
+} from "../../../agents/lib/atlas_inventory.js";
+import { getLastAtlasRunId } from "./atlas_orchestrator.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -334,6 +339,62 @@ export function checkCodeRefDrift(wikiRoot: string, cache?: PageCache): Issue[] 
           ),
         );
       }
+    }
+  }
+  return issues;
+}
+
+/**
+ * Flag `references:` entries whose path is not present anywhere in the
+ * atlas Phase-1b inventory snapshot — neither as an ORM-entity source,
+ * REST endpoint file, code-client file, nor as one of the parsed
+ * project manifests. Skips silently when no inventory is loaded so lint
+ * remains usable in CI gates that do not run atlas.
+ *
+ * Complements {@link checkCodeRefDrift} (which is about hash drift
+ * against the file on disk): this check is about whether the manifest
+ * has *seen* the file at all. A real-but-unseen file usually means the
+ * walker missed it (excluded path / size limit) or the user hasn't
+ * re-run atlas since adding the file.
+ */
+export function checkReferencesInventory(
+  wikiRoot: string,
+  cache?: PageCache,
+  inventory?: CodeInventory | null,
+): Issue[] {
+  if (!inventory) return [];
+  const knownFiles = new Set<string>();
+  for (const e of inventory.orm_entities) knownFiles.add(e.source_file);
+  for (const r of inventory.rest_endpoints) knownFiles.add(r.file);
+  for (const c of inventory.code_clients) knownFiles.add(c.file);
+  for (const m of inventory.project_metadata.manifests_seen) knownFiles.add(m);
+
+  const issues: Issue[] = [];
+  const pages = cache ?? buildPageCache(wikiRoot);
+  for (const [page, { frontmatter: fm }] of pages) {
+    const refs = fm["references"];
+    if (!Array.isArray(refs)) continue;
+    for (const refEntry of refs) {
+      if (
+        refEntry === null ||
+        typeof refEntry !== "object" ||
+        Array.isArray(refEntry)
+      ) {
+        continue;
+      }
+      const ref = refEntry as Record<string, unknown>;
+      const refPathVal = ref["path"];
+      const refPath = typeof refPathVal === "string" ? refPathVal : "";
+      if (!refPath) continue;
+      if (knownFiles.has(refPath)) continue;
+      issues.push(
+        makeIssue(
+          "warning",
+          "references_inventory",
+          page,
+          `Referenced file ${refPath} is not in the atlas inventory snapshot`,
+        ),
+      );
     }
   }
   return issues;
@@ -930,19 +991,28 @@ export function checkDeprecatedClaims(wikiRoot: string, cache?: PageCache): Issu
 /**
  * Registry of check functions, matching the Python dict insertion order.
  *
- * Every check accepts an optional `cache` so `lintWiki` can amortize the
- * page-read I/O across the whole run. Checks that don't read pages
+ * Every check accepts the wiki root, an optional `cache` (so `lintWiki`
+ * can amortize page-read I/O across the whole run), and an optional
+ * `inventory` snapshot. Checks that don't read pages or the inventory
  * (provenance / ambiguity_rate / isolated_nodes / orm_mapping_freshness /
- * thin_clusters) just ignore the cache.
+ * thin_clusters) ignore both extras.
  */
 const CHECK_FUNCTIONS: ReadonlyArray<
-  [string, (wikiRoot: string, cache?: PageCache) => Issue[]]
+  [
+    string,
+    (
+      wikiRoot: string,
+      cache?: PageCache,
+      inventory?: CodeInventory | null,
+    ) => Issue[],
+  ]
 > = [
   ["broken_links", checkBrokenLinks],
   ["frontmatter", checkFrontmatter],
   ["orphans", checkOrphans],
   ["isolated_nodes", checkIsolatedNodes],
   ["code_ref_drift", checkCodeRefDrift],
+  ["references_inventory", checkReferencesInventory],
   ["provenance", checkProvenanceCompleteness],
   ["ambiguity_rate", checkHighAmbiguityRate],
   ["deprecated_claims", checkDeprecatedClaims],
@@ -1018,12 +1088,15 @@ function issueMatchesPage(issue: Issue, pageFilter: string): boolean {
  *
  * When `pageFilter` is set, only issues whose `page` field matches the
  * filter (exact path, suffix path, or `*`/`**` glob) are returned. The
- * `summary` counters reflect the post-filter list.
+ * `summary` counters reflect the post-filter list. Pass `inventory`
+ * (the Phase-1b atlas manifest) to enable the `references_inventory`
+ * check; when it's `null` / `undefined`, that check silently skips.
  */
 export function lintWiki(
   wikiRoot: string,
   category: string | null = null,
   pageFilter: string | null = null,
+  inventory: CodeInventory | null = null,
 ): LintResult {
   let issues: Issue[] = [];
   // Build the page cache once for the whole run so checks don't each
@@ -1032,11 +1105,11 @@ export function lintWiki(
   if (category) {
     const found = CHECK_FUNCTIONS.find(([k]) => k === category);
     if (found) {
-      issues = found[1](wikiRoot, cache);
+      issues = found[1](wikiRoot, cache, inventory);
     }
   } else {
     for (const [, fn] of CHECK_FUNCTIONS) {
-      issues.push(...fn(wikiRoot, cache));
+      issues.push(...fn(wikiRoot, cache, inventory));
     }
   }
 
@@ -1061,23 +1134,30 @@ const FLAG_SPEC = {
   "--wiki-root": "wikiRoot",
   "--category": "category",
   "--page": "page",
+  "--inventory-run-id": "inventoryRunId",
 } as const;
 
-const HELP_TEXT = `usage: lint_checks.js [-h] --wiki-root WIKI_ROOT [--category CATEGORY] [--page PAGE]
+const HELP_TEXT = `usage: lint_checks.js [-h] --wiki-root WIKI_ROOT [--category CATEGORY] [--page PAGE] [--inventory-run-id RUN_ID]
 
 Wiki structural lint checks.
 
 options:
-  -h, --help            show this help message and exit
-  --wiki-root WIKI_ROOT Wiki root path
-  --category CATEGORY   Run only a specific check category
-  --page PAGE           Scope the report to a single page. Accepts an
-                        absolute path, a wiki-relative path
-                        (e.g. wiki/auth/session.md), or a glob with
-                        * / ** segments. All check functions still run
-                        (so orphan/isolated/coverage issues that name the
-                        page survive the filter); only the issues whose
-                        \`page\` field matches PAGE are reported.
+  -h, --help               show this help message and exit
+  --wiki-root WIKI_ROOT    Wiki root path
+  --category CATEGORY      Run only a specific check category
+  --page PAGE              Scope the report to a single page. Accepts an
+                           absolute path, a wiki-relative path
+                           (e.g. wiki/auth/session.md), or a glob with
+                           * / ** segments. All check functions still run
+                           (so orphan/isolated/coverage issues that name the
+                           page survive the filter); only the issues whose
+                           \`page\` field matches PAGE are reported.
+  --inventory-run-id RUN_ID
+                           Atlas run id (YYYY-MM-DDTHH-MM-SS) whose Phase-1b
+                           inventory should drive the references_inventory
+                           check. When omitted, the latest atlas run from
+                           log/events.jsonl is used. The check no-ops when
+                           no inventory is available.
 `;
 
 export function main(
@@ -1116,7 +1196,25 @@ export function main(
   const pageRaw = parsed.values["page"];
   const pageFilter = typeof pageRaw === "string" && pageRaw ? pageRaw : null;
 
-  const result = lintWiki(wikiRoot, category, pageFilter);
+  // Resolve the inventory snapshot: explicit --inventory-run-id wins;
+  // otherwise auto-discover the latest atlas run from events.jsonl.
+  // A missing/empty/zero-length run id is treated as "no inventory" —
+  // the references_inventory check silently no-ops in that case.
+  const explicitRunIdRaw = parsed.values["inventoryRunId"];
+  const explicitRunId =
+    typeof explicitRunIdRaw === "string" && explicitRunIdRaw.length > 0
+      ? explicitRunIdRaw
+      : null;
+  const inventoryRunId =
+    explicitRunId !== null
+      ? explicitRunId
+      : getLastAtlasRunId(wikiRoot) || null;
+  const inventory =
+    inventoryRunId !== null && inventoryRunId.length > 0
+      ? loadInventory(wikiRoot, inventoryRunId)
+      : null;
+
+  const result = lintWiki(wikiRoot, category, pageFilter, inventory);
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   return 0;
 }
