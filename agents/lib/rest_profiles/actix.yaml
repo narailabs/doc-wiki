@@ -1,0 +1,26 @@
+name: actix
+language: rust
+description: "Actix Web (Rust) HTTP routes via .route() registration"
+
+detection:
+  file_patterns:
+    - "**/*.rs"
+  markers:
+    - pattern: "use actix_web"
+      type: import
+    - pattern: "extern crate actix_web"
+      type: import
+    - pattern: "actix_web::"
+      type: usage
+
+# Actix has two routing styles. This profile covers the explicit
+# `.route("/path", web::get().to(handler))` builder form, which puts the
+# path BEFORE the method — hence method_group: 2 / path_group: 1. The
+# attribute-macro form (`#[get("/path")]` on a handler + `cfg.service(...)`)
+# is intentionally deferred: those attribute macros are typed differently
+# than Rocket's and would shadow Rocket's profile on shared `*.rs` files.
+endpoint_extraction:
+  patterns:
+    - regex: "\\.route\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*web::(get|post|put|delete|patch|options|head)"
+      method_group: 2
+      path_group: 1
