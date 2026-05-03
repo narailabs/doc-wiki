@@ -197,6 +197,23 @@
         "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root after onboard completes (auto-init triggered)",
         "events.jsonl contains one op='init' event AND one op='onboard' event (or equivalent), each with ISO timestamps"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Run /doc-wiki:ingest https://github.com/anthropics/anthropic-sdk-python against my wiki at /tmp/test-gather-wiki/ (initialize the wiki first with /doc-wiki:init). Do NOT set GITHUB_TOKEN in the environment. The point of this eval is to verify the gather() ↔ connector-subprocess ↔ credential-resolution boundary survives end-to-end without needing a real token: gather() should plan the github connector, spawn its subprocess, the subprocess should load narai-primitives/credentials and call resolveSecret() inside its own process, find no credential, and return a structured CONFIG_ERROR envelope to the hub. doc-wiki should record that envelope verbatim in events.jsonl — never a stack trace, never a silent skip.",
+      "expected_output": "Wiki scaffold initialized; gather() dispatches the github connector subprocess; the subprocess calls narai-primitives/credentials.resolveSecret() and finds no GITHUB_TOKEN; the connector emits a structured envelope with status='error' or 'denied' and code='CONFIG_ERROR' (or equivalent) whose reason references GITHUB_TOKEN or the credentials layer; the hub captures the envelope and logs it in events.jsonl; no cleartext token ever appears in any wiki output. Re-running the same ingest produces an identical structured failure (idempotent error path).",
+      "files": [],
+      "expectations": [
+        "Wiki scaffold exists at /tmp/test-gather-wiki/ with the standard dirs (wiki/, raw/, graph/, audit/, log/, outputs/) — confirms /doc-wiki:init ran",
+        "events.jsonl records at least one op='ingest' entry whose details capture the gather() dispatch — either a top-level `consumer` field set to 'doc-wiki' or an embedded `dispatch_steps[]` array referencing the 'github' connector",
+        "The github dispatch step has a non-success status (e.g., 'error' or 'denied'), with a structured code field — accept any of `code`, `error_code`, or `error.code` set to a CONFIG-class value (e.g., 'CONFIG_ERROR') — proving the github connector's structured-error path fired rather than a thrown exception",
+        "The dispatch step's reason / message text references GITHUB_TOKEN OR narai-primitives/credentials — proves the credential-resolution boundary was reached inside the subprocess (the connector's CONFIG_ERROR text says 'Set GITHUB_TOKEN or register a credential provider via narai-primitives/credentials')",
+        "The github connector ran in a separate Node process, not in-line in the hub — verifiable via either (a) the dispatch envelope matching narai-primitives' DispatchResult contract (envelope/data/error shape produced by createConnector — not raw object literal from in-process code), or (b) the resolved CLI path under narai-primitives/dist/connectors/github/cli.js appearing in the hub log/output",
+        "No stack trace anywhere in the wiki tree (`outputs/`, `raw/`, `wiki/`, `events.jsonl`, `audit/`) — `grep -rE 'at .+\\.js:[0-9]+:|at Object\\.<anonymous>'` returns zero matches; the failure is structured throughout",
+        "The hub process never sees a cleartext token — `grep -rE 'github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{36}' /tmp/test-gather-wiki/` returns zero matches (the subprocess-credential-isolation guarantee from architecture invariant #4 still holds)",
+        "Re-running the same /doc-wiki:ingest command produces an identical structured failure (idempotent error path) — does not crash, does not double-create wiki pages, and either (a) emits a second dispatch entry with the same code or (b) skips via cache and records a 'cache_hit' or 'skipped' entry",
+        "resolveAgentCli({name:'github'}) succeeds against the published bundle — the resolved CLI lives at node_modules/narai-primitives/dist/connectors/github/cli.js (with `source: 'bundled-self'` per the 2.1.1+ resolver). A null result here means the bundled-CLI resolver is broken and gather() can't actually dispatch."
+      ]
     }
   ]
 }
