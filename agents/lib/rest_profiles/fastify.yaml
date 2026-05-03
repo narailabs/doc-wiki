@@ -1,0 +1,33 @@
+name: fastify
+language: typescript
+description: "Fastify (Node.js) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.mjs"
+    - "**/*.cjs"
+  markers:
+    - pattern: "from \"fastify\""
+      type: import
+    - pattern: "from 'fastify'"
+      type: import
+    - pattern: "require('fastify')"
+      type: import
+    - pattern: "require(\"fastify\")"
+      type: import
+    - pattern: "Fastify("
+      type: instantiation
+
+# fastify.get('/path', handler), app.post("/x"), server.put(`/y/:id`).
+# Fastify's plugin/encapsulation system can also expose `instance.get(...)`
+# inside `fastify.register(...)` callbacks; that's deferred to a future
+# pass.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:fastify|app|server)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+      method_group: 1
+      path_group: 2

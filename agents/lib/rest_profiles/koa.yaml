@@ -1,0 +1,37 @@
+name: koa
+language: typescript
+description: "Koa (Node.js) routes via @koa/router or koa-router"
+
+detection:
+  file_patterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.js"
+    - "**/*.jsx"
+    - "**/*.mjs"
+    - "**/*.cjs"
+  markers:
+    - pattern: "from \"@koa/router\""
+      type: import
+    - pattern: "from '@koa/router'"
+      type: import
+    - pattern: "from \"koa-router\""
+      type: import
+    - pattern: "from 'koa-router'"
+      type: import
+    - pattern: "require('@koa/router')"
+      type: import
+    - pattern: "require(\"koa-router\")"
+      type: import
+    - pattern: "new Router("
+      type: instantiation
+
+# Koa itself ships no router — apps almost always use @koa/router (or the
+# legacy koa-router). Routes are declared on a Router instance and then
+# mounted with app.use(router.routes()). Common variable names: router,
+# api, app (when developers reuse the app symbol for a sub-router).
+endpoint_extraction:
+  patterns:
+    - regex: "(?:router|api|app)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+      method_group: 1
+      path_group: 2

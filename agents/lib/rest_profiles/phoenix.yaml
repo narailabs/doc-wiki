@@ -1,0 +1,27 @@
+name: phoenix
+language: elixir
+description: "Phoenix (Elixir) router verb declarations"
+
+detection:
+  file_patterns:
+    - "**/*.ex"
+    - "**/*.exs"
+  markers:
+    - pattern: "use Phoenix.Router"
+      type: import
+    - pattern: "Phoenix.Router"
+      type: import
+    - pattern: ":router"
+      type: declaration
+
+# Phoenix routes are declared inside a router module:
+#   get "/users", UserController, :index
+#   post "/users", UserController, :create
+# `pipe_through` blocks scope routes to a pipeline; `scope "/api"` blocks
+# prefix paths. Neither is unwound by the inventory v1 — the literal path
+# argument is recorded as-is.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:^|\\s)(get|post|put|delete|patch|options|head)\\s+\"([^\"]+)\"\\s*,"
+      method_group: 1
+      path_group: 2

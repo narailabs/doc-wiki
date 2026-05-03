@@ -1,0 +1,26 @@
+name: slim
+language: php
+description: "Slim Framework (PHP) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.php"
+  markers:
+    - pattern: "use Slim\\App"
+      type: import
+    - pattern: "Slim\\Factory\\AppFactory"
+      type: import
+    - pattern: "\\Slim\\App"
+      type: usage
+    - pattern: "Slim\\App"
+      type: usage
+
+# Slim's verb methods sit on the App instance: `$app->get('/x', $h)`,
+# `$app->post(...)`, etc. The `any()` helper registers a handler for
+# every verb — it's recorded literally as `ANY` in the inventory so the
+# downstream synthesizer can decide how to render it.
+endpoint_extraction:
+  patterns:
+    - regex: "\\$app->(get|post|put|delete|patch|options|head|any)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2
