@@ -235,7 +235,7 @@ describe("TestGetStats", () => {
     expect(opsByType["ingest"]).toBe(2);
     expect(opsByType["query"]).toBe(1);
     expect(opsByType["lint"]).toBe(1);
-    expect(stats["total_ops"]).toBe(4);
+    expect(stats["total_events"]).toBe(4);
 
     expect(approxEqual(stats["total_cost_usd"] as number, 0.16)).toBe(true);
 
@@ -253,7 +253,7 @@ describe("TestGetStats", () => {
     // Only events on or after 2026-04-10
     const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
 
-    expect(stats["total_ops"]).toBe(2);
+    expect(stats["total_events"]).toBe(2);
     const opsByType = stats["ops_by_type"] as Record<string, number>;
     expect(opsByType["ingest"]).toBe(1);
     expect(opsByType["lint"]).toBe(1);
@@ -289,7 +289,7 @@ describe("TestGetStats", () => {
       events.map((e) => JSON.stringify(e)).join("\n") + "\n",
     );
     const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
-    expect(stats["total_ops"]).toBe(1);
+    expect(stats["total_events"]).toBe(1);
     const opsByType = stats["ops_by_type"] as Record<string, number>;
     expect(opsByType["ingest"]).toBe(1);
     expect("query" in opsByType).toBe(false);
@@ -371,7 +371,7 @@ describe("EventLoggerCLIShape", () => {
     const data = JSON.parse(js.stdout);
     expect(typeof data.total_cost_usd).toBe("number");
     expect(data.total_cost_usd).toBeGreaterThan(0);
-    expect(data.total_ops).toBeGreaterThanOrEqual(4);
+    expect(data.total_events).toBeGreaterThanOrEqual(4);
   });
 
   it("cli_stats_since_iso_filters_older_events", () => {
@@ -386,7 +386,7 @@ describe("EventLoggerCLIShape", () => {
     expect(js.status).toBe(0);
     const data = JSON.parse(js.stdout);
     // Only two events fall on or after 2026-04-09.
-    expect(data.total_ops).toBe(2);
+    expect(data.total_events).toBe(2);
   });
 
   it("cli_stats_integer_ratios_emit_python_style_numbers", () => {
@@ -414,6 +414,113 @@ describe("EventLoggerCLIShape", () => {
     const js = runCli(["stats", "--wiki-root", tmpPath]);
     expect(js.status).toBe(0);
     expect(js.stdout).toMatch(/"total_cost_usd":\s*15\b/);
+  });
+});
+
+// ── --source CLI flag ────────────────────────────────────────────────
+//
+// SKILL.md step 12 documents `--source <source>` as a convenience over
+// `--details '{"source":"..."}'` for the common ingest case. These tests
+// pin that contract: the flag is accepted, lands as a top-level `source`
+// field on the entry, and merges cleanly with `--details`.
+
+describe("event_logger --source flag", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-source-flag-");
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("accepts --source on `log` and writes it as a top-level field", () => {
+    const js = runCli([
+      "log",
+      "--op", "ingest",
+      "--wiki-root", tmpPath,
+      "--source", "slides.pptx",
+    ]);
+    expect(js.status).toBe(0);
+    const entry = JSON.parse(js.stdout) as Record<string, unknown>;
+    expect(entry["source"]).toBe("slides.pptx");
+    expect(entry["op"]).toBe("ingest");
+  });
+
+  it("merges --source into --details (explicit flag wins on collision)", () => {
+    const js = runCli([
+      "log",
+      "--op", "ingest",
+      "--wiki-root", tmpPath,
+      "--details", '{"source":"old.md","extra":"keep"}',
+      "--source", "new.md",
+    ]);
+    expect(js.status).toBe(0);
+    const entry = JSON.parse(js.stdout) as Record<string, unknown>;
+    expect(entry["source"]).toBe("new.md");
+    expect(entry["extra"]).toBe("keep");
+  });
+
+  it("accepts --source on the bare-fallback (no subcommand) shape", () => {
+    const js = runCli([
+      "--op", "ingest",
+      "--wiki-root", tmpPath,
+      "--source", "report.pdf",
+    ]);
+    expect(js.status).toBe(0);
+    const entry = JSON.parse(js.stdout) as Record<string, unknown>;
+    expect(entry["source"]).toBe("report.pdf");
+  });
+});
+
+// ── stats output: total_events ───────────────────────────────────────
+//
+// Pin the renamed top-level count field so a future rename (or mistaken
+// revert) breaks loudly.
+
+describe("event_logger stats — total_events", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-total-events-");
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("getStats returns total_events (not total_ops) and counts every entry", () => {
+    const events = [
+      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", cost_usd: 0.05 },
+      { ts: "2026-04-05T12:00:00+00:00", op: "query", cost_usd: 0.03 },
+      { ts: "2026-04-10T08:00:00+00:00", op: "ingest", cost_usd: 0.07 },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const stats = getStats(tmpPath);
+    expect(stats["total_events"]).toBe(3);
+    expect("total_ops" in stats).toBe(false);
+  });
+
+  it("CLI `stats` emits total_events in stdout JSON", () => {
+    const events = [
+      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", cost_usd: 0.05 },
+      { ts: "2026-04-05T12:00:00+00:00", op: "lint",  cost_usd: 0.01 },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const js = runCli(["stats", "--wiki-root", tmpPath]);
+    expect(js.status).toBe(0);
+    const data = JSON.parse(js.stdout) as Record<string, unknown>;
+    expect(data["total_events"]).toBe(2);
+    expect("total_ops" in data).toBe(false);
   });
 });
 

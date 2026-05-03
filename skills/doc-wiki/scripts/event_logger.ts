@@ -269,7 +269,7 @@ function median(values: readonly number[]): number {
  * Compute aggregate statistics from the event log.
  *
  * Returns a dict with:
- *   total_ops: number
+ *   total_events: number                            -- count of events in the window
  *   ops_by_type: { [op: string]: number }
  *   total_cost_usd: number
  *   reduction_ratio: { mean, p50, p95 } (only keys present when ratios > 0)
@@ -401,7 +401,7 @@ export function getStats(
   }
 
   const result: Record<string, unknown> = {
-    total_ops: events.length,
+    total_events: events.length,
     ops_by_type: opsByType,
     total_cost_usd: totalCost,
     reduction_ratio: ratioStats,
@@ -428,6 +428,11 @@ interface ParsedArgs {
   /** A6: when true, total_tokens_by_op contains a 0-entry for every op
    *  observed in the log (including ops that emitted no token data). */
   includeZeroTokens?: boolean;
+  /** Sugar over `--details '{"source":"..."}'` — SKILL.md step 12 documents
+   *  this flag for the common ingest case. Merged into `details.source`
+   *  before logging; if `--details` already carries `source`, the explicit
+   *  flag wins. */
+  source?: string;
   help?: boolean;
 }
 
@@ -504,6 +509,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case "since":
         out.since = value ?? null;
         break;
+      case "source":
+        out.source = value ?? "";
+        break;
       default:
         throw new Error(`unrecognized argument: --${name}`);
     }
@@ -522,6 +530,14 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+
+log options:
+  --op OP               Operation name (required)
+  --wiki-root PATH      Wiki root (required)
+  --details JSON        Event details as a JSON object (default: {})
+  --source SOURCE       Sugar that merges into details.source — convenient
+                        for ingest events that just need a source identifier
+                        without a hand-built JSON blob.
 
 stats options:
   --since SINCE         Filter events to ts >= SINCE (ISO-8601 or
@@ -592,6 +608,9 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       return 2;
     }
     const details = JSON.parse(args.details ?? "{}") as Record<string, unknown>;
+    if (typeof args.source === "string" && args.source !== "") {
+      details["source"] = args.source;
+    }
     const entry = logEvent(args.wikiRoot, args.op, details);
     process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
     return 0;
@@ -600,6 +619,9 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   // Fallback: bare --op style (no subcommand)
   if (args.op && args.wikiRoot) {
     const details = JSON.parse(args.details ?? "{}") as Record<string, unknown>;
+    if (typeof args.source === "string" && args.source !== "") {
+      details["source"] = args.source;
+    }
     const entry = logEvent(args.wikiRoot, args.op, details);
     process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
     return 0;

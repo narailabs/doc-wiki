@@ -226,7 +226,7 @@ function median(values) {
  * Compute aggregate statistics from the event log.
  *
  * Returns a dict with:
- *   total_ops: number
+ *   total_events: number                            -- count of events in the window
  *   ops_by_type: { [op: string]: number }
  *   total_cost_usd: number
  *   reduction_ratio: { mean, p50, p95 } (only keys present when ratios > 0)
@@ -348,7 +348,7 @@ export function getStats(wikiRoot, since = null, opts = {}) {
         ratioStats["p95"] = sortedRatios[idx95] ?? 0;
     }
     const result = {
-        total_ops: events.length,
+        total_events: events.length,
         ops_by_type: opsByType,
         total_cost_usd: totalCost,
         reduction_ratio: ratioStats,
@@ -437,6 +437,9 @@ function parseArgs(argv) {
             case "since":
                 out.since = value ?? null;
                 break;
+            case "source":
+                out.source = value ?? "";
+                break;
             default:
                 throw new Error(`unrecognized argument: --${name}`);
         }
@@ -454,6 +457,14 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
+
+log options:
+  --op OP               Operation name (required)
+  --wiki-root PATH      Wiki root (required)
+  --details JSON        Event details as a JSON object (default: {})
+  --source SOURCE       Sugar that merges into details.source — convenient
+                        for ingest events that just need a source identifier
+                        without a hand-built JSON blob.
 
 stats options:
   --since SINCE         Filter events to ts >= SINCE (ISO-8601 or
@@ -514,6 +525,9 @@ export function main(argv = process.argv.slice(2)) {
             return 2;
         }
         const details = JSON.parse(args.details ?? "{}");
+        if (typeof args.source === "string" && args.source !== "") {
+            details["source"] = args.source;
+        }
         const entry = logEvent(args.wikiRoot, args.op, details);
         process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
         return 0;
@@ -521,6 +535,9 @@ export function main(argv = process.argv.slice(2)) {
     // Fallback: bare --op style (no subcommand)
     if (args.op && args.wikiRoot) {
         const details = JSON.parse(args.details ?? "{}");
+        if (typeof args.source === "string" && args.source !== "") {
+            details["source"] = args.source;
+        }
         const entry = logEvent(args.wikiRoot, args.op, details);
         process.stdout.write(JSON.stringify(entry, null, 2) + "\n");
         return 0;

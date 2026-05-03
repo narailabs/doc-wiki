@@ -309,6 +309,41 @@ describe("init_wiki — missing args", () => {
   });
 });
 
+// ── --wiki-root alias ───────────────────────────────────────────────
+//
+// `--wiki-root` is accepted as an alias for `--path` so callers using the
+// convention shared with event_logger / graph_ops / etc. work without
+// translation. Both flags map to the same internal field.
+
+describe("init_wiki — --wiki-root alias", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-alias-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("accepts --wiki-root as a synonym for --path", () => {
+    const wiki = tmpWiki(tmpPath);
+    const rc = main(["--wiki-root", wiki]);
+    expect(rc).toBe(0);
+    expect(fs.existsSync(path.join(wiki, "wiki.config.yaml"))).toBe(true);
+  });
+
+  it("CLI: --wiki-root works as a synonym for --path", () => {
+    const wiki = tmpWiki(tmpPath);
+    const stdout = execFileSync(
+      "node",
+      [CLI, "--wiki-root", wiki],
+      { encoding: "utf-8" },
+    );
+    const result = JSON.parse(stdout) as { status: string; wiki_root: string };
+    expect(result.status).toBe("ok");
+    expect(fs.existsSync(path.join(wiki, "wiki.config.yaml"))).toBe(true);
+  });
+});
+
 // ── v2 config blocks (Phase H2) ─────────────────────────────────────
 
 describe("init_wiki — v2 config blocks", () => {
