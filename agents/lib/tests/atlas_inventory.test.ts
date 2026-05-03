@@ -565,6 +565,26 @@ app.get('/x', () => {});
     const profile = loadRestProfile("hono")!;
     expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
   });
+
+  it("does NOT extract .use() middleware as a route", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.ts"),
+      `import { Hono } from "hono";
+import { logger } from "hono/logger";
+
+const app = new Hono();
+
+app.use('/api/*', logger());
+app.use('*', async (c, next) => { await next(); });
+app.get('/api/users', (c) => c.json([]));
+app.post('/api/users', (c) => c.json({}, 201));
+`,
+    );
+    const profile = loadRestProfile("hono")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toEqual(["GET /api/users", "POST /api/users"]);
+  });
 });
 
 describe("FastAPI profile", () => {
