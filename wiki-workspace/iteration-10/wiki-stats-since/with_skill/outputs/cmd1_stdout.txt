@@ -1,0 +1,18 @@
+{
+  "total_ops": 2,
+  "ops_by_type": {
+    "query": 1,
+    "ingest": 1
+  },
+  "total_cost_usd": 0,
+  "reduction_ratio": {},
+  "per_agent_cost": {},
+  "total_tokens_by_op": {
+    "query": 800,
+    "ingest": 1500
+  },
+  "avg_duration_ms_by_op": {
+    "query": 1200,
+    "ingest": 2300
+  }
+}

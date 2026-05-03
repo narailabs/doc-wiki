@@ -1,0 +1,7 @@
+now_ms=1777836861153
+now_iso_z=2026-05-03T19:34:21Z
+now_iso_plus=2026-05-03T19:34:21+00:00
+abs_iso_10d_z=2026-04-23T19:34:21Z
+abs_iso_10d_plus=2026-04-23T19:34:21+00:00
+event_count=12
+events_path=/Users/narayan/src/doc-wiki/wiki-workspace/iteration-10/wiki-stats-since/work/log/events.jsonl
