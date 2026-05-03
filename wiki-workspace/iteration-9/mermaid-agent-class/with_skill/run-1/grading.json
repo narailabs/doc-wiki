@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Generated block starts with the `classDiagram` directive",
+      "passed": true,
+      "evidence": "Substring `\\`\\`\\`mermaid\\nclassDiagram` is present in class-hierarchy.md (lines 16-17)."
+    },
+    {
+      "text": "All three classes (Animal, Dog, Cat) are declared as separate `class Foo { ... }` blocks",
+      "passed": true,
+      "evidence": "Regex search inside the marker region matches `class Animal { +name: string +eat() }`, `class Dog { +bark() }`, `class Cat { +meow() }` — three distinct class blocks."
+    },
+    {
+      "text": "Each class's body lists its declared methods and attributes from the input (e.g., Animal: `name: string`, `eat()`; Dog: `bark()`; Cat: `meow()`); no method appears under the wrong class",
+      "passed": true,
+      "evidence": "Animal body == `+name: string\\n        +eat()`; Dog body == `+bark()`; Cat body == `+meow()`. `bark` and `meow` do not appear inside the Animal block; `eat` only appears in the Animal block."
+    },
+    {
+      "text": "Inheritance is rendered as `Animal <|-- Dog` and `Animal <|-- Cat` (the `<|--` glyph specifically — `<--` or `--|>` are wrong directions and fail the assertion)",
+      "passed": true,
+      "evidence": "`Animal <|-- Dog` and `Animal <|-- Cat` substrings are both present in the marker region; the wrong glyphs ` <-- Dog` (no pipe) and `--|>` are NOT present."
+    },
+    {
+      "text": "Block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on class-hierarchy.md — no EOF append; content outside the markers preserved byte-for-byte",
+      "passed": true,
+      "evidence": "start-marker-count=1, end-marker-count=1; mermaid fence sits between lines 14 and 31 (between the two markers). Python compare of pre-run vs post-run bytes outside the marker region: outside-bytes-equal == True. The `## Notes` section after the end marker is intact."
+    },
+    {
+      "text": "mermaid_lint.js passes on the resulting page",
+      "passed": true,
+      "evidence": "`node mermaid_lint.js --page class-hierarchy.md` printed `[]` (empty issue array)."
+    }
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "Class diagram injection passed all 6 expectations: three class blocks with correct attribute/method assignment, correct `<|--` inheritance glyph in correct direction, marker-bounded injection, byte-stable outside content, lint clean."}
+}

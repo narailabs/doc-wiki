@@ -1,0 +1,48 @@
+{
+  "expectations": [
+    {
+      "text": "All three models (User, Post, Comment) are extracted into detected-entities.json as separate entries",
+      "passed": true,
+      "evidence": "detected-entities.json entities array has 3 entries: class_name='User' (line 6), class_name='Post' (line 18), class_name='Comment' (line 34) — one per `model` block in fixtures/prisma/schema.prisma."
+    },
+    {
+      "text": "Each entity's table_name matches the @@map(...) value in the fixture (e.g., User → 'users', Post → 'posts', Comment → 'comments')",
+      "passed": true,
+      "evidence": "Fixture: User has @@map(\"users\"), Post has @@map(\"posts\"), Comment has @@map(\"comments\"). detected-entities.json: User.table_name='users' (line 7), Post.table_name='posts' (line 19), Comment.table_name='comments' (line 35). All three @@map values picked up via the per-class windowing pass."
+    },
+    {
+      "text": "Every @relation(fields: [...], references: [...]) field produces a relationship in detected-entities.json with a non-empty target_entity that names another extracted model — no blank target_entity strings",
+      "passed": true,
+      "evidence": "Fixture has two @relation declarations: `author User @relation(...)` on Post and `post Post @relation(...)` on Comment. detected-entities.json: Post.relationships[0].target_entity='User' (line 25, type many_to_one) and Comment.relationships[0].target_entity='Post' (line 41, type many_to_one). Both targets non-empty and reference extracted models. The Prisma profile's `\\b\\w+\\s+([A-Z]\\w*)\\s+@relation\\b` pattern captured the type token before the marker."
+    },
+    {
+      "text": "One-to-many sides (e.g., posts Post[]) produce relationships of type one_to_many; their corresponding many-to-one inverse (e.g., author User @relation(...)) produces type many_to_one, both with the correct target_entity",
+      "passed": true,
+      "evidence": "Fixture User has `posts Post[]` → detected-entities.json User.relationships[0]={type:'one_to_many', target_entity:'Post'} (lines 12-13). Fixture Post has `author User @relation` → Post.relationships[0]={type:'many_to_one', target_entity:'User'} (lines 24-25). Fixture Post has `comments Comment[]` → Post.relationships[1]={type:'one_to_many', target_entity:'Comment'} (lines 28-29). Fixture Comment has `post Post @relation` → Comment.relationships[0]={type:'many_to_one', target_entity:'Post'} (lines 40-41). All four pairs captured with correct type + target."
+    },
+    {
+      "text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='prisma'",
+      "passed": true,
+      "evidence": "database-mapping.md line 3 (`type: entity`) and line 6 (`orm_profile: prisma`)."
+    },
+    {
+      "text": "Mermaid erDiagram contains nodes named 'users', 'posts', 'comments' (the table names from @@map, not the model names) and at least one edge of cardinality ||--o{ linking users-posts AND another linking posts-comments",
+      "passed": true,
+      "evidence": "database-mapping.md Mermaid block lines 23-26: `erDiagram\\n    users ||--o{ posts : \"\"\\n    posts ||--o{ comments : \"\"`. Node names 'users', 'posts', 'comments' all appear as edge endpoints (Mermaid implicitly declares entities from edges). Required edges both present: users ||--o{ posts AND posts ||--o{ comments. The bidirectional canonicalization in output.ts (A2) collapsed the User↔Post pair to the one_to_many side as expected."
+    },
+    {
+      "text": "mermaid_lint.js reports no issues on the generated page",
+      "passed": true,
+      "evidence": "Ran `node skills/doc-wiki/scripts/mermaid_lint.js --page <database-mapping.md>` — exit 0, output `[]`. Captured in mermaid-lint.txt."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "Prisma detection extracted all 3 models, mapped each to its @@map table name, captured every @relation with the correct one_to_many / many_to_one type and target_entity (the profile's capture-group-based pattern dereferenced correctly to User/Post/Comment), and rendered a clean Mermaid diagram with the two required ||--o{ edges."
+  }
+}

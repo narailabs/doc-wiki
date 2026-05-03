@@ -415,8 +415,10 @@ describe("TestGraphOpsCLI", () => {
     expect(data.length).toBeGreaterThan(0);
   });
 
-  it("cli_path_no_result_returns_empty_array", () => {
-    // F has no outgoing edges to A
+  it("cli_path_no_result_returns_explanatory_object", () => {
+    // F has no outgoing edges to A — the no-path case.
+    // The CLI must surface a human-readable reason here so the wiki skill's
+    // /doc-wiki:query path mode does not present a bare `[]` to the user.
     const js = runCli([
       "path",
       "--edges",
@@ -428,8 +430,32 @@ describe("TestGraphOpsCLI", () => {
     ]);
     expect(js.status).toBe(0);
     const data = JSON.parse(js.stdout);
-    expect(Array.isArray(data)).toBe(true);
-    expect(data).toHaveLength(0);
+    expect(Array.isArray(data)).toBe(false);
+    expect(data.path).toEqual([]);
+    expect(data.found).toBe(false);
+    expect(typeof data.reason).toBe("string");
+    expect(data.reason).toMatch(/'F'/);
+    expect(data.reason).toMatch(/'A'/);
+  });
+
+  it("cli_path_all_paths_no_result_returns_explanatory_object", () => {
+    // Same no-path scenario via --all-paths.
+    const js = runCli([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "F",
+      "--to",
+      "A",
+      "--all-paths",
+    ]);
+    expect(js.status).toBe(0);
+    const data = JSON.parse(js.stdout);
+    expect(Array.isArray(data)).toBe(false);
+    expect(data.paths).toEqual([]);
+    expect(data.found).toBe(false);
+    expect(typeof data.reason).toBe("string");
   });
 
   it("cli_path_with_via_routes_through_waypoint", () => {

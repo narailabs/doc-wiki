@@ -556,12 +556,33 @@ export function main(argv = process.argv.slice(2)) {
             return 0;
         }
         if (args.command === "path") {
+            const from = args.fromConcept ?? "";
+            const to = args.toConcept ?? "";
             if (args.allPaths) {
-                const result = allPaths(args.edges ?? "", args.fromConcept ?? "", args.toConcept ?? "");
-                process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+                const paths = allPaths(args.edges ?? "", from, to);
+                if (paths.length === 0) {
+                    process.stdout.write(JSON.stringify({
+                        paths: [],
+                        found: false,
+                        reason: `No paths from '${from}' to '${to}' — either the target is unknown, unreachable from the source, or no edges connect them in the directed graph.`,
+                    }, null, 2) + "\n");
+                    return 0;
+                }
+                process.stdout.write(JSON.stringify(paths, null, 2) + "\n");
                 return 0;
             }
-            const result = shortestPath(args.edges ?? "", args.fromConcept ?? "", args.toConcept ?? "", args.maxHops ?? 6, args.via ?? null);
+            const maxHops = args.maxHops ?? 6;
+            const via = args.via ?? null;
+            const result = shortestPath(args.edges ?? "", from, to, maxHops, via);
+            if (result.length === 0) {
+                const viaClause = via ? ` via '${via}'` : "";
+                process.stdout.write(JSON.stringify({
+                    path: [],
+                    found: false,
+                    reason: `No path from '${from}' to '${to}'${viaClause} within ${maxHops} hops — either the target is unknown, unreachable from the source, or the shortest path exceeds --max-hops.`,
+                }, null, 2) + "\n");
+                return 0;
+            }
             process.stdout.write(JSON.stringify(result, null, 2) + "\n");
             return 0;
         }

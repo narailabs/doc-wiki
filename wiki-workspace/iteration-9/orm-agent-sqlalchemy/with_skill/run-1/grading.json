@@ -1,0 +1,43 @@
+{
+  "expectations": [
+    {
+      "text": "Every class that inherits from the declarative Base is identified as an entity — detected-entities.json has an entry per SQLAlchemy class in the fixture",
+      "passed": true,
+      "evidence": "Fixture models.py declares 4 Base-inheriting classes (User, Order, OrderItem, Profile). detected-entities.json contains 4 entries with class_name='User' (line 6), 'Order' (line 35), 'OrderItem' (line 72), 'Profile' (line 105) — one per Base subclass."
+    },
+    {
+      "text": "Each entity's table_name matches its own __tablename__ assignment (the per-class windowing fix; multi-class single-file input must not collapse to one table)",
+      "passed": true,
+      "evidence": "Source __tablename__ values: User='users', Order='orders', OrderItem='order_items', Profile='profiles'. detected-entities.json table_names: User.table_name='users' (line 7), Order.table_name='orders' (line 36), OrderItem.table_name='order_items' (line 73), Profile.table_name='profiles' (line 106). All 4 distinct, no collapse."
+    },
+    {
+      "text": "relationship() declarations are picked up by the relationship_patterns, with type and target_entity populated where the back-ref is unambiguous",
+      "passed": true,
+      "evidence": "User has 2 relationship entries → target_entity='Order','Profile' (lines 26, 30). Order has 2 relationship + 1 foreign_key → targets 'User','OrderItem','users' (lines 59, 63, 67). OrderItem has 1 relationship + 1 foreign_key → 'Order','orders' (lines 96, 100). Profile has 1 relationship + 1 foreign_key → 'User','users' (lines 125, 129). Every relationship() call's first arg was resolved into target_entity."
+    },
+    {
+      "text": "Mermaid erDiagram contains one node per extracted entity with its columns, and AT LEAST ONE edge between two of them — with the extended edge-rendering in output.ts, `relationship`, `foreign_key`, `one_to_one`, `many_to_one` types now produce edges too (not just one_to_many + many_to_many). Zero edges is a failure.",
+      "passed": true,
+      "evidence": "database-mapping.md Mermaid block (lines 23-56) declares 4 entity nodes (users, orders, order_items, profiles) each with column blocks. 3 edges emitted: `users ||--o{ orders` (line 53), `users ||--o{ profiles` (line 54), `orders ||--o{ order_items` (line 55). The generic `relationship` type produced edges thanks to the extended CARDINALITY map in output.ts (line 197). Edge count is well above the 'at least one' floor."
+    },
+    {
+      "text": "Generated markdown has frontmatter with type='entity' and orm_profile='sqlalchemy'",
+      "passed": true,
+      "evidence": "database-mapping.md line 3 (`type: entity`) and line 6 (`orm_profile: sqlalchemy`)."
+    },
+    {
+      "text": "mermaid_lint.js passes on the generated page",
+      "passed": true,
+      "evidence": "Ran `node skills/doc-wiki/scripts/mermaid_lint.js --page <database-mapping.md>` — exit 0, output `[]`. Captured in mermaid-lint.txt."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "SQLAlchemy detection extracted all 4 Base-inheriting classes with their own __tablename__ values (per-class windowing held), every relationship() resolved a target_entity, and the Mermaid diagram emitted edges for the generic `relationship` type via the extended CARDINALITY map. mermaid_lint passes."
+  }
+}

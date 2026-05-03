@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Every generated CLAUDE.md contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (grep -c returns 1 for each on every file)",
+      "passed": true,
+      "evidence": "grep -c on root + 3 submodule CLAUDE.md files: each returns start=1 end=1 (4/4 files)."
+    },
+    {
+      "text": "Root CLAUDE.md lists EXACTLY three submodule links — one per discovered submodule — with relative paths that resolve to real CLAUDE.md files under the submodule dirs",
+      "passed": true,
+      "evidence": "Root contains exactly 3 lines matching `[name](name/CLAUDE.md)` for backend, frontend, shared; each target file exists at the resolved relative path."
+    },
+    {
+      "text": "Each submodule CLAUDE.md contains a relative link back to the root CLAUDE.md (e.g., `../../CLAUDE.md`) under a Parent Project heading, and the link target resolves",
+      "passed": true,
+      "evidence": "frontend/, backend/, shared/ each have a `## Parent Project` heading followed by `[Root CLAUDE.md](../CLAUDE.md)`; readlink -f resolves all three to the actual root CLAUDE.md (depth-1 submodules use `../`, matching generator logic)."
+    },
+    {
+      "text": "Managed section content is non-empty: each file's region between the start/end markers contains at least an Overview heading OR a non-empty link to wiki/index.md — empty markers fail",
+      "passed": true,
+      "evidence": "All 4 files contain `## Overview` AND a `wiki/index.md` link inside the managed region."
+    },
+    {
+      "text": "Running the generator a second time produces byte-identical CLAUDE.md files across the board (diff -ru is empty) — idempotency holds",
+      "passed": true,
+      "evidence": "Snapshotted all 4 files, re-ran 4 generations, diff -q on each pair reported MATCH; no byte differences."
+    },
+    {
+      "text": "When the user edits content OUTSIDE the managed markers between runs (e.g., adds a new heading above the start marker), the next generation preserves that edit unchanged",
+      "passed": true,
+      "evidence": "Added a manual header before the start marker and a manual footer after the end marker on root CLAUDE.md, re-ran generator. sha256 of pre-marker bytes: 0a709f6c…2304 (identical before/after). sha256 of post-marker bytes: 74eea628…3a28 (identical before/after)."
+    }
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "All 6 expectations pass. Generator produces correct root + 3 submodule CLAUDE.md files with balanced markers, parent links resolve, idempotency and outside-marker preservation both hold across re-runs."}
+}

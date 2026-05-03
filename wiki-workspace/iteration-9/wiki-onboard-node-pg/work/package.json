@@ -1,0 +1,9 @@
+{
+  "name": "test-onboard-node-pg",
+  "version": "0.0.1",
+  "main": "src/index.js",
+  "dependencies": {
+    "express": "^4.18.0",
+    "pg": "^8.11.0"
+  }
+}
