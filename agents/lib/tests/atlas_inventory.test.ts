@@ -4,7 +4,7 @@
  * Each describe block targets one detection function plus the shared
  * generate / persist / load round-trip.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -21,6 +21,8 @@ import {
   loadCustomRestProfiles,
   loadRestProfile,
   resolveRestProfiles,
+  main,
+  _readEcosystemRestEnabled,
   type CodeInventory,
   type RestProfile,
 } from "../atlas_inventory.js";
@@ -1527,5 +1529,143 @@ describe("inventory round-trip", () => {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, "{not json");
     expect(loadInventory(wikiRoot, VALID_RUN_ID)).toBeNull();
+  });
+});
+
+describe("_readEcosystemRestEnabled", () => {
+  let tmpPath: string;
+  beforeEach(() => { tmpPath = makeTmpPath("atlas-inv-eco-rest-"); });
+  afterEach(() => { cleanupTmpPath(tmpPath); });
+
+  it("returns true when wiki.config.yaml has ecosystem.rest.enabled: true", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  rest:\n    enabled: true\n",
+    );
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(true);
+  });
+
+  it("returns false when wiki.config.yaml has ecosystem.rest.enabled: false", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  rest:\n    enabled: false\n",
+    );
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(false);
+  });
+
+  it("returns false when wiki.config.yaml is missing", () => {
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(false);
+  });
+
+  it("returns false when wiki.config.yaml is malformed", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem: : :\n  not yaml [",
+    );
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(false);
+  });
+
+  it("returns false when wiki.config.yaml omits the ecosystem.rest key", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  orm:\n    cross_validate_against_db: true\n",
+    );
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(false);
+  });
+
+  it("falls back to wiki/wiki.config.yaml when the root copy is missing", () => {
+    fs.mkdirSync(path.join(tmpPath, "wiki"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki", "wiki.config.yaml"),
+      "ecosystem:\n  rest:\n    enabled: true\n",
+    );
+    expect(_readEcosystemRestEnabled(tmpPath)).toBe(true);
+  });
+});
+
+describe("main() honors ecosystem.rest.enabled", () => {
+  let tmpPath: string;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-main-eco-");
+    // The CLI writes the manifest to stdout; suppress it during tests.
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  function writeFlaskFile(): void {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.py"),
+      `from flask import Flask
+app = Flask(__name__)
+
+@app.route("/api/health")
+def health(): pass
+`,
+    );
+  }
+
+  function readManifest(runId: string): CodeInventory {
+    const manifest = loadInventory(tmpPath, runId);
+    if (!manifest) throw new Error("manifest not found");
+    return manifest;
+  }
+
+  it("enables REST detection when wiki.config.yaml has ecosystem.rest.enabled: true (no CLI flag)", () => {
+    writeFlaskFile();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  rest:\n    enabled: true\n",
+    );
+    const runId = "2026-05-03T00-00-00";
+    const exit = main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+    ]);
+    expect(exit).toBe(0);
+    const manifest = readManifest(runId);
+    expect(manifest.rest_endpoints.length).toBeGreaterThan(0);
+    expect(manifest.rest_endpoints[0]?.method).toBe("GET");
+    expect(manifest.rest_endpoints[0]?.path).toBe("/api/health");
+  });
+
+  it("leaves REST detection off when wiki.config.yaml is absent and no --enable-rest", () => {
+    writeFlaskFile();
+    const runId = "2026-05-03T00-00-01";
+    const exit = main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+    ]);
+    expect(exit).toBe(0);
+    expect(readManifest(runId).rest_endpoints).toEqual([]);
+  });
+
+  it("--enable-rest forces detection even when config disables it", () => {
+    writeFlaskFile();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  rest:\n    enabled: false\n",
+    );
+    const runId = "2026-05-03T00-00-02";
+    const exit = main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+      "--enable-rest",
+    ]);
+    expect(exit).toBe(0);
+    expect(readManifest(runId).rest_endpoints.length).toBeGreaterThan(0);
   });
 });
