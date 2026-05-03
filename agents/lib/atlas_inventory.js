@@ -609,6 +609,39 @@ function _resolvePath(rawPath, filePrefix) {
         return filePrefix;
     return `${filePrefix.replace(/\/+$/, "")}/${rawPath.replace(/^\/+/, "")}`;
 }
+/**
+ * Read `ecosystem.rest.enabled` from `wiki.config.yaml` at the wiki root
+ * (or the parent's `wiki/` subdir). Returns `false` when the flag is
+ * absent or the config is missing/malformed — REST detection is opt-in.
+ * Mirrors `readCrossValidateFlag` in `agents/wiki-orm-agent/scripts/orm_detect.ts`.
+ */
+export function _readEcosystemRestEnabled(wikiRoot) {
+    const candidates = [
+        path.join(wikiRoot, "wiki.config.yaml"),
+        path.join(wikiRoot, "wiki", "wiki.config.yaml"),
+    ];
+    for (const file of candidates) {
+        let text;
+        try {
+            text = fs.readFileSync(file, "utf-8");
+        }
+        catch {
+            continue;
+        }
+        try {
+            const parsed = yaml.load(text);
+            const eco = parsed?.["ecosystem"];
+            const rest = eco?.["rest"];
+            const flag = rest?.["enabled"];
+            if (typeof flag === "boolean")
+                return flag;
+        }
+        catch {
+            // malformed YAML — treat as missing
+        }
+    }
+    return false;
+}
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
     "--wiki-root": "wikiRoot",
@@ -630,7 +663,9 @@ Required:
   --run-id <id>        Atlas run id (YYYY-MM-DDTHH-MM-SS)
 
 Optional:
-  --enable-rest                Run REST endpoint detection (off by default)
+  --enable-rest                Run REST endpoint detection. If absent,
+                               the CLI reads ecosystem.rest.enabled from
+                               <wiki-root>/wiki.config.yaml (default false).
   --rest-profiles <csv>        Comma-separated profile names. Default: all
                                shipped profiles + custom profiles from
                                <wiki-root>/wiki.config.yaml's
@@ -652,8 +687,9 @@ export function main(argv = process.argv.slice(2)) {
         return 2;
     }
     // --enable-rest is a bare flag; detect it before parseFlags consumes
-    // the value-bearing args.
-    const enableRest = argv.includes("--enable-rest");
+    // the value-bearing args. The CLI flag always wins; if absent, the
+    // config-file flag is consulted after wikiRoot is resolved below.
+    const enableRestFromCli = argv.includes("--enable-rest");
     const flagArgs = argv.slice(1).filter((a) => a !== "--enable-rest");
     let parsed;
     try {
@@ -700,6 +736,8 @@ export function main(argv = process.argv.slice(2)) {
     // attempted; missing file yields an empty list, which the resolver
     // tolerates without complaint.
     const wikiConfigPath = path.join(wikiRoot, "wiki.config.yaml");
+    // Resolve the REST-detection flag: CLI > config > default false.
+    const enableRest = enableRestFromCli || _readEcosystemRestEnabled(wikiRoot);
     let inventory;
     try {
         inventory = generateInventory(repoRoot, runId, {
