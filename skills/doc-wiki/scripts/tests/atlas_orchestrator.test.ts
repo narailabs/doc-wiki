@@ -3,7 +3,7 @@
  * `/doc-wiki:atlas` skill orchestrator. State detection, page counting,
  * cost estimation, and plan-snapshot persistence.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
@@ -20,7 +20,12 @@ import {
   getRollingPerIngestAvg,
   assembleGapReport,
   renderGapReportMarkdown,
+  main,
 } from "../atlas_orchestrator.js";
+import {
+  generateInventory,
+  persistInventory,
+} from "../../../../agents/lib/atlas_inventory.js";
 import {
   makeTmpPath,
   cleanupTmpPath,
@@ -733,5 +738,109 @@ describe("renderGapReportMarkdown", () => {
     );
     expect(md).toContain("- GET /api/users (src/routes/users.ts:42)");
     expect(md).toContain("- gather() at src/orchestrator.ts:18");
+  });
+});
+
+describe("main() compute-sources subcommand", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+  let stdoutChunks: string[];
+  let stderrChunks: string[];
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-cs-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    stdoutChunks = [];
+    stderrChunks = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdoutChunks.push(chunk.toString());
+      return true;
+    });
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      stderrChunks.push(chunk.toString());
+      return true;
+    });
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  function persistInventoryWith(overrides: {
+    runId: string;
+    orm?: Array<{ class_name: string; source_file: string }>;
+    rest?: Array<{ method: string; path: string; file: string }>;
+  }): void {
+    const inv = generateInventory(wikiRoot, overrides.runId);
+    inv.orm_entities = (overrides.orm ?? []).map((e) => ({
+      profile: "sqlalchemy",
+      class_name: e.class_name,
+      table_name: e.class_name.toLowerCase(),
+      schema_name: "",
+      source_file: e.source_file,
+      columns: [],
+      relationships: [],
+    }));
+    inv.rest_endpoints = (overrides.rest ?? []).map((r) => ({
+      framework: "fastapi",
+      method: r.method,
+      path: r.path,
+      file: r.file,
+      line: 1,
+    }));
+    persistInventory(wikiRoot, inv);
+  }
+
+  it("groups orm and rest entries by topic+facet", () => {
+    persistInventoryWith({
+      runId: "2026-05-03T00-00-00",
+      orm: [{ class_name: "User", source_file: "src/auth/models.py" }],
+      rest: [{ method: "GET", path: "/x", file: "src/billing/api.ts" }],
+    });
+    const exit = main([
+      "compute-sources",
+      "--wiki-root", wikiRoot,
+      "--run-id", "2026-05-03T00-00-00",
+      "--topics", "auth,billing",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as Record<string, unknown>;
+    expect(out["auth"]).toEqual({ "data-model": ["src/auth/models.py"], api: [] });
+    expect(out["billing"]).toEqual({ "data-model": [], api: ["src/billing/api.ts"] });
+  });
+
+  it("emits empty {} when the manifest is missing (non-fatal fallback)", () => {
+    const exit = main([
+      "compute-sources",
+      "--wiki-root", wikiRoot,
+      "--run-id", "2026-05-03T99-99-99",
+      "--topics", "auth",
+    ]);
+    expect(exit).toBe(0);
+    expect(stdoutChunks.join("").trim()).toBe("{}");
+  });
+
+  it("rejects missing --topics", () => {
+    persistInventoryWith({ runId: "2026-05-03T00-00-00" });
+    const exit = main([
+      "compute-sources",
+      "--wiki-root", wikiRoot,
+      "--run-id", "2026-05-03T00-00-00",
+    ]);
+    expect(exit).toBe(2);
+    expect(stderrChunks.join("")).toContain("--topics is required");
+  });
+
+  it("rejects missing --run-id", () => {
+    const exit = main([
+      "compute-sources",
+      "--wiki-root", wikiRoot,
+      "--topics", "auth",
+    ]);
+    expect(exit).toBe(2);
+    expect(stderrChunks.join("")).toContain("--run-id is required");
   });
 });

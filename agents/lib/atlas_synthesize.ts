@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
+import { type CodeInventory } from "./atlas_inventory.js";
 import {
   formatPhaseFlow,
   type ClassDef,
@@ -768,6 +769,109 @@ export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle
   }
 
   return { sources, text: parts.join("\n"), notes };
+}
+
+// ── Manifest-driven source lookups ─────────────────────────────────
+
+/** Per-topic, per-facet source list. Only the manifest-backed facets
+ *  appear here; other facets keep using SKILL.md heuristics. */
+export interface ManifestSourcesByTopic {
+  [topic: string]: { "data-model": string[]; api: string[] };
+}
+
+/** Directory names that gate a topic-bearing path component. The
+ *  directory IMMEDIATELY following one of these is treated as the
+ *  topic candidate. Curated to match the layouts atlas already
+ *  recognises in topic discovery (Phase 2). */
+const _TOPIC_DIR_PREFIXES: ReadonlySet<string> = new Set([
+  "src",
+  "app",
+  "apps",
+  "services",
+  "lib",
+  "internal",
+  "pkg",
+  "packages",
+  "modules",
+  "cmd",
+]);
+
+/**
+ * Canonicalize a topic candidate to match the topic-discovery convention
+ * (SKILL.md Phase 2): lowercase-kebab-case, strip `-service`, `-svc`,
+ * `-module` suffixes.
+ */
+function _canonicalizeTopic(raw: string): string {
+  let s = raw.toLowerCase().replace(/[_\s]+/g, "-");
+  s = s.replace(/-(service|svc|module)$/i, "");
+  return s;
+}
+
+/**
+ * Extract a topic candidate from a repo-relative source-file path.
+ * Looks for `<prefix>/<topic>/...` where `<prefix>` is one of the
+ * known topic-bearing directories. Returns the canonicalized topic,
+ * or `null` if no recognized topic directory is found or the candidate
+ * is the path's leaf (i.e. a file, not a sub-directory).
+ */
+export function extractTopicFromPath(sourceFile: string): string | null {
+  const parts = sourceFile.split("/").filter((p) => p.length > 0);
+  // Need at least <prefix>/<topic>/<more> — if `<topic>` is the leaf,
+  // it's likely a file (e.g. `src/utils.ts`), not a topic directory.
+  for (let i = 0; i < parts.length - 2; i++) {
+    if (_TOPIC_DIR_PREFIXES.has(parts[i] ?? "")) {
+      const candidate = parts[i + 1] ?? "";
+      if (candidate.length > 0) return _canonicalizeTopic(candidate);
+    }
+  }
+  return null;
+}
+
+/**
+ * Build a topic → facet → source-files map for the two manifest-backed
+ * facets — `data-model` (from `inventory.orm_entities`) and `api` (from
+ * `inventory.rest_endpoints`). Topic assignment is path-based via
+ * {@link extractTopicFromPath}; entries whose extracted topic does not
+ * canonicalize to a member of `topics` are dropped.
+ *
+ * Other facets (`architecture`, `environments`, `operations`) are NOT
+ * manifest-backed — the orchestrator continues to use SKILL.md
+ * heuristics for them, merging the two source lists.
+ */
+export function groupManifestByTopicFacet(
+  inventory: CodeInventory,
+  topics: readonly string[],
+): ManifestSourcesByTopic {
+  const wantedTopics = new Set(topics.map((t) => _canonicalizeTopic(t)));
+  const out: ManifestSourcesByTopic = {};
+
+  const ensure = (topic: string): { "data-model": string[]; api: string[] } => {
+    const existing = out[topic];
+    if (existing) return existing;
+    const fresh = { "data-model": [] as string[], api: [] as string[] };
+    out[topic] = fresh;
+    return fresh;
+  };
+
+  for (const entity of inventory.orm_entities) {
+    const topic = extractTopicFromPath(entity.source_file);
+    if (!topic || !wantedTopics.has(topic)) continue;
+    const bucket = ensure(topic);
+    if (!bucket["data-model"].includes(entity.source_file)) {
+      bucket["data-model"].push(entity.source_file);
+    }
+  }
+
+  for (const endpoint of inventory.rest_endpoints) {
+    const topic = extractTopicFromPath(endpoint.file);
+    if (!topic || !wantedTopics.has(topic)) continue;
+    const bucket = ensure(topic);
+    if (!bucket["api"].includes(endpoint.file)) {
+      bucket["api"].push(endpoint.file);
+    }
+  }
+
+  return out;
 }
 
 // ── CLI ────────────────────────────────────────────────────────────
