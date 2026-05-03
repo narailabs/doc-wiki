@@ -1,0 +1,25 @@
+name: rocket
+language: rust
+description: "Rocket (Rust) HTTP routes via attribute macros"
+
+detection:
+  file_patterns:
+    - "**/*.rs"
+  markers:
+    - pattern: "use rocket"
+      type: import
+    - pattern: "extern crate rocket"
+      type: import
+    - pattern: "#[macro_use] extern crate rocket"
+      type: import
+
+# Rocket's routes are declared via attribute macros: `#[get("/path")]`,
+# `#[post("/path", data = "<body>")]`, etc. on a free function. The
+# extractor captures the verb from the macro name and the path from the
+# first quoted string argument; query / data / format keyword args after
+# the path are ignored (the regex stops at the closing quote).
+endpoint_extraction:
+  patterns:
+    - regex: "#\\[(get|post|put|delete|patch|options|head)\\s*\\(\\s*\"([^\"]+)\""
+      method_group: 1
+      path_group: 2

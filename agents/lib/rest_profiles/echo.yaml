@@ -1,0 +1,23 @@
+name: echo
+language: go
+description: "Echo (Go) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.go"
+  markers:
+    - pattern: "github.com/labstack/echo"
+      type: import
+    - pattern: "echo.New("
+      type: instantiation
+
+# Echo's verb methods are SHOUTING-CASE: `e.GET("/x", h)`, `e.POST(...)`,
+# etc. Common router variable names: e (engine), router, g (group), api,
+# server. Group prefixing — `g := e.Group("/api"); g.GET("/users", ...)`
+# — is intentionally NOT concatenated: the inventory records the literal
+# path argument and leaves prefix synthesis to the future synthesizer.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:e|router|g|api|server)\\.(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\\s*\\(\\s*\"([^\"]+)\""
+      method_group: 1
+      path_group: 2

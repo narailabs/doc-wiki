@@ -1,0 +1,26 @@
+name: vapor
+language: swift
+description: "Vapor (Swift) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.swift"
+  markers:
+    - pattern: "import Vapor"
+      type: import
+    - pattern: "app.routes"
+      type: usage
+    - pattern: "app.group("
+      type: usage
+
+# Vapor verb methods accept either a single path string or a sequence of
+# `PathComponent` arguments — `app.get("api", "users") { req in ... }`.
+# The inventory captures only the FIRST path argument; multi-component
+# concatenation (e.g. `["api", "users"]` -> `/api/users`) and route
+# groups (`app.grouped("api").get("users", ...)`) are deferred. Common
+# router variables: `app`, `routes`, `grouped`.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:app|routes|grouped)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*\"([^\"]+)\""
+      method_group: 1
+      path_group: 2
