@@ -1,0 +1,15 @@
+{
+  "executor_duration_seconds": 0,
+  "total_duration_seconds": 0,
+  "phases": {
+    "docker_start": "docker run -d --rm --name eval-pg-20 -p 5455:5432 -e POSTGRES_PASSWORD=eval -e POSTGRES_DB=evaldb postgres:16-alpine; pg_isready returns ready on attempt 1",
+    "seed_table": "docker exec eval-pg-20 psql -U postgres -d evaldb -c 'CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name,email) VALUES (\"alice\",...),(\"bob\",...),(\"carol\",...);' returns 'CREATE TABLE; INSERT 0 3'",
+    "init_wiki": "ran node init_wiki.js --path work",
+    "gather_run_1": "POSTGRES_PASSWORD=eval node run.mjs > dispatch-result.json (cwd=<work>); exit=0; envelope.status=success; data.rows[0].table_name=users",
+    "gather_run_2": "POSTGRES_PASSWORD=eval node run.mjs > dispatch-result-2.json (cwd=<work>); exit=0; envelope identical to run 1",
+    "cli_resolution": "node cli-resolve.mjs > cli-resolution.json; source=bundled-self",
+    "events_logged": "two op=ingest entries in log/events.jsonl, one per gather run",
+    "verify_no_leak": "docker exec eval-pg-20 psql -c 'SELECT pid, application_name, state FROM pg_stat_activity WHERE datname=evaldb AND state IS NOT NULL' returns only the psql session — connector pool was released on each Node exit",
+    "docker_stop": "docker stop eval-pg-20 (idempotent; tolerates already-stopped containers)"
+  }
+}

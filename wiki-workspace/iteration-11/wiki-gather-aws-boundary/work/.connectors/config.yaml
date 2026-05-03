@@ -1,0 +1,11 @@
+connectors:
+  aws:
+    skill: aws-agent-connector
+    access_key_id: ""
+    secret_access_key: ""
+    session_token: ""
+    region: us-east-1
+consumers:
+  doc-wiki:
+    enabled:
+      - aws

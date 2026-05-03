@@ -1,0 +1,28 @@
+{
+  "plan": [
+    {
+      "connector": "confluence",
+      "action": "get_page",
+      "params": {
+        "page_id": "1"
+      }
+    }
+  ],
+  "results": [
+    {
+      "step": 1,
+      "connector": "confluence",
+      "action": "get_page",
+      "params": {
+        "page_id": "1"
+      },
+      "envelope": {
+        "status": "error",
+        "action": "get_page",
+        "error_code": "CONFIG_ERROR",
+        "message": "Confluence credentials not configured. Set CONFLUENCE_SITE_URL, CONFLUENCE_EMAIL, and CONFLUENCE_API_TOKEN (or register a credential provider via narai-primitives/credentials).",
+        "retriable": false
+      }
+    }
+  ]
+}

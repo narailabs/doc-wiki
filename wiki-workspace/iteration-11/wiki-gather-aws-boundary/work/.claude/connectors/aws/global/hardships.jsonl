@@ -1,0 +1,2 @@
+{"ts":"2026-05-03T21:57:39.276Z","connector":"aws","action":"list_buckets","kind":"auth_error","context":"Could not load credentials from any providers","scope":null,"session_id":"8d2076b3f2fa"}
+{"ts":"2026-05-03T21:57:46.117Z","connector":"aws","action":"list_buckets","kind":"auth_error","context":"Could not load credentials from any providers","scope":null,"session_id":"03f37236a886"}
