@@ -1,0 +1,62 @@
+{
+  "status": "success",
+  "orm_detected": "jpa",
+  "entities": [
+    {
+      "class_name": "Order",
+      "table_name": "orders",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "total_cents",
+          "source_field": "total_cents"
+        },
+        {
+          "name": "placed_at",
+          "source_field": "placed_at"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "many_to_one",
+          "target_entity": "User"
+        }
+      ]
+    },
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "email",
+          "source_field": "email"
+        },
+        {
+          "name": "full_name",
+          "source_field": "full_name"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "one_to_many",
+          "target_entity": "Order"
+        }
+      ]
+    }
+  ],
+  "mapping_file": "wiki-workspace/iteration-9/orm-agent-jpa/with_skill/outputs/database-mapping.md",
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Entity Relationships",
+    "code": "erDiagram\n    orders {\n        string id\n        string total_cents\n        string placed_at\n    }\n    users {\n        string id\n        string email\n        string full_name\n    }\n    users ||--o{ orders : \"\"\n"
+  }
+}

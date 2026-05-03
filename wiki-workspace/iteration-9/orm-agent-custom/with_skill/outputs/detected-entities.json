@@ -1,0 +1,89 @@
+{
+  "status": "success",
+  "orm_detected": "basemodel",
+  "entities": [
+    {
+      "class_name": "Customer",
+      "table_name": "customers",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "email",
+          "source_field": "email"
+        },
+        {
+          "name": "name",
+          "source_field": "name"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "one_to_many",
+          "target_entity": "Address"
+        }
+      ]
+    },
+    {
+      "class_name": "Address",
+      "table_name": "customer_addresses",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "customer_id",
+          "source_field": "customer_id"
+        },
+        {
+          "name": "line1",
+          "source_field": "line1"
+        },
+        {
+          "name": "city",
+          "source_field": "city"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "many_to_one",
+          "target_entity": "Customer"
+        }
+      ]
+    },
+    {
+      "class_name": "Invoice",
+      "table_name": "billing_invoices",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "customer_id",
+          "source_field": "customer_id"
+        },
+        {
+          "name": "total_cents",
+          "source_field": "total_cents"
+        },
+        {
+          "name": "issued_at",
+          "source_field": "issued_at"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "many_to_one",
+          "target_entity": "Customer"
+        }
+      ]
+    }
+  ]
+}

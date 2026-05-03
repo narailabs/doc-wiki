@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Mermaid block uses flowchart directive (flowchart TD|TB|LR|RL)",
+      "passed": true,
+      "evidence": "Resulting block opens with `flowchart LR` after the ```mermaid fence (line 16 of pipeline.md after run 2)."
+    },
+    {
+      "text": "Labels containing special characters (quotes, angle brackets) are escaped so mermaid_lint passes — a single escape case is OK but the lint must be clean",
+      "passed": true,
+      "evidence": "Labels include `Run #quot;test#quot; suite (unit + integration)` (escaped double quotes via `#quot;`) and `Deploy to prod (gated &lt;manual&gt;)` (escaped angle brackets). `mermaid_lint.js --page pipeline.md` printed `[]`."
+    },
+    {
+      "text": "Re-running with the IDENTICAL input produces a byte-identical pipeline.md (true idempotency)",
+      "passed": true,
+      "evidence": "Snapshotted post-run-1 file as pipeline.after_run1.md, re-ran with agent_output_v1.json, then `diff` showed no differences. md5 8bd4ea0e5b749df4f84bdceca48040b8 in both."
+    },
+    {
+      "text": "Re-running with a DIFFERENT input (e.g., an added node) REPLACES the previous block between the markers — not appends a second block; pipeline.md still contains exactly one `<!-- wiki-mermaid: start -->` and one `<!-- wiki-mermaid: end -->` after both runs",
+      "passed": true,
+      "evidence": "After running with agent_output_v2.json (added `canary` node): start-marker-count=1, end-marker-count=1, mermaid-fence-count=1, canary-present=True. The 4-stage block was replaced by the 5-stage block."
+    },
+    {
+      "text": "Only the named target file is modified — no other .md files in the wiki change across the runs",
+      "passed": true,
+      "evidence": "md5 of pipeline.before.md and pipeline.after_run1.md (snapshots) unchanged; only pipeline.md mutated (final md5 cf86f74280555f8e8d5356a813d4bc3f)."
+    },
+    {
+      "text": "Content outside the markers on pipeline.md is preserved byte-for-byte across both runs",
+      "passed": true,
+      "evidence": "Python compare of pipeline.before.md and final pipeline.md, slicing out the inter-marker region: outside-bytes-equal-after-both-runs == True."
+    }
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "Flowchart injection passed all 6 expectations including the idempotency byte-equality and replace-on-different-input checks; HTML-entity escapes for quotes and angle brackets keep lint clean."}
+}

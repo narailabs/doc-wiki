@@ -1,0 +1,33 @@
+name: basemodel
+language: python
+description: "Custom in-house ORM using BaseModel base class with __table__ attribute"
+
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - pattern: "class "
+      type: entity_class
+    - pattern: "(BaseModel)"
+      type: base_declaration
+    - pattern: "__table__"
+      type: table_mapping
+    - pattern: "Column("
+      type: column_definition
+
+entity_extraction:
+  class_pattern: "^class\\s+(\\w+)\\s*\\(\\s*BaseModel\\s*\\)\\s*:"
+  table_pattern: "__table__\\s*=\\s*['\"]([\\w.]+)['\"]"
+  column_pattern: "(\\w+)\\s*=\\s*Column\\("
+
+relationship_detection:
+  patterns:
+    - pattern: "has_many\\("
+      type: one_to_many
+    - pattern: "belongs_to\\("
+      type: many_to_one
+    - pattern: "has_one\\("
+      type: one_to_one
+
+naming_conventions:
+  table_from_class: snake_case
+  column_from_field: snake_case
