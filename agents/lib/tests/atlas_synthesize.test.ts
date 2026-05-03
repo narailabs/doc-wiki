@@ -17,7 +17,10 @@ import {
   assembleIntegrationsInputs,
   assembleOverviewInputs,
   assembleTroubleshootingInputs,
+  extractTopicFromPath,
+  groupManifestByTopicFacet,
 } from "../atlas_synthesize.js";
+import { type CodeInventory } from "../atlas_inventory.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -491,5 +494,196 @@ describe("assembleTroubleshootingInputs", () => {
     const bundle = assembleTroubleshootingInputs(wikiRoot);
     expect(bundle.text).toContain("NEW DRIFT");
     expect(bundle.text).not.toContain("OLD DRIFT");
+  });
+});
+
+// ── Manifest-driven source lookups ─────────────────────────────────
+
+function emptyInventory(overrides: Partial<CodeInventory> = {}): CodeInventory {
+  return {
+    atlas_run_id: "2026-05-03T00-00-00",
+    generated_at: "2026-05-03T00:00:00.000Z",
+    repo_root: "/repo",
+    project_metadata: {
+      name: "x",
+      version: "0.0.0",
+      language: "unknown",
+      runtime: "",
+      manifests_seen: [],
+    },
+    orm_entities: [],
+    rest_endpoints: [],
+    code_clients: [],
+    stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+    notes: [],
+    ...overrides,
+  };
+}
+
+describe("extractTopicFromPath", () => {
+  it("extracts topic from src/<topic>/...", () => {
+    expect(extractTopicFromPath("src/auth/models/user.py")).toBe("auth");
+    expect(extractTopicFromPath("src/billing/routes/payments.ts")).toBe("billing");
+  });
+
+  it("works for app, services, lib, internal, pkg, packages, modules, cmd, apps", () => {
+    expect(extractTopicFromPath("app/users/controllers/index.rb")).toBe("users");
+    expect(extractTopicFromPath("services/auth/handler.go")).toBe("auth");
+    expect(extractTopicFromPath("lib/billing/calc.ts")).toBe("billing");
+    expect(extractTopicFromPath("internal/users/store.go")).toBe("users");
+    expect(extractTopicFromPath("pkg/auth/jwt.go")).toBe("auth");
+    expect(extractTopicFromPath("packages/billing/index.ts")).toBe("billing");
+    expect(extractTopicFromPath("modules/users/service.php")).toBe("users");
+    expect(extractTopicFromPath("cmd/server/main.go")).toBe("server");
+    expect(extractTopicFromPath("apps/dashboard/layout.tsx")).toBe("dashboard");
+  });
+
+  it("strips -service / -svc / -module suffixes (matches Phase 2 canonicalization)", () => {
+    expect(extractTopicFromPath("src/auth-service/api.ts")).toBe("auth");
+    expect(extractTopicFromPath("services/billing-svc/index.go")).toBe("billing");
+    expect(extractTopicFromPath("lib/users-module/handler.ts")).toBe("users");
+  });
+
+  it("returns null when no recognized prefix is present", () => {
+    expect(extractTopicFromPath("agents/lib/foo.ts")).toBeNull();
+    expect(extractTopicFromPath("docs/intro.md")).toBeNull();
+    expect(extractTopicFromPath("Makefile")).toBeNull();
+  });
+
+  it("returns null when the topic candidate is the leaf (looks like a file)", () => {
+    // src/utils.ts → no topic; the "candidate" is the file itself.
+    expect(extractTopicFromPath("src/utils.ts")).toBeNull();
+    expect(extractTopicFromPath("lib/index.js")).toBeNull();
+  });
+
+  it("tolerates leading slashes and multiple separators", () => {
+    expect(extractTopicFromPath("/src/auth/foo.py")).toBe("auth");
+    expect(extractTopicFromPath("src//billing//x.ts")).toBe("billing");
+  });
+});
+
+describe("groupManifestByTopicFacet", () => {
+  it("groups orm_entities into data-model and rest_endpoints into api", () => {
+    const inv = emptyInventory({
+      orm_entities: [
+        {
+          profile: "sqlalchemy",
+          class_name: "User",
+          table_name: "users",
+          schema_name: "",
+          source_file: "src/auth/models/user.py",
+          columns: [],
+          relationships: [],
+        },
+        {
+          profile: "sqlalchemy",
+          class_name: "Invoice",
+          table_name: "invoices",
+          schema_name: "",
+          source_file: "src/billing/models/invoice.py",
+          columns: [],
+          relationships: [],
+        },
+      ],
+      rest_endpoints: [
+        {
+          framework: "fastapi",
+          method: "GET",
+          path: "/api/users",
+          file: "src/auth/routes/users.py",
+          line: 10,
+        },
+        {
+          framework: "fastapi",
+          method: "POST",
+          path: "/api/payments",
+          file: "src/billing/routes/payments.py",
+          line: 22,
+        },
+      ],
+    });
+    const grouped = groupManifestByTopicFacet(inv, ["auth", "billing"]);
+    expect(grouped["auth"]).toEqual({
+      "data-model": ["src/auth/models/user.py"],
+      api: ["src/auth/routes/users.py"],
+    });
+    expect(grouped["billing"]).toEqual({
+      "data-model": ["src/billing/models/invoice.py"],
+      api: ["src/billing/routes/payments.py"],
+    });
+  });
+
+  it("drops entries whose extracted topic is not in the wanted list", () => {
+    const inv = emptyInventory({
+      orm_entities: [
+        {
+          profile: "sqlalchemy",
+          class_name: "User",
+          table_name: "users",
+          schema_name: "",
+          source_file: "src/auth/models/user.py",
+          columns: [],
+          relationships: [],
+        },
+        {
+          profile: "sqlalchemy",
+          class_name: "Telemetry",
+          table_name: "telemetry",
+          schema_name: "",
+          source_file: "src/observability/models/event.py",
+          columns: [],
+          relationships: [],
+        },
+      ],
+    });
+    const grouped = groupManifestByTopicFacet(inv, ["auth"]);
+    expect(Object.keys(grouped)).toEqual(["auth"]);
+    expect(grouped["auth"]?.["data-model"]).toEqual(["src/auth/models/user.py"]);
+  });
+
+  it("canonicalizes the wanted-topics list (auth-service ≡ auth)", () => {
+    const inv = emptyInventory({
+      orm_entities: [
+        {
+          profile: "django",
+          class_name: "User",
+          table_name: "users",
+          schema_name: "",
+          source_file: "src/auth/models.py",
+          columns: [],
+          relationships: [],
+        },
+      ],
+    });
+    const grouped = groupManifestByTopicFacet(inv, ["Auth-Service"]);
+    expect(grouped["auth"]?.["data-model"]).toEqual(["src/auth/models.py"]);
+  });
+
+  it("dedupes when multiple endpoints in the same file map to the same topic", () => {
+    const inv = emptyInventory({
+      rest_endpoints: [
+        { framework: "fastapi", method: "GET",  path: "/a", file: "src/auth/routes.py", line: 1 },
+        { framework: "fastapi", method: "POST", path: "/a", file: "src/auth/routes.py", line: 2 },
+      ],
+    });
+    const grouped = groupManifestByTopicFacet(inv, ["auth"]);
+    expect(grouped["auth"]?.["api"]).toEqual(["src/auth/routes.py"]);
+  });
+
+  it("returns empty object when no manifest entry matches a wanted topic", () => {
+    const inv = emptyInventory({
+      orm_entities: [
+        {
+          profile: "django",
+          class_name: "User",
+          table_name: "users",
+          schema_name: "",
+          source_file: "src/auth/models.py",
+          columns: [],
+          relationships: [],
+        },
+      ],
+    });
+    expect(groupManifestByTopicFacet(inv, ["billing"])).toEqual({});
   });
 });

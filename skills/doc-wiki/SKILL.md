@@ -220,7 +220,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 3. **Confirm topics** — present the merged list with provenance (which signals contributed each topic). Under `balanced+`, ask "Generate atlas pages for these topics? [Y/n/edit]". Under `auto`/`autonomous`, proceed silently. With `--yes`, skip the prompt.
 
 4. **Estimate cost**:
-   - Build a `Plan` JSON: `{ topics, facets, entries: [{topic, facet, sources, output}], created_at }`. Source heuristics: `architecture` → `src/<topic>/`; `data-model` → ORM model files; `environments` → `.env*`, `config/<topic>*`; `api` → controllers/routes; `operations` → runbooks if present.
+   - Build a `Plan` JSON: `{ topics, facets, entries: [{topic, facet, sources, output}], created_at }`. **Manifest-backed facets** — populate `entry.sources` for `data-model` and `api` from `node {skill_path}/scripts/atlas_orchestrator.js compute-sources --wiki-root <root> --run-id <id> --topics <csv>`. The CLI returns `{topic: {"data-model": [...], "api": [...]}}` from the Phase 1b inventory; an empty `{}` (manifest missing or no entries match a wanted topic) means fall back to the heuristics for those facets too. **Heuristic facets** — `architecture` → `src/<topic>/`; `environments` → `.env*`, `config/<topic>*`; `operations` → runbooks if present. Always use heuristics when a manifest source is empty for a `(topic, facet)` pair (e.g. ORM not detected, REST disabled, `--enable-rest` was off).
    - `node {skill_path}/scripts/atlas_orchestrator.js estimate-cost --wiki-root <root> --plan '<plan-json>'`.
    - Display the estimate; if `total_estimated_usd > --max-cost`, abort with a clear hint to re-run with a higher `--max-cost`.
 
