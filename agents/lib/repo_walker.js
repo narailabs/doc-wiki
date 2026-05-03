@@ -116,3 +116,64 @@ export function walkCodebase(root, patterns) {
 export function _resetPatternCache() {
     _PATTERN_CACHE.clear();
 }
+/**
+ * Walker variant tailored to the per-facet bundle assemblers in
+ * `atlas_synthesize.ts`: top-level basenames matching one of a fixed
+ * regex set + named subdirectories walked recursively with their own
+ * basename filter. Returns a sorted list of repo-relative POSIX paths.
+ *
+ * Does NOT read file bodies — callers handle truncation, encoding, and
+ * synthesis-text formatting themselves. Stays small, single-purpose,
+ * and reusable.
+ */
+export function walkRepoTargets(repoRoot, spec) {
+    const paths = new Set();
+    const notes = [];
+    // Top-level files.
+    if (spec.topLevelBasenames && spec.topLevelBasenames.length > 0) {
+        let topLevel;
+        try {
+            topLevel = fs.readdirSync(repoRoot, { withFileTypes: true });
+        }
+        catch {
+            notes.push(`could not read repo root: ${repoRoot}`);
+            return { paths: [], notes };
+        }
+        for (const e of topLevel) {
+            if (!e.isFile())
+                continue;
+            if (spec.topLevelBasenames.some((rx) => rx.test(e.name))) {
+                paths.add(e.name);
+            }
+        }
+    }
+    // Subdirectory recursive walks.
+    if (spec.subdirPatterns) {
+        for (const { dir, rx } of spec.subdirPatterns) {
+            const abs = path.join(repoRoot, dir);
+            if (!fs.existsSync(abs))
+                continue;
+            const recurse = (d, relBase) => {
+                let entries;
+                try {
+                    entries = fs.readdirSync(d, { withFileTypes: true });
+                }
+                catch {
+                    return;
+                }
+                for (const entry of entries) {
+                    const full = path.join(d, entry.name);
+                    const rel = path.posix.join(relBase, entry.name);
+                    if (entry.isDirectory()) {
+                        recurse(full, rel);
+                    }
+                    else if (entry.isFile() && rx.test(entry.name)) {
+                        paths.add(rel);
+                    }
+                }
+            };
+            recurse(abs, dir);
+        }
+    }
+    return { paths: [...paths].sort(), notes };
+}
