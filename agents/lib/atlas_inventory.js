@@ -392,7 +392,9 @@ export function detectRestEndpoints(repoRoot, profiles) {
                     re.lastIndex = 0;
                     let m;
                     while ((m = re.exec(line)) !== null) {
-                        const method = (m[ext.method_group] ?? "").toUpperCase();
+                        const method = ext.method_group > 0
+                            ? (m[ext.method_group] ?? "").toUpperCase()
+                            : (ext.default_method ?? "").toUpperCase();
                         const apiPath = m[ext.path_group] ?? "";
                         if (method.length > 0 && apiPath.length > 0) {
                             const key = `${relFile}|${lineIdx + 1}|${method}|${apiPath}`;

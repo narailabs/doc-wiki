@@ -298,8 +298,13 @@ export interface RestProfile {
   endpoint_extraction: {
     patterns: Array<{
       regex: string;
+      /** 1-indexed offset of the method capture group. `0` = no method
+       *  captured; in that case `default_method` MUST be set. */
       method_group: number;
       path_group: number;
+      /** Hardcoded HTTP verb for path-only patterns (e.g. Flask's
+       *  `@app.route('/x')` defaults to GET). Used when `method_group` is 0. */
+      default_method?: string;
     }>;
   };
 }
@@ -518,7 +523,10 @@ export function detectRestEndpoints(
           re.lastIndex = 0;
           let m: RegExpExecArray | null;
           while ((m = re.exec(line)) !== null) {
-            const method = (m[ext.method_group] ?? "").toUpperCase();
+            const method =
+              ext.method_group > 0
+                ? (m[ext.method_group] ?? "").toUpperCase()
+                : (ext.default_method ?? "").toUpperCase();
             const apiPath = m[ext.path_group] ?? "";
             if (method.length > 0 && apiPath.length > 0) {
               const key = `${relFile}|${lineIdx + 1}|${method}|${apiPath}`;
