@@ -196,9 +196,55 @@ function _restProfilesDir() {
     return path.join(path.dirname(fileURLToPath(import.meta.url)), "rest_profiles");
 }
 /**
- * Load a REST profile by name (e.g. `"express"`). Returns `null` when
- * the YAML is missing, malformed, or fails minimal shape validation.
- * Errors are silenced — the inventory simply skips that profile.
+ * Names of every shipped REST profile under `agents/lib/rest_profiles/`.
+ * Sorted for deterministic ordering. Used as the default profile set
+ * when a caller does not specify one.
+ */
+export function discoverShippedRestProfiles() {
+    const dir = _restProfilesDir();
+    if (!fs.existsSync(dir))
+        return [];
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    }
+    catch {
+        return [];
+    }
+    const out = [];
+    for (const e of entries) {
+        if (!e.isFile())
+            continue;
+        if (!e.name.endsWith(".yaml"))
+            continue;
+        out.push(e.name.slice(0, -".yaml".length));
+    }
+    return out.sort();
+}
+/**
+ * Validate a parsed object as a {@link RestProfile}. Returns the typed
+ * profile on success, `null` when required fields are missing or wrong
+ * shape. Used by both `loadRestProfile` (file-backed) and
+ * `loadCustomRestProfiles` (config-backed) — same shape contract for both.
+ */
+function _validateRestProfile(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return null;
+    }
+    const rec = parsed;
+    if (typeof rec["name"] !== "string" ||
+        typeof rec["language"] !== "string" ||
+        !rec["detection"] ||
+        !rec["endpoint_extraction"]) {
+        return null;
+    }
+    return rec;
+}
+/**
+ * Load a shipped REST profile by name (e.g. `"express"`, `"fastapi"`).
+ * Returns `null` when the YAML is missing, malformed, or fails minimal
+ * shape validation. Errors are silenced — the inventory simply skips
+ * that profile.
  */
 export function loadRestProfile(name) {
     const profilePath = path.join(_restProfilesDir(), `${name}.yaml`);
@@ -218,31 +264,109 @@ export function loadRestProfile(name) {
     catch {
         return null;
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return null;
-    }
-    const rec = parsed;
-    if (typeof rec["name"] !== "string" ||
-        typeof rec["language"] !== "string" ||
-        !rec["detection"] ||
-        !rec["endpoint_extraction"]) {
-        return null;
-    }
-    return rec;
+    return _validateRestProfile(parsed);
 }
 /**
- * Scan the repo for HTTP routes matching any loaded profile. Two-stage:
- *   1. walkCodebase with the union of profile file_patterns.
- *   2. Per file: skip unless any marker substring is present (cheap).
- *   3. Per matching file: run each extraction regex line by line, so the
- *      `line` field in the manifest reflects the actual route declaration.
+ * Read `ecosystem.rest.custom_profiles` from `wiki.config.yaml` and
+ * return every entry that validates as a `RestProfile`. Mirrors the
+ * existing `ecosystem.orm.custom_profiles` slot. Returns `[]` when:
+ *   - the config file is missing
+ *   - the YAML is malformed
+ *   - the `ecosystem.rest.custom_profiles` key is absent
+ *   - every entry fails validation
+ *
+ * Custom profiles let users teach the inventory about in-house frameworks
+ * without modifying the doc-wiki repo.
  */
-export function detectRestEndpoints(repoRoot, profileNames = ["express"]) {
+export function loadCustomRestProfiles(wikiConfigPath) {
+    if (!fs.existsSync(wikiConfigPath))
+        return [];
+    let raw;
+    try {
+        raw = fs.readFileSync(wikiConfigPath, "utf-8");
+    }
+    catch {
+        return [];
+    }
+    let parsed;
+    try {
+        parsed = yaml.load(raw);
+    }
+    catch {
+        return [];
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return [];
+    }
+    const ecosystem = parsed["ecosystem"];
+    if (!ecosystem || typeof ecosystem !== "object" || Array.isArray(ecosystem)) {
+        return [];
+    }
+    const rest = ecosystem["rest"];
+    if (!rest || typeof rest !== "object" || Array.isArray(rest)) {
+        return [];
+    }
+    const customRaw = rest["custom_profiles"];
+    if (!Array.isArray(customRaw))
+        return [];
     const out = [];
-    for (const profileName of profileNames) {
-        const profile = loadRestProfile(profileName);
-        if (!profile)
+    for (const entry of customRaw) {
+        const validated = _validateRestProfile(entry);
+        if (validated)
+            out.push(validated);
+    }
+    return out;
+}
+/**
+ * Resolve the set of {@link RestProfile} objects the inventory should
+ * scan with. When `profileNames` is empty/undefined, returns ALL shipped
+ * profiles plus any custom profiles loaded from `wikiConfigPath`. When
+ * `profileNames` is provided, treats each as a shipped-profile name and
+ * loads accordingly (skipping unknown names silently). Custom profiles
+ * win on name collision with shipped ones — users can override in-house.
+ */
+export function resolveRestProfiles(options) {
+    const out = [];
+    const seen = new Set();
+    // 1. Load custom profiles first (so they can override shipped names).
+    const custom = options.wikiConfigPath
+        ? loadCustomRestProfiles(options.wikiConfigPath)
+        : [];
+    for (const p of custom) {
+        if (seen.has(p.name))
             continue;
+        seen.add(p.name);
+        out.push(p);
+    }
+    // 2. Load shipped profiles.
+    const names = options.profileNames && options.profileNames.length > 0
+        ? [...options.profileNames]
+        : discoverShippedRestProfiles();
+    for (const name of names) {
+        if (seen.has(name))
+            continue;
+        const loaded = loadRestProfile(name);
+        if (loaded) {
+            seen.add(loaded.name);
+            out.push(loaded);
+        }
+    }
+    return out;
+}
+/**
+ * Scan the repo for HTTP routes matching any of the given profiles.
+ * Three-stage per profile: walkCodebase with the profile's file_patterns,
+ * marker pre-filter (cheap substring), then line-by-line regex extraction.
+ *
+ * Endpoints are deduplicated across profiles by `(file, line, method,
+ * path)` so a route matched by two overlapping profiles only appears
+ * once. The first profile to match a tuple wins (its `framework` field
+ * is the one recorded).
+ */
+export function detectRestEndpoints(repoRoot, profiles) {
+    const out = [];
+    const seen = new Set();
+    for (const profile of profiles) {
         const fileContents = walkCodebase(repoRoot, profile.detection.file_patterns);
         if (Object.keys(fileContents).length === 0)
             continue;
@@ -271,13 +395,17 @@ export function detectRestEndpoints(repoRoot, profileNames = ["express"]) {
                         const method = (m[ext.method_group] ?? "").toUpperCase();
                         const apiPath = m[ext.path_group] ?? "";
                         if (method.length > 0 && apiPath.length > 0) {
-                            out.push({
-                                framework: profile.name,
-                                method,
-                                path: apiPath,
-                                file: relFile,
-                                line: lineIdx + 1,
-                            });
+                            const key = `${relFile}|${lineIdx + 1}|${method}|${apiPath}`;
+                            if (!seen.has(key)) {
+                                seen.add(key);
+                                out.push({
+                                    framework: profile.name,
+                                    method,
+                                    path: apiPath,
+                                    file: relFile,
+                                    line: lineIdx + 1,
+                                });
+                            }
                         }
                         // Avoid pathological infinite loops on zero-width matches.
                         if (m.index === re.lastIndex)
@@ -338,9 +466,14 @@ export function generateInventory(repoRoot, runId, options = {}) {
     const notes = [];
     const project_metadata = detectProjectMetadata(repoRoot, notes);
     const orm_entities = options.enableOrm !== false ? detectOrmEntities(repoRoot) : [];
-    const rest_endpoints = options.enableRest === true
-        ? detectRestEndpoints(repoRoot, options.restProfiles ?? ["express"])
-        : [];
+    let rest_endpoints = [];
+    if (options.enableRest === true) {
+        const profiles = resolveRestProfiles({
+            profileNames: options.restProfiles,
+            wikiConfigPath: options.wikiConfigPath,
+        });
+        rest_endpoints = detectRestEndpoints(repoRoot, profiles);
+    }
     const code_clients = detectCodeClients(repoRoot);
     // files_walked is approximate — each detector walked the repo with its
     // own pattern set, so the union is hard to count cheaply. Sum unique
@@ -432,10 +565,12 @@ const FLAG_SPEC = {
     "--repo-root": "repoRoot",
     "--run-id": "runId",
     "--rest-profile": "restProfile",
+    "--rest-profiles": "restProfiles",
 };
 const _RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
 const HELP_TEXT = `usage: atlas_inventory.js generate --wiki-root <p> --repo-root <p> --run-id <id>
-                                  [--enable-rest] [--rest-profile <name>]
+                                  [--enable-rest] [--rest-profiles <csv>]
+                                  [--rest-profile <name>]
 
 Build the code-inventory manifest for a /doc-wiki:atlas run.
 
@@ -446,7 +581,12 @@ Required:
 
 Optional:
   --enable-rest                Run REST endpoint detection (off by default)
-  --rest-profile <name>        REST profile to use (default: express)
+  --rest-profiles <csv>        Comma-separated profile names. Default: all
+                               shipped profiles + custom profiles from
+                               <wiki-root>/wiki.config.yaml's
+                               ecosystem.rest.custom_profiles.
+  --rest-profile <name>        Backwards-compat alias for --rest-profiles
+                               with a single value.
 
 Stdout: full manifest JSON with an additional 'written' field naming
 the path persisted on disk.
@@ -481,6 +621,7 @@ export function main(argv = process.argv.slice(2)) {
     const repoRoot = parsed.values["repoRoot"];
     const runId = parsed.values["runId"];
     const restProfileRaw = parsed.values["restProfile"];
+    const restProfilesRaw = parsed.values["restProfiles"];
     if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
@@ -493,14 +634,28 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n");
         return 2;
     }
-    const restProfiles = typeof restProfileRaw === "string" && restProfileRaw.length > 0
-        ? [restProfileRaw]
-        : ["express"];
+    // Resolve --rest-profiles (plural csv) > --rest-profile (singular alias).
+    // Empty / missing → undefined, which signals "default = all shipped + custom".
+    let profileNames;
+    if (typeof restProfilesRaw === "string" && restProfilesRaw.length > 0) {
+        profileNames = restProfilesRaw
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+    }
+    else if (typeof restProfileRaw === "string" && restProfileRaw.length > 0) {
+        profileNames = [restProfileRaw];
+    }
+    // Custom profiles come from <wikiRoot>/wiki.config.yaml. Always
+    // attempted; missing file yields an empty list, which the resolver
+    // tolerates without complaint.
+    const wikiConfigPath = path.join(wikiRoot, "wiki.config.yaml");
     let inventory;
     try {
         inventory = generateInventory(repoRoot, runId, {
             enableRest,
-            restProfiles,
+            restProfiles: profileNames,
+            wikiConfigPath,
         });
     }
     catch (e) {

@@ -1,0 +1,29 @@
+name: rails
+language: ruby
+description: "Ruby on Rails routes (config/routes.rb verb declarations)"
+
+detection:
+  # Rails routes live primarily in config/routes.rb but the matcher walks
+  # any *.rb just in case the project splits routes across files. Markers
+  # confine the actual scan to files that look Rails-shaped.
+  file_patterns:
+    - "**/*.rb"
+  markers:
+    - pattern: "Rails.application.routes.draw"
+      type: routes_block
+    - pattern: "ActionController::Base"
+      type: base_class
+    - pattern: "ApplicationController"
+      type: base_class
+    - pattern: "ActionController::API"
+      type: base_class
+
+# Per-line regex extraction. Catches the conventional verb-prefix routes
+# (`get "/path"`, `post '/x', to: '...'`). Resource blocks (`resources
+# :users`) are intentionally NOT expanded — that would need a route-tree
+# walker, deferred to a future profile pass.
+endpoint_extraction:
+  patterns:
+    - regex: "(?:^|\\s)(get|post|put|delete|patch|options|head)\\s+(?:'|\")([^'\"]+)(?:'|\")"
+      method_group: 1
+      path_group: 2

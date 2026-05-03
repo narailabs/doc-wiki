@@ -1,0 +1,28 @@
+name: fastapi
+language: python
+description: "FastAPI (Python) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.py"
+  markers:
+    - pattern: "from fastapi import"
+      type: import
+    - pattern: "import fastapi"
+      type: import
+    - pattern: "from fastapi.routing import"
+      type: import
+    - pattern: "FastAPI("
+      type: instantiation
+    - pattern: "APIRouter("
+      type: instantiation
+
+# Per-line regex extraction. Captures the HTTP verb from the decorator
+# name and the path from the first string argument. Method names are
+# uppercased downstream.
+endpoint_extraction:
+  patterns:
+    # @app.get("/path"), @router.post('/path'), @api.put(f"/x/{id}")
+    - regex: "@(?:app|router|api)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*[fr]?['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2

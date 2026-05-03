@@ -1,0 +1,25 @@
+name: spring
+language: java
+description: "Spring (Java/Kotlin) MVC + WebFlux HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.java"
+    - "**/*.kt"
+  markers:
+    - pattern: "import org.springframework"
+      type: import
+    - pattern: "@RestController"
+      type: annotation
+    - pattern: "@Controller"
+      type: annotation
+
+# Per-line regex extraction. Captures the HTTP verb from the annotation
+# name (Get/Post/...) and the path from the first quoted string argument.
+# The method name is uppercased downstream.
+endpoint_extraction:
+  patterns:
+    # @GetMapping("/path"), @PostMapping(value = "/path"), @PatchMapping(path = "/x")
+    - regex: "@(Get|Post|Put|Delete|Patch|Options|Head)Mapping\\s*\\(\\s*(?:(?:value|path)\\s*=\\s*)?[\"']([^\"']+)[\"']"
+      method_group: 1
+      path_group: 2
