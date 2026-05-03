@@ -112,7 +112,7 @@ straight-line profiles, expand router patterns post-launch.
 
 Original framing from PR #14: doc-wiki should learn with the code, not
 just match shipped profiles. With 18 profiles shipped (10 from PRs
-#14+#15, 8 from PR #16), the major frameworks are covered; the
+#14+#15, 8 from PR #17), the major frameworks are covered; the
 learning loop is a substantial new feature, not a main-release blocker.
 
 - **Heuristic regex fallback** — catch HTTP-route-shaped patterns
@@ -181,7 +181,7 @@ These have come up but aren't recommended without more design.
 | #13 | refactor(atlas): consolidate deploy + configuration walkers | 2026-05-01 |
 | #14 | feat(atlas): REST profile expansion + custom profiles | 2026-05-02 |
 | #15 | feat(atlas): six new REST profiles (Django / Flask / ASP.NET / Gin / Laravel / Hono) | 2026-05-02 |
-| #16 | feat(atlas): eight more REST profiles (Fastify / Koa / Echo / Rocket / Actix / Slim / Phoenix / Vapor) | 2026-05-02 |
+| #17 | feat(atlas): eight more REST profiles (Fastify / Koa / Echo / Rocket / Actix / Slim / Phoenix / Vapor) | 2026-05-02 |
 
 These six PRs took atlas from a five-facet code-shaped pipeline to an
 audience-aware, manifest-driven, eighteen-REST-profile pipeline with
