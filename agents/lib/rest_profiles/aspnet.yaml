@@ -1,6 +1,6 @@
 name: aspnet
 language: csharp
-description: "ASP.NET Core MVC + Web API attribute-routed controllers"
+description: "ASP.NET Core MVC + Web API attribute-routed controllers (with class-level [Route] prefix concat)"
 
 detection:
   file_patterns:
@@ -15,13 +15,18 @@ detection:
     - pattern: ": Controller"
       type: base_class
 
-# `[HttpGet("/api/users")]`, `[HttpPost("/api/users")]`, etc. The
-# `Http<Verb>` capture group is normalized to the verb; the path is the
-# first quoted string argument. Routes declared via `[Route("...")]`
-# at the controller level are intentionally NOT extracted here — the
-# inventory cares about ENDPOINT routes, not controller prefixes.
+# `[HttpGet("/api/users")]`, `[HttpPost("/api/users")]`, etc. The path
+# argument is optional — `[HttpGet]` alone is valid and inherits the
+# class-level `[Route(...)]` prefix as its full path. Verb attributes
+# whose path starts with `/` are absolute and bypass the prefix; the
+# `[controller]` token in `[Route("api/[controller]")]` expands to the
+# controller class name (lowercased, `Controller` suffix stripped).
 endpoint_extraction:
+  file_prefix:
+    regex: "\\[Route\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*\\)\\s*\\]"
+    prefix_group: 1
+    expand_controller_token: true
   patterns:
-    - regex: "\\[Http(Get|Post|Put|Delete|Patch|Options|Head)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+    - regex: "\\[Http(Get|Post|Put|Delete|Patch|Options|Head)(?:\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*\\))?\\s*\\]"
       method_group: 1
       path_group: 2
