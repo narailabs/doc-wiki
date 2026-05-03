@@ -306,7 +306,7 @@ sequenceDiagram
 Three things worth highlighting:
 
 1. **The planner is an LLM call.** `AgentSdkPlanner` (the default) imports `@anthropic-ai/claude-agent-sdk` and asks Claude to choose connectors and actions based on the prompt. Plan steps are validated against each connector's declared actions; malformed steps are dropped (and surfaced as `DispatchResult.error`).
-2. **Dispatch is subprocess-based, not in-process.** Each connector runs in its own Node child process so a misbehaving connector can't corrupt the parent. Configuration is passed via the `NARAI_CONFIG_BLOB` env var; credentials are loaded inside the child process by `@narai/credential-providers`. doc-wiki itself never sees a cleartext token.
+2. **Dispatch is subprocess-based, not in-process.** Each connector runs in its own Node child process so a misbehaving connector can't corrupt the parent. Configuration is passed via the `NARAI_CONFIG_BLOB` env var; credentials are loaded inside the child process by `narai-primitives/credentials`. doc-wiki itself never sees a cleartext token.
 3. **Errors are isolated per step.** A timeout, an unauthorized response, or a missing CLI in one connector does not fail the gather — just that step. The caller sees `results[i].error.code` (e.g., `TIMEOUT`, `DISPATCH_FAILED`, `CLI_NOT_FOUND`, `UNAUTHORIZED`) and decides how to handle it.
 
 For the full `gather()` API, plan validation rules, and per-connector envelopes, see [`connectors.md`](connectors.md).
@@ -396,7 +396,7 @@ These are load-bearing invariants. Implementers must respect them; reviewers sho
 
 3. **Single source-fetch path through `gather()`.** `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`; doc-wiki does not maintain per-service subagents or wrappers. The hub owns CLI resolution, parallel dispatch, and per-step error isolation; `mermaid_augment.ts` owns wiki-specific decoration.
 
-4. **Credential resolution uses the published package.** Import `resolveSecret`, `registerProvider`, and provider classes from `@narai/credential-providers` (not from a local path). Connectors load their own credentials inside the connector process — doc-wiki does not pass credentials into `gather()`.
+4. **Credential resolution uses the `narai-primitives/credentials` subpath.** Import `resolveSecret`, `registerProvider`, and provider classes from `narai-primitives/credentials` (absorbed into the bundle in v2.1). Connectors load their own credentials inside the connector process — doc-wiki does not pass credentials into `gather()`.
 
 5. **ORM profile patterns are validated at load time.** `loadProfile()` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
 

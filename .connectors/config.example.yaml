@@ -13,7 +13,7 @@
 # plans which connectors to invoke based on the prompt, and dispatches
 # them in parallel.
 #
-# Credential refs follow the @narai/credential-providers syntax:
+# Credential refs follow the narai-primitives/credentials syntax:
 #   env:NAME           → process.env.NAME
 #   keychain:LABEL     → OS keychain entry (macOS Keychain / libsecret)
 #   file:/path/to/key  → contents of that file (with permission check)

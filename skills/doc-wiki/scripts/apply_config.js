@@ -6,7 +6,7 @@
  * code reads secrets via `resolveSecret()` from `credential_providers`,
  * which needs at least one provider registered up front.
  */
-import { registerProvider, EnvVarProvider, FileProvider, KeychainProvider, CloudSecretsProvider, } from "@narai/credential-providers";
+import { registerProvider, EnvVarProvider, FileProvider, KeychainProvider, CloudSecretsProvider, } from "narai-primitives/credentials";
 /**
  * Merge the two credential blocks that can appear in `wiki.config.yaml`:
  *
