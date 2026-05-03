@@ -34,6 +34,7 @@ import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 import { computeHash, checkCache } from "./cache_manager.js";
 import { loadInventory, } from "../../../agents/lib/atlas_inventory.js";
+import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 // ── State detection ────────────────────────────────────────────────
 /**
  * Walk `<wikiRoot>/wiki/` and count `.md` pages whose frontmatter contains
@@ -695,8 +696,9 @@ const FLAG_SPEC = {
     "--sample-size": "sampleSize",
     "--per-ingest-avg-usd": "perIngestAvgUsd",
     "--gitlog": "gitlog",
+    "--topics": "topics",
 };
-const HELP_TEXT = `usage: atlas_orchestrator.js {detect-state,estimate-cost,save-plan,load-plan,per-ingest-avg,gap-report} [...]
+const HELP_TEXT = `usage: atlas_orchestrator.js {detect-state,estimate-cost,save-plan,load-plan,per-ingest-avg,gap-report,compute-sources} [...]
 
 Deterministic helpers for the /doc-wiki:atlas orchestrator.
 
@@ -715,6 +717,12 @@ Subcommands:
                     Build the gap report. With --run-id, also writes
                     wiki/outputs/atlas/<run-id>/gap-report.md.
                     Stdout: GapReport JSON (and {written: path} when --run-id is given).
+  compute-sources   --wiki-root <p> --run-id <id> --topics <csv>
+                    Group the Phase-1b inventory into topic+facet source
+                    lists for the manifest-backed facets (data-model, api).
+                    Use these to populate the Plan instead of glob heuristics.
+                    Stdout: {topic: {"data-model": [...], "api": [...]}}.
+                    Empty {} when the manifest is missing.
 `;
 export function main(argv = process.argv.slice(2)) {
     if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
@@ -858,6 +866,36 @@ export function main(argv = process.argv.slice(2)) {
         else {
             process.stdout.write(JSON.stringify(report) + "\n");
         }
+        return 0;
+    }
+    if (sub === "compute-sources") {
+        const runIdRaw = parsed.values["runId"];
+        const topicsRaw = parsed.values["topics"];
+        if (typeof runIdRaw !== "string" || runIdRaw.length === 0) {
+            process.stderr.write("--run-id is required\n");
+            return 2;
+        }
+        if (typeof topicsRaw !== "string" || topicsRaw.length === 0) {
+            process.stderr.write("--topics is required (comma-separated)\n");
+            return 2;
+        }
+        const topics = topicsRaw
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        if (topics.length === 0) {
+            process.stderr.write("--topics produced an empty list\n");
+            return 2;
+        }
+        const inventory = loadInventory(wikiRoot, runIdRaw);
+        if (!inventory) {
+            // Missing manifest is non-fatal — emit empty map so the orchestrator
+            // falls back to SKILL.md heuristic sources for every topic+facet.
+            process.stdout.write(JSON.stringify({}) + "\n");
+            return 0;
+        }
+        const grouped = groupManifestByTopicFacet(inventory, topics);
+        process.stdout.write(JSON.stringify(grouped) + "\n");
         return 0;
     }
     process.stderr.write(`unknown subcommand: ${sub}\n`);
