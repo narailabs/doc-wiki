@@ -13,6 +13,7 @@ This directory holds the public-facing documentation for doc-wiki. The internal 
 | Configure `wiki.config.yaml` or connector access | [`configuration.md`](configuration.md) |
 | Understand how doc-wiki is built | [`architecture.md`](architecture.md) |
 | Understand how doc-wiki talks to external services | [`connectors.md`](connectors.md) |
+| Author a custom REST profile for atlas inventory | [`rest-profiles.md`](rest-profiles.md) |
 | Diagnose a failure | [`troubleshooting.md`](troubleshooting.md) |
 
 ## Documents
@@ -23,6 +24,7 @@ This directory holds the public-facing documentation for doc-wiki. The internal 
 | [`commands.md`](commands.md) | Operators | All 10 `/doc-wiki:*` commands with synopsis, args, examples, and links to the orchestrator skill |
 | [`atlas.md`](atlas.md) | Operators | The eight-phase `/doc-wiki:atlas` walkthrough — what each phase does, what it writes, how to resume |
 | [`configuration.md`](configuration.md) | Operators / contributors | Schema reference for `wiki.config.yaml` and `.connectors/config.yaml`, plus credential-ref grammar |
+| [`rest-profiles.md`](rest-profiles.md) | Contributors / integrators | How to author a custom REST profile — schema, regex grouping, `default_method`, `file_prefix`, with worked examples |
 | [`architecture.md`](architecture.md) | Contributors / integrators | Three-layer model, ingest pipeline, scripts/agents/libraries inventory, Mermaid diagrams, architecture contracts |
 | [`connectors.md`](connectors.md) | Contributors / integrators | The `narai-primitives` stack — hub, toolkit, config, 7 connectors, `@narai/credential-providers` |
 | [`troubleshooting.md`](troubleshooting.md) | Anyone hitting an error | Common failures and how to fix them |
