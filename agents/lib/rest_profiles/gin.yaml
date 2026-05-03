@@ -1,0 +1,22 @@
+name: gin
+language: go
+description: "Gin (Go) HTTP routes"
+
+detection:
+  file_patterns:
+    - "**/*.go"
+  markers:
+    - pattern: "github.com/gin-gonic/gin"
+      type: import
+    - pattern: "gin.Default()"
+      type: instantiation
+    - pattern: "gin.New()"
+      type: instantiation
+
+# Gin's verb methods are SHOUTING-CASE: `r.GET("/x", h)`, `r.POST(...)`,
+# etc. Common router variable names: r, router, group, api, e (engine).
+endpoint_extraction:
+  patterns:
+    - regex: "(?:r|router|group|api|e|engine)\\.(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\\s*\\(\\s*\"([^\"]+)\""
+      method_group: 1
+      path_group: 2

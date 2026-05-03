@@ -1,0 +1,30 @@
+name: django
+language: python
+description: "Django URLconf routes (path / re_path); DRF ViewSet routers deferred"
+
+detection:
+  file_patterns:
+    - "**/*.py"
+  markers:
+    - pattern: "from django.urls import"
+      type: import
+    - pattern: "from django.conf.urls import"
+      type: import
+    - pattern: "urlpatterns ="
+      type: declaration
+
+# Django URLconf entries follow `path("api/users/", view, name="...")`
+# or `re_path(r"^api/", view)`. The HTTP method is not declared at the
+# URL level — it's enforced inside the view (CBV/FBV/DRF). For the
+# inventory, we record GET as a placeholder so the (file, line, method,
+# path) tuple stays unique; the synthesized api page can refine.
+endpoint_extraction:
+  patterns:
+    # path("api/users/", views.UserList.as_view(), name="user-list")
+    - regex: "(path)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2
+    # re_path(r"^api/users/$", views.user_list)
+    - regex: "(re_path)\\s*\\(\\s*r?['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2

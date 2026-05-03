@@ -1,0 +1,29 @@
+name: laravel
+language: php
+description: "Laravel routes (routes/*.php Route::verb declarations)"
+
+detection:
+  # Laravel routes live in routes/api.php, routes/web.php; the matcher
+  # walks any *.php just in case routes are split. Markers confine the
+  # scan to files that look Laravel-shaped.
+  file_patterns:
+    - "**/*.php"
+  markers:
+    - pattern: "use Illuminate\\Support\\Facades\\Route"
+      type: import
+    - pattern: "Route::"
+      type: facade_call
+    - pattern: "Illuminate\\Routing"
+      type: import
+
+endpoint_extraction:
+  patterns:
+    # Route::get('/api/users', [UserController::class, 'index'])
+    # Route::post('/x', fn () => 'ok')
+    - regex: "Route::(get|post|put|delete|patch|options|head|any)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2
+    # $router->get('/x', '...') — older middleware-group style
+    - regex: "\\$router->(get|post|put|delete|patch|options|head|any)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2

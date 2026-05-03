@@ -1,0 +1,29 @@
+name: flask
+language: python
+description: "Flask routes (explicit methods= keyword form; default-GET form deferred)"
+
+detection:
+  file_patterns:
+    - "**/*.py"
+  markers:
+    - pattern: "from flask import"
+      type: import
+    - pattern: "import flask"
+      type: import
+    - pattern: "Flask(__name__)"
+      type: instantiation
+
+# `@app.route('/path', methods=['GET'])` — only catches the explicit
+# methods= form. The default-GET case (`@app.route('/x')`) needs a
+# profile-shape extension to support a hardcoded fallback method;
+# tracked as a future enhancement. Capture order is path then method
+# because that's how Flask writes them.
+endpoint_extraction:
+  patterns:
+    - regex: "@(?:app|bp|blueprint)\\.route\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*methods\\s*=\\s*\\[\\s*['\"](GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)['\"]"
+      method_group: 2
+      path_group: 1
+    # @app.get("/x"), @app.post("/x") — Flask 2+ shorthand
+    - regex: "@(?:app|bp|blueprint)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      path_group: 2
