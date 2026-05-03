@@ -296,10 +296,28 @@ export interface RestProfile {
     markers: Array<{ pattern: string; type?: string }>;
   };
   endpoint_extraction: {
+    /** Optional per-file prefix extracted from a class-level annotation
+     *  (e.g. ASP.NET's `[Route("api/users")]` above the controller class).
+     *  When set, the prefix is prepended to each relative path captured
+     *  by the per-line `patterns` regexes. Paths that start with `/` are
+     *  treated as absolute and bypass the prefix. */
+    file_prefix?: {
+      regex: string;
+      prefix_group: number;
+      /** When the captured prefix contains `[controller]`, replace it
+       *  with the controller class name (lowercased, `Controller`
+       *  suffix stripped). Used by ASP.NET's `[Route("api/[controller]")]`. */
+      expand_controller_token?: boolean;
+    };
     patterns: Array<{
       regex: string;
+      /** 1-indexed offset of the method capture group. `0` = no method
+       *  captured; in that case `default_method` MUST be set. */
       method_group: number;
       path_group: number;
+      /** Hardcoded HTTP verb for path-only patterns (e.g. Flask's
+       *  `@app.route('/x')` defaults to GET). Used when `method_group` is 0. */
+      default_method?: string;
     }>;
   };
 }
@@ -504,6 +522,10 @@ export function detectRestEndpoints(
         continue;
       }
 
+      // Optional per-file prefix (e.g. ASP.NET `[Route("api/users")]`
+      // above the controller class). Captured once per file.
+      const filePrefix = _extractFilePrefix(content, profile.endpoint_extraction.file_prefix);
+
       const lines = content.split("\n");
       const relFile = _toRepoRelative(repoRoot, absFile);
       for (const ext of profile.endpoint_extraction.patterns) {
@@ -518,8 +540,12 @@ export function detectRestEndpoints(
           re.lastIndex = 0;
           let m: RegExpExecArray | null;
           while ((m = re.exec(line)) !== null) {
-            const method = (m[ext.method_group] ?? "").toUpperCase();
-            const apiPath = m[ext.path_group] ?? "";
+            const method =
+              ext.method_group > 0
+                ? (m[ext.method_group] ?? "").toUpperCase()
+                : (ext.default_method ?? "").toUpperCase();
+            const rawPath = m[ext.path_group] ?? "";
+            const apiPath = _resolvePath(rawPath, filePrefix);
             if (method.length > 0 && apiPath.length > 0) {
               const key = `${relFile}|${lineIdx + 1}|${method}|${apiPath}`;
               if (!seen.has(key)) {
@@ -726,6 +752,51 @@ function _toRepoRelative(repoRoot: string, absPath: string): string {
   if (absPath.length === 0) return "";
   const rel = path.relative(repoRoot, absPath);
   return rel.split(path.sep).join("/");
+}
+
+/**
+ * Run a profile's `file_prefix` regex against the full file content and
+ * return the captured prefix string, or `undefined` if the file declares
+ * no class-level prefix. When the captured prefix contains the
+ * `[controller]` token and the profile asks for it, expand it to the
+ * controller class name (lowercased, `Controller` suffix stripped).
+ */
+function _extractFilePrefix(
+  content: string,
+  spec: RestProfile["endpoint_extraction"]["file_prefix"],
+): string | undefined {
+  if (!spec) return undefined;
+  let re: RegExp;
+  try {
+    re = new RegExp(spec.regex);
+  } catch {
+    return undefined;
+  }
+  const m = re.exec(content);
+  if (!m) return undefined;
+  let prefix = m[spec.prefix_group] ?? "";
+  if (spec.expand_controller_token && prefix.includes("[controller]")) {
+    const classMatch = content.match(
+      /\bpublic\s+(?:abstract\s+|sealed\s+|partial\s+|static\s+)*class\s+(\w+?)Controller\b/,
+    );
+    if (classMatch?.[1]) {
+      prefix = prefix.replace(/\[controller\]/g, classMatch[1].toLowerCase());
+    }
+  }
+  return prefix.length > 0 ? prefix : undefined;
+}
+
+/**
+ * Combine a per-line captured path with the file's class-level prefix.
+ * Absolute paths (starting with `/`) bypass the prefix entirely. When
+ * the regex captured an empty path (e.g. ASP.NET's `[HttpGet]` with no
+ * argument) and a prefix exists, the prefix becomes the full route path.
+ */
+function _resolvePath(rawPath: string, filePrefix: string | undefined): string {
+  if (rawPath.startsWith("/")) return rawPath;
+  if (!filePrefix) return rawPath;
+  if (rawPath.length === 0) return filePrefix;
+  return `${filePrefix.replace(/\/+$/, "")}/${rawPath.replace(/^\/+/, "")}`;
 }
 
 // ── CLI ────────────────────────────────────────────────────────────

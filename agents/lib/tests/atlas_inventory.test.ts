@@ -355,7 +355,7 @@ describe("Flask profile", () => {
     expect(p?.language).toBe("python");
   });
 
-  it("extracts @app.route(methods=) and @app.<verb> shorthand", () => {
+  it("extracts @app.route(methods=), @app.<verb> shorthand, and bare @app.route default-GET", () => {
     fs.writeFileSync(
       path.join(tmpPath, "app.py"),
       `from flask import Flask
@@ -372,6 +372,12 @@ def show(user_id): pass
 
 @app.delete('/api/users/<int:user_id>')
 def remove(user_id): pass
+
+@app.route("/api/health")
+def health(): pass
+
+@app.route('/api/version')
+def version(): pass
 `,
     );
     const profile = loadRestProfile("flask")!;
@@ -381,6 +387,25 @@ def remove(user_id): pass
     expect(tuples).toContain("POST /api/users");
     expect(tuples).toContain("GET /api/users/<int:user_id>");
     expect(tuples).toContain("DELETE /api/users/<int:user_id>");
+    expect(tuples).toContain("GET /api/health");
+    expect(tuples).toContain("GET /api/version");
+  });
+
+  it("does not double-count the explicit-methods= form via the bare-route pattern", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.py"),
+      `from flask import Flask
+app = Flask(__name__)
+
+@app.route("/api/users", methods=["POST"])
+def create_user(): pass
+`,
+    );
+    const profile = loadRestProfile("flask")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    expect(eps).toHaveLength(1);
+    expect(eps[0]?.method).toBe("POST");
+    expect(eps[0]?.path).toBe("/api/users");
   });
 });
 
@@ -395,7 +420,7 @@ describe("ASP.NET profile", () => {
     expect(p?.language).toBe("csharp");
   });
 
-  it("extracts [HttpVerb] attribute routes", () => {
+  it("extracts [HttpVerb] attribute routes (absolute paths)", () => {
     fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
     fs.writeFileSync(
       path.join(tmpPath, "Controllers", "UsersController.cs"),
@@ -422,6 +447,109 @@ public class UsersController : ControllerBase
     expect(tuples).toContain("GET /api/users");
     expect(tuples).toContain("POST /api/users");
     expect(tuples).toContain("DELETE /api/users/{id:int}");
+  });
+
+  it("prepends class-level [Route(...)] prefix to relative paths", () => {
+    fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "Controllers", "OrdersController.cs"),
+      `using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route("api/orders")]
+public class OrdersController : ControllerBase
+{
+    [HttpGet]
+    public IActionResult List() => Ok();
+
+    [HttpGet("{id:int}")]
+    public IActionResult Get(int id) => Ok();
+
+    [HttpPost]
+    public IActionResult Create() => Created("/", null);
+
+    [HttpDelete("{id:int}")]
+    public IActionResult Delete(int id) => NoContent();
+}
+`,
+    );
+    const profile = loadRestProfile("aspnet")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET api/orders");
+    expect(tuples).toContain("GET api/orders/{id:int}");
+    expect(tuples).toContain("POST api/orders");
+    expect(tuples).toContain("DELETE api/orders/{id:int}");
+  });
+
+  it("expands the [controller] token in the class-level [Route]", () => {
+    fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "Controllers", "AuthController.cs"),
+      `using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route("api/[controller]")]
+public class AuthController : ControllerBase
+{
+    [HttpPost("login")]
+    public IActionResult Login() => Ok();
+
+    [HttpPost("logout")]
+    public IActionResult Logout() => Ok();
+}
+`,
+    );
+    const profile = loadRestProfile("aspnet")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("POST api/auth/login");
+    expect(tuples).toContain("POST api/auth/logout");
+  });
+
+  it("absolute paths in [HttpVerb] bypass the class-level prefix", () => {
+    fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "Controllers", "MixedController.cs"),
+      `using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route("api/mixed")]
+public class MixedController : ControllerBase
+{
+    [HttpGet]
+    public IActionResult List() => Ok();
+
+    [HttpGet("/healthz")]
+    public IActionResult Health() => Ok();
+}
+`,
+    );
+    const profile = loadRestProfile("aspnet")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toContain("GET api/mixed");
+    expect(tuples).toContain("GET /healthz");
+  });
+
+  it("falls back to relative path when the class has no [Route]", () => {
+    fs.mkdirSync(path.join(tmpPath, "Controllers"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpPath, "Controllers", "StatusController.cs"),
+      `using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+public class StatusController : ControllerBase
+{
+    [HttpGet("/healthz")]
+    public IActionResult Health() => Ok();
+}
+`,
+    );
+    const profile = loadRestProfile("aspnet")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toEqual(["GET /healthz"]);
   });
 });
 
@@ -539,6 +667,26 @@ app.get('/x', () => {});
     );
     const profile = loadRestProfile("hono")!;
     expect(detectRestEndpoints(tmpPath, [profile])).toEqual([]);
+  });
+
+  it("does NOT extract .use() middleware as a route", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "app.ts"),
+      `import { Hono } from "hono";
+import { logger } from "hono/logger";
+
+const app = new Hono();
+
+app.use('/api/*', logger());
+app.use('*', async (c, next) => { await next(); });
+app.get('/api/users', (c) => c.json([]));
+app.post('/api/users', (c) => c.json({}, 201));
+`,
+    );
+    const profile = loadRestProfile("hono")!;
+    const eps = detectRestEndpoints(tmpPath, [profile]);
+    const tuples = eps.map((e) => `${e.method} ${e.path}`);
+    expect(tuples).toEqual(["GET /api/users", "POST /api/users"]);
   });
 });
 

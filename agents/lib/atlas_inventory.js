@@ -377,6 +377,9 @@ export function detectRestEndpoints(repoRoot, profiles) {
                 !markerPatterns.some((m) => content.includes(m))) {
                 continue;
             }
+            // Optional per-file prefix (e.g. ASP.NET `[Route("api/users")]`
+            // above the controller class). Captured once per file.
+            const filePrefix = _extractFilePrefix(content, profile.endpoint_extraction.file_prefix);
             const lines = content.split("\n");
             const relFile = _toRepoRelative(repoRoot, absFile);
             for (const ext of profile.endpoint_extraction.patterns) {
@@ -392,8 +395,11 @@ export function detectRestEndpoints(repoRoot, profiles) {
                     re.lastIndex = 0;
                     let m;
                     while ((m = re.exec(line)) !== null) {
-                        const method = (m[ext.method_group] ?? "").toUpperCase();
-                        const apiPath = m[ext.path_group] ?? "";
+                        const method = ext.method_group > 0
+                            ? (m[ext.method_group] ?? "").toUpperCase()
+                            : (ext.default_method ?? "").toUpperCase();
+                        const rawPath = m[ext.path_group] ?? "";
+                        const apiPath = _resolvePath(rawPath, filePrefix);
                         if (method.length > 0 && apiPath.length > 0) {
                             const key = `${relFile}|${lineIdx + 1}|${method}|${apiPath}`;
                             if (!seen.has(key)) {
@@ -558,6 +564,50 @@ function _toRepoRelative(repoRoot, absPath) {
         return "";
     const rel = path.relative(repoRoot, absPath);
     return rel.split(path.sep).join("/");
+}
+/**
+ * Run a profile's `file_prefix` regex against the full file content and
+ * return the captured prefix string, or `undefined` if the file declares
+ * no class-level prefix. When the captured prefix contains the
+ * `[controller]` token and the profile asks for it, expand it to the
+ * controller class name (lowercased, `Controller` suffix stripped).
+ */
+function _extractFilePrefix(content, spec) {
+    if (!spec)
+        return undefined;
+    let re;
+    try {
+        re = new RegExp(spec.regex);
+    }
+    catch {
+        return undefined;
+    }
+    const m = re.exec(content);
+    if (!m)
+        return undefined;
+    let prefix = m[spec.prefix_group] ?? "";
+    if (spec.expand_controller_token && prefix.includes("[controller]")) {
+        const classMatch = content.match(/\bpublic\s+(?:abstract\s+|sealed\s+|partial\s+|static\s+)*class\s+(\w+?)Controller\b/);
+        if (classMatch?.[1]) {
+            prefix = prefix.replace(/\[controller\]/g, classMatch[1].toLowerCase());
+        }
+    }
+    return prefix.length > 0 ? prefix : undefined;
+}
+/**
+ * Combine a per-line captured path with the file's class-level prefix.
+ * Absolute paths (starting with `/`) bypass the prefix entirely. When
+ * the regex captured an empty path (e.g. ASP.NET's `[HttpGet]` with no
+ * argument) and a prefix exists, the prefix becomes the full route path.
+ */
+function _resolvePath(rawPath, filePrefix) {
+    if (rawPath.startsWith("/"))
+        return rawPath;
+    if (!filePrefix)
+        return rawPath;
+    if (rawPath.length === 0)
+        return filePrefix;
+    return `${filePrefix.replace(/\/+$/, "")}/${rawPath.replace(/^\/+/, "")}`;
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
