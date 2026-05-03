@@ -123,3 +123,94 @@ export function walkCodebase(
 export function _resetPatternCache(): void {
   _PATTERN_CACHE.clear();
 }
+
+/**
+ * Spec for {@link walkRepoTargets}. At least one of `topLevelBasenames`
+ * or `subdirPatterns` should be non-empty — both empty returns an empty
+ * result without error.
+ */
+export interface WalkTargetSpec {
+  /**
+   * RegExps tested against the basename (`fs.Dirent.name`) of every
+   * top-level file under `repoRoot`. A file matches when ANY pattern
+   * matches.
+   */
+  topLevelBasenames?: ReadonlyArray<RegExp>;
+  /**
+   * Subdirectories under `repoRoot` to walk recursively. Each entry's
+   * `rx` is tested against the basename of every file encountered. The
+   * walker silently skips a `dir` that does not exist.
+   */
+  subdirPatterns?: ReadonlyArray<{ dir: string; rx: RegExp }>;
+}
+
+/** Result of {@link walkRepoTargets}. */
+export interface WalkTargetResult {
+  /** Repo-relative POSIX paths discovered, lexicographically sorted. */
+  paths: string[];
+  /** Per-walk notes (e.g. `could not read repo root: <p>`). */
+  notes: string[];
+}
+
+/**
+ * Walker variant tailored to the per-facet bundle assemblers in
+ * `atlas_synthesize.ts`: top-level basenames matching one of a fixed
+ * regex set + named subdirectories walked recursively with their own
+ * basename filter. Returns a sorted list of repo-relative POSIX paths.
+ *
+ * Does NOT read file bodies — callers handle truncation, encoding, and
+ * synthesis-text formatting themselves. Stays small, single-purpose,
+ * and reusable.
+ */
+export function walkRepoTargets(
+  repoRoot: string,
+  spec: WalkTargetSpec,
+): WalkTargetResult {
+  const paths = new Set<string>();
+  const notes: string[] = [];
+
+  // Top-level files.
+  if (spec.topLevelBasenames && spec.topLevelBasenames.length > 0) {
+    let topLevel: fs.Dirent[];
+    try {
+      topLevel = fs.readdirSync(repoRoot, { withFileTypes: true });
+    } catch {
+      notes.push(`could not read repo root: ${repoRoot}`);
+      return { paths: [], notes };
+    }
+    for (const e of topLevel) {
+      if (!e.isFile()) continue;
+      if (spec.topLevelBasenames.some((rx) => rx.test(e.name))) {
+        paths.add(e.name);
+      }
+    }
+  }
+
+  // Subdirectory recursive walks.
+  if (spec.subdirPatterns) {
+    for (const { dir, rx } of spec.subdirPatterns) {
+      const abs = path.join(repoRoot, dir);
+      if (!fs.existsSync(abs)) continue;
+      const recurse = (d: string, relBase: string): void => {
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(d, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          const full = path.join(d, entry.name);
+          const rel = path.posix.join(relBase, entry.name);
+          if (entry.isDirectory()) {
+            recurse(full, rel);
+          } else if (entry.isFile() && rx.test(entry.name)) {
+            paths.add(rel);
+          }
+        }
+      };
+      recurse(abs, dir);
+    }
+  }
+
+  return { paths: [...paths].sort(), notes };
+}
