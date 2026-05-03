@@ -1,6 +1,6 @@
 name: flask
 language: python
-description: "Flask routes (explicit methods= keyword form; default-GET form deferred)"
+description: "Flask routes (explicit methods=, @app.<verb> shorthand, and bare @app.route default-GET)"
 
 detection:
   file_patterns:
@@ -13,11 +13,10 @@ detection:
     - pattern: "Flask(__name__)"
       type: instantiation
 
-# `@app.route('/path', methods=['GET'])` — only catches the explicit
-# methods= form. The default-GET case (`@app.route('/x')`) needs a
-# profile-shape extension to support a hardcoded fallback method;
-# tracked as a future enhancement. Capture order is path then method
-# because that's how Flask writes them.
+# Three patterns, in priority order. The bare-route pattern is anchored
+# with `\)` after the path so it does not match the explicit-methods=
+# form. Capture order is path then method because that's how Flask
+# writes them.
 endpoint_extraction:
   patterns:
     - regex: "@(?:app|bp|blueprint)\\.route\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*methods\\s*=\\s*\\[\\s*['\"](GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)['\"]"
@@ -27,3 +26,9 @@ endpoint_extraction:
     - regex: "@(?:app|bp|blueprint)\\.(get|post|put|delete|patch|options|head)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
       method_group: 1
       path_group: 2
+    # @app.route("/x") — bare form, defaults to GET. The `\)` anchor
+    # keeps this from double-matching lines that also have methods=.
+    - regex: "@(?:app|bp|blueprint)\\.route\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)"
+      method_group: 0
+      path_group: 1
+      default_method: GET
