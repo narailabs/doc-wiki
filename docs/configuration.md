@@ -90,6 +90,10 @@ ecosystem:
     custom_profiles: []       # paths to additional profile YAML files
     cross_validate_against_db: true
 
+  rest:
+    enabled: false            # opt-in: when true, /doc-wiki:atlas Phase 1b inventory walks REST endpoints
+    custom_profiles: []       # zero or more inline RestProfile entries; same shape as agents/lib/rest_profiles/*.yaml
+
   claude_md:
     enabled: true
     submodule_support: true
@@ -105,6 +109,31 @@ ecosystem:
 The `ecosystem.agents.custom` block is how you register a custom local connector with doc-wiki — see [`connectors.md`](connectors.md#adding-a-custom-local-connector). Each entry maps URL patterns (or scheme prefixes) to the connector's invocation template; `source_registry.ts` uses these to classify sources during `/doc-wiki:ingest`.
 
 The `ecosystem.database` block configures `wiki-orm-agent`'s cross-validation flow against a live DB. The actual connection lives under `connectors.db` in `.connectors/config.yaml`; this block just enables the cross-validation behavior and defines a wiki-side audit log.
+
+The `ecosystem.rest` block controls REST-endpoint detection during `/doc-wiki:atlas` Phase 1b. It is **off by default** so the inventory step stays fast on repos that aren't HTTP services. Set `enabled: true` to opt in. The flag is read automatically by `atlas_inventory.js generate`, so the orchestrator doesn't have to know whether to pass `--enable-rest` — see [`atlas.md` § Phase 1b](atlas.md#phase-1b--inventory-the-repo). Override at the CLI with `--enable-rest` when needed regardless of config.
+
+`custom_profiles` is a list of inline [`RestProfile`](rest-profiles.md) objects — same shape as the YAML files under [`agents/lib/rest_profiles/`](../agents/lib/rest_profiles/). Custom profiles win on name collision with shipped profiles, so this slot is the right place to teach atlas about an in-house framework without modifying doc-wiki:
+
+```yaml
+ecosystem:
+  rest:
+    enabled: true
+    custom_profiles:
+      - name: company-rpc
+        language: typescript
+        description: "In-house RPC façade over Express"
+        detection:
+          file_patterns: ["**/*.ts"]
+          markers:
+            - { pattern: "@company/rpc-server", type: import }
+        endpoint_extraction:
+          patterns:
+            - regex: "rpc\\.(get|post|put|delete)\\s*\\(\\s*['\"`]([^'\"`]+)['\"`]"
+              method_group: 1
+              path_group: 2
+```
+
+Authoring a profile (regex grouping rules, the `default_method` and `file_prefix` schema extensions, how to dedupe) is documented in detail at [`rest-profiles.md`](rest-profiles.md).
 
 ### `autonomy` section
 
