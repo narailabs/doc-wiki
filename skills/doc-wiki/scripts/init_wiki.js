@@ -6,6 +6,9 @@
  * Usage:
  *   node init_wiki.js --path /path/to/wiki-root [--domain general] [--name "My Wiki"]
  *
+ * `--wiki-root` is accepted as an alias for `--path`, matching the convention
+ * used by the rest of the wiki scripts (event_logger, graph_ops, etc.).
+ *
  * The script is idempotent: existing directories are kept, existing config is
  * not overwritten, and existing wiki files are preserved.
  *
@@ -506,8 +509,14 @@ export function initWiki(wikiPath, domain = "general", name = "My Wiki", seedDat
     };
 }
 // ── CLI ─────────────────────────────────────────────────────────────
+// `--wiki-root` is an alias for `--path` so callers using the more
+// descriptive "wiki-root" convention (the same name event_logger,
+// graph_ops, etc. already use) work without translation. Both flags map
+// to the same `path` field below — providing both is fine, but the last
+// one parsed wins (parseFlags overwrites).
 const FLAG_SPEC = {
     "--path": "path",
+    "--wiki-root": "path",
     "--domain": "domain",
     "--name": "name",
 };
@@ -516,10 +525,12 @@ const HELP_TEXT = `usage: init_wiki.js [-h] --path PATH [--domain DOMAIN] [--nam
 Initialize a documentation wiki scaffold.
 
 options:
-  -h, --help       show this help message and exit
-  --path PATH      Root directory for the wiki.
-  --domain DOMAIN  Knowledge domain (default: general).
-  --name NAME      Display name for the wiki (default: "My Wiki").
+  -h, --help            show this help message and exit
+  --path PATH           Root directory for the wiki.
+  --wiki-root PATH      Alias for --path (matches the convention used by
+                        event_logger.js, graph_ops.js, and friends).
+  --domain DOMAIN       Knowledge domain (default: general).
+  --name NAME           Display name for the wiki (default: "My Wiki").
 `;
 export function main(argv = process.argv.slice(2)) {
     let parsed;
@@ -536,7 +547,7 @@ export function main(argv = process.argv.slice(2)) {
     }
     const pathArg = parsed.values["path"];
     if (typeof pathArg !== "string" || pathArg === "") {
-        process.stderr.write("the following arguments are required: --path\n");
+        process.stderr.write("the following arguments are required: --path (or --wiki-root)\n");
         return 2;
     }
     const domain = typeof parsed.values["domain"] === "string" && parsed.values["domain"]
