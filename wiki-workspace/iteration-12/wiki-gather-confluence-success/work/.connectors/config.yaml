@@ -1,0 +1,12 @@
+connectors:
+  aws:
+    disable: true
+  confluence:
+    skill: confluence-agent-connector
+    site_url: env:CONFLUENCE_SITE_URL
+    email: env:CONFLUENCE_EMAIL
+    api_token: env:CONFLUENCE_API_TOKEN
+consumers:
+  doc-wiki:
+    enabled:
+      - confluence
