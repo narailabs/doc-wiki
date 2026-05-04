@@ -317,6 +317,93 @@
         "resolveAgentCli({name:'db'}) succeeds against the published bundle — the resolved CLI lives at node_modules/narai-primitives/dist/connectors/db/cli.js (with `source: 'bundled-self'` per the 2.1.1+ resolver). A null result here means the bundled-CLI resolver is broken and gather() can't actually dispatch.",
         "Cleanup is idempotent — `docker stop eval-pg-20` succeeds whether the container is running or already stopped (the test runner tolerates the stop-stop case for repeatable runs)."
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "Run /doc-wiki:ingest 'https://stub-jira.local/browse/PROJ-1' against my wiki at /tmp/test-gather-jira-success-wiki/ (initialize the wiki first with /doc-wiki:init). The runner stands up a local HTTP stub on a random free port that mimics Atlassian Cloud REST v3 — it answers GET /rest/api/3/issue/PROJ-1 with {\"key\":\"PROJ-1\",\"fields\":{\"summary\":\"Stub issue summary\"}}. JIRA_SITE_URL points at the stub, JIRA_EMAIL=stub@example.com, and JIRA_API_TOKEN=ATATTfaketoken000000000000 are all set in the runner env (fake values — no real Atlassian PAT). Approach A (local HTTP stub): the jira connector takes a configurable site URL via JIRA_SITE_URL, so the stub server can fully impersonate the API for the success path. The point of this eval is to verify the gather() ↔ jira connector subprocess SUCCESS path end-to-end: planner -> spawn jira connector subprocess -> resolveSecret() returns the fake creds -> JiraClient does a GET against the stub -> success envelope returned to the hub -> doc-wiki logs it. A re-run produces an equivalent success.",
+      "expected_output": "Wiki scaffold initialized; gather() (or dispatchPlan() — the test exercises dispatchPlan to keep the result deterministic without an LLM planner) plans + dispatches a jira get_issue call against the stub on JIRA_SITE_URL; the subprocess loads its config slice, resolves credentials via narai-primitives/credentials, builds a Basic-auth GET, hits the stub, and returns a non-error envelope (status='success'); the data carries the stubbed issue summary; doc-wiki logs the envelope in events.jsonl. Re-running produces an equivalent success and leaves no leaked sockets. No cleartext token appears anywhere in the wiki tree (the fake token still must not leak).",
+      "files": [],
+      "expectations": [
+        "Wiki scaffold exists at the per-eval `work/` dir with the standard dirs (wiki/, raw/, graph/, audit/, log/, outputs/) — confirms /doc-wiki:init ran",
+        "events.jsonl records at least one op='ingest' entry whose details capture the dispatch — top-level `consumer: 'doc-wiki'` AND an embedded `dispatch_steps[]` array referencing the 'jira' connector with action='get_issue'",
+        "The jira dispatch step has a SUCCESS status — either status='success' (createConnector framework envelope) or status='ok' (legacy dispatcher envelope). No error_code on the success path. Proves the full credential-load -> connect -> read path executed end-to-end inside the connector subprocess against the stub",
+        "The dispatch envelope's data references the stubbed issue — the issue key 'PROJ-1' and summary text 'Stub issue summary' (or fields.summary) appear in the data payload, confirming the JiraClient actually executed a GET against the stub (not a stub-of-the-stub)",
+        "The jira connector ran in a separate Node process — verifiable via (a) the dispatch envelope matching narai-primitives' DispatchResult contract (envelope/data shape produced by createConnector), AND (b) the resolved CLI path under narai-primitives/dist/connectors/jira/cli.js appearing in the cli-resolution.json output (resolveAgentCli({name:'jira'}) returns source='bundled-self')",
+        "No cleartext token leaked into the wiki tree — `grep -rE 'ATATT[A-Za-z0-9_-]{20,}' work/` returns zero matches even though the runner sets a fake JIRA_API_TOKEN; the token lives only in the runner's env",
+        "The stub server received exactly one (or two on re-run) authenticated GETs to /rest/api/3/issue/PROJ-1 — the runner's request log records the path AND a non-empty Authorization: Basic <…> header, proving the connector actually built and sent the Basic-auth round trip end-to-end",
+        "Re-running the dispatch produces an equivalent success envelope (idempotent success path) — same status, same data shape, same PROJ-1 reference. Both runs exit cleanly. The stub server tearing down at end-of-test releases its port (no leaked listeners)",
+        "resolveAgentCli({name:'jira'}) succeeds against the published bundle — the resolved CLI lives at node_modules/narai-primitives/dist/connectors/jira/cli.js (with `source: 'bundled-self'` per the 2.1.1+ resolver). A null result here means the bundled-CLI resolver is broken and gather() can't actually dispatch",
+        "Approach: A (local HTTP stub on a random free port pointing JIRA_SITE_URL at it). Picked because the jira connector reads JIRA_SITE_URL directly from process.env and validateUrl accepts http://127.0.0.1:<port>. No real Atlassian credentials required."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "Run /doc-wiki:ingest 'https://stub-confluence.local/wiki/spaces/PROJ/pages/1' against my wiki at /tmp/test-gather-confluence-success-wiki/ (initialize the wiki first with /doc-wiki:init). The runner stands up a local HTTP stub on a random free port that mimics Atlassian Cloud Confluence REST v2 — it answers GET /wiki/api/v2/pages/1 with a stubbed page body referencing 'Stub page title' and a body in storage representation. CONFLUENCE_SITE_URL points at the stub, CONFLUENCE_EMAIL=stub@example.com, and CONFLUENCE_API_TOKEN=ATATTfaketoken000000000000 are all set in the runner env (fake values — no real Atlassian PAT). Approach A (local HTTP stub): the confluence connector takes a configurable site URL via CONFLUENCE_SITE_URL, so the stub server can fully impersonate the API for the success path. The point of this eval is to verify the gather() ↔ confluence connector subprocess SUCCESS path end-to-end. A re-run produces an equivalent success.",
+      "expected_output": "Wiki scaffold initialized; dispatchPlan() plans + dispatches a confluence get_page call against the stub on CONFLUENCE_SITE_URL; the subprocess loads its config slice, resolves credentials via narai-primitives/credentials, builds a Basic-auth GET, hits the stub, and returns a non-error envelope (status='success'); the data carries the stubbed page title; doc-wiki logs the envelope in events.jsonl. Re-running produces an equivalent success.",
+      "files": [],
+      "expectations": [
+        "Wiki scaffold exists at the per-eval `work/` dir with the standard dirs (wiki/, raw/, graph/, audit/, log/, outputs/) — confirms /doc-wiki:init ran",
+        "events.jsonl records at least one op='ingest' entry whose details capture the dispatch — top-level `consumer: 'doc-wiki'` AND an embedded `dispatch_steps[]` array referencing the 'confluence' connector with action in {get_page, get_content}",
+        "The confluence dispatch step has a SUCCESS status — either status='success' or status='ok'. No error_code on the success path. Proves the full credential-load -> connect -> read path executed end-to-end inside the connector subprocess against the stub",
+        "The dispatch envelope's data references the stubbed page — the page id '1' and stubbed title text appear in the data payload, confirming the ConfluenceClient actually executed a GET against the stub",
+        "The confluence connector ran in a separate Node process — verifiable via (a) the dispatch envelope matching narai-primitives' DispatchResult contract (envelope/data shape produced by createConnector), AND (b) the resolved CLI path under narai-primitives/dist/connectors/confluence/cli.js appearing in cli-resolution.json (resolveAgentCli({name:'confluence'}) returns source='bundled-self')",
+        "No cleartext token leaked into the wiki tree — `grep -rE 'ATATT[A-Za-z0-9_-]{20,}' work/` returns zero matches even though the runner sets a fake CONFLUENCE_API_TOKEN",
+        "The stub server received the expected GET with a non-empty Authorization: Basic <…> header, proving the connector actually built and sent the Basic-auth round trip end-to-end",
+        "Re-running the dispatch produces an equivalent success envelope (idempotent success path) — same status, same data shape, same page-id reference",
+        "resolveAgentCli({name:'confluence'}) succeeds against the published bundle — the resolved CLI lives at node_modules/narai-primitives/dist/connectors/confluence/cli.js (with `source: 'bundled-self'`)",
+        "Approach: A (local HTTP stub on a random free port pointing CONFLUENCE_SITE_URL at it). Picked because the confluence connector reads CONFLUENCE_SITE_URL directly from process.env. No real Atlassian credentials required."
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "Run /doc-wiki:ingest 'https://www.notion.so/Page-abcdef0123456789abcdef0123456789' against my wiki at /tmp/test-gather-notion-success-wiki/ (initialize the wiki first with /doc-wiki:init). This eval is gated behind TEST_LIVE_NOTION=1 plus a real NOTION_TOKEN in the env. When TEST_LIVE_NOTION is unset (default) the eval is marked 'skipped' (not failed) with a clear reason. Approach B (TEST_LIVE_<NAME> gate) — picked because the Notion API base URL (api.notion.com) is hardcoded inside @notionhq/client and overriding it cleanly requires either a network-level intercept (DNS hosts file or HTTPS proxy) or a JS-runtime fetch monkey-patch inside the connector subprocess; both are higher-friction than a TEST_LIVE_ gate that exercises the real API.",
+      "expected_output": "When TEST_LIVE_NOTION=1 and NOTION_TOKEN is set in env: gather() (or dispatchPlan) plans + dispatches a notion get_page call; the subprocess resolves NOTION_TOKEN via narai-primitives/credentials, hits api.notion.com, returns a success envelope; doc-wiki logs the envelope in events.jsonl. When TEST_LIVE_NOTION is unset: the runner emits a 'skipped' record with reason='TEST_LIVE_NOTION not set; success-path covered only via the live-API gate'. Skip is NOT a failure — it's an explicit gated-test pattern mirroring narai-primitives' live-DB suite.",
+      "files": [],
+      "expectations": [
+        "Approach: B (TEST_LIVE_NOTION=1 gate). Picked because notion's API base URL is hardcoded inside @notionhq/client; a clean override requires either a DNS/hosts-level intercept or a fetch-monkey-patch in the connector subprocess — both higher-friction than the gate.",
+        "When TEST_LIVE_NOTION is unset (the default in CI today), the runner emits a 'skipped' record with a clear reason — NOT a failed expectation. The harness reports skip distinct from pass/fail",
+        "When TEST_LIVE_NOTION=1 and NOTION_TOKEN is set: wiki scaffold exists at the per-eval `work/` dir; events.jsonl has an op='ingest' entry referencing the notion connector",
+        "When TEST_LIVE_NOTION=1: the dispatch envelope has SUCCESS status (status='success' or 'ok'), no error_code, and data references the requested page id (the 32-char Notion id)",
+        "When TEST_LIVE_NOTION=1: the notion connector ran in a separate Node process — resolveAgentCli({name:'notion'}) returns source='bundled-self' AND resolvedPath under node_modules/narai-primitives/dist/connectors/notion/cli.js",
+        "Whether TEST_LIVE_NOTION is set or not: no cleartext NOTION_TOKEN appears in the wiki tree — `grep -rE 'secret_[A-Za-z0-9_]{30,}|ntn_[A-Za-z0-9_]{30,}' work/` returns zero matches",
+        "The skip path is documented in grading.json — the eval entry records `status='skipped'` AND `skip_reason` referencing TEST_LIVE_NOTION; this mirrors narai-primitives' live-DB integration test gating",
+        "resolveAgentCli({name:'notion'}) succeeds against the published bundle even on the skip path — proves the bundled-CLI resolver is intact regardless of whether the live API is exercised",
+        "Re-running with the same TEST_LIVE_NOTION setting yields the same status (skipped or pass) — deterministic gate behavior"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "Run /doc-wiki:ingest 'arn:aws:s3:::example-bucket' against my wiki at /tmp/test-gather-aws-success-wiki/ (initialize the wiki first with /doc-wiki:init). This eval is gated behind TEST_LIVE_AWS=1 plus real AWS credentials in env (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or AWS_PROFILE). When TEST_LIVE_AWS is unset (default) the eval is marked 'skipped' with a clear reason. Approach B — picked because while the AWS SDK v3 supports AWS_ENDPOINT_URL for endpoint override (so a localstack/moto stub is conceptually possible), faithfully mocking S3's signed-request protocol for a non-trivial 'list buckets' or 'describe DB' call requires either localstack (~Docker, large dep) or a hand-rolled SigV4-aware HTTP stub that handles the AWS error envelope. Both are far more friction than a TEST_LIVE_ gate that exercises the real account.",
+      "expected_output": "When TEST_LIVE_AWS=1 and AWS credentials are set: gather() plans + dispatches an aws action (list_buckets or describe_db); the subprocess loads credentials via the AWS SDK default chain (which narai-primitives/credentials defers to), hits the real AWS API, returns a success envelope; doc-wiki logs the envelope. When TEST_LIVE_AWS is unset: the runner emits a 'skipped' record with reason='TEST_LIVE_AWS not set; success-path covered only via the live-API gate'.",
+      "files": [],
+      "expectations": [
+        "Approach: B (TEST_LIVE_AWS=1 gate). Picked because faithfully stubbing S3's signed-request protocol or any other AWS SDK call requires either localstack/moto (big dep) or a SigV4-aware HTTP stub — both higher-friction than the gate. AWS_ENDPOINT_URL would point an SDK at a stub, but the stub itself is the expensive part",
+        "When TEST_LIVE_AWS is unset (the default in CI today), the runner emits a 'skipped' record with a clear reason — NOT a failed expectation",
+        "When TEST_LIVE_AWS=1 and AWS credentials are set: wiki scaffold exists at the per-eval `work/` dir; events.jsonl has an op='ingest' entry referencing the aws connector",
+        "When TEST_LIVE_AWS=1: the dispatch envelope has SUCCESS status (status='success' or 'ok'), no error_code on the success path, and data references the chosen action's payload (e.g., a 'buckets' array for list_buckets)",
+        "When TEST_LIVE_AWS=1: the aws connector ran in a separate Node process — resolveAgentCli({name:'aws'}) returns source='bundled-self' AND resolvedPath under node_modules/narai-primitives/dist/connectors/aws/cli.js",
+        "Whether TEST_LIVE_AWS is set or not: no cleartext AWS key leaks — `grep -rE 'AKIA[0-9A-Z]{16}|aws_secret_access_key' work/` returns zero matches",
+        "The skip path is documented in grading.json — the eval entry records `status='skipped'` AND `skip_reason` referencing TEST_LIVE_AWS",
+        "resolveAgentCli({name:'aws'}) succeeds against the published bundle even on the skip path",
+        "Re-running with the same TEST_LIVE_AWS setting yields the same status (skipped or pass) — deterministic gate behavior"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "Run /doc-wiki:ingest 'gcp://projects/example-project/services' against my wiki at /tmp/test-gather-gcp-success-wiki/ (initialize the wiki first with /doc-wiki:init). This eval is gated behind TEST_LIVE_GCP=1 plus a working gcloud installation (Application Default Credentials configured) and GCP_PROJECT_ID set in env. When TEST_LIVE_GCP is unset (default) the eval is marked 'skipped' with a clear reason. Approach B — picked because the gcp connector probes for the gcloud binary on PATH and relies on Application Default Credentials; faithfully stubbing both (a fake gcloud shim plus signed-token mock) is far more friction than a TEST_LIVE_ gate.",
+      "expected_output": "When TEST_LIVE_GCP=1 and gcloud is installed + ADC configured: gather() plans + dispatches a gcp action (list_projects, describe_service, etc.); the subprocess shells out to gcloud or uses the SDK with ADC, returns a success envelope; doc-wiki logs the envelope. When TEST_LIVE_GCP is unset: the runner emits a 'skipped' record with reason='TEST_LIVE_GCP not set; success-path covered only via the live-API gate'.",
+      "files": [],
+      "expectations": [
+        "Approach: B (TEST_LIVE_GCP=1 gate). Picked because the gcp connector probes the gcloud binary plus uses Application Default Credentials; faithfully stubbing both is far more friction than a gate that exercises the real account when configured",
+        "When TEST_LIVE_GCP is unset (the default in CI today), the runner emits a 'skipped' record with a clear reason — NOT a failed expectation",
+        "When TEST_LIVE_GCP=1 and gcloud + ADC are configured: wiki scaffold exists at the per-eval `work/` dir; events.jsonl has an op='ingest' entry referencing the gcp connector",
+        "When TEST_LIVE_GCP=1: the dispatch envelope has SUCCESS status (status='success' or 'ok'), no error_code on the success path, and data references the requested resource (project id or service list)",
+        "When TEST_LIVE_GCP=1: the gcp connector ran in a separate Node process — resolveAgentCli({name:'gcp'}) returns source='bundled-self' AND resolvedPath under node_modules/narai-primitives/dist/connectors/gcp/cli.js",
+        "Whether TEST_LIVE_GCP is set or not: no cleartext credential leaks — `grep -rE 'private_key|service_account|client_email' work/` returns zero matches in materialized wiki output (skip path: zero by definition; live path: ADC tokens never serialize)",
+        "The skip path is documented in grading.json — the eval entry records `status='skipped'` AND `skip_reason` referencing TEST_LIVE_GCP",
+        "resolveAgentCli({name:'gcp'}) succeeds against the published bundle even on the skip path",
+        "Re-running with the same TEST_LIVE_GCP setting yields the same status (skipped or pass) — deterministic gate behavior"
+      ]
     }
   ]
 }
