@@ -1,0 +1,28 @@
+{
+  "plan": [
+    {
+      "connector": "aws",
+      "action": "list_buckets",
+      "params": {
+        "region": "us-east-1"
+      }
+    }
+  ],
+  "results": [
+    {
+      "step": 1,
+      "connector": "aws",
+      "action": "list_buckets",
+      "params": {
+        "region": "us-east-1"
+      },
+      "envelope": {
+        "status": "error",
+        "action": "list_buckets",
+        "error_code": "AUTH_ERROR",
+        "message": "Could not load credentials from any providers",
+        "retriable": false
+      }
+    }
+  ]
+}

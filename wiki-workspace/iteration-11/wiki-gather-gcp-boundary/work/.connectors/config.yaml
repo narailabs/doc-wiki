@@ -1,0 +1,11 @@
+connectors:
+  aws:
+    disable: true
+  gcp:
+    skill: gcp-agent-connector
+    project_id: env:GCP_PROJECT_ID
+    region: env:GCP_REGION
+consumers:
+  doc-wiki:
+    enabled:
+      - gcp
