@@ -63,7 +63,11 @@ Open the project you want to document in Claude Code (or one of the other suppor
 /doc-wiki:init
 ```
 
-Optional flags: `--path <wiki-root>` (default `wiki/`), `--domain "<domain>"`, `--name "<wiki-name>"`.
+Optional flags: `--path <wiki-root>`, `--domain "<domain>"`, `--name "<wiki-name>"`.
+
+If you omit `--path`, the skill infers a default of `docs/<app-name-kebab-case>-wiki/` from the project's marker file (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, ...) and asks you to confirm or override before scaffolding.
+
+> **Why this naming pattern?** Obsidian (and most other markdown-vault tools) names a vault after its containing folder. Putting the wiki at `docs/<app-name>-wiki/` means anyone who opens that folder as an Obsidian vault gets a vault titled `<app-name>-wiki` rather than the generic `wiki` — instantly recognizable in Obsidian's vault switcher and in any cross-vault links. The `docs/` prefix keeps the wiki adjacent to the rest of the project's hand-authored docs without colliding with them.
 
 This invokes `init_wiki.ts` and creates a directory layout:
 

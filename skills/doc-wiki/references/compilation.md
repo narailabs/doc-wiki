@@ -103,6 +103,28 @@ For pages with external source references, auto-generate:
 
 Generation is handled by `scripts/how_to_go_deeper.ts` (compiled `how_to_go_deeper.js`). It classifies each string in the page's `sources:` frontmatter — Atlassian URLs / `jira://` → Jira, Confluence URLs / `confluence://` → Confluence, `gh://` or github.com → GitHub, `notion://` or notion.so → Notion, GCP/AWS console URLs and schemes → the respective agent, `db://env/target` → the db-query agent, code extensions with optional `:lines` → Live code. Sources under `raw/` (already ingested into the body) are elided. Pass the enabled-agents set from `wiki.config.yaml` so hints for disabled agents render as "enable the wiki-X-agent" callouts instead of unrunnable commands.
 
+## Related Pages Section
+
+Every compiled page MUST end with a populated `## Related Pages` section, written **at page-creation time** — not deferred to the post-op crosslink hook. Compose 3-5 hand-picked `[Title](relative/path.md)` bullets, drawing from:
+
+- **Same-topic siblings** — other facets of the same topic (for atlas pages: e.g. `agents/architecture.md` should link `agents/api.md`, `agents/operations.md`).
+- **Same-facet peers** — the same facet on neighboring topics (e.g. `agents/architecture.md` should link `skills/architecture.md`).
+- **Most relevant audience-flavor globals** — `overview.md`, `integrations.md`, `deploy.md`, `commands.md`, `configuration.md`, `getting-started.md`, `troubleshooting.md`.
+
+Do NOT emit a `<!-- crosslink hook will populate -->` (or similar deferred-fill) placeholder. The post-op crosslink hook **refines** an existing list — it adds newly-discovered relationships and prunes stale ones — but it never bootstraps the section from scratch. Pages that ship with empty / placeholder `## Related Pages` are treated as page-creation bugs by the hook's summary output.
+
+Format:
+
+```markdown
+## Related Pages
+
+- [Title of sibling](relative/path.md) — short relevance note
+- [Title of peer](relative/path.md) — short relevance note
+- [Title of global](relative/path.md) — short relevance note
+```
+
+The short relevance note (after the em-dash) is optional but recommended — it helps readers decide whether to follow the link.
+
 ## Graph Edges
 
 After compilation, write typed relationships to `graph/edges.jsonl`:

@@ -22,7 +22,7 @@ Create the directory scaffold and initial configuration.
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
-| `--path` | path | `wiki/` | Wiki root directory (created if missing) |
+| `--path` | path | `docs/<app-name-kebab-case>-wiki/` (inferred from `package.json`, `pyproject.toml`, etc., then confirmed via prompt) | Wiki root directory (created if missing). The naming pattern is chosen so the folder, opened as an Obsidian vault, takes the app's name rather than a generic `wiki` label. |
 | `--domain` | string | `general` | Broad topic for the wiki (e.g. `backend-services`, `infra`) |
 | `--name` | string | (project name) | Wiki name; appears in frontmatter and overview |
 

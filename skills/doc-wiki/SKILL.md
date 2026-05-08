@@ -40,6 +40,16 @@ node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --
 
 This creates: `wiki/`, `raw/`, `graph/`, `audit/`, `log/`, `outputs/`, `.wiki-cache/`, `.wiki-ignore`, and a default `wiki.config.yaml`.
 
+**Default path inference (when `--path` is omitted):** Before invoking the script, derive a sensible default and confirm with the user via `AskUserQuestion`. Inference rule:
+
+1. Read the project name from the first marker file present in the cwd: `package.json` (`name` field, strip `@scope/` prefix), then `pyproject.toml` (`[project] name` or `[tool.poetry] name`), then `Cargo.toml` (`[package] name`), then `go.mod` (last segment of `module` path), then `pom.xml` (`<artifactId>`), then `Gemfile`/`*.gemspec`, else fall back to `basename(cwd)`.
+2. Convert the name to kebab-case: lowercase, replace runs of `[^a-z0-9]+` with `-`, strip leading/trailing `-`.
+3. Default path = `docs/<kebab-name>-wiki/` (relative to cwd).
+
+Always present this default to the user via `AskUserQuestion` with two options: (a) accept the default `docs/<kebab-name>-wiki/`, (b) "Other" → free-form path entry. Do NOT proceed silently to the script with an inferred path; init is a one-time scaffold and the path becomes a long-lived convention, so the explicit confirmation is worth the extra turn. Apply the same `AskUserQuestion` pattern for `--domain` (default: kebab-name) and `--name` (default: derived from the package's display name or kebab-name) when those are also omitted, but accept the inferred values as a single bundled question rather than three separate prompts.
+
+The wrapper `commands/init.md` only routes into this skill — it does not pre-collect arguments. Arg collection happens here so the inference + confirmation logic stays co-located with the rest of the orchestrator.
+
 After running the script, create initial files:
 - `wiki/index.md` — master catalog (empty, will populate during ingest)
 - `wiki/summaries.md` — enriched summary index (empty initially)
@@ -264,7 +274,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 
 These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
 
-**Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with auto-managed cross-links. The body section is **facet-conditional** so each audience gets the structure it needs.
+**Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with cross-links **written at page-creation time** (the post-op crosslink hook later refines, but never bootstraps, the section). The body section is **facet-conditional** so each audience gets the structure it needs.
 
 ```text
 ---
@@ -282,7 +292,13 @@ These let atlas recognize its own pages on re-runs and skip semantic-cache inval
 <links to deeper sources or sibling pages>
 
 ## Related Pages
-<auto-managed by crosslink hook>
+<3–5 hand-picked `[Title](relative/path.md)` bullets, written when the page is written.
+ Pick from: same-topic siblings (other facets of this topic), same-facet peers
+ (this facet on other topics), and the most relevant audience-flavor globals
+ (overview, integrations, deploy, commands, configuration, getting-started,
+ troubleshooting). Do NOT emit a `<!-- crosslink hook will populate -->` (or
+ similar deferred-fill) placeholder — pages must ship with this section
+ populated. The post-op crosslink hook refines/extends; it does not bootstrap.>
 ```
 
 **Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
@@ -536,7 +552,7 @@ Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost br
 
 After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
 
-**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page. Add/update `## Related Pages` section on every page.
+**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:promote`) gets corrected — do not silently fill it in.
 
 **Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page.
 
