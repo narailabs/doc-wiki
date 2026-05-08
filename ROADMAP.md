@@ -72,13 +72,13 @@ to v2.)
 
 - **`docs/atlas.md`** — full Phase 1-8 walkthrough including the
   Phase 1b inventory step. The atlas command is the tentpole; deserves
-  its own doc beyond the existing `docs/architecture.md` Diagram 4. _proposed_
+  its own doc beyond the existing `docs/internals/architecture.md` Diagram 4. _proposed_
 - **`docs/configuration.md` `ecosystem.rest` section** — deferred from
   PR #14. Describe the block (enabled flag, custom_profiles slot,
   example custom YAML). _proposed_
 - **Custom REST profile authoring guide** — example YAMLs + how to
   test. Probably belongs as a new file under `docs/` or a section in
-  `docs/architecture.md`. _proposed_
+  `docs/internals/architecture.md`. _proposed_
 
 ---
 

@@ -39,7 +39,7 @@ npx vitest run agents/wiki-mermaid-agent/scripts/tests/
 
 ## Where things live
 
-Read [`docs/architecture.md`](docs/architecture.md) for the three-layer model. The short version:
+Read [`docs/internals/architecture.md`](docs/internals/architecture.md) for the three-layer model. The short version:
 
 - **Slash commands** live at `commands/doc-wiki:*.md` — thin wrappers that route into the `doc-wiki` skill.
 - **The orchestrator skill** lives at `skills/doc-wiki/SKILL.md` — state machine that dispatches scripts and agents.
@@ -48,14 +48,14 @@ Read [`docs/architecture.md`](docs/architecture.md) for the three-layer model. T
 - **Shared libraries** live at `agents/lib/` — `wiki_db`, `wiki_orm`, plus standalone modules.
 - **Reference docs** live at `skills/doc-wiki/references/` — autonomy, code-locality, compilation, operations, quality.
 
-External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the seven bundled connectors. See [`docs/connectors.md`](docs/connectors.md).
+External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the seven bundled connectors. See [`docs/connectors.md`](docs/connectors.md) for the user-facing reference, [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) for the API.
 
 ## Common contributions
 
 | Goal | Where to start |
 |---|---|
 | Add or modify a `/doc-wiki:*` command | Edit `skills/doc-wiki/SKILL.md` (the command's section) and the wrapper at `commands/wiki-<name>.md` |
-| Add a TypeScript script | Add `.ts` under `skills/doc-wiki/scripts/`, add tests under `tests/`, update `docs/architecture.md` script inventory |
+| Add a TypeScript script | Add `.ts` under `skills/doc-wiki/scripts/`, add tests under `tests/`, update `docs/internals/architecture.md` script inventory |
 | Add an ORM profile | Drop a YAML file under `agents/lib/wiki_orm/profiles/` — `loadProfile()` validates regexes at load time |
 | Add a custom local connector | Use the `/create-connector` skill — scaffolds at `.connectors/connectors/<name>/`. **Do not** add it inside doc-wiki sources. |
 | Contribute a builtin connector | Open a PR against [narailabs/narai-primitives](https://github.com/narailabs/narai-primitives), not this repo |
@@ -66,7 +66,7 @@ External-source fetching does **not** live in doc-wiki. It is delegated to `nara
 - **Surgical changes only.** Don't refactor adjacent code that isn't broken.
 - **No Python.** All scripts are TypeScript; the only `.py` files in the repo are ORM-extractor test fixtures (read as text by the TypeScript tests).
 - **Match existing style.** ES modules, TypeScript strict mode, vitest, content-only concept tags.
-- **Respect architecture contracts.** See the "Architecture contracts" section of `CLAUDE.md` and `docs/architecture.md` — those invariants are load-bearing.
+- **Respect architecture contracts.** See the "Architecture contracts" section of `CLAUDE.md` and `docs/internals/architecture.md` — those invariants are load-bearing.
 - **Don't bypass safety.** No `--no-verify`, `git push --force` to main, or skipping the policy gate on the `db` connector.
 
 ## Filing an issue or PR

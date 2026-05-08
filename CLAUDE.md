@@ -10,9 +10,9 @@ The public-facing documentation lives under [`docs/`](docs/). Start there for in
 |---|---|
 | Brand new — installing | [`README.md`](README.md), [`docs/getting-started.md`](docs/getting-started.md) |
 | Operator — using the commands | [`docs/commands.md`](docs/commands.md), [`docs/configuration.md`](docs/configuration.md), [`docs/troubleshooting.md`](docs/troubleshooting.md) |
-| Contributor — modifying internals | [`docs/architecture.md`](docs/architecture.md), [`docs/connectors.md`](docs/connectors.md), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Contributor — modifying internals | [`docs/internals/architecture.md`](docs/internals/architecture.md), [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
-This file (`CLAUDE.md`) is the project-memory layer that Claude Code loads automatically; the sections below are an architecture summary for the orchestrator. The full architecture doc with Mermaid diagrams is at [`docs/architecture.md`](docs/architecture.md).
+This file (`CLAUDE.md`) is the project-memory layer that Claude Code loads automatically; the sections below are an architecture summary for the orchestrator. The full architecture doc with Mermaid diagrams is at [`docs/internals/architecture.md`](docs/internals/architecture.md).
 
 ## Quickstart
 

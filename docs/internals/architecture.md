@@ -1,6 +1,6 @@
 # Architecture
 
-doc-wiki is a documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helper scripts. There is no daemon, no service, no external API to call from your shell — every operation is initiated by a `/doc-wiki:*` slash command, mediated by the orchestrator skill, and carried out by a mix of deterministic TypeScript scripts, three sub-agents, and a single planner-dispatcher (`gather()` from [`narai-primitives`](connectors.md)) for external sources.
+doc-wiki is a documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helper scripts. There is no daemon, no service, no external API to call from your shell — every operation is initiated by a `/doc-wiki:*` slash command, mediated by the orchestrator skill, and carried out by a mix of deterministic TypeScript scripts, three sub-agents, and a single planner-dispatcher (`gather()` from [`narai-primitives`](../connectors.md)) for external sources.
 
 This document explains how the layers fit together, what each script and agent is for, and which architecture invariants are load-bearing.
 
@@ -78,15 +78,15 @@ Nine `commands/doc-wiki:*.md` files. Each is a YAML-frontmatter wrapper that reg
 
 | Command | What it does |
 |---|---|
-| [`/doc-wiki:init`](../commands/init.md) | Bootstrap the wiki directory scaffold and default config |
-| [`/doc-wiki:onboard`](../commands/onboard.md) | Interactive setup: detect language, ORM, DB, configure connectors |
-| [`/doc-wiki:ingest`](../commands/ingest.md) | Fetch, extract, and compile a source into wiki pages |
-| [`/doc-wiki:query`](../commands/query.md) | Summary-first search + synthesis (synthesis mode) or shortest-path between concepts (path mode, `--from <a> --to <b>`) |
-| [`/doc-wiki:lint`](../commands/lint.md) | Structural health check and auto-heal |
-| [`/doc-wiki:fix`](../commands/fix.md) | Targeted correction to a single wiki page |
-| [`/doc-wiki:promote`](../commands/promote.md) | Convert an archived `/doc-wiki:query` answer into a permanent page |
-| [`/doc-wiki:refresh`](../commands/refresh.md) | Re-fetch and update previously ingested sources |
-| [`/doc-wiki:stats`](../commands/stats.md) | Token efficiency and cost metrics from the event log |
+| [`/doc-wiki:init`](../../commands/init.md) | Bootstrap the wiki directory scaffold and default config |
+| [`/doc-wiki:onboard`](../../commands/onboard.md) | Interactive setup: detect language, ORM, DB, configure connectors |
+| [`/doc-wiki:ingest`](../../commands/ingest.md) | Fetch, extract, and compile a source into wiki pages |
+| [`/doc-wiki:query`](../../commands/query.md) | Summary-first search + synthesis (synthesis mode) or shortest-path between concepts (path mode, `--from <a> --to <b>`) |
+| [`/doc-wiki:lint`](../../commands/lint.md) | Structural health check and auto-heal |
+| [`/doc-wiki:fix`](../../commands/fix.md) | Targeted correction to a single wiki page |
+| [`/doc-wiki:promote`](../../commands/promote.md) | Convert an archived `/doc-wiki:query` answer into a permanent page |
+| [`/doc-wiki:refresh`](../../commands/refresh.md) | Re-fetch and update previously ingested sources |
+| [`/doc-wiki:stats`](../../commands/stats.md) | Token efficiency and cost metrics from the event log |
 
 Each wrapper looks roughly like:
 
@@ -103,11 +103,11 @@ Call `Skill(doc-wiki, "init $ARGUMENTS")`.
 
 The wrappers exist purely so each command shows up in slash-command autocomplete. They do no work themselves.
 
-For per-command argument and example reference, see [`commands.md`](commands.md).
+For per-command argument and example reference, see [`commands.md`](../commands.md).
 
 ## Layer 2 — The wiki skill orchestrator
 
-[`skills/doc-wiki/SKILL.md`](../skills/doc-wiki/SKILL.md) is a 340+ line state machine. It is loaded into the Claude Code session when any `/doc-wiki:*` command fires, and it routes the command to the correct combination of scripts, agents, and `gather()` calls.
+[`skills/doc-wiki/SKILL.md`](../../skills/doc-wiki/SKILL.md) is a 340+ line state machine. It is loaded into the Claude Code session when any `/doc-wiki:*` command fires, and it routes the command to the correct combination of scripts, agents, and `gather()` calls.
 
 The orchestrator does not contain code — it's instructions for the LLM. Each subcommand section describes:
 
@@ -123,7 +123,7 @@ Cross-cutting concerns are documented once and reused across commands:
 - **Caching** — content-hash dedup via `cache_manager.ts` happens before any expensive operation.
 - **Event logging** — every operation appends a structured event to `log/events.jsonl` via `event_logger.ts`.
 - **Post-op hooks** — after any write op (ingest, fix, promote, refresh), the orchestrator runs **crosslink** + **tag-harmonize** passes, but only if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
-- **Autonomy mode** — every change respects the configured autonomy level (`conservative` / `balanced` / `autonomous` / `auto`). See [`skills/doc-wiki/references/autonomy.md`](../skills/doc-wiki/references/autonomy.md).
+- **Autonomy mode** — every change respects the configured autonomy level (`conservative` / `balanced` / `autonomous` / `auto`). See [`skills/doc-wiki/references/autonomy.md`](../../skills/doc-wiki/references/autonomy.md).
 
 ## Layer 3 — Execution
 
@@ -131,7 +131,7 @@ Three independent execution surfaces. The orchestrator uses each for what it's g
 
 ### 3a. TypeScript scripts
 
-Roughly 21 deterministic operations live at [`skills/doc-wiki/scripts/`](../skills/doc-wiki/scripts/). They compile to sibling `.js` files via `npm run build` and are invoked as `node <script>.js <args>`.
+Roughly 21 deterministic operations live at [`skills/doc-wiki/scripts/`](../../skills/doc-wiki/scripts/). They compile to sibling `.js` files via `npm run build` and are invoked as `node <script>.js <args>`.
 
 Grouped by purpose:
 
@@ -152,11 +152,11 @@ Every script has matching `*.test.ts` cases under `tests/`. Tests double as the 
 
 ### 3b. Agents
 
-Three sub-agents live under [`agents/`](../agents/). Each has its own `AGENT.md` specification.
+Three sub-agents live under [`agents/`](../../agents/). Each has its own `AGENT.md` specification.
 
 #### `wiki-orm-agent`
 
-- **Path:** [`agents/wiki-orm-agent/`](../agents/wiki-orm-agent/)
+- **Path:** [`agents/wiki-orm-agent/`](../../agents/wiki-orm-agent/)
 - **Purpose:** Detect ORM patterns in a codebase and map entities to database tables.
 - **Tools:** Bash, Read, Glob, Grep (Serena MCP when available).
 - **Output:** A `database-mapping.md` page with a Mermaid ER diagram.
@@ -165,7 +165,7 @@ Three sub-agents live under [`agents/`](../agents/). Each has its own `AGENT.md`
 
 #### `wiki-mermaid-agent`
 
-- **Path:** [`agents/wiki-mermaid-agent/`](../agents/wiki-mermaid-agent/)
+- **Path:** [`agents/wiki-mermaid-agent/`](../../agents/wiki-mermaid-agent/)
 - **Purpose:** Convert structured JSON (from connector envelopes or other sources) into fenced Mermaid blocks and inject them into wiki pages.
 - **Tools:** Bash, Read, Write.
 - **Constraint:** Purely deterministic — no LLM calls. All operations are string formatting and file I/O.
@@ -173,7 +173,7 @@ Three sub-agents live under [`agents/`](../agents/). Each has its own `AGENT.md`
 
 #### `wiki-claude-md-agent`
 
-- **Path:** [`agents/wiki-claude-md-agent/`](../agents/wiki-claude-md-agent/)
+- **Path:** [`agents/wiki-claude-md-agent/`](../../agents/wiki-claude-md-agent/)
 - **Purpose:** Generate and maintain `CLAUDE.md` files (root + per-submodule), preserving user-written content outside `<!-- wiki-managed: start/end -->` markers.
 - **Tools:** Bash, Read, Write.
 - **Operations:** `generate` (full creation) and `update` (managed-section refresh only).
@@ -181,7 +181,7 @@ Three sub-agents live under [`agents/`](../agents/). Each has its own `AGENT.md`
 
 ### 3c. Shared libraries
 
-Code that's shared between agents and scripts lives at [`agents/lib/`](../agents/lib/).
+Code that's shared between agents and scripts lives at [`agents/lib/`](../../agents/lib/).
 
 Two library directories:
 
@@ -205,7 +205,7 @@ External-source fetching does not live in doc-wiki at all. It is delegated to `g
 
 doc-wiki calls `gather()` exactly once per `/doc-wiki:ingest`, in step 7 of the pipeline. The hub plans which connectors to invoke, spawns each as a child process, and returns a `DispatchResult[]` where each entry carries either an `envelope` (success) or a structured `error` (failure). The wiki then runs `applyMermaid()` on the results to add wiki-specific Mermaid blocks before compiling the final page.
 
-For the full `gather()` API, the `DispatchResult` envelope shape, and the seven connectors, see [`connectors.md`](connectors.md).
+For the full `gather()` API, the `DispatchResult` envelope shape, and the seven connectors, see [`connectors.md`](../connectors.md).
 
 ## Diagram 2: `/doc-wiki:ingest` pipeline
 
@@ -251,7 +251,7 @@ sequenceDiagram
     S-->>U: page path + summary
 ```
 
-The numbered steps map to the orchestrator's instructions in [`SKILL.md`](../skills/doc-wiki/SKILL.md) (search for `### /doc-wiki:ingest`). Steps 1–6 are deterministic. Step 7 is the only place external services are touched. Steps 8–13 are deterministic.
+The numbered steps map to the orchestrator's instructions in [`SKILL.md`](../../skills/doc-wiki/SKILL.md) (search for `### /doc-wiki:ingest`). Steps 1–6 are deterministic. Step 7 is the only place external services are touched. Steps 8–13 are deterministic.
 
 A few subtle behaviors worth knowing:
 
@@ -309,7 +309,7 @@ Three things worth highlighting:
 2. **Dispatch is subprocess-based, not in-process.** Each connector runs in its own Node child process so a misbehaving connector can't corrupt the parent. Configuration is passed via the `NARAI_CONFIG_BLOB` env var; credentials are loaded inside the child process by `narai-primitives/credentials`. doc-wiki itself never sees a cleartext token.
 3. **Errors are isolated per step.** A timeout, an unauthorized response, or a missing CLI in one connector does not fail the gather — just that step. The caller sees `results[i].error.code` (e.g., `TIMEOUT`, `DISPATCH_FAILED`, `CLI_NOT_FOUND`, `UNAUTHORIZED`) and decides how to handle it.
 
-For the full `gather()` API, plan validation rules, and per-connector envelopes, see [`connectors.md`](connectors.md).
+For the full `gather()` API, plan validation rules, and per-connector envelopes, see [`connectors.md`](../connectors.md).
 
 ## Diagram 4: `/doc-wiki:atlas` pipeline
 
@@ -344,12 +344,12 @@ flowchart TD
 
 Green = deterministic (TypeScript helpers); yellow = LLM-driven (the orchestrator skill itself); red = decision gates that may abort or branch.
 
-The eight phases map to the orchestrator's instructions in [`SKILL.md`](../skills/doc-wiki/SKILL.md) (search for `### /doc-wiki:atlas`). The new TypeScript helpers under `skills/doc-wiki/scripts/` are:
+The eight phases map to the orchestrator's instructions in [`SKILL.md`](../../skills/doc-wiki/SKILL.md) (search for `### /doc-wiki:atlas`). The new TypeScript helpers under `skills/doc-wiki/scripts/` are:
 
-- [`atlas_orchestrator.ts`](../skills/doc-wiki/scripts/atlas_orchestrator.ts) — state detection (Phase 1), cost estimation (Phase 4), plan-snapshot persistence (Phase 6 entry / `--resume`).
-- [`atlas_gitlog.ts`](../skills/doc-wiki/scripts/atlas_gitlog.ts) — `git log --since` parser; classifies changed paths as **stale** (referenced by an existing atlas page), **uncovered** (under a current-run topic but no atlas page), or **unrelated**.
-- [`atlas_validate.ts`](../skills/doc-wiki/scripts/atlas_validate.ts) — `(page-hash, source-hash)` cache for the Phase 5 semantic check, plus a thin wrapper around `lint_checks.ts` for single-page structural validation.
-- [`agents/lib/atlas_synthesize.ts`](../agents/lib/atlas_synthesize.ts) — read-only input bundles for Phase 7 (`overview`, `integrations`, `deploy`).
+- [`atlas_orchestrator.ts`](../../skills/doc-wiki/scripts/atlas_orchestrator.ts) — state detection (Phase 1), cost estimation (Phase 4), plan-snapshot persistence (Phase 6 entry / `--resume`).
+- [`atlas_gitlog.ts`](../../skills/doc-wiki/scripts/atlas_gitlog.ts) — `git log --since` parser; classifies changed paths as **stale** (referenced by an existing atlas page), **uncovered** (under a current-run topic but no atlas page), or **unrelated**.
+- [`atlas_validate.ts`](../../skills/doc-wiki/scripts/atlas_validate.ts) — `(page-hash, source-hash)` cache for the Phase 5 semantic check, plus a thin wrapper around `lint_checks.ts` for single-page structural validation.
+- [`agents/lib/atlas_synthesize.ts`](../../agents/lib/atlas_synthesize.ts) — read-only input bundles for Phase 7 (`overview`, `integrations`, `deploy`).
 
 A few subtle behaviors worth knowing:
 
@@ -360,15 +360,15 @@ A few subtle behaviors worth knowing:
 
 ## Reference docs
 
-Five operator manuals live at [`skills/doc-wiki/references/`](../skills/doc-wiki/references/). The orchestrator skill reads these on demand — they are not loaded upfront.
+Five operator manuals live at [`skills/doc-wiki/references/`](../../skills/doc-wiki/references/). The orchestrator skill reads these on demand — they are not loaded upfront.
 
 | Document | What it covers |
 |---|---|
-| [`autonomy.md`](../skills/doc-wiki/references/autonomy.md) | Autonomy levels (conservative / balanced / autonomous / auto), per-category overrides, dispute audit inbox |
-| [`code-locality.md`](../skills/doc-wiki/references/code-locality.md) | When to reference code vs copy it; content-hash drift detection |
-| [`compilation.md`](../skills/doc-wiki/references/compilation.md) | Page-type taxonomy (concept / entity / summary / index / lecture / claim / synthesis), required frontmatter, claims metadata, "How to Go Deeper" generation |
-| [`operations.md`](../skills/doc-wiki/references/operations.md) | Detailed specs per operation: codebase markers, ORM patterns, DB detection, Q&A flow, scaffold template, onboarding phases |
-| [`quality.md`](../skills/doc-wiki/references/quality.md) | Quality scoring formula (0.0–1.0), tag philosophy (content-only), Mermaid lint rules |
+| [`autonomy.md`](../../skills/doc-wiki/references/autonomy.md) | Autonomy levels (conservative / balanced / autonomous / auto), per-category overrides, dispute audit inbox |
+| [`code-locality.md`](../../skills/doc-wiki/references/code-locality.md) | When to reference code vs copy it; content-hash drift detection |
+| [`compilation.md`](../../skills/doc-wiki/references/compilation.md) | Page-type taxonomy (concept / entity / summary / index / lecture / claim / synthesis), required frontmatter, claims metadata, "How to Go Deeper" generation |
+| [`operations.md`](../../skills/doc-wiki/references/operations.md) | Detailed specs per operation: codebase markers, ORM patterns, DB detection, Q&A flow, scaffold template, onboarding phases |
+| [`quality.md`](../../skills/doc-wiki/references/quality.md) | Quality scoring formula (0.0–1.0), tag philosophy (content-only), Mermaid lint rules |
 
 These are the source of truth for the orchestrator's behavior. The public docs in `docs/` paraphrase them where helpful.
 
@@ -378,10 +378,10 @@ The skill is exposed in five AI tools via wrapper files:
 
 | File | Tool |
 |---|---|
-| [`AGENTS.md`](../AGENTS.md) | Codex / OpenAI agents |
-| [`GEMINI.md`](../GEMINI.md) | Gemini / Google AI |
-| [`.cursor/rules/wiki.mdc`](../.cursor/rules/wiki.mdc) | Cursor IDE |
-| [`.aider/conventions.md`](../.aider/conventions.md) | Aider |
+| [`AGENTS.md`](../../AGENTS.md) | Codex / OpenAI agents |
+| [`GEMINI.md`](../../GEMINI.md) | Gemini / Google AI |
+| [`.cursor/rules/wiki.mdc`](../../.cursor/rules/wiki.mdc) | Cursor IDE |
+| [`.aider/conventions.md`](../../.aider/conventions.md) | Aider |
 | `skills/doc-wiki/SKILL.md` | Claude Code (the canonical, full-detail manual) |
 
 All five point back to the same scripts under `skills/doc-wiki/scripts/` and the same agents under `agents/`. The wrappers exist because each tool has its own slash-command discovery path and rule format; the skill itself is one orchestrator.
@@ -421,9 +421,9 @@ The connector toolkit (in `narai-primitives/toolkit`) provides:
 - **`fetchWithCaps(url, init?, caps?)`** — HTTP fetch with size cap (default 50 MB) and timeout (default 60 s), enforced via streaming + `AbortController`.
 - **`sanitizeLabel(label, maxLen?)`** — strip control chars (`U+0000–001F`, `U+007F–009F`), HTML-escape, cap length.
 
-Doc-wiki itself adds [`security_check.ts`](../skills/doc-wiki/scripts/security_check.ts) for URL validation prior to ingest. The full security posture is documented in [`compilation.md`](../skills/doc-wiki/references/compilation.md) and [`operations.md`](../skills/doc-wiki/references/operations.md).
+Doc-wiki itself adds [`security_check.ts`](../../skills/doc-wiki/scripts/security_check.ts) for URL validation prior to ingest. The full security posture is documented in [`compilation.md`](../../skills/doc-wiki/references/compilation.md) and [`operations.md`](../../skills/doc-wiki/references/operations.md).
 
-The `db` connector adds a guard-rail policy on top of all this — see [`connectors.md`](connectors.md#db-connector) for the ALLOW / DENY / ESCALATE / PRESENT_ONLY decisions.
+The `db` connector adds a guard-rail policy on top of all this — see [`connectors.md`](../connectors.md#db) for the ALLOW / DENY / ESCALATE / PRESENT_ONLY decisions.
 
 ## Testing posture
 
@@ -449,8 +449,8 @@ npx vitest run skills/doc-wiki/scripts/tests/   # focused
 
 doc-wiki is a TypeScript project with two `tsconfig` files:
 
-- [`tsconfig.json`](../tsconfig.json) — typecheck config (`tsc --noEmit`); `npm run typecheck`.
-- [`tsconfig.build.json`](../tsconfig.build.json) — build config (`tsc -b`); `npm run build`. Emits sibling `.js` files next to every `.ts` under `skills/doc-wiki/scripts/` and `agents/lib/`.
+- [`tsconfig.json`](../../tsconfig.json) — typecheck config (`tsc --noEmit`); `npm run typecheck`.
+- [`tsconfig.build.json`](../../tsconfig.build.json) — build config (`tsc -b`); `npm run build`. Emits sibling `.js` files next to every `.ts` under `skills/doc-wiki/scripts/` and `agents/lib/`.
 
 ES modules (`"type": "module"`), strict TypeScript, ES2022 target. There is no bundler; scripts are loaded by `node` directly.
 

@@ -156,7 +156,7 @@ Ingest a source (file, URL, folder, or pasted text) into the wiki. The bread-and
 
 **What it does:**
 
-The 13-step pipeline (full diagram in [`architecture.md`](architecture.md#diagram-2-wiki-ingest-pipeline)):
+The 13-step pipeline (full diagram in [`internals/architecture.md`](internals/architecture.md#diagram-2-wiki-ingest-pipeline)):
 
 1. Parse `wiki.config.yaml` to find the wiki root.
 2. Check the SHA256 cache to skip already-ingested content.
@@ -184,7 +184,7 @@ A folder ingest runs the pipeline once per file, with checkpoint support — int
 /doc-wiki:ingest /path/to/design-spec.pdf --no-tag-harmonize
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:ingest](../skills/doc-wiki/SKILL.md), [`connectors.md`](connectors.md), [`architecture.md`](architecture.md#diagram-2-wiki-ingest-pipeline).
+**See also:** [`SKILL.md` § /doc-wiki:ingest](../skills/doc-wiki/SKILL.md), [`connectors.md`](connectors.md), [`internals/architecture.md`](internals/architecture.md#diagram-2-wiki-ingest-pipeline).
 
 ---
 

@@ -302,7 +302,7 @@ These let atlas recognize its own pages on re-runs and skip semantic-cache inval
  populated. The post-op crosslink hook refines/extends; it does not bootstrap.>
 ```
 
-**Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
+**Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/internals/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
 
 | Facet | Audience | Body sections (mandatory unless noted) |
 |---|---|---|
