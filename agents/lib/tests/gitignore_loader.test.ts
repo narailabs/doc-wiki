@@ -250,6 +250,41 @@ describe("isIgnoredByStack", () => {
       isIgnoredByStack([sm], path.join(tmpPath, "build"), false),
     ).toBe(false);
   });
+
+  it("skips out-of-scope paths (`..` and `../...`)", () => {
+    fs.mkdirSync(path.join(tmpPath, "child"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "child", ".gitignore"), "*\n");
+    const childSm = loadGitignoreScoped(path.join(tmpPath, "child"))!;
+    // tmpPath itself is the parent of `child` → out-of-scope for childSm.
+    expect(isIgnoredByStack([childSm], tmpPath, true)).toBe(false);
+    // A sibling of `child` is also out-of-scope.
+    fs.mkdirSync(path.join(tmpPath, "sibling"), { recursive: true });
+    expect(
+      isIgnoredByStack([childSm], path.join(tmpPath, "sibling"), true),
+    ).toBe(false);
+  });
+
+  it("still applies rules to in-scope basenames that start with `..`", () => {
+    // Regression: `rel.startsWith("..")` previously over-matched names
+    // like `..cache` and silently disabled the matcher for that subtree.
+    fs.writeFileSync(
+      path.join(tmpPath, ".gitignore"),
+      "..cache/\n..hidden.ts\n",
+    );
+    const sm = loadGitignoreScoped(tmpPath)!;
+    // Directory whose name starts with `..`
+    expect(
+      isIgnoredByStack([sm], path.join(tmpPath, "..cache"), true),
+    ).toBe(true);
+    // File inside that directory
+    expect(
+      isIgnoredByStack([sm], path.join(tmpPath, "..cache", "x.ts"), false),
+    ).toBe(true);
+    // Stand-alone file whose name starts with `..`
+    expect(
+      isIgnoredByStack([sm], path.join(tmpPath, "..hidden.ts"), false),
+    ).toBe(true);
+  });
 });
 
 describe("buildInitialMatcherStack", () => {
@@ -299,6 +334,25 @@ describe("buildInitialMatcherStack", () => {
     } finally {
       cleanupTmpPath(outside);
     }
+  });
+
+  it("treats in-scope segments starting with `..` as descendants, not as parents", () => {
+    // Regression: a previous `rel.startsWith("..")` check classified
+    // `..cache` as out-of-scope and returned just the anchor's matcher.
+    // It should descend into `..cache` and pick up its `.gitignore`.
+    fs.mkdirSync(path.join(tmpPath, "..cache"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, ".gitignore"), "anchor.ts\n");
+    fs.writeFileSync(
+      path.join(tmpPath, "..cache", ".gitignore"),
+      "nested.ts\n",
+    );
+    const stack = buildInitialMatcherStack(
+      tmpPath,
+      path.join(tmpPath, "..cache"),
+    );
+    expect(stack).toHaveLength(2);
+    expect(stack[0].baseDir).toBe(path.resolve(tmpPath));
+    expect(stack[1].baseDir).toBe(path.resolve(path.join(tmpPath, "..cache")));
   });
 
   it("skips levels without a .gitignore", () => {

@@ -138,7 +138,11 @@ export function loadGitignoreScoped(dir) {
 export function isIgnoredByStack(stack, absPath, isDirectory) {
     for (const sm of stack) {
         const rel = path.relative(sm.baseDir, absPath).replace(/\\/g, "/");
-        if (rel === "" || rel.startsWith(".."))
+        // Skip out-of-scope paths (`..` or `../...`) but NOT in-scope basenames
+        // that merely start with `..` such as `..cache/foo.ts` — those are
+        // legitimate descendants of `baseDir` and their `.gitignore` rules
+        // must still apply.
+        if (rel === "" || rel === ".." || rel.startsWith("../"))
             continue;
         const probe = isDirectory ? rel + "/" : rel;
         if (sm.matcher.isIgnored(probe))
@@ -166,8 +170,14 @@ export function buildInitialMatcherStack(anchorRoot, walkRoot) {
     if (target === anchor)
         return stack;
     const rel = path.relative(anchor, target);
-    if (rel.startsWith(".."))
-        return stack; // walkRoot not under anchor
+    // Out-of-scope when walkRoot is above (`..`) or sideways (`../...`) of
+    // anchorRoot; an in-scope segment that merely starts with `..`
+    // (e.g. `..cache`) stays valid.
+    if (rel === ".." ||
+        rel.startsWith(".." + path.sep) ||
+        rel.startsWith("../")) {
+        return stack;
+    }
     let cursor = anchor;
     for (const seg of rel.split(path.sep)) {
         if (seg === "")
