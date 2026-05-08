@@ -263,6 +263,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, external-services-without-documentation, and (when the Phase 1b inventory manifest is present at the canonical path) REST-endpoints-without-documentation + code-clients-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
+   - **Refresh the root-file Reference appendix** — dispatch `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [...]}` where `targets` lists every AI-tool root file present in the repo (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md`). The agent regenerates the `<!-- wiki-managed: reference start/end -->` block on each present file and refreshes `docs/<wiki-folder>/ai-dev/<tool>-config.md` for each detected tool. See the **Root-file Reference Appendix** section above for the canonical structure. This step MUST run after crosslink + tag-harmonize so the appendix reflects the final wiki state.
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
    - Clear the checkpoint via `clearCheckpoint(wikiRoot, "atlas")`.
    - Write `wiki/outputs/atlas/<run-id>/cost-report.md` with the planned breakdown from `estimate-cost` plus actual costs from this run's events.
@@ -547,6 +548,73 @@ node {skill_path}/scripts/event_logger.js stats --wiki-root <wiki-root> --since 
 ```
 
 Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown. Per-agent cost sums top-level `agent` fields as well as every `agent_calls[]` sub-entry on every event, so parent-op events that dispatched sub-agents are fully accounted for.
+
+## Root-file Reference Appendix
+
+Every AI-tool entry-point file at the repo root ends with a wiki-managed `## Reference` section that points the AI tool at the wiki for **progressive disclosure** — the root file stays brief and high-signal, and the AI tool follows the pointers to load deeper context only when needed. Affected files:
+
+- `CLAUDE.md` (Claude Code)
+- `AGENTS.md` (Codex / OpenAI agents)
+- `GEMINI.md` (Gemini)
+- `.cursor/rules/doc-wiki.mdc` (Cursor)
+- `.aider/conventions.md` (Aider)
+
+The section is owned by `wiki-claude-md-agent` (which generalizes to all five surfaces despite its Claude-Code-flavored name; the same agent's `scripts/` operate on any of the listed paths). Content between the markers is regenerated on each invocation; content outside the markers is preserved verbatim.
+
+### Canonical structure
+
+```markdown
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+`docs/<wiki-folder>/wiki/index.md`
+
+### Coding agent configuration registry (Skills & agents)
+
+**claude-code**: `docs/<wiki-folder>/ai-dev/claude-config.md`
+**codex**: `docs/<wiki-folder>/ai-dev/codex-config.md`
+**gemini**: `docs/<wiki-folder>/ai-dev/gemini-config.md`
+**cursor**: `docs/<wiki-folder>/ai-dev/cursor-config.md`
+**aider**: `docs/<wiki-folder>/ai-dev/aider-config.md`
+
+(Only list rows for AI tools whose root file is present in this repo. If the per-tool config file does not exist yet, list it anyway so the absence is visible — the agent will create the file on its next run.)
+
+### Other references
+
+(Optional. 0–5 brief, high-signal pointers the AI tool should know without bloating context. Examples: latest atlas run id, the canonical architecture page, current incident runbook, link to a freeze-window calendar. Each entry is one line. If "Other references" grows past 5 bullets, promote items into the wiki and link there instead.)
+<!-- wiki-managed: reference end -->
+```
+
+`<wiki-folder>` is the leaf-folder name from the wiki path (e.g., for `/doc-wiki:init --path docs/my-app-wiki/`, `<wiki-folder>` = `my-app-wiki`).
+
+### Per-tool config files (`docs/<wiki-folder>/ai-dev/<tool>-config.md`)
+
+One markdown file per AI tool, all generated and maintained by `wiki-claude-md-agent`. Each file is a structured inventory of how that tool sees the project:
+
+| Section | Content |
+|---|---|
+| Skills | name + description + invocation mode for every installed skill |
+| Agents | `subagent_type` + purpose for every agent the tool can dispatch |
+| Hooks | `PreToolUse` / `PostToolUse` / `SessionStart` registrations + their commands |
+| MCP servers | name + capabilities for every MCP server the tool loads |
+| Slash commands | `/<name>` + summary for every command file the tool exposes |
+
+Files are read by the AI tool only when the user explicitly asks "what skills/agents/hooks are configured?" or equivalent — they are not loaded into the default context window.
+
+### Generation triggers
+
+The Reference appendix is regenerated on:
+
+1. `/doc-wiki:init` — initial appendix written with empty registry (no per-tool config files yet).
+2. `/doc-wiki:onboard` — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
+3. `/doc-wiki:atlas` Phase 8 (finalize) — refreshed alongside the rest of the wiki.
+4. Any direct `Agent(wiki-claude-md-agent)` invocation.
+
+### Brevity rule
+
+The total Reference appendix MUST stay under ~30 lines per root file. The "Other references" subsection is the only freeform area; keep it tight. Anything that wants to be a paragraph belongs as a wiki page, not in the appendix.
 
 ## Post-Operation Hooks
 
