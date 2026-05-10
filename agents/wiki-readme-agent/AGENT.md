@@ -8,7 +8,7 @@ description: |
 type: maintenance
 autonomy_level: autonomous
 model: sonnet
-tools: [Read, Write, Bash]
+tools: [Bash, Read, Write]
 color: yellow
 version: "1.0.0"
 invocation_template:
@@ -48,6 +48,75 @@ If the markers are missing, you do **not** insert them silently — defer to the
 | `sync` (default) | Drift-check + LLM salvage + write new block. |
 | `check` | Drift-check only — no writes. Use for `--dry-run`. |
 | `init` | Insert markers when missing AND `ecosystem.readme.insert_markers_on_init: true`. Takes optional `quickstart_depth` to seed the placeholder. |
+
+## OUTPUT FORMAT
+
+The agent always emits a single JSON object on stdout. The shape varies by outcome:
+
+### Success — sync wrote new content
+
+```json
+{
+  "status": "success",
+  "action": "sync",
+  "drift_summary": {
+    "only_in_readme_count": 3,
+    "only_in_getting_started_count": 1,
+    "shared_count": 4
+  },
+  "salvaged_paragraphs": [
+    { "snippet": "Note: Node 21+ isn't supported...", "disposition": "keep_verbatim" }
+  ],
+  "written": "/path/to/project/README.md"
+}
+```
+
+### Success — check (dry-run); no writes
+
+Same shape as `sync` success, with `action: "check"` and `written` omitted.
+
+### Success — init inserted markers
+
+```json
+{
+  "status": "success",
+  "action": "init",
+  "written": "/path/to/project/README.md",
+  "anchor": "## Install"
+}
+```
+
+### No-op — init found markers already present
+
+```json
+{ "status": "noop", "reason": "markers already present" }
+```
+
+### Skipped — init declined to act
+
+```json
+{ "status": "skipped", "reason": "disabled" | "no readme" | "insert disabled" }
+```
+
+### Warn — sync/check found markers missing or corrupt
+
+```json
+{
+  "status": "warn",
+  "error_code": "MARKERS_MISSING" | "MARKERS_CORRUPT",
+  "message": "..."
+}
+```
+
+### Error — fatal failure
+
+```json
+{
+  "status": "error",
+  "error_code": "README_MISSING" | "GETTING_STARTED_MISSING" | "MARKERS_CORRUPT",
+  "message": "..."
+}
+```
 
 ## Procedure for `sync` and `check`
 
