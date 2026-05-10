@@ -437,6 +437,36 @@ describe("init_wiki — v2 config blocks", () => {
   });
 });
 
+// ── ecosystem.readme defaults ────────────────────────────────────────
+
+describe("init_wiki — ecosystem.readme defaults", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-readme-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function loadCfg(wiki: string): Record<string, any> {
+    return yaml.load(
+      fs.readFileSync(path.join(wiki, "wiki.config.yaml"), "utf-8"),
+    ) as Record<string, any>;
+  }
+
+  it("includes the readme block with documented defaults", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+    expect(cfg.ecosystem.readme).toEqual({
+      enabled: true,
+      quickstart_depth: "generous",
+      salvage_mode: "balanced",
+      insert_markers_on_init: true,
+    });
+  });
+});
+
 // ── Claude Code hook install on init (Phase H1) ─────────────────────
 
 describe("init_wiki — Claude Code hook install", () => {

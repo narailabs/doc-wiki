@@ -191,6 +191,12 @@ function buildConfig(domain, name) {
                 marked_sections: true,
                 preserve_user_sections: true,
             },
+            readme: {
+                enabled: true,
+                quickstart_depth: "generous",
+                salvage_mode: "balanced",
+                insert_markers_on_init: true,
+            },
             mermaid: {
                 auto_generate: true,
                 types: ["erDiagram", "sequenceDiagram", "graph"],
