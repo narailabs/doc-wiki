@@ -132,3 +132,81 @@ describe("TestParseConfig", () => {
     expect(() => parseConfig(p)).toThrow(/[Mm]ode|autonomy/);
   });
 });
+
+describe("ecosystem.readme", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("parse-cfg-readme-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("defaults when absent", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      autonomy: { mode: "balanced" },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: {
+        readme: {
+          enabled: boolean;
+          quickstart_depth: string;
+          salvage_mode: string;
+          insert_markers_on_init: boolean;
+        };
+      };
+    };
+    expect(cfg.ecosystem.readme).toEqual({
+      enabled: true,
+      quickstart_depth: "generous",
+      salvage_mode: "balanced",
+      insert_markers_on_init: true,
+    });
+  });
+
+  it("auto autonomy mode maps salvage_mode to autonomous", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      autonomy: { mode: "auto" },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { salvage_mode: string } } };
+    expect(cfg.ecosystem.readme.salvage_mode).toBe("autonomous");
+  });
+
+  it("respects enabled: false", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { enabled: false } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { enabled: boolean } } };
+    expect(cfg.ecosystem.readme.enabled).toBe(false);
+  });
+
+  it("respects quickstart_depth: minimal", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { quickstart_depth: "minimal" } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { quickstart_depth: string } } };
+    expect(cfg.ecosystem.readme.quickstart_depth).toBe("minimal");
+  });
+
+  it("rejects invalid quickstart_depth", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { quickstart_depth: "medium" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/quickstart_depth/);
+  });
+
+  it("rejects invalid salvage_mode", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { salvage_mode: "yolo" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/salvage_mode/);
+  });
+});

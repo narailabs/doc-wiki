@@ -22,6 +22,17 @@ const VALID_AUTONOMY_MODES: ReadonlySet<string> = new Set([
   "auto",
 ]);
 
+const VALID_QUICKSTART_DEPTHS: ReadonlySet<string> = new Set([
+  "minimal",
+  "standard",
+  "generous",
+]);
+const VALID_SALVAGE_MODES: ReadonlySet<string> = new Set([
+  "conservative",
+  "balanced",
+  "autonomous",
+]);
+
 const DEFAULTS = {
   wiki: {
     domain: "general",
@@ -42,6 +53,36 @@ export class ConfigFileNotFoundError extends Error {
     super(message);
     this.name = "ConfigFileNotFoundError";
   }
+}
+
+function applyReadmeDefaults(
+  ecosystem: Record<string, unknown>,
+  autonomyMode: string,
+): void {
+  const raw = (ecosystem["readme"] as Record<string, unknown> | undefined) ?? {};
+  if (
+    raw.quickstart_depth !== undefined &&
+    !VALID_QUICKSTART_DEPTHS.has(String(raw.quickstart_depth))
+  ) {
+    throw new Error(
+      `invalid ecosystem.readme.quickstart_depth: ${raw.quickstart_depth} (expected one of: ${[...VALID_QUICKSTART_DEPTHS].join(", ")})`,
+    );
+  }
+  if (
+    raw.salvage_mode !== undefined &&
+    !VALID_SALVAGE_MODES.has(String(raw.salvage_mode))
+  ) {
+    throw new Error(
+      `invalid ecosystem.readme.salvage_mode: ${raw.salvage_mode} (expected one of: ${[...VALID_SALVAGE_MODES].join(", ")})`,
+    );
+  }
+  const inheritedSalvage = autonomyMode === "auto" ? "autonomous" : autonomyMode;
+  ecosystem.readme = {
+    enabled: raw.enabled ?? true,
+    quickstart_depth: raw.quickstart_depth ?? "generous",
+    salvage_mode: raw.salvage_mode ?? inheritedSalvage,
+    insert_markers_on_init: raw.insert_markers_on_init ?? true,
+  };
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -121,6 +162,13 @@ export function parseConfig(configPath: string): WikiConfig {
       `Invalid autonomy mode '${mode}'. Valid modes: ${sorted}`,
     );
   }
+
+  // --- Apply ecosystem defaults ---
+  if (!("ecosystem" in config) || !isPlainObject(config["ecosystem"])) {
+    config["ecosystem"] = {};
+  }
+  const ecosystem = config["ecosystem"] as Record<string, unknown>;
+  applyReadmeDefaults(ecosystem, mode);
 
   return config;
 }

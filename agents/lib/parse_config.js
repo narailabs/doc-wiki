@@ -20,6 +20,16 @@ const VALID_AUTONOMY_MODES = new Set([
     "autonomous",
     "auto",
 ]);
+const VALID_QUICKSTART_DEPTHS = new Set([
+    "minimal",
+    "standard",
+    "generous",
+]);
+const VALID_SALVAGE_MODES = new Set([
+    "conservative",
+    "balanced",
+    "autonomous",
+]);
 const DEFAULTS = {
     wiki: {
         domain: "general",
@@ -35,6 +45,24 @@ export class ConfigFileNotFoundError extends Error {
         super(message);
         this.name = "ConfigFileNotFoundError";
     }
+}
+function applyReadmeDefaults(ecosystem, autonomyMode) {
+    const raw = ecosystem["readme"] ?? {};
+    if (raw.quickstart_depth !== undefined &&
+        !VALID_QUICKSTART_DEPTHS.has(String(raw.quickstart_depth))) {
+        throw new Error(`invalid ecosystem.readme.quickstart_depth: ${raw.quickstart_depth} (expected one of: ${[...VALID_QUICKSTART_DEPTHS].join(", ")})`);
+    }
+    if (raw.salvage_mode !== undefined &&
+        !VALID_SALVAGE_MODES.has(String(raw.salvage_mode))) {
+        throw new Error(`invalid ecosystem.readme.salvage_mode: ${raw.salvage_mode} (expected one of: ${[...VALID_SALVAGE_MODES].join(", ")})`);
+    }
+    const inheritedSalvage = autonomyMode === "auto" ? "autonomous" : autonomyMode;
+    ecosystem.readme = {
+        enabled: raw.enabled ?? true,
+        quickstart_depth: raw.quickstart_depth ?? "generous",
+        salvage_mode: raw.salvage_mode ?? inheritedSalvage,
+        insert_markers_on_init: raw.insert_markers_on_init ?? true,
+    };
 }
 function isPlainObject(v) {
     return (typeof v === "object" && v !== null && !Array.isArray(v) && v.constructor === Object);
@@ -100,6 +128,12 @@ export function parseConfig(configPath) {
         const sorted = [...VALID_AUTONOMY_MODES].sort().join(", ");
         throw new Error(`Invalid autonomy mode '${mode}'. Valid modes: ${sorted}`);
     }
+    // --- Apply ecosystem defaults ---
+    if (!("ecosystem" in config) || !isPlainObject(config["ecosystem"])) {
+        config["ecosystem"] = {};
+    }
+    const ecosystem = config["ecosystem"];
+    applyReadmeDefaults(ecosystem, mode);
     return config;
 }
 function parseArgs(argv) {
