@@ -191,10 +191,13 @@ function buildConfig(domain, name) {
                 marked_sections: true,
                 preserve_user_sections: true,
             },
+            // salvage_mode is intentionally omitted — it inherits from autonomy.mode
+            // at parse time (see applyReadmeDefaults in agents/lib/parse_config.ts).
+            // Seeding it here would freeze the inheritance and break later changes
+            // to autonomy.mode.
             readme: {
                 enabled: true,
                 quickstart_depth: "generous",
-                salvage_mode: "balanced",
                 insert_markers_on_init: true,
             },
             mermaid: {

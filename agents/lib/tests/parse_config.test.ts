@@ -238,16 +238,12 @@ describe("ecosystem.readme", () => {
     expect(cfg.ecosystem.readme.enabled).toBe(true);
   });
 
-  it("ignores scalar ecosystem.readme value and applies defaults", () => {
+  it("rejects scalar ecosystem.readme value with a helpful error", () => {
     const p = writeConfigYaml(tmpPath, {
       wiki: { name: "t" },
       ecosystem: { readme: false },
     });
-    const cfg = parseConfig(p) as {
-      ecosystem: { readme: { enabled: boolean; quickstart_depth: string } };
-    };
-    // Defaults applied; the raw scalar is discarded
-    expect(cfg.ecosystem.readme.enabled).toBe(true);
-    expect(cfg.ecosystem.readme.quickstart_depth).toBe("generous");
+    expect(() => parseConfig(p)).toThrow(/invalid ecosystem.readme/);
+    expect(() => parseConfig(p)).toThrow(/ecosystem.readme.enabled: false/);
   });
 });

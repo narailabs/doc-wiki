@@ -59,7 +59,16 @@ function applyReadmeDefaults(
   ecosystem: Record<string, unknown>,
   autonomyMode: string,
 ): void {
-  const raw = isPlainObject(ecosystem["readme"]) ? ecosystem["readme"] : {};
+  // Fail fast on malformed config — `ecosystem.readme: false` (intending to
+  // disable) is a common YAML shorthand that would silently turn into
+  // `enabled: true` after defaults applied. Force the user to write the
+  // explicit `enabled: false` form instead.
+  if (ecosystem["readme"] !== undefined && !isPlainObject(ecosystem["readme"])) {
+    throw new Error(
+      `invalid ecosystem.readme: ${JSON.stringify(ecosystem["readme"])} (expected an object; to disable the agent use \`ecosystem.readme.enabled: false\`)`,
+    );
+  }
+  const raw = (ecosystem["readme"] as Record<string, unknown> | undefined) ?? {};
   if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
     throw new Error(
       `invalid ecosystem.readme.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`,

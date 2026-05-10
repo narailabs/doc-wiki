@@ -458,12 +458,20 @@ describe("init_wiki — ecosystem.readme defaults", () => {
     const wiki = tmpWiki(tmpPath);
     runInit(wiki);
     const cfg = loadCfg(wiki);
+    // salvage_mode is intentionally not seeded — it inherits from
+    // autonomy.mode at parse time (applyReadmeDefaults).
     expect(cfg.ecosystem.readme).toEqual({
       enabled: true,
       quickstart_depth: "generous",
-      salvage_mode: "balanced",
       insert_markers_on_init: true,
     });
+  });
+
+  it("omits salvage_mode so it inherits from autonomy.mode dynamically", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+    expect(cfg.ecosystem.readme).not.toHaveProperty("salvage_mode");
   });
 });
 
