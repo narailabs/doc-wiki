@@ -135,4 +135,229 @@ export function insertMarkers(readme: string, placeholder: string): string {
 }
 
 // ── CLI ─────────────────────────────────────────────────────────────
-// (CLI dispatch added in Task 3.)
+
+const HELP_TEXT = `usage: readme_sync.js {extract,write,init} [...]
+
+Subcommands:
+  extract --readme <path>
+                    Print the marker block as JSON: { before, between, after }.
+                    Errors emit { status: "error", error_code, message }.
+
+  write   --readme <path> --block-file <path>
+                    Replace the marker block with the contents of <block-file>.
+                    Preserves text outside the markers.
+
+  init    --readme <path> --depth {minimal|standard|generous}
+                    Insert markers if missing. Idempotent when markers exist.
+                    The depth seeds a one-line placeholder (real content lands
+                    on the next /doc-wiki:atlas run).
+`;
+
+const PLACEHOLDERS: Record<string, string> = {
+  minimal:
+    "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+  standard:
+    "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+  generous:
+    "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+};
+
+interface FlagMap {
+  readme?: string;
+  blockFile?: string;
+  depth?: string;
+  help?: boolean;
+}
+
+function parseFlags(argv: readonly string[]): FlagMap {
+  const out: FlagMap = {};
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i] as string;
+    if (token === "-h" || token === "--help") {
+      out.help = true;
+      continue;
+    }
+    let key = token;
+    let value: string | undefined;
+    const eq = token.indexOf("=");
+    if (token.startsWith("--") && eq > 0) {
+      key = token.substring(0, eq);
+      value = token.substring(eq + 1);
+    } else if (token.startsWith("--")) {
+      value = argv[++i] as string | undefined;
+    } else {
+      throw new Error(`unrecognized argument: ${token}`);
+    }
+    switch (key) {
+      case "--readme":
+        out.readme = value;
+        break;
+      case "--block-file":
+        out.blockFile = value;
+        break;
+      case "--depth":
+        out.depth = value;
+        break;
+      default:
+        throw new Error(`unrecognized argument: ${key}`);
+    }
+  }
+  return out;
+}
+
+function emitError(error_code: string, message: string, details?: object): void {
+  process.stdout.write(
+    JSON.stringify({ status: "error", error_code, message, ...(details ?? {}) }, null, 2) +
+      "\n",
+  );
+}
+
+function cmdExtract(flags: FlagMap): number {
+  if (!flags.readme) {
+    process.stderr.write("--readme is required\n");
+    return 2;
+  }
+  if (!fs.existsSync(flags.readme)) {
+    emitError("README_MISSING", `README not found: ${flags.readme}`);
+    return 1;
+  }
+  const readme = fs.readFileSync(flags.readme, "utf-8");
+  try {
+    const out = extractMarkerBlock(readme);
+    process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+    return 0;
+  } catch (e) {
+    if (e instanceof MarkersMissingError) {
+      emitError("MARKERS_MISSING", e.message);
+      return 1;
+    }
+    if (e instanceof MarkersCorruptError) {
+      emitError("MARKERS_CORRUPT", e.message, {
+        starts: e.starts,
+        ends: e.ends,
+      });
+      return 1;
+    }
+    throw e;
+  }
+}
+
+function cmdWrite(flags: FlagMap): number {
+  if (!flags.readme || !flags.blockFile) {
+    process.stderr.write("--readme and --block-file are required\n");
+    return 2;
+  }
+  if (!fs.existsSync(flags.readme)) {
+    emitError("README_MISSING", `README not found: ${flags.readme}`);
+    return 1;
+  }
+  if (!fs.existsSync(flags.blockFile)) {
+    emitError("README_MISSING", `Block file not found: ${flags.blockFile}`);
+    return 1;
+  }
+  const readme = fs.readFileSync(flags.readme, "utf-8");
+  const block = fs.readFileSync(flags.blockFile, "utf-8").replace(/\n$/, "");
+  try {
+    const out = replaceMarkerBlock(readme, block);
+    fs.writeFileSync(flags.readme, out);
+    process.stdout.write(
+      JSON.stringify({ status: "success", written: flags.readme }, null, 2) +
+        "\n",
+    );
+    return 0;
+  } catch (e) {
+    if (e instanceof MarkersMissingError) {
+      emitError("MARKERS_MISSING", e.message);
+      return 1;
+    }
+    if (e instanceof MarkersCorruptError) {
+      emitError("MARKERS_CORRUPT", e.message, {
+        starts: e.starts,
+        ends: e.ends,
+      });
+      return 1;
+    }
+    throw e;
+  }
+}
+
+function cmdInit(flags: FlagMap): number {
+  if (!flags.readme) {
+    process.stderr.write("--readme is required\n");
+    return 2;
+  }
+  const depth = flags.depth ?? "generous";
+  if (!["minimal", "standard", "generous"].includes(depth)) {
+    process.stderr.write(`invalid --depth: ${depth}\n`);
+    return 2;
+  }
+  if (!fs.existsSync(flags.readme)) {
+    emitError("README_MISSING", `README not found: ${flags.readme}`);
+    return 1;
+  }
+  const readme = fs.readFileSync(flags.readme, "utf-8");
+  // Idempotent — if markers exist, do nothing.
+  try {
+    extractMarkerBlock(readme);
+    process.stdout.write(
+      JSON.stringify({ status: "noop", reason: "markers already present" }, null, 2) +
+        "\n",
+    );
+    return 0;
+  } catch (e) {
+    if (!(e instanceof MarkersMissingError)) {
+      // Corrupt markers — surface error rather than overwriting
+      if (e instanceof MarkersCorruptError) {
+        emitError("MARKERS_CORRUPT", e.message, {
+          starts: e.starts,
+          ends: e.ends,
+        });
+        return 1;
+      }
+      throw e;
+    }
+  }
+  const out = insertMarkers(readme, PLACEHOLDERS[depth] as string);
+  fs.writeFileSync(flags.readme, out);
+  process.stdout.write(
+    JSON.stringify({ status: "success", written: flags.readme, depth }, null, 2) +
+      "\n",
+  );
+  return 0;
+}
+
+function main(): number {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
+    process.stdout.write(HELP_TEXT);
+    return 0;
+  }
+  const sub = argv[0];
+  let flags: FlagMap;
+  try {
+    flags = parseFlags(argv.slice(1));
+  } catch (e) {
+    process.stderr.write(`${(e as Error).message}\n`);
+    return 2;
+  }
+  if (flags.help) {
+    process.stdout.write(HELP_TEXT);
+    return 0;
+  }
+  switch (sub) {
+    case "extract":
+      return cmdExtract(flags);
+    case "write":
+      return cmdWrite(flags);
+    case "init":
+      return cmdInit(flags);
+    default:
+      process.stderr.write(`unknown subcommand: ${sub}\n`);
+      return 2;
+  }
+}
+
+const thisFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
+  process.exit(main());
+}
