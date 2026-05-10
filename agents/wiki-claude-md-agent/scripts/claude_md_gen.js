@@ -245,6 +245,11 @@ function parseArgs(argv) {
             i++;
             continue;
         }
+        if (a === "--check") {
+            out.check = true;
+            i++;
+            continue;
+        }
         let name;
         let value;
         if (a.startsWith("--")) {
@@ -282,7 +287,7 @@ function parseArgs(argv) {
     }
     return out;
 }
-const HELP_TEXT = `usage: claude_md_gen.js [-h] --project-root PROJECT_ROOT --wiki-root WIKI_ROOT [--submodule SUBMODULE] [--update FILE]
+const HELP_TEXT = `usage: claude_md_gen.js [-h] --project-root PROJECT_ROOT --wiki-root WIKI_ROOT [--submodule SUBMODULE] [--update FILE] [--check]
 
 Generate or update CLAUDE.md with wiki-managed sections.
 
@@ -295,6 +300,10 @@ options:
   --submodule SUBMODULE
                         Submodule relative path (for submodule-specific CLAUDE.md)
   --update FILE         Path to existing CLAUDE.md to update in-place
+  --check               Dry-run with --update: print would-be content as JSON to
+                        stdout without writing the target file. Exit 0 on success,
+                        1 on MarkerCorruptError (same as --update without --check).
+                        Has no effect when --update is not set.
 `;
 export function main(argv = process.argv.slice(2)) {
     let args;
@@ -336,6 +345,14 @@ export function main(argv = process.argv.slice(2)) {
                 return 1;
             }
             throw e;
+        }
+        if (args.check) {
+            process.stdout.write(JSON.stringify({
+                status: "would-update",
+                target: args.update,
+                would_write: result,
+            }, null, 2) + "\n");
+            return 0;
         }
         fs.mkdirSync(path.dirname(args.update), { recursive: true });
         fs.writeFileSync(args.update, result);
