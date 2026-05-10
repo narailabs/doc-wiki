@@ -428,3 +428,34 @@ describe("marker validation (G-CLAUDE-MD-MARKER)", () => {
     expect(after).toContain("unclosed");
   });
 });
+
+describe("CLI: --check flag", () => {
+  it("computes the would-be content and emits JSON without writing", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "claude-md-"));
+    const project = path.join(tmp, "project");
+    const wiki = path.join(project, "docs", "test-wiki");
+    fs.mkdirSync(wiki, { recursive: true });
+    fs.writeFileSync(path.join(project, "package.json"), '{"name": "t"}');
+    const target = path.join(project, "CLAUDE.md");
+    const original = `# Hello\n\n${MARKER_START}\nold\n${MARKER_END}\n`;
+    fs.writeFileSync(target, original);
+
+    const { stdout, status } = runCli([
+      "--project-root",
+      project,
+      "--wiki-root",
+      wiki,
+      "--update",
+      target,
+      "--check",
+    ]);
+
+    expect(status).toBe(0);
+    const out = JSON.parse(stdout);
+    expect(out.status).toBe("would-update");
+    expect(out.target).toBe(target);
+    expect(typeof out.would_write).toBe("string");
+    // File on disk is unchanged
+    expect(fs.readFileSync(target, "utf-8")).toBe(original);
+  });
+});

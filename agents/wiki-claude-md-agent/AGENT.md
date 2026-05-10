@@ -89,6 +89,18 @@ Generate a submodule CLAUDE.md:
 }
 ```
 
+Dry-run update (compute would-be content, do not write):
+```json
+{
+  "action": "check",
+  "project_root": "/path/to/project",
+  "wiki_root": "/path/to/project/docs/my-app-wiki",
+  "targets": ["CLAUDE.md", "AGENTS.md", "GEMINI.md"]
+}
+```
+
+The `check` action runs the same logic as `update` but never writes to disk; it returns `{status: "would-update", target, would_write}` for each target. Used by `/doc-wiki:atlas --dry-run`. The underlying CLI mechanism is the `--check` flag passed alongside `--update` to `scripts/claude_md_gen.js`.
+
 ## Reference appendix — canonical structure
 
 (Source of truth: `skills/doc-wiki/SKILL.md` § "Root-file Reference Appendix". Mirror it exactly.)
