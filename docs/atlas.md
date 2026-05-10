@@ -2,7 +2,7 @@
 
 `/doc-wiki:atlas` is the meta-orchestrator that documents an entire codebase in one phased pass. It does not replace [`/doc-wiki:ingest`](commands.md#doc-wikiingest--fetch-extract-compile) — it batches it across discovered topics and facets, then synthesizes global aggregation pages on top.
 
-This document is the operator-facing walkthrough of the eight phases. The architectural overview (with a Mermaid pipeline diagram) lives in [`architecture.md` § Diagram 4](architecture.md#diagram-4-doc-wikiatlas-pipeline); the orchestrator's full prose prompt is the canonical reference at [`SKILL.md` § /doc-wiki:atlas](../skills/doc-wiki/SKILL.md). Use this doc when you want to know what each phase does, what it writes to disk, and how to reason about cost and resumption.
+This document is the operator-facing walkthrough of the eight phases. The architectural overview (with a Mermaid pipeline diagram) lives in [`internals/architecture.md` § Diagram 4](internals/architecture.md#diagram-4-doc-wikiatlas-pipeline); the orchestrator's full prose prompt is the canonical reference at [`SKILL.md` § /doc-wiki:atlas](../skills/doc-wiki/SKILL.md). Use this doc when you want to know what each phase does, what it writes to disk, and how to reason about cost and resumption.
 
 ## Table of contents
 
@@ -90,7 +90,7 @@ Driver: [`skills/doc-wiki/scripts/atlas_orchestrator.ts`](../skills/doc-wiki/scr
 Walks the repo once and emits a four-bucket manifest at `wiki/outputs/atlas/<run-id>/code-inventory.json`:
 
 - `project_metadata` — name / version / language / runtime parsed from `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`.
-- `orm_entities` — every entity discovered by the [`wiki_orm` library](architecture.md#3c-shared-libraries) (seven shipped profiles: SQLAlchemy, Django, JPA, Prisma, TypeORM, ActiveRecord, Entity Framework).
+- `orm_entities` — every entity discovered by the [`wiki_orm` library](internals/architecture.md#3c-shared-libraries) (seven shipped profiles: SQLAlchemy, Django, JPA, Prisma, TypeORM, ActiveRecord, Entity Framework).
 - `rest_endpoints` — HTTP routes from eighteen shipped REST profiles spanning Python / TypeScript / Java / Ruby / Go / PHP / C# / Rust / Elixir / Swift. Opt-in via `ecosystem.rest.enabled: true` in `wiki.config.yaml` (see [`configuration.md`](configuration.md#ecosystem-section)).
 - `code_clients` — `gather()` and `fetchWithCaps()` callsites — anywhere doc-wiki's connector primitives are invoked.
 

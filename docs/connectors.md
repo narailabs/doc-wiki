@@ -1,311 +1,52 @@
-# Connectors and the `narai-primitives` Stack
+# Connectors
 
-doc-wiki itself does not talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. All external-source fetching is delegated to a single dependency: [`narai-primitives`](https://github.com/narailabs/narai-primitives), a bundled package that ships a planner-dispatcher (`gather()`), a connector framework (the toolkit), a config loader, seven read-only built-in connectors, and the [credential-resolution layer](#credential-providers).
+doc-wiki itself doesn't talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. External-source fetching is delegated to a single dependency — [`narai-primitives`](https://github.com/narailabs/narai-primitives) — which ships a planner-dispatcher (`gather()`) and seven read-only built-in connectors. This doc is your guide to **which connector fetches what, what credentials it needs, and how to invoke it**.
 
-This document is the API and operations reference for that stack. For doc-wiki's *use* of `gather()` (the `/doc-wiki:ingest` step 7 hook, the `mermaid_augment.ts` decoration site), see [`architecture.md`](architecture.md).
+For the credential-reference grammar (`env:` / `keychain:` / `file:` / `cloud:`) and YAML schema, see [`configuration.md`](configuration.md). For internals — the `gather()` API, toolkit helpers, error codes, contributing a new built-in connector — see [`internals/connectors-api.md`](internals/connectors-api.md).
 
 ## Table of contents
 
-- [Why `narai-primitives`](#why-narai-primitives)
-- [Package map](#package-map)
-- [`gather()` — the planning hub](#gather--the-planning-hub)
-- [The toolkit](#the-toolkit)
-- [The config module](#the-config-module)
-- [Credential providers](#credential-providers)
+- [How connectors plug into doc-wiki](#how-connectors-plug-into-doc-wiki)
 - [The seven built-in connectors](#the-seven-built-in-connectors)
-  - [`db`](#db-connector)
-  - [`github`](#github-connector)
-  - [`jira`](#jira-connector)
-  - [`confluence`](#confluence-connector)
-  - [`notion`](#notion-connector)
-  - [`aws`](#aws-connector)
-  - [`gcp`](#gcp-connector)
+  - [`db`](#db)
+  - [`github`](#github)
+  - [`jira`](#jira)
+  - [`confluence`](#confluence)
+  - [`notion`](#notion)
+  - [`aws`](#aws)
+  - [`gcp`](#gcp)
+- [Credential reference grammar](#credential-reference-grammar)
 - [Adding a custom local connector](#adding-a-custom-local-connector)
-- [Contributing a built-in connector](#contributing-a-built-in-connector)
-- [Wiki-side decoration: `mermaid_augment.ts`](#wiki-side-decoration-mermaid_augmentts)
+- [Filing connector issues](#filing-connector-issues)
 
-## Why `narai-primitives`
+## How connectors plug into doc-wiki
 
-Pre-2.0, doc-wiki depended on eight separate `@narai/*` packages: `connector-hub`, `connector-toolkit`, `connector-config`, and one `*-agent-connector` package per service (`db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`), plus `@narai/credential-providers` as a ninth. Maintaining nine packages with synchronized release cadences was a tax on every change.
+Every `/doc-wiki:ingest <source>` runs a 13-step pipeline; step 7 calls `gather({ prompt, consumer: "doc-wiki" })` from `narai-primitives`. The hub:
 
-With `narai-primitives@2.0.0`, the eight connector packages were bundled into a single deliverable. With `narai-primitives@2.1.0`, `@narai/credential-providers` was absorbed too — its API is now reachable at the `narai-primitives/credentials` subpath. All nine legacy packages are deprecated on npm.
+1. **Reads** your `~/.connectors/config.yaml` (and any `./.connectors/config.yaml` overlay).
+2. **Plans** which connectors to call based on the prompt's entities — only enabled connectors that look relevant to the source are dispatched.
+3. **Dispatches** the plan in parallel as subprocesses, each carrying its own credential slice.
+4. **Returns** a `DispatchResult[]` array; doc-wiki carries on with whatever envelopes succeeded.
 
-Practical effect for doc-wiki:
+You configure connectors **once** (in `~/.connectors/config.yaml`); from then on, every `/doc-wiki:ingest` and every `/doc-wiki:query` that needs external context can use them. Credentials are **lazy** — the secret is only read when a connector actually runs, and only inside the connector's subprocess. doc-wiki never sees the cleartext value.
 
-- **One install:** `npm install narai-primitives` (already in `package.json`).
-- **One import path:** `import { gather } from "narai-primitives";`. Sub-paths cover the toolkit (`narai-primitives/toolkit`), config (`narai-primitives/config`), and the connectors (`narai-primitives/db`, etc.).
-- **One CLI namespace:** `npx narai jira list_issues --project AUTH` (the umbrella dispatcher), with back-compat aliases like `npx jira-agent-connector`.
-
-## Package map
-
-```
-narai-primitives/
-├── src/
-│   ├── hub/                 # gather() planner + dispatcher
-│   ├── toolkit/             # createConnector(), security helpers, policy, audit, hardship
-│   ├── config/              # YAML loader, schema, env + consumer overlays
-│   ├── connectors/
-│   │   ├── db/              # SQL + NoSQL drivers + policy gate
-│   │   ├── github/          # GitHub REST API
-│   │   ├── jira/            # Jira Cloud REST
-│   │   ├── confluence/      # Confluence Cloud REST
-│   │   ├── notion/          # Notion API
-│   │   ├── aws/             # AWS SDK v3 clients
-│   │   └── gcp/             # gcloud / bq CLI shellouts
-│   └── cli/                 # narai umbrella dispatcher
-└── plugins/                 # plugin skill definitions (not on npm)
-```
-
-| Sub-path | Default export |
-|---|---|
-| `narai-primitives` | `gather()` (the hub) |
-| `narai-primitives/hub` | `gather()` (same) |
-| `narai-primitives/toolkit` | `createConnector()`, `parseAgentArgs`, `fetchWithCaps`, `validateUrl`, `checkPathContainment`, `sanitizeLabel` |
-| `narai-primitives/config` | `loadResolvedConfig()`, types |
-| `narai-primitives/db` | The `db` connector factory and types |
-| `narai-primitives/github` | The `github` connector factory and types |
-| (same for `jira`, `confluence`, `notion`, `aws`, `gcp`) | … |
-
-Source repository: https://github.com/narailabs/narai-primitives
-
-## `gather()` — the planning hub
-
-`gather()` is the only function doc-wiki imports from `narai-primitives` directly. It plans a multi-connector dispatch from a natural-language prompt and returns the results in parallel.
-
-### Signature
-
-```ts
-import { gather } from "narai-primitives";
-
-const out = await gather({
-  prompt: "What was the last commit on main in narailabs/foo?",
-  consumer: "doc-wiki",
-});
-console.log(out.plan);     // PlanStep[]
-console.log(out.results);  // DispatchResult[]
-```
-
-### Input
-
-```ts
-type GatherInput = {
-  prompt: string;            // The natural-language request
-  consumer?: string;         // Config consumer override (e.g., "doc-wiki")
-  environment?: string;      // Config environment override (e.g., "prod")
-  extraContext?: string;     // Optional extra instructions appended to the system prompt
-};
-```
-
-### Output
-
-```ts
-type GatherOutput = {
-  plan: PlanStep[];          // The planner's chosen steps (after validation)
-  results: DispatchResult[]; // One entry per plan step
-};
-
-type PlanStep = {
-  connector: string;         // e.g., "github"
-  action: string;            // e.g., "search_code"
-  params: Record<string, unknown>;
-};
-
-type DispatchResult = {
-  step: number;              // sequential index
-  connector: string;
-  action: string;
-  params: Record<string, unknown>;
-  envelope?: unknown;        // connector's JSON envelope on success
-  error?: {
-    code: string;            // e.g., "TIMEOUT", "DISPATCH_FAILED", "CLI_NOT_FOUND"
-    message: string;
-  };
-};
-```
-
-### Plan-then-dispatch flow
-
-1. Load config (user-global + per-repo overlay; apply env + consumer overrides).
-2. Build a system prompt by concatenating each enabled connector's `SKILL.md` verbatim.
-3. Send the system + user prompt to the planner. The default planner is `AgentSdkPlanner`, which uses `@anthropic-ai/claude-agent-sdk`'s `query()` with `maxTurns: 1` and an empty tool list — Claude returns a JSON array of plan steps.
-4. Validate plan entries (drop ones with bad connector names, empty actions, or non-object params; surface dropped entries as `DispatchResult.error`).
-5. Dispatch each valid step in parallel via `child_process.spawn`, with concurrency cap (default 8) and per-step timeout (default 60 s).
-6. Collect each child's stdout, parse as JSON, and assemble `DispatchResult[]`.
-
-### Subprocess safeguards
-
-- **Timeouts:** SIGTERM after `timeout_ms`, then SIGKILL after a 2-second grace period.
-- **stdout cap:** default 50 MB; oversized stdout fails the step with `STDOUT_CAP_EXCEEDED`.
-- **AbortSignal:** cancellation mid-gather is supported; in-flight children get SIGTERM.
-- **Parent-exit cleanup:** if the parent process exits (SIGINT / SIGTERM), all in-flight children are sent SIGTERM before the parent dies.
-
-### Error surface
-
-Per-step errors are structured and never thrown:
-
-| `error.code` | Meaning |
-|---|---|
-| `TIMEOUT` | Connector exceeded its time budget |
-| `DISPATCH_FAILED` | Subprocess died unexpectedly (non-zero exit, signal, parse failure) |
-| `STDOUT_CAP_EXCEEDED` | Connector wrote >50 MB to stdout |
-| `CLI_NOT_FOUND` | The connector CLI couldn't be located on disk |
-| `UNAUTHORIZED` | Connector reported credential failure |
-| `RATE_LIMITED` | Connector hit a rate limit |
-| `CONFIG_ERROR` | Connector misconfiguration (e.g., missing optional dep, bad params) |
-
-The caller sees `out.results[i].error.code` and decides whether to fail the operation or carry on with partial results. doc-wiki's `/doc-wiki:ingest` carries on with whatever envelopes succeeded.
-
-### Source files
-
-- Hub orchestration: `narai-primitives/src/hub/index.ts`
-- Planner: `narai-primitives/src/hub/plan.ts`
-- Dispatcher + safeguards: `narai-primitives/src/hub/dispatch.ts`
-- Public types: `narai-primitives/src/hub/types.ts`
-
-## The toolkit
-
-Every built-in connector is built with `createConnector()` from `narai-primitives/toolkit`. The toolkit also provides the security primitives doc-wiki uses directly (via `import { ... } from "narai-primitives/toolkit"`).
-
-### `createConnector(config)`
-
-Builds a production-ready connector with:
-
-- A CLI harness that parses `--action`, `--params`, `--curate`, `--help`.
-- An approval-gate (universal policy engine: ALLOW / ESCALATE / DENY). Connectors may register extra decisions via `policyExtras` — e.g. db-agent adds `PRESENT` for "displayed but not executed".
-- Audit logging (structured action / policy events).
-- Hardship recording (error clustering for self-improvement prompts).
-- Lazy SDK and credential loading (per-action, not on connector start).
-- Error envelope translation (canonical `ErrorCode` enum).
-
-Connector authors define a list of action specs (zod-validated input, handler function, classification keyword) and an SDK-loader. The toolkit provides everything else.
-
-### Security helpers
-
-| Function | Purpose |
-|---|---|
-| `validateUrl(url)` | Whitelist `http://` and `https://`. Throws `InvalidUrlError` on anything else. |
-| `checkPathContainment(path, root)` | Resolve symlinks, then verify the path is inside `root`. Returns boolean. **TOCTOU note:** the resolve and the check are two syscalls — relies on running on a private filesystem (developer workstation, CI runner, sandboxed container). |
-| `fetchWithCaps(url, init?, caps?)` | HTTP fetch with size + timeout caps. Defaults: 50 MB / 60 s. Composable with external `AbortSignal`. Throws `FetchCapExceeded` if response too large. |
-| `sanitizeLabel(label, maxLen?)` | Strip control chars (`U+0000–001F`, `U+007F–009F`), HTML-escape, cap length (default 200). |
-
-### CLI helpers
-
-| Function | Purpose |
-|---|---|
-| `parseAgentArgs(argv, flagSpecs?)` | Parse `--flag value` pairs into a typed object |
-| `resolveAgentCli(opts)` | 4-level fallback for finding the connector CLI on disk |
-
-The 4-level CLI resolution:
-
-1. `<NAME>_AGENT_CLI` env var (operator escape hatch).
-2. `~/.claude/plugins/cache/<name>-agent-plugin*` (Claude Code plugin manager install).
-3. `${CLAUDE_PLUGIN_DATA}/node_modules/@narai/<name>-agent-connector/dist/cli.js` (SessionStart hook install).
-4. `~/src/connectors/<name>-agent-connector/dist/cli.js` (developer fallback).
-
-For doc-wiki users, the npm install of `narai-primitives` covers paths 3 and 4 transparently.
-
-## The config module
-
-The config module loads YAML from `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (per-repo overlay), validates secret refs, applies environment + consumer overlays, and returns a `ResolvedConfig`. `gather()` calls `loadResolvedConfig()` automatically.
-
-For the full schema (every key, default, and example), see [`configuration.md`](configuration.md).
-
-Public API:
-
-```ts
-import { loadResolvedConfig } from "narai-primitives/config";
-
-const cfg = await loadResolvedConfig({
-  consumer: "doc-wiki",   // overlay consumers.doc-wiki on top
-  environment: "prod",    // overlay environments.prod on top
-});
-```
-
-`ResolvedConfig` shape:
-
-```ts
-type ResolvedConfig = {
-  hub: { model: string | null; max_tokens: number | null };
-  policy: PolicyMap;
-  enforce_hooks: boolean;
-  model: string | null;
-  environment: string | null;
-  consumer: string | null;
-  connectors: Record<string, ResolvedConnector>;
-};
-
-type ResolvedConnector = {
-  name: string;
-  enabled: boolean;
-  skill: string;          // CLI name or path
-  model: string | null;
-  enforce_hooks: boolean;
-  policy: PolicyMap;
-  options: Record<string, unknown>;  // connector-specific settings
-};
-```
-
-The resolution order is: user-global → per-repo overlay (wins on conflict) → environments overlay → consumers overlay.
-
-## Credential providers
-
-The credential-resolution layer ships as the `narai-primitives/credentials` subpath (absorbed into the bundle in v2.1; previously published as the standalone `@narai/credential-providers` package, now deprecated on npm). doc-wiki imports it directly from the `narai-primitives` dependency it already declares — no separate install.
-
-### Reference grammar
-
-Credential refs in `.connectors/config.yaml` follow this grammar:
-
-| Form | Resolution |
-|---|---|
-| `env:VAR_NAME` | `process.env.VAR_NAME` |
-| `keychain:LABEL` | OS keychain entry (macOS Keychain or libsecret on Linux) |
-| `file:/path/to/key` | File contents (with permission check) |
-| `cloud:aws-secret/<arn>` | AWS Secrets Manager (uses default AWS credential chain) |
-| `cloud:gcp-secret/<resource>` | GCP Secret Manager (uses Application Default Credentials) |
-
-Mixing forms in one config is fine: `token: env:GITHUB_TOKEN` and `password: keychain:db-prod` can coexist.
-
-### Public API
-
-```ts
-import {
-  resolveSecret,
-  registerProvider,
-  CredentialResolver,
-  EnvVarProvider,
-  KeychainProvider,
-  FileProvider,
-  CloudSecretsProvider,
-  parseCredentialRef,
-} from "narai-primitives/credentials";
-
-// Resolve a single ref:
-const token = await resolveSecret("env:GITHUB_TOKEN");
-
-// Register a custom provider:
-registerProvider("vault", new MyVaultProvider());
-```
-
-### Where resolution happens
-
-Crucially, credential resolution happens **inside the connector subprocess**, not in doc-wiki. The hub passes the connector its config slice via `NARAI_CONFIG_BLOB` (a JSON-stringified env var); the connector then calls `resolveSecret()` for each ref it needs.
-
-Doc-wiki itself never sees a cleartext credential. Even if you log `gather()` results, you'll see API responses, not tokens.
-
-This is invariant **#4** in [the architecture contracts](architecture.md#architecture-contracts).
+All seven connectors are **read-only**. The `db` connector additionally ships with a guard-rail policy gate (`ALLOW` / `DENY` / `ESCALATE` / `PRESENT_ONLY`) — see [`db`](#db) below.
 
 ## The seven built-in connectors
 
-Every connector follows the same pattern:
+A consolidated reference. Each connector has its own block under `connectors:` in `~/.connectors/config.yaml`. The starter is at [`.connectors/config.example.yaml`](../.connectors/config.example.yaml) — copy it, uncomment the connectors you want, fill in credential refs.
 
-- Built on `createConnector()`.
-- Has a CLI binary (e.g., `db-agent-connector`, accessible via `npx narai db <action>`).
-- Returns a JSON envelope on success: `{ status: "ok", data: {...} }`.
-- Returns a structured envelope on failure: `{ status: "denied" | "escalate" | "error", reason: ..., code: ... }`.
-- Loads credentials lazily via `narai-primitives/credentials`.
-- Lazy-imports its SDK (so installing `narai-primitives` doesn't pull every cloud SDK upfront).
+| Connector | Wraps | Use it for |
+|---|---|---|
+| [`db`](#db) | SQL + NoSQL drivers | Schema introspection, read-only queries with policy gate |
+| [`github`](#github) | GitHub REST API | Repo info, code search, issues, PRs, file contents, releases |
+| [`jira`](#jira) | Jira Cloud REST | Issue search by JQL, metadata, comments, sprint info |
+| [`confluence`](#confluence) | Confluence Cloud REST | Page content, space search, CQL queries, attachments |
+| [`notion`](#notion) | Notion API | Database query, page content, search, property listings |
+| [`aws`](#aws) | AWS SDK v3 | CloudWatch metrics, Lambda info, RDS, S3, DynamoDB, STS identity |
+| [`gcp`](#gcp) | `gcloud` + `bq` CLIs | Cloud Logging, Compute Engine, BigQuery, GCS, IAM bindings |
 
-### `db` connector
+### `db`
 
 **Wraps:** SQL and NoSQL databases — read-only query and schema introspection.
 
@@ -323,7 +64,7 @@ Every connector follows the same pattern:
 | `dynamodb` (alias: `dynamo`) | `@aws-sdk/client-dynamodb` (optional) |
 | `oracle` | `oracledb` (optional) |
 
-**Credentials:** Per-environment block in `.connectors/config.yaml`:
+**Credentials** — per-environment block in `~/.connectors/config.yaml`:
 
 ```yaml
 connectors:
@@ -341,12 +82,10 @@ connectors:
 
 **Actions:**
 
-- `query` — execute a read-only SQL query: `--params '{"env":"dev","sql":"SELECT * FROM users","max_rows":1000,"timeout_ms":30000}'`
+- `query` — read-only SQL: `--params '{"env":"dev","sql":"SELECT * FROM users","max_rows":1000,"timeout_ms":30000}'`
 - `schema` — describe schema: `--params '{"env":"dev","filter":"public.*"}'`
 
-**Policy gate (the marquee feature):**
-
-The `db` connector classifies every SQL statement by leading keyword:
+**Policy gate (the marquee feature):** Every SQL statement is classified by leading keyword, then matched against your policy:
 
 | Keyword(s) | Classification |
 |---|---|
@@ -357,18 +96,18 @@ The `db` connector classifies every SQL statement by leading keyword:
 | `GRANT`, `REVOKE` | `privilege` |
 | (anything else) | unknown — **default deny** |
 
-The classification is then matched against the configured policy (per-action, per-environment) and produces one of four decisions:
+The classification → one of four decisions:
 
 | Decision | Meaning |
 |---|---|
 | `allow` | Execute the query, return rows |
 | `deny` | Refuse to execute. Envelope: `{ status: "denied", reason, formatted_sql }` |
-| `escalate` | Pause and escalate to human approval (via the toolkit's `ApprovalEngine`). Envelope: `{ status: "escalate", reason }` |
-| `present_only` | Show the formatted SQL without executing. Envelope: `{ status: "present_only", formatted_sql, reason }` (db-only outcome) |
+| `escalate` | Pause and escalate to human approval |
+| `present_only` | Show the formatted SQL without executing (db-only outcome) |
 
 Default policy in `.connectors/config.example.yaml` is conservative: `read` allowed in dev, escalate in prod; `write` / `delete` / `admin` / `privilege` denied everywhere unless explicitly opened.
 
-### `github` connector
+### `github`
 
 **Wraps:** GitHub REST API.
 
@@ -394,7 +133,7 @@ npx narai github search_code --params '{"owner":"narailabs","repo":"doc-wiki","q
 
 **Notable safeguards:** `get_file` rejects paths containing `..` (path traversal prevention). All actions paginate up to 1000 results.
 
-### `jira` connector
+### `jira`
 
 **Wraps:** Jira Cloud REST API.
 
@@ -420,7 +159,7 @@ connectors:
 npx narai jira list_issues --params '{"jql":"project = AUTH AND status = Open"}'
 ```
 
-### `confluence` connector
+### `confluence`
 
 **Wraps:** Confluence Cloud REST API.
 
@@ -440,7 +179,7 @@ connectors:
 
 **Actions:** Page content retrieval, space search, content search by CQL, attachment listing.
 
-### `notion` connector
+### `notion`
 
 **Wraps:** Notion API.
 
@@ -458,15 +197,13 @@ connectors:
 
 **Actions:** Database query, page content retrieval, search pages, list database properties.
 
-### `aws` connector
+### `aws`
 
 **Wraps:** AWS SDK v3 (CloudWatch metrics, Lambda info, RDS instances, S3 buckets, DynamoDB tables, STS identity).
 
 **CLI:** `aws-agent-connector` or `npx narai aws <action>`.
 
-**SDK loading:** Each AWS SDK client is lazy-imported on demand. Missing client packages surface as `CONFIG_ERROR` envelopes. The relevant client packages are listed under `optionalDependencies` in [`package.json`](../package.json).
-
-**Credentials:** Uses the standard AWS credential chain — environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`), `~/.aws/credentials`, IAM role. Override via the connector's `profile` option:
+**Credentials** — uses the standard AWS credential chain (env vars `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` / `AWS_REGION`, `~/.aws/credentials`, IAM role). Override via the connector's `profile` option:
 
 ```yaml
 connectors:
@@ -477,7 +214,9 @@ connectors:
     # profile: my-profile          # optional, when not using default
 ```
 
-### `gcp` connector
+**SDK loading:** Each AWS SDK client is lazy-imported on demand. Missing client packages surface as `CONFIG_ERROR` envelopes. The relevant client packages are listed under `optionalDependencies` in [`package.json`](../package.json).
+
+### `gcp`
 
 **Wraps:** GCP services via the `gcloud` CLI (Cloud Logging, Compute Engine, BigQuery via `bq`, Cloud Storage, IAM bindings).
 
@@ -496,9 +235,25 @@ connectors:
     # GOOGLE_APPLICATION_CREDENTIALS picked up automatically when set
 ```
 
+## Credential reference grammar
+
+Anywhere a value can be a credential ref in `~/.connectors/config.yaml`, use one of these forms:
+
+| Form | Resolution |
+|---|---|
+| `env:VAR_NAME` | `process.env.VAR_NAME` |
+| `keychain:LABEL` | OS keychain entry — macOS Keychain or libsecret on Linux |
+| `file:/abs/path` | File contents (with permission check that the file isn't world-readable) |
+| `cloud:aws-secret/<arn>` | AWS Secrets Manager (uses default AWS credential chain to authenticate) |
+| `cloud:gcp-secret/<resource>` | GCP Secret Manager (uses Application Default Credentials) |
+
+Mixing forms within one file is fine: `token: env:GITHUB_TOKEN` and `password: keychain:db-prod` can coexist. Plaintext values are accepted but **discouraged** — `narai-primitives/config` warns when it sees a connector option that looks like an inline secret.
+
+For resolution order (user-global → per-repo overlay → environments → consumers), see [`configuration.md` § Resolution order](configuration.md#resolution-order).
+
 ## Adding a custom local connector
 
-For a SaaS / API / CLI that isn't in the seven built-ins, use the [`/create-connector`](https://github.com/narailabs/narai-primitives/blob/main/docs/create-connector.md) skill (installed alongside `narai-primitives`):
+For a SaaS / API / CLI that isn't in the seven built-ins, use the `/create-connector` skill (installed alongside `narai-primitives`):
 
 ```text
 /create-connector
@@ -506,7 +261,7 @@ For a SaaS / API / CLI that isn't in the seven built-ins, use the [`/create-conn
 
 This scaffolds a minimal connector at `.connectors/connectors/<name>/` (project scope, default) or `~/.connectors/connectors/<name>/` (user scope). No `git init`, no `npm publish`, no plugin manifest, no marketplace entry — just a `cli.ts`, an `actions/` directory, and a `SKILL.md`.
 
-Once scaffolded, register it in `wiki.config.yaml`:
+Once scaffolded, register it in `wiki.config.yaml` so doc-wiki routes the right URLs through it during ingest:
 
 ```yaml
 ecosystem:
@@ -520,20 +275,17 @@ ecosystem:
 
 doc-wiki's `source_registry.ts` will then route Stripe URLs through your connector when `/doc-wiki:ingest` encounters them.
 
-**Do not** modify an existing connector for ad-hoc behavior. If the change is general-purpose, contribute it upstream (see next section). If it's project-local, scaffold a custom connector instead.
+**Don't** modify an existing connector for ad-hoc behavior. If the change is general-purpose, contribute it upstream — see [`internals/connectors-api.md` § Contributing a built-in connector](internals/connectors-api.md#contributing-a-built-in-connector). If it's project-local, scaffold a custom connector instead.
 
-## Contributing a built-in connector
+## Filing connector issues
 
-If your connector is broadly useful (would benefit multiple Narailabs tools), open a pull request against [narailabs/narai-primitives](https://github.com/narailabs/narai-primitives). The repository's [`CONTRIBUTING.md`](https://github.com/narailabs/narai-primitives/blob/main/CONTRIBUTING.md) walks through the structure: drop your connector under `src/connectors/<name>/`, add zod schemas for actions, write tests under `tests/connectors/<name>/`, register a CLI binary in the umbrella dispatcher, and add an entry to the package's `exports` map.
+- **Bugs in a specific connector** (e.g. Jira returns wrong field, GitHub pagination broken): https://github.com/narailabs/narai-primitives/issues
+- **Bugs in how doc-wiki uses connectors** (e.g. wrong source classified, mermaid diagram missing): https://github.com/narailabs/doc-wiki/issues
+- **Credential resolver issues**: report under `narai-primitives` issues; the `narai-primitives/credentials` subpath is the same package.
 
-doc-wiki's only hook into a new built-in is its entry in `BUILTIN_PATTERNS` in [`source_registry.ts`](../agents/lib/source_registry.ts) — add it there too, so `/doc-wiki:ingest` routes the right URLs through the new connector.
+## See also
 
-## Wiki-side decoration: `mermaid_augment.ts`
-
-After `gather()` returns, doc-wiki runs the results through [`mermaid_augment.ts`](../agents/lib/mermaid_augment.ts). This is the single decoration site for all 7 connectors — it inspects each `DispatchResult.envelope`, recognizes connector-specific shapes (Jira issues, GitHub PRs, schema info from `db`, etc.), and adds a `mermaid: { type, title, code }` field with a wiki-ready Mermaid block.
-
-The wiki page compilation step then splices these blocks into the page (idempotently, via `mermaid_inject.ts`'s `<!-- wiki-mermaid: <title> start/end -->` markers).
-
-If you add a new connector and want the wiki to generate a Mermaid diagram from its envelopes, edit `mermaid_augment.ts` — never the connector itself. The toolkit and connectors stay vendor-neutral; wiki-specific decoration lives at the wiki edge.
-
-This is invariant **#3** in [the architecture contracts](architecture.md#architecture-contracts): one source-fetch path through `gather()`, one decoration site at `mermaid_augment.ts`.
+- [`configuration.md`](configuration.md) — full schema for `~/.connectors/config.yaml`, credential resolution order, worked example.
+- [`internals/connectors-api.md`](internals/connectors-api.md) — `gather()` API, toolkit, error codes, contributing a new built-in connector.
+- [`recipes.md`](recipes.md) — common multi-connector ingestion workflows.
+- [`troubleshooting.md`](troubleshooting.md#gather-returns-empty-plan) — what to do when `gather()` returns an empty plan.

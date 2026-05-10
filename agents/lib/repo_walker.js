@@ -9,6 +9,24 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { buildInitialMatcherStack, findRepoRoot, isIgnoredByStack, loadGitignoreScoped, } from "./gitignore_loader.js";
+/**
+ * Resolve the initial scoped-matcher stack for a walk: every
+ * `.gitignore` between the inferred repo root and the walked `root`,
+ * ordered top-down. Returns an empty array when gitignore handling is
+ * disabled or no repo root can be located, so callers can short-circuit
+ * the per-entry check.
+ *
+ * As the walker descends past `root`, it appends new
+ * {@link ScopedMatcher}s for every `.gitignore` it encounters; the
+ * initial stack established here is the prefix common to every frame.
+ */
+function resolveInitialMatcherStack(root, opts) {
+    if (opts.respectGitignore === false)
+        return [];
+    const anchorRoot = opts.gitignoreRoot ?? findRepoRoot(root) ?? root;
+    return buildInitialMatcherStack(anchorRoot, root);
+}
 /**
  * Top-level directory names skipped during any walk. Tuned for the seven
  * supported language ecosystems plus the wiki's own dev-time artifacts
@@ -69,22 +87,25 @@ export function matchesPattern(fullPath, patterns) {
 /**
  * Walk `root` recursively, returning a map of `{absolutePath: fileContents}`
  * for every regular file matching one of `patterns`. Honors {@link
- * DEFAULT_IGNORE} and the {@link MAX_FILES} cap. Unreadable files are
- * silently skipped (permission errors, broken symlinks, etc.).
+ * DEFAULT_IGNORE}, the {@link MAX_FILES} cap, and `.gitignore` from the
+ * repo root (default on; pass `opts.respectGitignore: false` to disable).
+ * Unreadable files are silently skipped (permission errors, broken
+ * symlinks, etc.).
  *
  * Iterative DFS via an explicit stack so very deep trees do not blow
  * the call stack.
  */
-export function walkCodebase(root, patterns) {
+export function walkCodebase(root, patterns, opts = {}) {
+    const initialStack = resolveInitialMatcherStack(root, opts);
     const out = {};
-    const stack = [root];
+    const stack = [{ dir: root, active: initialStack }];
     while (stack.length > 0 && Object.keys(out).length < MAX_FILES) {
-        const dir = stack.pop();
-        if (dir === undefined)
+        const frame = stack.pop();
+        if (frame === undefined)
             break;
         let entries;
         try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
+            entries = fs.readdirSync(frame.dir, { withFileTypes: true });
         }
         catch {
             continue;
@@ -92,9 +113,22 @@ export function walkCodebase(root, patterns) {
         for (const entry of entries) {
             if (DEFAULT_IGNORE.has(entry.name))
                 continue;
-            const full = path.join(dir, entry.name);
+            const full = path.join(frame.dir, entry.name);
+            if (frame.active.length > 0 &&
+                isIgnoredByStack(frame.active, full, entry.isDirectory())) {
+                continue;
+            }
             if (entry.isDirectory()) {
-                stack.push(full);
+                // Layer this dir's `.gitignore` (if any) onto the active stack
+                // for descendants. Slice so sibling subtrees don't pollute one
+                // another's matcher list.
+                const childActive = frame.active.slice();
+                if (opts.respectGitignore !== false) {
+                    const childGi = loadGitignoreScoped(full);
+                    if (childGi)
+                        childActive.push(childGi);
+                }
+                stack.push({ dir: full, active: childActive });
             }
             else if (entry.isFile() && matchesPattern(full, patterns)) {
                 try {
@@ -126,9 +160,11 @@ export function _resetPatternCache() {
  * synthesis-text formatting themselves. Stays small, single-purpose,
  * and reusable.
  */
-export function walkRepoTargets(repoRoot, spec) {
+export function walkRepoTargets(repoRoot, spec, opts = {}) {
     const paths = new Set();
     const notes = [];
+    const initialStack = resolveInitialMatcherStack(repoRoot, opts);
+    const respectGitignore = opts.respectGitignore !== false;
     // Top-level files.
     if (spec.topLevelBasenames && spec.topLevelBasenames.length > 0) {
         let topLevel;
@@ -142,6 +178,11 @@ export function walkRepoTargets(repoRoot, spec) {
         for (const e of topLevel) {
             if (!e.isFile())
                 continue;
+            const full = path.join(repoRoot, e.name);
+            if (initialStack.length > 0 &&
+                isIgnoredByStack(initialStack, full, false)) {
+                continue;
+            }
             if (spec.topLevelBasenames.some((rx) => rx.test(e.name))) {
                 paths.add(e.name);
             }
@@ -151,9 +192,22 @@ export function walkRepoTargets(repoRoot, spec) {
     if (spec.subdirPatterns) {
         for (const { dir, rx } of spec.subdirPatterns) {
             const abs = path.join(repoRoot, dir);
+            // Skip the entire subtree if the subdir itself is gitignored.
+            if (initialStack.length > 0 &&
+                isIgnoredByStack(initialStack, abs, true)) {
+                continue;
+            }
             if (!fs.existsSync(abs))
                 continue;
-            const recurse = (d, relBase) => {
+            // Layer any `.gitignore` at the subdir root onto the active stack
+            // before descending, so its rules apply to entries inside.
+            const subdirActive = initialStack.slice();
+            if (respectGitignore) {
+                const subdirGi = loadGitignoreScoped(abs);
+                if (subdirGi)
+                    subdirActive.push(subdirGi);
+            }
+            const recurse = (d, relBase, active) => {
                 let entries;
                 try {
                     entries = fs.readdirSync(d, { withFileTypes: true });
@@ -164,15 +218,25 @@ export function walkRepoTargets(repoRoot, spec) {
                 for (const entry of entries) {
                     const full = path.join(d, entry.name);
                     const rel = path.posix.join(relBase, entry.name);
+                    if (active.length > 0 &&
+                        isIgnoredByStack(active, full, entry.isDirectory())) {
+                        continue;
+                    }
                     if (entry.isDirectory()) {
-                        recurse(full, rel);
+                        const childActive = active.slice();
+                        if (respectGitignore) {
+                            const childGi = loadGitignoreScoped(full);
+                            if (childGi)
+                                childActive.push(childGi);
+                        }
+                        recurse(full, rel, childActive);
                     }
                     else if (entry.isFile() && rx.test(entry.name)) {
                         paths.add(rel);
                     }
                 }
             };
-            recurse(abs, dir);
+            recurse(abs, dir, subdirActive);
         }
     }
     return { paths: [...paths].sort(), notes };

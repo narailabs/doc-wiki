@@ -1,52 +1,61 @@
 # doc-wiki documentation
 
-This directory holds the public-facing documentation for doc-wiki. The internal Claude Code skill manuals (`SKILL.md`, the per-agent `AGENT.md` files, and the five `references/*.md` files under `skills/doc-wiki/references/`) are still authoritative for the orchestrator's behavior — these docs paraphrase and link into them for human readers.
+Public-facing documentation for users and operators. Internal Claude Code skill manuals (`SKILL.md`, the per-agent `AGENT.md` files, and the five reference docs under `skills/doc-wiki/references/`) are still authoritative for the orchestrator's behavior — these public docs paraphrase and link into them for human readers.
 
-## Where to start
+## Get started
 
-| You want to... | Read |
+| Doc | When to read |
 |---|---|
-| Run through the full lifecycle on a new codebase, step by step | [`../WALKTHROUGH.md`](../WALKTHROUGH.md) |
-| Install doc-wiki and run your first command | [`getting-started.md`](getting-started.md) |
-| Look up what a `/doc-wiki:*` command does | [`commands.md`](commands.md) |
-| Document an entire codebase in one pass | [`atlas.md`](atlas.md) |
-| Configure `wiki.config.yaml` or connector access | [`configuration.md`](configuration.md) |
-| Understand how doc-wiki is built | [`architecture.md`](architecture.md) |
-| Understand how doc-wiki talks to external services | [`connectors.md`](connectors.md) |
-| Author a custom REST profile for atlas inventory | [`rest-profiles.md`](rest-profiles.md) |
-| Diagnose a failure | [`troubleshooting.md`](troubleshooting.md) |
+| [`getting-started.md`](getting-started.md) | Step-by-step tutorial — install through maintenance loop |
+| [`recipes.md`](recipes.md) | Common end-to-end command sequences for typical jobs |
+| [`wiki-output.md`](wiki-output.md) | What your wiki looks like after first ingest — directory tree, page anatomy, conventions |
+| [`faq.md`](faq.md) | Anticipated common questions about setup, privacy, cost, customization |
 
-## Documents
+## Reference
 
-| Doc | Audience | One-line summary |
-|---|---|---|
-| [`getting-started.md`](getting-started.md) | New users | Prereqs, install, `/doc-wiki:init`, `/doc-wiki:onboard`, first `/doc-wiki:ingest`, verifying it worked |
-| [`commands.md`](commands.md) | Operators | All 10 `/doc-wiki:*` commands with synopsis, args, examples, and links to the orchestrator skill |
-| [`atlas.md`](atlas.md) | Operators | The eight-phase `/doc-wiki:atlas` walkthrough — what each phase does, what it writes, how to resume |
-| [`configuration.md`](configuration.md) | Operators / contributors | Schema reference for `wiki.config.yaml` and `.connectors/config.yaml`, plus credential-ref grammar |
-| [`rest-profiles.md`](rest-profiles.md) | Contributors / integrators | How to author a custom REST profile — schema, regex grouping, `default_method`, `file_prefix`, with worked examples |
-| [`architecture.md`](architecture.md) | Contributors / integrators | Three-layer model, ingest pipeline, scripts/agents/libraries inventory, Mermaid diagrams, architecture contracts |
-| [`connectors.md`](connectors.md) | Contributors / integrators | The `narai-primitives` stack — hub, toolkit, config, 7 connectors, credential providers |
-| [`troubleshooting.md`](troubleshooting.md) | Anyone hitting an error | Common failures and how to fix them |
+| Doc | When to read |
+|---|---|
+| [`commands.md`](commands.md) | Every `/doc-wiki:*` command — synopsis, args, examples |
+| [`configuration.md`](configuration.md) | `wiki.config.yaml` and `.connectors/config.yaml` schemas, credential-ref grammar |
+| [`connectors.md`](connectors.md) | The 7 built-in connectors and the credentials each needs |
+| [`atlas.md`](atlas.md) | The eight-phase `/doc-wiki:atlas` walkthrough |
+| [`autonomy-modes.md`](autonomy-modes.md) | When to pick conservative / balanced / autonomous / auto |
+| [`troubleshooting.md`](troubleshooting.md) | Common failures and how to fix them |
+
+## Advanced
+
+| Doc | When to read |
+|---|---|
+| [`rest-profiles.md`](rest-profiles.md) | Author a custom REST profile for atlas Phase 1b inventory |
+
+## Contributor reference
+
+For understanding or extending doc-wiki itself, **not** for using it. If you're a user, you don't need these.
+
+| Doc | When to read |
+|---|---|
+| [`internals/architecture.md`](internals/architecture.md) | Three-layer model, ingest pipeline, script + agent inventory, architecture contracts |
+| [`internals/connectors-api.md`](internals/connectors-api.md) | `gather()` API, toolkit helpers, credential-provider internals, contributing a built-in connector |
+
+The dev-loop manual (test commands, where to file PRs) is at the repo root: [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Cross-doc concerns
 
 A few topics legitimately span more than one doc. To avoid duplication and drift, each lives in exactly one place:
 
-- **Data flow / `/doc-wiki:ingest` pipeline** — owned by [`architecture.md`](architecture.md) (Mermaid diagram + step-by-step).
-- **`gather()` flow and `DispatchResult` envelope** — owned by [`connectors.md`](connectors.md). `architecture.md` shows how doc-wiki *uses* `gather()`; `connectors.md` is the API reference.
-- **Security baseline** (URL validation, path containment, fetch caps, label sanitization, DB policy gate) — owned by [`architecture.md`](architecture.md). `connectors.md` cross-links.
-- **YAML schemas** — owned by [`configuration.md`](configuration.md). Other docs link in.
-- **`narai-primitives` consolidation history** — owned by [`connectors.md`](connectors.md). Don't restate.
-- **Architecture contracts (load-bearing invariants)** — owned by [`architecture.md`](architecture.md). `CLAUDE.md` keeps a copy near the top of the file as a Claude-Code-skill primer; both must stay in sync.
+- **Data flow / `/doc-wiki:ingest` pipeline** — owned by [`internals/architecture.md`](internals/architecture.md) (Mermaid diagram + step-by-step).
+- **`gather()` API and `DispatchResult` envelope** — owned by [`internals/connectors-api.md`](internals/connectors-api.md). User-facing connector list + credentials lives in [`connectors.md`](connectors.md).
+- **Security baseline** (URL validation, path containment, fetch caps, label sanitization, DB policy gate) — owned by [`internals/architecture.md`](internals/architecture.md). [`connectors.md`](connectors.md) cross-links.
+- **YAML schemas and credential-ref grammar** — owned by [`configuration.md`](configuration.md). Other docs link in.
+- **Architecture contracts (load-bearing invariants)** — owned by [`internals/architecture.md`](internals/architecture.md). `CLAUDE.md` keeps a copy near the top of the file as a Claude-Code-skill primer; both must stay in sync.
 
 ## Internal docs (also useful)
 
-The orchestrator skill and reference docs live at the plugin root:
+The orchestrator skill and its reference docs live at the plugin root:
 
-- [`../CLAUDE.md`](../CLAUDE.md) — project-memory overview that Claude Code loads automatically
-- [`../skills/doc-wiki/SKILL.md`](../skills/doc-wiki/SKILL.md) — orchestrator state machine
-- [`../skills/doc-wiki/references/`](../skills/doc-wiki/references/) — `autonomy.md`, `code-locality.md`, `compilation.md`, `operations.md`, `quality.md`
-- [`../agents/`](../agents/) — `wiki-orm-agent`, `wiki-mermaid-agent`, `wiki-claude-md-agent` (each has its own `AGENT.md`)
+- [`../CLAUDE.md`](../CLAUDE.md) — project-memory overview that Claude Code loads automatically.
+- [`../skills/doc-wiki/SKILL.md`](../skills/doc-wiki/SKILL.md) — orchestrator state machine.
+- [`../skills/doc-wiki/references/`](../skills/doc-wiki/references/) — `autonomy.md`, `code-locality.md`, `compilation.md`, `operations.md`, `quality.md`.
+- [`../agents/`](../agents/) — `wiki-orm-agent`, `wiki-mermaid-agent`, `wiki-claude-md-agent` (each has its own `AGENT.md`).
 
 These are referenced from the public docs above where appropriate.

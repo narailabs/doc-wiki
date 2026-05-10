@@ -40,6 +40,16 @@ node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --
 
 This creates: `wiki/`, `raw/`, `graph/`, `audit/`, `log/`, `outputs/`, `.wiki-cache/`, `.wiki-ignore`, and a default `wiki.config.yaml`.
 
+**Default path inference (when `--path` is omitted):** Before invoking the script, derive a sensible default and confirm with the user via `AskUserQuestion`. Inference rule:
+
+1. Read the project name from the first marker file present in the cwd: `package.json` (`name` field, strip `@scope/` prefix), then `pyproject.toml` (`[project] name` or `[tool.poetry] name`), then `Cargo.toml` (`[package] name`), then `go.mod` (last segment of `module` path), then `pom.xml` (`<artifactId>`), then `Gemfile`/`*.gemspec`, else fall back to `basename(cwd)`.
+2. Convert the name to kebab-case: lowercase, replace runs of `[^a-z0-9]+` with `-`, strip leading/trailing `-`.
+3. Default path = `docs/<kebab-name>-wiki/` (relative to cwd).
+
+Always present this default to the user via `AskUserQuestion` with two options: (a) accept the default `docs/<kebab-name>-wiki/`, (b) "Other" → free-form path entry. Do NOT proceed silently to the script with an inferred path; init is a one-time scaffold and the path becomes a long-lived convention, so the explicit confirmation is worth the extra turn. Apply the same `AskUserQuestion` pattern for `--domain` (default: kebab-name) and `--name` (default: derived from the package's display name or kebab-name) when those are also omitted, but accept the inferred values as a single bundled question rather than three separate prompts.
+
+The wrapper `commands/init.md` only routes into this skill — it does not pre-collect arguments. Arg collection happens here so the inference + confirmation logic stays co-located with the rest of the orchestrator.
+
 After running the script, create initial files:
 - `wiki/index.md` — master catalog (empty, will populate during ingest)
 - `wiki/summaries.md` — enriched summary index (empty initially)
@@ -253,6 +263,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, external-services-without-documentation, and (when the Phase 1b inventory manifest is present at the canonical path) REST-endpoints-without-documentation + code-clients-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
+   - **Refresh the root-file Reference appendix** — dispatch `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [...]}` where `targets` lists every AI-tool root file present in the repo (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md`). The agent regenerates the `<!-- wiki-managed: reference start/end -->` block on each present file and refreshes `docs/<wiki-folder>/ai-dev/<tool>-config.md` for each detected tool. See the **Root-file Reference Appendix** section above for the canonical structure. This step MUST run after crosslink + tag-harmonize so the appendix reflects the final wiki state.
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
    - Clear the checkpoint via `clearCheckpoint(wikiRoot, "atlas")`.
    - Write `wiki/outputs/atlas/<run-id>/cost-report.md` with the planned breakdown from `estimate-cost` plus actual costs from this run's events.
@@ -264,7 +275,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 
 These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
 
-**Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with auto-managed cross-links. The body section is **facet-conditional** so each audience gets the structure it needs.
+**Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with cross-links **written at page-creation time** (the post-op crosslink hook later refines, but never bootstraps, the section). The body section is **facet-conditional** so each audience gets the structure it needs.
 
 ```text
 ---
@@ -282,10 +293,16 @@ These let atlas recognize its own pages on re-runs and skip semantic-cache inval
 <links to deeper sources or sibling pages>
 
 ## Related Pages
-<auto-managed by crosslink hook>
+<3–5 hand-picked `[Title](relative/path.md)` bullets, written when the page is written.
+ Pick from: same-topic siblings (other facets of this topic), same-facet peers
+ (this facet on other topics), and the most relevant audience-flavor globals
+ (overview, integrations, deploy, commands, configuration, getting-started,
+ troubleshooting). Do NOT emit a `<!-- crosslink hook will populate -->` (or
+ similar deferred-fill) placeholder — pages must ship with this section
+ populated. The post-op crosslink hook refines/extends; it does not bootstrap.>
 ```
 
-**Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
+**Body sections by facet** (the LLM should follow these structural conventions; they mirror the patterns documented in `docs/internals/architecture.md`, `docs/commands.md`, `docs/troubleshooting.md`):
 
 | Facet | Audience | Body sections (mandatory unless noted) |
 |---|---|---|
@@ -532,11 +549,78 @@ node {skill_path}/scripts/event_logger.js stats --wiki-root <wiki-root> --since 
 
 Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown. Per-agent cost sums top-level `agent` fields as well as every `agent_calls[]` sub-entry on every event, so parent-op events that dispatched sub-agents are fully accounted for.
 
+## Root-file Reference Appendix
+
+Every AI-tool entry-point file at the repo root ends with a wiki-managed `## Reference` section that points the AI tool at the wiki for **progressive disclosure** — the root file stays brief and high-signal, and the AI tool follows the pointers to load deeper context only when needed. Affected files:
+
+- `CLAUDE.md` (Claude Code)
+- `AGENTS.md` (Codex / OpenAI agents)
+- `GEMINI.md` (Gemini)
+- `.cursor/rules/doc-wiki.mdc` (Cursor)
+- `.aider/conventions.md` (Aider)
+
+The section is owned by `wiki-claude-md-agent` (which generalizes to all five surfaces despite its Claude-Code-flavored name; the same agent's `scripts/` operate on any of the listed paths). Content between the markers is regenerated on each invocation; content outside the markers is preserved verbatim.
+
+### Canonical structure
+
+```markdown
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+`docs/<wiki-folder>/wiki/index.md`
+
+### Coding agent configuration registry (Skills & agents)
+
+**claude-code**: `docs/<wiki-folder>/ai-dev/claude-config.md`
+**codex**: `docs/<wiki-folder>/ai-dev/codex-config.md`
+**gemini**: `docs/<wiki-folder>/ai-dev/gemini-config.md`
+**cursor**: `docs/<wiki-folder>/ai-dev/cursor-config.md`
+**aider**: `docs/<wiki-folder>/ai-dev/aider-config.md`
+
+(Only list rows for AI tools whose root file is present in this repo. If the per-tool config file does not exist yet, list it anyway so the absence is visible — the agent will create the file on its next run.)
+
+### Other references
+
+(Optional. 0–5 brief, high-signal pointers the AI tool should know without bloating context. Examples: latest atlas run id, the canonical architecture page, current incident runbook, link to a freeze-window calendar. Each entry is one line. If "Other references" grows past 5 bullets, promote items into the wiki and link there instead.)
+<!-- wiki-managed: reference end -->
+```
+
+`<wiki-folder>` is the leaf-folder name from the wiki path (e.g., for `/doc-wiki:init --path docs/my-app-wiki/`, `<wiki-folder>` = `my-app-wiki`).
+
+### Per-tool config files (`docs/<wiki-folder>/ai-dev/<tool>-config.md`)
+
+One markdown file per AI tool, all generated and maintained by `wiki-claude-md-agent`. Each file is a structured inventory of how that tool sees the project:
+
+| Section | Content |
+|---|---|
+| Skills | name + description + invocation mode for every installed skill |
+| Agents | `subagent_type` + purpose for every agent the tool can dispatch |
+| Hooks | `PreToolUse` / `PostToolUse` / `SessionStart` registrations + their commands |
+| MCP servers | name + capabilities for every MCP server the tool loads |
+| Slash commands | `/<name>` + summary for every command file the tool exposes |
+
+Files are read by the AI tool only when the user explicitly asks "what skills/agents/hooks are configured?" or equivalent — they are not loaded into the default context window.
+
+### Generation triggers
+
+The Reference appendix is regenerated on:
+
+1. `/doc-wiki:init` — initial appendix written with empty registry (no per-tool config files yet).
+2. `/doc-wiki:onboard` — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
+3. `/doc-wiki:atlas` Phase 8 (finalize) — refreshed alongside the rest of the wiki.
+4. Any direct `Agent(wiki-claude-md-agent)` invocation.
+
+### Brevity rule
+
+The total Reference appendix MUST stay under ~30 lines per root file. The "Other references" subsection is the only freeform area; keep it tight. Anything that wants to be a paragraph belongs as a wiki page, not in the appendix.
+
 ## Post-Operation Hooks
 
 After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
 
-**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page. Add/update `## Related Pages` section on every page.
+**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:promote`) gets corrected — do not silently fill it in.
 
 **Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page.
 

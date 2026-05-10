@@ -10,9 +10,9 @@ The public-facing documentation lives under [`docs/`](docs/). Start there for in
 |---|---|
 | Brand new — installing | [`README.md`](README.md), [`docs/getting-started.md`](docs/getting-started.md) |
 | Operator — using the commands | [`docs/commands.md`](docs/commands.md), [`docs/configuration.md`](docs/configuration.md), [`docs/troubleshooting.md`](docs/troubleshooting.md) |
-| Contributor — modifying internals | [`docs/architecture.md`](docs/architecture.md), [`docs/connectors.md`](docs/connectors.md), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Contributor — modifying internals | [`docs/internals/architecture.md`](docs/internals/architecture.md), [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md), [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
-This file (`CLAUDE.md`) is the project-memory layer that Claude Code loads automatically; the sections below are an architecture summary for the orchestrator. The full architecture doc with Mermaid diagrams is at [`docs/architecture.md`](docs/architecture.md).
+This file (`CLAUDE.md`) is the project-memory layer that Claude Code loads automatically; the sections below are an architecture summary for the orchestrator. The full architecture doc with Mermaid diagrams is at [`docs/internals/architecture.md`](docs/internals/architecture.md).
 
 ## Quickstart
 
@@ -38,26 +38,36 @@ Three slash commands take a new repo from zero to a working wiki:
 
 Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (`/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
 
-### TypeScript scripts (14) — `skills/doc-wiki/scripts/`
+### TypeScript scripts (24) — `skills/doc-wiki/scripts/`
 
-Deterministic operations: hashing, parsing, graph ops, lint, security.
+Deterministic operations: scaffolding, parsing, graph ops, lint, multimodal extraction, checkpointing. (Security primitives — URL/path/label validation — moved into `narai-primitives/toolkit`.)
 
 | Script | Purpose |
 |--------|---------|
 | `init_wiki.ts` | Scaffold wiki directory structure and config |
-| `parse_config.ts` | Read and validate `wiki.config.yaml` |
+| `apply_config.ts` | Translate `wiki.config.yaml` blocks (currently `credentials`) into live state by registering providers from `narai-primitives/credentials` |
 | `event_logger.ts` | Append structured events to `events.jsonl` |
 | `graph_ops.ts` | Relationship graph queries (paths, clusters, orphans) |
 | `lint_checks.ts` | Frontmatter and link validation |
 | `quality_score.ts` | Per-page and aggregate quality scoring |
 | `cache_manager.ts` | Content-hash cache for incremental processing |
+| `checkpoint.ts` | Resume mechanism for long-running batch ops; atomic JSON state at `<wikiRoot>/.wiki-checkpoint.json`, keyed per operation |
 | `daily_summary.ts` | Generate daily digest of wiki changes |
 | `extract_binary.ts` | Extract text from binary files (PDF, DOCX, etc.) |
+| `extract_multimodal.ts` | Optional extraction for images, audio/video, YouTube; gated by `ecosystem.multimodal.enabled`; degrades gracefully when `faster-whisper` / `yt-dlp` are off-PATH |
 | `mermaid_lint.ts` | Validate Mermaid diagram syntax |
-| `security_check.ts` | URL validation, path containment, input sanitization |
+| `mermaid_inject.ts` | Splice agent-emitted Mermaid blocks into compiled pages between idempotent `<!-- wiki-mermaid: ... -->` markers (ingest step 9) |
+| `summaries_rebuild.ts` | Deterministic regeneration of `wiki/summaries.md` (progressive-disclosure index loaded first by `/doc-wiki:query`); preserves content outside `wiki-managed: summaries` markers |
+| `banlist.ts` | Anti-repetition memory harvester; aggregates deprecated claims with `failure_reason` into a markdown section spliced into `summaries.md` |
+| `how_to_go_deeper.ts` | Auto-generate the trailing "How to Go Deeper" section on externally-sourced pages (uses `source_registry`'s `BUILTIN_PATTERNS` + custom config) |
+| `hook_installer.ts` | Idempotent installer for PreToolUse hook configs across Claude Code, Codex, Cursor, and Aider |
 | `atlas_orchestrator.ts` | `/doc-wiki:atlas` state detection, plan-snapshot persistence, cost estimation |
 | `atlas_gitlog.ts` | `git log --since` parser; classifies changed paths as stale / uncovered / unrelated against atlas-page sources and current topic list |
 | `atlas_validate.ts` | `(page-hash, source-hash)` cache for atlas semantic validation; structural-check wrapper over `lint_checks.ts` |
+| `_cli_args.ts` | Shared `--flag value` / `--flag=value` / `-h` argv parser for the wiki scripts |
+| `_frontmatter.ts` | Canonical YAML frontmatter parser shared by `lint_checks.ts` and `quality_score.ts` |
+| `_optional.ts` | `importOptional()` and `isBinaryOnPath()` helpers for graceful degradation when an optional npm dep or external CLI is missing |
+| `_wiki_fs.ts` | Shared recursive `*.md` walker rooted at `<wikiRoot>/wiki/`, sorted lexicographically |
 
 ### Agents (3) — `agents/`
 
@@ -87,6 +97,10 @@ Standalone helpers still live at `agents/lib/` (flat files, no subdirectory):
 | `mermaid_format.ts` | Mermaid diagram formatting utilities |
 | `mermaid_augment.ts` | Apply wiki-specific `mermaid: { type, title, code }` blocks on top of raw `DispatchResult` envelopes returned by `narai-primitives`'s `gather()`. Used by `/doc-wiki:ingest` step 7. Single decoration site for all 7 connectors. |
 | `atlas_synthesize.ts` | Read-only input assembly for `/doc-wiki:atlas` Phase 7 (global synthesis). Three subcommands — `overview` (concatenated topic architecture pages + per-facet TL;DRs), `integrations` (api pages + external-service mentions + connector config), `deploy` (Dockerfile, compose, workflows, terraform). |
+| `atlas_inventory.ts` | Pre-Phase-2 code-inventory manifest for `/doc-wiki:atlas` — emits project metadata, ORM entities, REST endpoints, and code-client callsites to `<wikiRoot>/outputs/atlas/<runId>/code-inventory.json`; consumed by Phase 8 gap report. |
+| `repo_walker.ts` | Shared bounded source-file walker with a tuned ignore-list; lifted from `wiki-orm-agent` so atlas inventory and future consumers share one walker. |
+
+REST framework profiles (used by `atlas_inventory.ts` for endpoint detection) ship as YAML under `agents/lib/rest_profiles/*.yaml` — 18 profiles spanning Node (express, fastify, koa, hono), Python (django, fastapi, flask), JVM (spring), .NET (aspnet), Ruby (rails), PHP (laravel, slim), Go (gin, echo), Rust (actix, rocket), Elixir (phoenix), and Swift (vapor).
 
 Vendor-neutral connector code ships as a single npm package and is consumed directly:
 
@@ -144,7 +158,7 @@ All tests use Vitest.
 | Build | `npm run build` |
 | Skills/agents | `/skill-creator` evals |
 
-Current status: **934 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
+Current status: **1130 tests passed, 5 skipped (live-DB integration tests, gated behind `TEST_LIVE_*` env vars)**.
 
 ## Key conventions
 

@@ -52,4 +52,4 @@ After write operations (ingest, fix, promote, refresh), run crosslink and tag-ha
 
 ## Documentation
 
-Public-facing docs live in [`docs/`](docs/) at the repo root: [`getting-started.md`](docs/getting-started.md), [`commands.md`](docs/commands.md), [`configuration.md`](docs/configuration.md), [`architecture.md`](docs/architecture.md), [`connectors.md`](docs/connectors.md), [`troubleshooting.md`](docs/troubleshooting.md).
+Public-facing docs live in [`docs/`](docs/) at the repo root: [`getting-started.md`](docs/getting-started.md), [`commands.md`](docs/commands.md), [`configuration.md`](docs/configuration.md), [`connectors.md`](docs/connectors.md), [`troubleshooting.md`](docs/troubleshooting.md). Architecture internals are at [`internals/architecture.md`](docs/internals/architecture.md).

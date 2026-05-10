@@ -331,7 +331,7 @@ Anywhere a value can be a credential ref in either YAML file, use one of these f
 
 Mixing forms within one file is fine. Plaintext values are also accepted but **discouraged** — the secret-syntax validator in `narai-primitives/config` warns when it sees a connector option that looks like an inline secret. The intent is that real secrets always go through one of the four resolvers.
 
-For more on resolver behavior, see [`connectors.md`](connectors.md#credential-providers).
+For which credentials each connector wants by name (e.g. which env var the GitHub connector reads), see [`connectors.md`](connectors.md). For the credential-resolver public API and how providers are loaded, see [`internals/connectors-api.md` § Credential providers](internals/connectors-api.md#credential-providers--public-api).
 
 ---
 

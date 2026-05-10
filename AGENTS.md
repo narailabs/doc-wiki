@@ -9,7 +9,7 @@ Public-facing docs live in [`docs/`](docs/). For Codex users:
 - [`docs/getting-started.md`](docs/getting-started.md) — install + first ingest
 - [`docs/commands.md`](docs/commands.md) — reference for all 10 `/doc-wiki:*` commands
 - [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` and `.connectors/config.yaml` schemas
-- [`docs/architecture.md`](docs/architecture.md) — full architecture with Mermaid diagrams
+- [`docs/internals/architecture.md`](docs/internals/architecture.md) — full architecture with Mermaid diagrams
 - [`docs/connectors.md`](docs/connectors.md) — the `narai-primitives` stack
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — common failures
 
