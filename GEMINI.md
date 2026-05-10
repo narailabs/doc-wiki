@@ -131,6 +131,7 @@ Sub-agents live at `agents/`. External-source fetching is handled by the connect
 | `wiki-orm-agent` | ORM profile detection |
 | `wiki-mermaid-agent` | Mermaid diagram generation |
 | `wiki-claude-md-agent` | CLAUDE.md maintenance |
+| `wiki-readme-agent` | Sync repo-root `README.md` quickstart block against `wiki/getting-started.md`; dispatched alongside `wiki-claude-md-agent` in atlas Phase 8 |
 
 ## Post-Operation Hooks
 

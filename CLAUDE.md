@@ -76,6 +76,7 @@ External-source fetching is handled by the connectors bundled inside `narai-prim
 | Agent | Purpose |
 |-------|---------|
 | `wiki-claude-md-agent` | Generate project `CLAUDE.md` from wiki pages |
+| `wiki-readme-agent` | Sync repo-root `README.md` quickstart block against `wiki/getting-started.md`; dispatched alongside `wiki-claude-md-agent` in atlas Phase 8 |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams |
 | `wiki-orm-agent` | ORM model detection and entity-to-table mapping (uses `wiki_db` to cross-validate schemas) |
 
