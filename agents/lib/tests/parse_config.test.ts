@@ -209,4 +209,32 @@ describe("ecosystem.readme", () => {
     });
     expect(() => parseConfig(p)).toThrow(/salvage_mode/);
   });
+
+  it("rejects non-boolean enabled", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { enabled: "true" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/enabled/);
+  });
+
+  it("rejects non-boolean insert_markers_on_init", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { insert_markers_on_init: 1 } },
+    });
+    expect(() => parseConfig(p)).toThrow(/insert_markers_on_init/);
+  });
+
+  it("preserves unknown fields in ecosystem.readme", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { custom_future_field: "hello" } },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: { readme: Record<string, unknown> };
+    };
+    expect(cfg.ecosystem.readme.custom_future_field).toBe("hello");
+    expect(cfg.ecosystem.readme.enabled).toBe(true);
+  });
 });

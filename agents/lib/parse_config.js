@@ -48,6 +48,13 @@ export class ConfigFileNotFoundError extends Error {
 }
 function applyReadmeDefaults(ecosystem, autonomyMode) {
     const raw = ecosystem["readme"] ?? {};
+    if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+        throw new Error(`invalid ecosystem.readme.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`);
+    }
+    if (raw.insert_markers_on_init !== undefined &&
+        typeof raw.insert_markers_on_init !== "boolean") {
+        throw new Error(`invalid ecosystem.readme.insert_markers_on_init: ${JSON.stringify(raw.insert_markers_on_init)} (expected true or false)`);
+    }
     if (raw.quickstart_depth !== undefined &&
         !VALID_QUICKSTART_DEPTHS.has(String(raw.quickstart_depth))) {
         throw new Error(`invalid ecosystem.readme.quickstart_depth: ${raw.quickstart_depth} (expected one of: ${[...VALID_QUICKSTART_DEPTHS].join(", ")})`);
@@ -58,6 +65,7 @@ function applyReadmeDefaults(ecosystem, autonomyMode) {
     }
     const inheritedSalvage = autonomyMode === "auto" ? "autonomous" : autonomyMode;
     ecosystem.readme = {
+        ...raw,
         enabled: raw.enabled ?? true,
         quickstart_depth: raw.quickstart_depth ?? "generous",
         salvage_mode: raw.salvage_mode ?? inheritedSalvage,
