@@ -1,0 +1,19 @@
+{
+  "evals": [
+    {
+      "name": "clean-sync-no-salvage",
+      "input": {"action": "sync", "fixture": "fixtures/clean-readme/"},
+      "expected": {"status": "success", "salvaged_paragraphs": []}
+    },
+    {
+      "name": "salvage-heavy-sync",
+      "input": {"action": "sync", "fixture": "fixtures/heavy-edits-readme/"},
+      "expected": {"status": "success", "salvage_dispositions": ["keep_verbatim", "keep_reworded"]}
+    },
+    {
+      "name": "no-op-second-sync",
+      "input": {"action": "sync", "fixture": "fixtures/just-synced-readme/"},
+      "expected": {"status": "success", "drift_summary": {"only_in_readme_count": 0}}
+    }
+  ]
+}
