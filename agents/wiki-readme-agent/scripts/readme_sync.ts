@@ -16,6 +16,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseFlags as parseSharedFlags } from "../../../skills/doc-wiki/scripts/_cli_args.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -153,6 +154,9 @@ Subcommands:
                     on the next /doc-wiki:atlas run).
 `;
 
+// All three depths currently seed the same one-line placeholder. Real depth
+// differentiation happens at sync time, when the agent generates the new
+// quickstart block from wiki/getting-started.md per the depth template.
 const PLACEHOLDERS: Record<string, string> = {
   minimal:
     "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
@@ -169,40 +173,20 @@ interface FlagMap {
   help?: boolean;
 }
 
-function parseFlags(argv: readonly string[]): FlagMap {
-  const out: FlagMap = {};
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i] as string;
-    if (token === "-h" || token === "--help") {
-      out.help = true;
-      continue;
-    }
-    let key = token;
-    let value: string | undefined;
-    const eq = token.indexOf("=");
-    if (token.startsWith("--") && eq > 0) {
-      key = token.substring(0, eq);
-      value = token.substring(eq + 1);
-    } else if (token.startsWith("--")) {
-      value = argv[++i] as string | undefined;
-    } else {
-      throw new Error(`unrecognized argument: ${token}`);
-    }
-    switch (key) {
-      case "--readme":
-        out.readme = value;
-        break;
-      case "--block-file":
-        out.blockFile = value;
-        break;
-      case "--depth":
-        out.depth = value;
-        break;
-      default:
-        throw new Error(`unrecognized argument: ${key}`);
-    }
-  }
-  return out;
+const FLAG_SPEC = {
+  "--readme": "readme",
+  "--block-file": "blockFile",
+  "--depth": "depth",
+} as const;
+
+function parseLocalFlags(argv: readonly string[]): FlagMap {
+  const parsed = parseSharedFlags(argv, FLAG_SPEC);
+  return {
+    readme: typeof parsed.values.readme === "string" ? parsed.values.readme : undefined,
+    blockFile: typeof parsed.values.blockFile === "string" ? parsed.values.blockFile : undefined,
+    depth: typeof parsed.values.depth === "string" ? parsed.values.depth : undefined,
+    help: parsed.help,
+  };
 }
 
 function emitError(error_code: string, message: string, details?: object): void {
@@ -252,7 +236,7 @@ function cmdWrite(flags: FlagMap): number {
     return 1;
   }
   if (!fs.existsSync(flags.blockFile)) {
-    emitError("README_MISSING", `Block file not found: ${flags.blockFile}`);
+    emitError("BLOCK_FILE_MISSING", `Block file not found: ${flags.blockFile}`);
     return 1;
   }
   const readme = fs.readFileSync(flags.readme, "utf-8");
@@ -326,8 +310,7 @@ function cmdInit(flags: FlagMap): number {
   return 0;
 }
 
-function main(): number {
-  const argv = process.argv.slice(2);
+export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
     process.stdout.write(HELP_TEXT);
     return 0;
@@ -335,7 +318,7 @@ function main(): number {
   const sub = argv[0];
   let flags: FlagMap;
   try {
-    flags = parseFlags(argv.slice(1));
+    flags = parseLocalFlags(argv.slice(1));
   } catch (e) {
     process.stderr.write(`${(e as Error).message}\n`);
     return 2;

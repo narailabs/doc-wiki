@@ -193,3 +193,48 @@ describe("CLI: init", () => {
     expect(fs.readFileSync(readmePath, "utf-8")).toBe(original);
   });
 });
+
+describe("CLI: usage errors", () => {
+  it("returns exit 2 on missing --readme", () => {
+    const { status } = runCli(["extract"]);
+    expect(status).toBe(2);
+  });
+
+  it("returns exit 2 on invalid --depth", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "readme-sync-"));
+    const readmePath = path.join(tmp, "README.md");
+    fs.writeFileSync(readmePath, "# T\n## Install\n");
+    const { status } = runCli([
+      "init",
+      "--readme",
+      readmePath,
+      "--depth",
+      "medium",
+    ]);
+    expect(status).toBe(2);
+  });
+
+  it("returns exit 2 on unknown subcommand", () => {
+    const { status } = runCli(["nope"]);
+    expect(status).toBe(2);
+  });
+
+  it("returns exit 1 with BLOCK_FILE_MISSING when --block-file does not exist", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "readme-sync-"));
+    const readmePath = path.join(tmp, "README.md");
+    fs.writeFileSync(
+      readmePath,
+      `# T\n${MARKER_START}\nold\n${MARKER_END}\n`,
+    );
+    const { stdout, status } = runCli([
+      "write",
+      "--readme",
+      readmePath,
+      "--block-file",
+      path.join(tmp, "missing.txt"),
+    ]);
+    expect(status).toBe(1);
+    const out = JSON.parse(stdout);
+    expect(out.error_code).toBe("BLOCK_FILE_MISSING");
+  });
+});

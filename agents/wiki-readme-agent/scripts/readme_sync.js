@@ -1,4 +1,22 @@
 #!/usr/bin/env node
+/**
+ * README.md marker-handling library + CLI for wiki-readme-agent.
+ *
+ * Library API:
+ *   import { extractMarkerBlock, replaceMarkerBlock, insertMarkers } from "./readme_sync.js";
+ *
+ * CLI (added in Task 3):
+ *   node readme_sync.js extract --readme <path>
+ *   node readme_sync.js write --readme <path> --block-file <path>
+ *   node readme_sync.js init --readme <path> --depth <minimal|standard|generous>
+ *
+ * Mirrors agents/wiki-claude-md-agent/scripts/claude_md_gen.ts patterns:
+ * library-first, custom error classes with `error_code`.
+ */
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseFlags as parseSharedFlags } from "../../../skills/doc-wiki/scripts/_cli_args.js";
 // ── Constants ───────────────────────────────────────────────────────
 export const MARKER_START = "<!-- wiki-managed: quickstart start -->";
 export const MARKER_END = "<!-- wiki-managed: quickstart end -->";
@@ -97,4 +115,187 @@ export function insertMarkers(readme, placeholder) {
         readme.substring(anchorLineEnd));
 }
 // ── CLI ─────────────────────────────────────────────────────────────
-// (CLI dispatch added in Task 3.)
+const HELP_TEXT = `usage: readme_sync.js {extract,write,init} [...]
+
+Subcommands:
+  extract --readme <path>
+                    Print the marker block as JSON: { before, between, after }.
+                    Errors emit { status: "error", error_code, message }.
+
+  write   --readme <path> --block-file <path>
+                    Replace the marker block with the contents of <block-file>.
+                    Preserves text outside the markers.
+
+  init    --readme <path> --depth {minimal|standard|generous}
+                    Insert markers if missing. Idempotent when markers exist.
+                    The depth seeds a one-line placeholder (real content lands
+                    on the next /doc-wiki:atlas run).
+`;
+// All three depths currently seed the same one-line placeholder. Real depth
+// differentiation happens at sync time, when the agent generates the new
+// quickstart block from wiki/getting-started.md per the depth template.
+const PLACEHOLDERS = {
+    minimal: "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+    standard: "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+    generous: "> Quickstart synced from wiki/getting-started.md on next /doc-wiki:atlas run.",
+};
+const FLAG_SPEC = {
+    "--readme": "readme",
+    "--block-file": "blockFile",
+    "--depth": "depth",
+};
+function parseLocalFlags(argv) {
+    const parsed = parseSharedFlags(argv, FLAG_SPEC);
+    return {
+        readme: typeof parsed.values.readme === "string" ? parsed.values.readme : undefined,
+        blockFile: typeof parsed.values.blockFile === "string" ? parsed.values.blockFile : undefined,
+        depth: typeof parsed.values.depth === "string" ? parsed.values.depth : undefined,
+        help: parsed.help,
+    };
+}
+function emitError(error_code, message, details) {
+    process.stdout.write(JSON.stringify({ status: "error", error_code, message, ...(details ?? {}) }, null, 2) +
+        "\n");
+}
+function cmdExtract(flags) {
+    if (!flags.readme) {
+        process.stderr.write("--readme is required\n");
+        return 2;
+    }
+    if (!fs.existsSync(flags.readme)) {
+        emitError("README_MISSING", `README not found: ${flags.readme}`);
+        return 1;
+    }
+    const readme = fs.readFileSync(flags.readme, "utf-8");
+    try {
+        const out = extractMarkerBlock(readme);
+        process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+        return 0;
+    }
+    catch (e) {
+        if (e instanceof MarkersMissingError) {
+            emitError("MARKERS_MISSING", e.message);
+            return 1;
+        }
+        if (e instanceof MarkersCorruptError) {
+            emitError("MARKERS_CORRUPT", e.message, {
+                starts: e.starts,
+                ends: e.ends,
+            });
+            return 1;
+        }
+        throw e;
+    }
+}
+function cmdWrite(flags) {
+    if (!flags.readme || !flags.blockFile) {
+        process.stderr.write("--readme and --block-file are required\n");
+        return 2;
+    }
+    if (!fs.existsSync(flags.readme)) {
+        emitError("README_MISSING", `README not found: ${flags.readme}`);
+        return 1;
+    }
+    if (!fs.existsSync(flags.blockFile)) {
+        emitError("BLOCK_FILE_MISSING", `Block file not found: ${flags.blockFile}`);
+        return 1;
+    }
+    const readme = fs.readFileSync(flags.readme, "utf-8");
+    const block = fs.readFileSync(flags.blockFile, "utf-8").replace(/\n$/, "");
+    try {
+        const out = replaceMarkerBlock(readme, block);
+        fs.writeFileSync(flags.readme, out);
+        process.stdout.write(JSON.stringify({ status: "success", written: flags.readme }, null, 2) +
+            "\n");
+        return 0;
+    }
+    catch (e) {
+        if (e instanceof MarkersMissingError) {
+            emitError("MARKERS_MISSING", e.message);
+            return 1;
+        }
+        if (e instanceof MarkersCorruptError) {
+            emitError("MARKERS_CORRUPT", e.message, {
+                starts: e.starts,
+                ends: e.ends,
+            });
+            return 1;
+        }
+        throw e;
+    }
+}
+function cmdInit(flags) {
+    if (!flags.readme) {
+        process.stderr.write("--readme is required\n");
+        return 2;
+    }
+    const depth = flags.depth ?? "generous";
+    if (!["minimal", "standard", "generous"].includes(depth)) {
+        process.stderr.write(`invalid --depth: ${depth}\n`);
+        return 2;
+    }
+    if (!fs.existsSync(flags.readme)) {
+        emitError("README_MISSING", `README not found: ${flags.readme}`);
+        return 1;
+    }
+    const readme = fs.readFileSync(flags.readme, "utf-8");
+    // Idempotent — if markers exist, do nothing.
+    try {
+        extractMarkerBlock(readme);
+        process.stdout.write(JSON.stringify({ status: "noop", reason: "markers already present" }, null, 2) +
+            "\n");
+        return 0;
+    }
+    catch (e) {
+        if (!(e instanceof MarkersMissingError)) {
+            // Corrupt markers — surface error rather than overwriting
+            if (e instanceof MarkersCorruptError) {
+                emitError("MARKERS_CORRUPT", e.message, {
+                    starts: e.starts,
+                    ends: e.ends,
+                });
+                return 1;
+            }
+            throw e;
+        }
+    }
+    const out = insertMarkers(readme, PLACEHOLDERS[depth]);
+    fs.writeFileSync(flags.readme, out);
+    process.stdout.write(JSON.stringify({ status: "success", written: flags.readme, depth }, null, 2) +
+        "\n");
+    return 0;
+}
+export function main(argv = process.argv.slice(2)) {
+    if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
+        process.stdout.write(HELP_TEXT);
+        return 0;
+    }
+    const sub = argv[0];
+    let flags;
+    try {
+        flags = parseLocalFlags(argv.slice(1));
+    }
+    catch (e) {
+        process.stderr.write(`${e.message}\n`);
+        return 2;
+    }
+    if (flags.help) {
+        process.stdout.write(HELP_TEXT);
+        return 0;
+    }
+    switch (sub) {
+        case "extract":
+            return cmdExtract(flags);
+        case "write":
+            return cmdWrite(flags);
+        case "init":
+            return cmdInit(flags);
+        default:
+            process.stderr.write(`unknown subcommand: ${sub}\n`);
+            return 2;
+    }
+}
+const thisFile = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
+    process.exit(main());
+}

@@ -180,3 +180,4 @@ Same shape as `sync` success, with `action: "check"` and `written` omitted.
 | `MARKERS_CORRUPT` | Unbalanced markers (e.g. start without end). |
 | `README_MISSING` | `<project_root>/README.md` does not exist. |
 | `GETTING_STARTED_MISSING` | `<wiki_root>/wiki/getting-started.md` does not exist. |
+| `BLOCK_FILE_MISSING` | The `--block-file` argument to the `write` subcommand points to a file that does not exist. |
