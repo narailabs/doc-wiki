@@ -53,3 +53,24 @@ After write operations (ingest, fix, promote, refresh), run crosslink and tag-ha
 ## Documentation
 
 Public-facing docs live in [`docs/`](docs/) at the repo root: [`getting-started.md`](docs/getting-started.md), [`commands.md`](docs/commands.md), [`configuration.md`](docs/configuration.md), [`connectors.md`](docs/connectors.md), [`troubleshooting.md`](docs/troubleshooting.md). Architecture internals are at [`internals/architecture.md`](docs/internals/architecture.md).
+
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+`docs/doc-wiki-wiki/wiki/index.md`
+
+### Coding agent configuration registry (Skills & agents)
+
+**claude-code**: `docs/doc-wiki-wiki/ai-dev/claude-config.md`
+**codex**: `docs/doc-wiki-wiki/ai-dev/codex-config.md`
+**gemini**: `docs/doc-wiki-wiki/ai-dev/gemini-config.md`
+**cursor**: `docs/doc-wiki-wiki/ai-dev/cursor-config.md`
+**aider**: `docs/doc-wiki-wiki/ai-dev/aider-config.md`
+
+### Other references
+
+- Latest atlas run: `docs/doc-wiki-wiki/outputs/atlas/2026-05-10T02-01-52/`
+- Architecture: `docs/doc-wiki-wiki/wiki/overview.md`
+<!-- wiki-managed: reference end -->

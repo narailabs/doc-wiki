@@ -26,6 +26,45 @@ doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / 
 
 ## Install
 
+<!-- wiki-managed: quickstart start -->
+**From zero to a queryable wiki in ~5 minutes.**
+
+### 1. Scaffold
+
+```
+/doc-wiki:init
+```
+
+Creates `wiki.config.yaml` and the wiki directory tree under `docs/<app-name>-wiki/`.
+
+### 2. Onboard
+
+```
+/doc-wiki:onboard
+```
+
+Six-phase setup: detects stack, ORM, database, external services (Jira / Confluence / GitHub / Notion / AWS / GCP), autonomy mode, and installs hooks. Idempotent.
+
+### 3. Ingest or Atlas
+
+```
+/doc-wiki:ingest README.md                             # single source
+/doc-wiki:ingest https://my-org.atlassian.net/PROJ-1   # Jira ticket
+/doc-wiki:atlas --dry-run                              # full-codebase plan
+/doc-wiki:atlas                                        # full-codebase commit
+```
+
+### 4. Query
+
+```
+/doc-wiki:query "How does the cache work?"
+```
+
+Returns a cited answer synthesised from wiki pages. Archives to `outputs/queries/`; promote with `/doc-wiki:promote last`.
+
+Full walkthrough → [docs/doc-wiki-wiki/wiki/getting-started.md](docs/doc-wiki-wiki/wiki/getting-started.md)
+<!-- wiki-managed: quickstart end -->
+
 ### From the NarAI marketplace (recommended)
 
 doc-wiki ships as a [Claude Code plugin](https://github.com/narailabs/narai-claude-plugins). One-time marketplace setup, then install:

@@ -152,3 +152,24 @@ Install dependencies and build first (Node 20 required):
 npm install
 npm run build
 ```
+
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+`docs/doc-wiki-wiki/wiki/index.md`
+
+### Coding agent configuration registry (Skills & agents)
+
+**claude-code**: `docs/doc-wiki-wiki/ai-dev/claude-config.md`
+**codex**: `docs/doc-wiki-wiki/ai-dev/codex-config.md`
+**gemini**: `docs/doc-wiki-wiki/ai-dev/gemini-config.md`
+**cursor**: `docs/doc-wiki-wiki/ai-dev/cursor-config.md`
+**aider**: `docs/doc-wiki-wiki/ai-dev/aider-config.md`
+
+### Other references
+
+- Latest atlas run: `docs/doc-wiki-wiki/outputs/atlas/2026-05-10T02-01-52/`
+- Architecture: `docs/doc-wiki-wiki/wiki/overview.md`
+<!-- wiki-managed: reference end -->

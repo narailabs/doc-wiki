@@ -181,3 +181,24 @@ Load-bearing invariants implementers must respect:
 - **Credential resolution uses the `narai-primitives/credentials` subpath.** Import `resolveSecret`, `registerProvider`, and provider classes from `narai-primitives/credentials` (absorbed into the bundle in v2.1). Connectors load their own credentials inside the connector process — doc-wiki does not pass credentials into `gather()`.
 - **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
 - **Source-to-connector matching is data-driven.** `lookupBySource()` from `agents/lib/source_registry.ts` reads a static `BUILTIN_PATTERNS` list (one entry per connector bundled in `narai-primitives`). Custom patterns load via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new connector mapping. `lookupBySource` never dispatches a connector; it only classifies sources for `how_to_go_deeper.ts`.
+
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+`docs/doc-wiki-wiki/wiki/index.md`
+
+### Coding agent configuration registry (Skills & agents)
+
+**claude-code**: `docs/doc-wiki-wiki/ai-dev/claude-config.md`
+**codex**: `docs/doc-wiki-wiki/ai-dev/codex-config.md`
+**gemini**: `docs/doc-wiki-wiki/ai-dev/gemini-config.md`
+**cursor**: `docs/doc-wiki-wiki/ai-dev/cursor-config.md`
+**aider**: `docs/doc-wiki-wiki/ai-dev/aider-config.md`
+
+### Other references
+
+- Latest atlas run: `docs/doc-wiki-wiki/outputs/atlas/2026-05-10T02-01-52/`
+- Architecture: `docs/doc-wiki-wiki/wiki/overview.md`
+<!-- wiki-managed: reference end -->
