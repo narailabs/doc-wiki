@@ -62,7 +62,7 @@ Six-phase setup: detects stack, ORM, database, external services (Jira / Conflue
 
 Returns a cited answer synthesised from wiki pages. Archives to `outputs/queries/`; promote with `/doc-wiki:promote last`.
 
-Full walkthrough → [docs/doc-wiki-wiki/wiki/getting-started.md](docs/doc-wiki-wiki/wiki/getting-started.md)
+Full walkthrough → [docs/getting-started.md](docs/getting-started.md)
 <!-- wiki-managed: quickstart end -->
 
 ### From the NarAI marketplace (recommended)
