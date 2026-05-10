@@ -69,7 +69,7 @@ Deterministic operations: scaffolding, parsing, graph ops, lint, multimodal extr
 | `_optional.ts` | `importOptional()` and `isBinaryOnPath()` helpers for graceful degradation when an optional npm dep or external CLI is missing |
 | `_wiki_fs.ts` | Shared recursive `*.md` walker rooted at `<wikiRoot>/wiki/`, sorted lexicographically |
 
-### Agents (3) — `agents/`
+### Agents (4) — `agents/`
 
 External-source fetching is handled by the connectors bundled inside `narai-primitives`, dispatched through its `gather()` planner — there are no per-service subagents in doc-wiki. The remaining agents do wiki-specific derivation that has nothing to do with the connector workspace:
 
