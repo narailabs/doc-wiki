@@ -28,6 +28,11 @@ describe("extractMarkerBlock", () => {
     const readme = `# Title\n${MARKER_START}\nhello\n${MARKER_START}\nworld\n${MARKER_END}\n`;
     expect(() => extractMarkerBlock(readme)).toThrow(MarkersCorruptError);
   });
+
+  it("throws MarkersCorruptError when end marker precedes start marker", () => {
+    const readme = `# T\n${MARKER_END}\nhello\n${MARKER_START}\n`;
+    expect(() => extractMarkerBlock(readme)).toThrow(MarkersCorruptError);
+  });
 });
 
 describe("replaceMarkerBlock", () => {

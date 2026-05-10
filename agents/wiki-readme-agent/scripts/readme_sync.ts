@@ -72,9 +72,12 @@ function countOccurrences(haystack: string, needle: string): number {
 // ── Library API ────────────────────────────────────────────────────
 
 export interface MarkerExtraction {
-  before: string; // everything up to (and including) the start marker line + trailing newline
-  between: string; // inner content (no leading/trailing newline)
-  after: string; // everything from the end marker (inclusive) onward
+  /** Everything up to (but NOT including) the start marker. */
+  before: string;
+  /** Inner content between markers, with leading/trailing newlines stripped. */
+  between: string;
+  /** Everything after (but NOT including) the end marker. */
+  after: string;
 }
 
 export function extractMarkerBlock(readme: string): MarkerExtraction {
