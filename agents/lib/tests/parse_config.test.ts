@@ -237,4 +237,17 @@ describe("ecosystem.readme", () => {
     expect(cfg.ecosystem.readme.custom_future_field).toBe("hello");
     expect(cfg.ecosystem.readme.enabled).toBe(true);
   });
+
+  it("ignores scalar ecosystem.readme value and applies defaults", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: false },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: { readme: { enabled: boolean; quickstart_depth: string } };
+    };
+    // Defaults applied; the raw scalar is discarded
+    expect(cfg.ecosystem.readme.enabled).toBe(true);
+    expect(cfg.ecosystem.readme.quickstart_depth).toBe("generous");
+  });
 });

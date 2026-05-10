@@ -5,7 +5,7 @@
  * Library API:
  *   import { extractMarkerBlock, replaceMarkerBlock, insertMarkers } from "./readme_sync.js";
  *
- * CLI (added in Task 3):
+ * CLI:
  *   node readme_sync.js extract --readme <path>
  *   node readme_sync.js write --readme <path> --block-file <path>
  *   node readme_sync.js init --readme <path> --depth <minimal|standard|generous>

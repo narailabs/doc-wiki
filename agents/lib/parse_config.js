@@ -47,7 +47,7 @@ export class ConfigFileNotFoundError extends Error {
     }
 }
 function applyReadmeDefaults(ecosystem, autonomyMode) {
-    const raw = ecosystem["readme"] ?? {};
+    const raw = isPlainObject(ecosystem["readme"]) ? ecosystem["readme"] : {};
     if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
         throw new Error(`invalid ecosystem.readme.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`);
     }

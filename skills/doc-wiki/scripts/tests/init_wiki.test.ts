@@ -326,7 +326,7 @@ describe("init_wiki — v2 config blocks", () => {
     ) as Record<string, any>;
   }
 
-  it("emits the ecosystem block with agents/credentials/database/orm/claude_md/mermaid", () => {
+  it("emits the ecosystem block with agents/credentials/database/orm/claude_md/readme/mermaid", () => {
     const wiki = tmpWiki(tmpPath);
     runInit(wiki);
     const cfg = loadCfg(wiki);

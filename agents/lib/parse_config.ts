@@ -59,7 +59,7 @@ function applyReadmeDefaults(
   ecosystem: Record<string, unknown>,
   autonomyMode: string,
 ): void {
-  const raw = (ecosystem["readme"] as Record<string, unknown> | undefined) ?? {};
+  const raw = isPlainObject(ecosystem["readme"]) ? ecosystem["readme"] : {};
   if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
     throw new Error(
       `invalid ecosystem.readme.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`,
