@@ -125,12 +125,15 @@ function findHeadingLineOutsideFence(
 ): number {
   const lines = readme.split("\n");
   // 0 = outside any fence; >=3 = inside a fence with that opening length.
+  // CommonMark allows up to 3 leading spaces of indentation on both the
+  // opening and closing fence delimiters.
   let openFenceLen = 0;
+  const FENCE_RE = /^ {0,3}(`{3,})/;
   for (let i = 0; i < lines.length; i++) {
     // Loop bound guarantees the index is valid; cast suppresses
     // noUncheckedIndexedAccess.
     const line = lines[i] as string;
-    const fenceMatch = line.match(/^(`{3,})/);
+    const fenceMatch = line.match(FENCE_RE);
     if (fenceMatch) {
       const len = (fenceMatch[1] as string).length;
       if (openFenceLen === 0) {

@@ -8,7 +8,7 @@ description: |
 type: maintenance
 autonomy_level: autonomous
 model: sonnet
-tools: [Bash, Read, Write]
+tools: [Bash, Read, Write, AskUserQuestion]
 color: yellow
 version: "1.0.0"
 invocation_template:

@@ -166,6 +166,38 @@ describe("insertMarkers", () => {
     const markerIdx = out.indexOf(MARKER_START);
     expect(markerIdx).toBeGreaterThan(realInstallIdx);
   });
+
+  it("recognises CommonMark fences with up to 3 leading spaces of indentation", () => {
+    // CommonMark allows fenced code blocks indented up to 3 spaces. The
+    // `## Install` inside the indented fence must NOT be selected as the
+    // anchor.
+    const readme = [
+      "# Title",
+      "",
+      "## Overview",
+      "",
+      "Indented fence (3 spaces — still a real fence per CommonMark):",
+      "",
+      "   ```markdown",
+      "   ## Install",
+      "   echo not real",
+      "   ```",
+      "",
+      "## Install",
+      "",
+      "Real install instructions.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // Marker landed AFTER the real install heading, not inside the indented fence
+    const realInstallIdx = out.lastIndexOf("## Install");
+    const markerIdx = out.indexOf(MARKER_START);
+    expect(markerIdx).toBeGreaterThan(realInstallIdx);
+    // Indented fence content remained intact
+    expect(out).toContain("   ```markdown");
+    expect(out).toContain("   ## Install");
+    expect(out).toContain("   echo not real");
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(
