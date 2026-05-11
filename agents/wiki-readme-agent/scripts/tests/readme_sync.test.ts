@@ -69,6 +69,63 @@ describe("insertMarkers", () => {
     const out = insertMarkers(readme, "PLACEHOLDER");
     expect(out.indexOf(MARKER_START)).toBeGreaterThan(out.indexOf("## Overview"));
   });
+
+  it("ignores ## headings inside fenced code blocks", () => {
+    // The first `## Install` lives inside a fenced markdown sample and must
+    // be ignored — the marker should land after the REAL `## Install`
+    // heading, and the fenced code must remain intact.
+    const readme = [
+      "# Title",
+      "",
+      "## Overview",
+      "",
+      "Example markdown:",
+      "",
+      "```markdown",
+      "## Install",
+      "echo not real",
+      "```",
+      "",
+      "## Install",
+      "",
+      "Real install instructions.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // The fenced sample is intact (no MARKER_START between its fences)
+    const fenceStart = out.indexOf("```markdown");
+    const fenceEnd = out.indexOf("```", fenceStart + 1);
+    const insideFence = out.substring(fenceStart, fenceEnd);
+    expect(insideFence).not.toContain(MARKER_START);
+    // Marker is after the REAL install heading (the second `## Install`)
+    const realInstallIdx = out.lastIndexOf("## Install");
+    const markerIdx = out.indexOf(MARKER_START);
+    expect(markerIdx).toBeGreaterThan(realInstallIdx);
+  });
+
+  it("falls back to the first ## heading outside any fence", () => {
+    // No install heading at all; fenced `## Install` must NOT be selected.
+    const readme = [
+      "# Title",
+      "",
+      "```markdown",
+      "## Install",
+      "fake",
+      "```",
+      "",
+      "## Overview",
+      "",
+      "Text.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // Marker is after `## Overview`, not after the fake install in the fence
+    expect(out.indexOf(MARKER_START)).toBeGreaterThan(out.indexOf("## Overview"));
+    // Fenced sample intact
+    const fenceStart = out.indexOf("```markdown");
+    const fenceEnd = out.indexOf("```", fenceStart + 1);
+    expect(out.substring(fenceStart, fenceEnd)).not.toContain(MARKER_START);
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(

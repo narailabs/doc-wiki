@@ -85,34 +85,53 @@ export function replaceMarkerBlock(readme, newBlock) {
     const { before, after } = extractMarkerBlock(readme);
     return `${before}${MARKER_START}\n${newBlock}\n${MARKER_END}${after}`;
 }
+/**
+ * Walk the README line-by-line, tracking ``` fence state, and return the
+ * 0-based index of the first line that satisfies `predicate` while OUTSIDE
+ * any fenced code block. Returns -1 if no such line exists.
+ *
+ * Toggling on lines that begin with three (or more) backticks covers the
+ * common case. Doesn't handle ~~~ fences or 4-space indented code blocks —
+ * both rare in modern Markdown READMEs and out of scope for this heuristic.
+ */
+function findHeadingLineOutsideFence(readme, predicate) {
+    const lines = readme.split("\n");
+    let inFence = false;
+    for (let i = 0; i < lines.length; i++) {
+        // Loop bound guarantees the index is valid; cast suppresses
+        // noUncheckedIndexedAccess.
+        const line = lines[i];
+        if (/^```/.test(line)) {
+            inFence = !inFence;
+            continue;
+        }
+        if (inFence)
+            continue;
+        if (predicate(line))
+            return i;
+    }
+    return -1;
+}
 export function insertMarkers(readme, placeholder) {
-    let anchorIdx = -1;
-    let anchorLineEnd = -1;
+    // Try install-heading regexes in priority order, skipping fenced code.
+    let anchorLine = -1;
     for (const re of INSTALL_HEADINGS) {
-        const m = re.exec(readme);
-        if (m) {
-            anchorIdx = m.index;
-            anchorLineEnd = readme.indexOf("\n", anchorIdx);
-            if (anchorLineEnd < 0)
-                anchorLineEnd = readme.length;
+        anchorLine = findHeadingLineOutsideFence(readme, (line) => re.test(line));
+        if (anchorLine !== -1)
             break;
-        }
     }
-    if (anchorIdx === -1) {
-        // Fallback: first ## heading
-        const m = /^##\s+/m.exec(readme);
-        if (!m) {
-            // Last resort: append at the end
-            return `${readme}\n${MARKER_START}\n${placeholder}\n${MARKER_END}\n`;
-        }
-        anchorLineEnd = readme.indexOf("\n", m.index);
-        if (anchorLineEnd < 0)
-            anchorLineEnd = readme.length;
+    if (anchorLine === -1) {
+        // Fallback: first ## heading outside any fence.
+        anchorLine = findHeadingLineOutsideFence(readme, (line) => /^##\s+/.test(line));
     }
-    const insertion = `\n\n${MARKER_START}\n${placeholder}\n${MARKER_END}`;
-    return (readme.substring(0, anchorLineEnd) +
-        insertion +
-        readme.substring(anchorLineEnd));
+    if (anchorLine === -1) {
+        // Last resort: append at the end.
+        return `${readme}\n${MARKER_START}\n${placeholder}\n${MARKER_END}\n`;
+    }
+    const lines = readme.split("\n");
+    const before = lines.slice(0, anchorLine + 1).join("\n");
+    const after = lines.slice(anchorLine + 1).join("\n");
+    return `${before}\n\n${MARKER_START}\n${placeholder}\n${MARKER_END}${after.length > 0 ? "\n" + after : ""}`;
 }
 // ── CLI ─────────────────────────────────────────────────────────────
 const HELP_TEXT = `usage: readme_sync.js {extract,write,init} [...]
