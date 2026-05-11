@@ -91,8 +91,9 @@ export function replaceMarkerBlock(readme, newBlock) {
  * any fenced code block. Returns -1 if no such line exists.
  *
  * Toggling on lines that begin with three (or more) backticks covers the
- * common case. Doesn't handle ~~~ fences or 4-space indented code blocks —
- * both rare in modern Markdown READMEs and out of scope for this heuristic.
+ * common case. Handles both backtick and tilde fences. Doesn't handle
+ * 4-space indented code blocks — rare in modern Markdown READMEs and out
+ * of scope for this heuristic.
  *
  * Tracks fence delimiter LENGTH so a 4-backtick fence (commonly used to
  * show triple-backtick examples inside) is closed only by another fence
@@ -101,33 +102,43 @@ export function replaceMarkerBlock(readme, newBlock) {
  */
 function findHeadingLineOutsideFence(readme, predicate) {
     const lines = readme.split("\n");
-    // 0 = outside any fence; >=3 = inside a fence with that opening length.
+    // Fence state:
+    //   openFenceLen === 0  → outside any fence
+    //   openFenceLen >= 3   → inside a fence (openFenceChar is the delimiter char)
     // CommonMark rules applied:
     //   - Up to 3 leading spaces of indentation on the fence line.
-    //   - Opening fence: backticks followed by an optional info string (any text).
-    //   - Closing fence: same character, length >= opening, followed by ONLY
+    //   - Both backtick (`) and tilde (~) fences are recognised.
+    //   - Opening fence: 3+ identical chars followed by an optional info string.
+    //   - Closing fence: SAME character, length >= opening, followed by ONLY
     //     whitespace (an info string makes it content, not a closer).
     let openFenceLen = 0;
-    const FENCE_RE = /^ {0,3}(`{3,})(.*)$/;
+    let openFenceChar = "";
+    const FENCE_RE = /^ {0,3}((?:`{3,}|~{3,}))(.*)$/;
     for (let i = 0; i < lines.length; i++) {
         // Loop bound guarantees the index is valid; cast suppresses
         // noUncheckedIndexedAccess.
         const line = lines[i];
         const fenceMatch = line.match(FENCE_RE);
         if (fenceMatch) {
-            const len = fenceMatch[1].length;
+            const delim = fenceMatch[1];
+            const char = delim[0]; // '`' or '~'
+            const len = delim.length;
             const rest = fenceMatch[2] ?? "";
             if (openFenceLen === 0) {
                 // Opening fence — info string allowed.
+                openFenceChar = char;
                 openFenceLen = len;
                 continue;
             }
-            // Closing fence requires length >= opening AND whitespace-only after.
-            if (len >= openFenceLen && /^\s*$/.test(rest)) {
+            // Closing requires same char, length >= opening, whitespace-only rest.
+            if (char === openFenceChar &&
+                len >= openFenceLen &&
+                /^\s*$/.test(rest)) {
+                openFenceChar = "";
                 openFenceLen = 0;
                 continue;
             }
-            // Otherwise: shorter run, or non-whitespace after — content.
+            // Otherwise: different char, shorter run, or non-whitespace — content.
         }
         if (openFenceLen > 0)
             continue;

@@ -232,6 +232,38 @@ describe("insertMarkers", () => {
     // The fenced content survived intact (no markers spliced in)
     expect(out).toContain("```bash\n## Install\necho not real\n```");
   });
+
+  it("recognises tilde fences with the same open/close rules", () => {
+    // CommonMark accepts ~~~ fences alongside ```. A ~~~ fence containing
+    // `## Install` must not be selected as the anchor; a ``` line inside a
+    // ~~~ fence must NOT close the ~~~ fence (different character).
+    const readme = [
+      "# Title",
+      "",
+      "## Overview",
+      "",
+      "Tilde-fenced markdown example:",
+      "",
+      "~~~markdown",
+      "## Install",
+      "echo not real",
+      "```",       // ``` inside ~~~ is content, NOT a closer (different char)
+      "more content",
+      "~~~",       // real close (same char, only whitespace after)
+      "",
+      "## Install",
+      "",
+      "Real install instructions.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // Marker landed AFTER the real install heading
+    const realInstallIdx = out.lastIndexOf("## Install");
+    const markerIdx = out.indexOf(MARKER_START);
+    expect(markerIdx).toBeGreaterThan(realInstallIdx);
+    // Tilde-fence content survived intact
+    expect(out).toContain("~~~markdown\n## Install\necho not real\n```\nmore content\n~~~");
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(
