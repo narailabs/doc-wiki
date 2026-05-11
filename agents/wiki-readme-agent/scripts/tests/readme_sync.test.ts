@@ -126,6 +126,46 @@ describe("insertMarkers", () => {
     const fenceEnd = out.indexOf("```", fenceStart + 1);
     expect(out.substring(fenceStart, fenceEnd)).not.toContain(MARKER_START);
   });
+
+  it("respects fence length — 4-backtick fence is not closed by 3-backtick line", () => {
+    // Common pattern: a 4-backtick fence containing a 3-backtick example.
+    // The 3-backtick line is CONTENT, not a fence delimiter, so the
+    // outer fence stays open and the `## Install` inside it must NOT
+    // be selected as the anchor.
+    const readme = [
+      "# Title",
+      "",
+      "## Overview",
+      "",
+      "Outer code fence:",
+      "",
+      "````markdown",
+      "Here is how to write a fenced block:",
+      "```bash",
+      "echo hi",
+      "```",
+      "## Install  (this line is INSIDE the outer 4-backtick fence)",
+      "more content",
+      "````",
+      "",
+      "## Install",
+      "",
+      "Real install instructions.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // The outer 4-backtick fence stays intact (open ` ```` ` to close ` ```` `)
+    const outerStart = out.indexOf("````markdown");
+    const outerEnd = out.indexOf("````", outerStart + 4);
+    expect(outerStart).toBeGreaterThan(-1);
+    expect(outerEnd).toBeGreaterThan(outerStart);
+    // No marker landed inside the outer fence
+    expect(out.substring(outerStart, outerEnd)).not.toContain(MARKER_START);
+    // Marker landed AFTER the real install heading (the second one)
+    const realInstallIdx = out.lastIndexOf("## Install");
+    const markerIdx = out.indexOf(MARKER_START);
+    expect(markerIdx).toBeGreaterThan(realInstallIdx);
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(

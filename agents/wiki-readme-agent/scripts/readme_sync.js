@@ -93,19 +93,34 @@ export function replaceMarkerBlock(readme, newBlock) {
  * Toggling on lines that begin with three (or more) backticks covers the
  * common case. Doesn't handle ~~~ fences or 4-space indented code blocks —
  * both rare in modern Markdown READMEs and out of scope for this heuristic.
+ *
+ * Tracks fence delimiter LENGTH so a 4-backtick fence (commonly used to
+ * show triple-backtick examples inside) is closed only by another fence
+ * of >=4 backticks — not by a 3-backtick content line. Per CommonMark,
+ * the closing fence must be at least as long as the opening one.
  */
 function findHeadingLineOutsideFence(readme, predicate) {
     const lines = readme.split("\n");
-    let inFence = false;
+    // 0 = outside any fence; >=3 = inside a fence with that opening length.
+    let openFenceLen = 0;
     for (let i = 0; i < lines.length; i++) {
         // Loop bound guarantees the index is valid; cast suppresses
         // noUncheckedIndexedAccess.
         const line = lines[i];
-        if (/^```/.test(line)) {
-            inFence = !inFence;
-            continue;
+        const fenceMatch = line.match(/^(`{3,})/);
+        if (fenceMatch) {
+            const len = fenceMatch[1].length;
+            if (openFenceLen === 0) {
+                openFenceLen = len; // opening a new fence
+                continue;
+            }
+            if (len >= openFenceLen) {
+                openFenceLen = 0; // closing the current fence
+                continue;
+            }
+            // Shorter backtick run inside a longer fence — content, not a delimiter.
         }
-        if (inFence)
+        if (openFenceLen > 0)
             continue;
         if (predicate(line))
             return i;
