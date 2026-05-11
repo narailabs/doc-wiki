@@ -187,7 +187,16 @@ export function parseConfig(configPath: string): WikiConfig {
   }
 
   // --- Apply ecosystem defaults ---
-  if (!("ecosystem" in config) || !isPlainObject(config["ecosystem"])) {
+  // Same fail-fast policy as `ecosystem.readme`: if the user wrote a
+  // non-object `ecosystem` value (e.g. `ecosystem: false`), reject rather
+  // than silently coercing — the value drives root-file behavior so silent
+  // coercion can produce unintended writes.
+  if ("ecosystem" in config && !isPlainObject(config["ecosystem"])) {
+    throw new Error(
+      `invalid ecosystem: ${JSON.stringify(config["ecosystem"])} (expected an object; omit the key entirely or use \`ecosystem: {}\` for an empty block)`,
+    );
+  }
+  if (!("ecosystem" in config)) {
     config["ecosystem"] = {};
   }
   const ecosystem = config["ecosystem"] as Record<string, unknown>;

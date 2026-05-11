@@ -246,4 +246,13 @@ describe("ecosystem.readme", () => {
     expect(() => parseConfig(p)).toThrow(/invalid ecosystem.readme/);
     expect(() => parseConfig(p)).toThrow(/ecosystem.readme.enabled: false/);
   });
+
+  it("rejects scalar top-level ecosystem value with a helpful error", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: false,
+    });
+    expect(() => parseConfig(p)).toThrow(/invalid ecosystem/);
+    expect(() => parseConfig(p)).toThrow(/expected an object/);
+  });
 });
