@@ -102,10 +102,13 @@ export function replaceMarkerBlock(readme, newBlock) {
 function findHeadingLineOutsideFence(readme, predicate) {
     const lines = readme.split("\n");
     // 0 = outside any fence; >=3 = inside a fence with that opening length.
-    // CommonMark allows up to 3 leading spaces of indentation on both the
-    // opening and closing fence delimiters.
+    // CommonMark rules applied:
+    //   - Up to 3 leading spaces of indentation on the fence line.
+    //   - Opening fence: backticks followed by an optional info string (any text).
+    //   - Closing fence: same character, length >= opening, followed by ONLY
+    //     whitespace (an info string makes it content, not a closer).
     let openFenceLen = 0;
-    const FENCE_RE = /^ {0,3}(`{3,})/;
+    const FENCE_RE = /^ {0,3}(`{3,})(.*)$/;
     for (let i = 0; i < lines.length; i++) {
         // Loop bound guarantees the index is valid; cast suppresses
         // noUncheckedIndexedAccess.
@@ -113,15 +116,18 @@ function findHeadingLineOutsideFence(readme, predicate) {
         const fenceMatch = line.match(FENCE_RE);
         if (fenceMatch) {
             const len = fenceMatch[1].length;
+            const rest = fenceMatch[2] ?? "";
             if (openFenceLen === 0) {
-                openFenceLen = len; // opening a new fence
+                // Opening fence — info string allowed.
+                openFenceLen = len;
                 continue;
             }
-            if (len >= openFenceLen) {
-                openFenceLen = 0; // closing the current fence
+            // Closing fence requires length >= opening AND whitespace-only after.
+            if (len >= openFenceLen && /^\s*$/.test(rest)) {
+                openFenceLen = 0;
                 continue;
             }
-            // Shorter backtick run inside a longer fence — content, not a delimiter.
+            // Otherwise: shorter run, or non-whitespace after — content.
         }
         if (openFenceLen > 0)
             continue;

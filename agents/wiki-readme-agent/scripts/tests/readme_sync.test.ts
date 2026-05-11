@@ -198,6 +198,40 @@ describe("insertMarkers", () => {
     expect(out).toContain("   ## Install");
     expect(out).toContain("   echo not real");
   });
+
+  it("treats `` ```bash `` (info-string line) inside a fence as content, not a closer", () => {
+    // Per CommonMark, a closing fence requires only-whitespace after the
+    // backticks. A line like ```bash inside an open fence is an
+    // (illegal-but-common) info-string line — it must NOT close the
+    // surrounding fence, otherwise subsequent `## Install` becomes a
+    // false anchor.
+    const readme = [
+      "# Title",
+      "",
+      "## Overview",
+      "",
+      "Example showing a code block:",
+      "",
+      "```",
+      "echo before",
+      "```bash",  // info string after backticks → NOT a closer
+      "## Install",
+      "echo not real",
+      "```",      // real close (only whitespace after)
+      "",
+      "## Install",
+      "",
+      "Real install instructions.",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // Marker landed AFTER the real install heading
+    const realInstallIdx = out.lastIndexOf("## Install");
+    const markerIdx = out.indexOf(MARKER_START);
+    expect(markerIdx).toBeGreaterThan(realInstallIdx);
+    // The fenced content survived intact (no markers spliced in)
+    expect(out).toContain("```bash\n## Install\necho not real\n```");
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(
