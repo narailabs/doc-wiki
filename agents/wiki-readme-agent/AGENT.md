@@ -141,7 +141,12 @@ Same shape as `sync` success, with `action: "check"` and `written` omitted.
    - `standard`: install + first command + 2-3 follow-up bullets + 1 docs link (≈15 lines).
    - `generous`: numbered walkthrough mirroring `wiki/getting-started.md` TL;DR + steps 1-4, with code blocks (≈30 lines).
 
-   **CRITICAL — link target rule.** Any "deeper docs" / "full walkthrough" link in the generated block MUST point to a file that is committed to the repo (not gitignored). Resolve in this priority order: (a) `docs/getting-started.md` if present, (b) `docs/<wiki-folder>/getting-started.md` if committed (the wiki tree is gitignored by default — verify with `git check-ignore` before linking), (c) the project's `README.md` itself with no follow-up link if neither exists. Never link to `wiki/getting-started.md` or `<wiki_root>/wiki/getting-started.md` — those paths are wiki-internal and gitignored, so a fresh clone or GitHub view sees a dead link.
+   **CRITICAL — link target rule.** Any "deeper docs" / "full walkthrough" link in the generated block MUST point to a file that is **tracked by git** (committed to the repo). Resolve in this priority order:
+   1. `docs/getting-started.md` if present AND tracked.
+   2. `docs/<wiki-folder>/getting-started.md` if tracked (the wiki tree is gitignored by default; an existing local file does NOT prove it's tracked).
+   3. The project's `README.md` itself, with no follow-up link, if neither (1) nor (2) is tracked.
+
+   **Verify tracked status with `git ls-files --error-unmatch <path>` (exit 0 → tracked).** Do NOT use `git check-ignore` — it only reports gitignore matches and silently passes for untracked-but-unignored files, so a fresh clone or GitHub view would see a dead link. Never link to `wiki/getting-started.md` or `<wiki_root>/wiki/getting-started.md` — those paths are wiki-internal and gitignored.
 10. Splice salvaged paragraphs into the appropriate template slot (or append as `> **Notes**` at the end if no slot fits).
 11. For `sync`: write the new block via `node agents/wiki-readme-agent/scripts/readme_sync.js write --readme <project_root>/README.md --block-file <tmp>`.
 12. For `check`: skip step 11.
