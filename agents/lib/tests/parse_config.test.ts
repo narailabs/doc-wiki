@@ -132,3 +132,127 @@ describe("TestParseConfig", () => {
     expect(() => parseConfig(p)).toThrow(/[Mm]ode|autonomy/);
   });
 });
+
+describe("ecosystem.readme", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("parse-cfg-readme-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("defaults when absent", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      autonomy: { mode: "balanced" },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: {
+        readme: {
+          enabled: boolean;
+          quickstart_depth: string;
+          salvage_mode: string;
+          insert_markers_on_init: boolean;
+        };
+      };
+    };
+    expect(cfg.ecosystem.readme).toEqual({
+      enabled: true,
+      quickstart_depth: "generous",
+      salvage_mode: "balanced",
+      insert_markers_on_init: true,
+    });
+  });
+
+  it("auto autonomy mode maps salvage_mode to autonomous", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      autonomy: { mode: "auto" },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { salvage_mode: string } } };
+    expect(cfg.ecosystem.readme.salvage_mode).toBe("autonomous");
+  });
+
+  it("respects enabled: false", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { enabled: false } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { enabled: boolean } } };
+    expect(cfg.ecosystem.readme.enabled).toBe(false);
+  });
+
+  it("respects quickstart_depth: minimal", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { quickstart_depth: "minimal" } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { readme: { quickstart_depth: string } } };
+    expect(cfg.ecosystem.readme.quickstart_depth).toBe("minimal");
+  });
+
+  it("rejects invalid quickstart_depth", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { quickstart_depth: "medium" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/quickstart_depth/);
+  });
+
+  it("rejects invalid salvage_mode", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { readme: { salvage_mode: "yolo" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/salvage_mode/);
+  });
+
+  it("rejects non-boolean enabled", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { enabled: "true" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/enabled/);
+  });
+
+  it("rejects non-boolean insert_markers_on_init", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { insert_markers_on_init: 1 } },
+    });
+    expect(() => parseConfig(p)).toThrow(/insert_markers_on_init/);
+  });
+
+  it("preserves unknown fields in ecosystem.readme", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: { custom_future_field: "hello" } },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: { readme: Record<string, unknown> };
+    };
+    expect(cfg.ecosystem.readme.custom_future_field).toBe("hello");
+    expect(cfg.ecosystem.readme.enabled).toBe(true);
+  });
+
+  it("rejects scalar ecosystem.readme value with a helpful error", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { readme: false },
+    });
+    expect(() => parseConfig(p)).toThrow(/invalid ecosystem.readme/);
+    expect(() => parseConfig(p)).toThrow(/ecosystem.readme.enabled: false/);
+  });
+
+  it("rejects scalar top-level ecosystem value with a helpful error", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: false,
+    });
+    expect(() => parseConfig(p)).toThrow(/invalid ecosystem/);
+    expect(() => parseConfig(p)).toThrow(/expected an object/);
+  });
+});

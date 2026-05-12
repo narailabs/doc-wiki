@@ -147,6 +147,21 @@ Present the four autonomy modes and ask user to choose:
 
 Default: `balanced`.
 
+**Phase 6a — README quickstart preference:**
+
+Ask the user via `AskUserQuestion`:
+
+> "Do you want doc-wiki to maintain a quickstart block in your README.md? It'll be auto-generated from `wiki/getting-started.md` on every `/doc-wiki:atlas` run, with hand-edits salvaged via LLM merge. You can change this later in `wiki.config.yaml`."
+
+| Choice | Effect on `wiki.config.yaml` |
+|---|---|
+| `Yes — generous (~30 lines)` | `ecosystem.readme.{enabled: true, quickstart_depth: generous, insert_markers_on_init: true}` |
+| `Yes — standard (~15 lines)` | `ecosystem.readme.{enabled: true, quickstart_depth: standard, insert_markers_on_init: true}` |
+| `Yes — minimal (~5 lines)` | `ecosystem.readme.{enabled: true, quickstart_depth: minimal, insert_markers_on_init: true}` |
+| `No, skip` | `ecosystem.readme.enabled: false` |
+
+If the user picked any "Yes", dispatch `Agent(wiki-readme-agent)` with `{action: "init", project_root, wiki_root, quickstart_depth}` to insert markers into `README.md` if it exists and has none.
+
 **Phase 6 — Install hooks + scaffold:**
 
 1. Offer to install PreToolUse always-on hooks for the detected platform
@@ -263,7 +278,15 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - **Gap report**: `node {skill_path}/scripts/atlas_orchestrator.js gap-report --wiki-root <root> --plan '<json>' --run-id <id> --gitlog '<json>'` writes `wiki/outputs/atlas/<run-id>/gap-report.md` enumerating topics-without-pages, facets-without-coverage, source-files-with-no-page, gitlog-uncovered-files, external-services-without-documentation, and (when the Phase 1b inventory manifest is present at the canonical path) REST-endpoints-without-documentation + code-clients-without-documentation. Always emitted; non-empty sections are actionable items for a follow-up `--scope` ingest.
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
-   - **Refresh the root-file Reference appendix** — dispatch `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [...]}` where `targets` lists every AI-tool root file present in the repo (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md`). The agent regenerates the `<!-- wiki-managed: reference start/end -->` block on each present file and refreshes `docs/<wiki-folder>/ai-dev/<tool>-config.md` for each detected tool. See the **Root-file Reference Appendix** section above for the canonical structure. This step MUST run after crosslink + tag-harmonize so the appendix reflects the final wiki state.
+   - **Dispatch root-file agents in parallel** (after crosslink + tag-harmonize so root-file content reflects the final wiki state):
+     - `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [<all present AI-tool root files>]}` — gated on `ecosystem.claude_md.enabled` (default `true`). Targets: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md` (only those that exist on disk).
+     - `Agent(wiki-readme-agent)` with `{action: "sync", project_root: <repo-root>, wiki_root: <root>}` — gated on `ecosystem.readme.enabled` (default `true`).
+     - The two agents touch disjoint files; parallel dispatch is safe.
+     - Per-agent failures are logged to the drift report and do not halt Phase 8 (matches the existing per-step error-isolation policy).
+     - Under `--dry-run`, both dispatches use `action: "check"` instead of `update`/`sync` — no writes happen but the drift report is still produced.
+   - **Format the agent responses into the drift report.** The orchestrator takes the JSON returned by each agent dispatch and appends two sections to `outputs/atlas/<run-id>/drift-report.md`:
+     - `## Root-file appendix sync (wiki-claude-md-agent)` — one row per target with status (`updated` / `skipped` / `error: <error_code>`).
+     - `## README sync (wiki-readme-agent)` — drift summary table from `salvaged_paragraphs[]` with columns `Disposition | Paragraph | Action`, plus a one-line salvage summary (`N paragraphs kept, M reworded, K dropped`).
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
    - Clear the checkpoint via `clearCheckpoint(wikiRoot, "atlas")`.
    - Write `wiki/outputs/atlas/<run-id>/cost-report.md` with the planned breakdown from `estimate-cost` plus actual costs from this run's events.
@@ -638,6 +661,15 @@ Scores each page 0.0-1.0 based on word count, frontmatter completeness, link den
 ## Sub-agent dispatch
 
 `/doc-wiki:ingest` step 7 dispatches via `narai-primitives`'s `gather()` — one library call plans and spawns the bundled connector CLIs in parallel. There are no per-service wrapper scripts or subagents in doc-wiki; the legacy `wiki-<svc>-agent` folders were removed because they only duplicated the hub's CLI resolution and the `mermaid_augment.ts` decoration. Add a new builtin connector by adding an entry to `BUILTIN_PATTERNS` in `source_registry.ts`. Add an out-of-tree connector via `wiki.config.yaml`'s `ecosystem.agents.custom` block.
+
+The wiki-specific derivation agents (dispatched directly via the Agent tool, not through `gather()`) are:
+
+| Agent | Purpose |
+|---|---|
+| `wiki-claude-md-agent` | Regenerate the `<!-- wiki-managed: reference start/end -->` block in AI-tool root files (`CLAUDE.md`, `AGENTS.md`, etc.) and refresh per-tool config files under `docs/<wiki-folder>/ai-dev/`; dispatched by atlas Phase 8. |
+| `wiki-readme-agent` | Sync repo-root `README.md` quickstart marker block against `wiki/getting-started.md` with LLM salvage; dispatched by atlas Phase 8. |
+| `wiki-mermaid-agent` | Generate Mermaid architecture diagrams for wiki pages. |
+| `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:onboard` and atlas Phase 6. |
 
 ## Reference files
 

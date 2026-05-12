@@ -22,6 +22,17 @@ const VALID_AUTONOMY_MODES: ReadonlySet<string> = new Set([
   "auto",
 ]);
 
+const VALID_QUICKSTART_DEPTHS: ReadonlySet<string> = new Set([
+  "minimal",
+  "standard",
+  "generous",
+]);
+const VALID_SALVAGE_MODES: ReadonlySet<string> = new Set([
+  "conservative",
+  "balanced",
+  "autonomous",
+]);
+
 const DEFAULTS = {
   wiki: {
     domain: "general",
@@ -42,6 +53,59 @@ export class ConfigFileNotFoundError extends Error {
     super(message);
     this.name = "ConfigFileNotFoundError";
   }
+}
+
+function applyReadmeDefaults(
+  ecosystem: Record<string, unknown>,
+  autonomyMode: string,
+): void {
+  // Fail fast on malformed config — `ecosystem.readme: false` (intending to
+  // disable) is a common YAML shorthand that would silently turn into
+  // `enabled: true` after defaults applied. Force the user to write the
+  // explicit `enabled: false` form instead.
+  if (ecosystem["readme"] !== undefined && !isPlainObject(ecosystem["readme"])) {
+    throw new Error(
+      `invalid ecosystem.readme: ${JSON.stringify(ecosystem["readme"])} (expected an object; to disable the agent use \`ecosystem.readme.enabled: false\`)`,
+    );
+  }
+  const raw = (ecosystem["readme"] as Record<string, unknown> | undefined) ?? {};
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+    throw new Error(
+      `invalid ecosystem.readme.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`,
+    );
+  }
+  if (
+    raw.insert_markers_on_init !== undefined &&
+    typeof raw.insert_markers_on_init !== "boolean"
+  ) {
+    throw new Error(
+      `invalid ecosystem.readme.insert_markers_on_init: ${JSON.stringify(raw.insert_markers_on_init)} (expected true or false)`,
+    );
+  }
+  if (
+    raw.quickstart_depth !== undefined &&
+    !VALID_QUICKSTART_DEPTHS.has(String(raw.quickstart_depth))
+  ) {
+    throw new Error(
+      `invalid ecosystem.readme.quickstart_depth: ${raw.quickstart_depth} (expected one of: ${[...VALID_QUICKSTART_DEPTHS].join(", ")})`,
+    );
+  }
+  if (
+    raw.salvage_mode !== undefined &&
+    !VALID_SALVAGE_MODES.has(String(raw.salvage_mode))
+  ) {
+    throw new Error(
+      `invalid ecosystem.readme.salvage_mode: ${raw.salvage_mode} (expected one of: ${[...VALID_SALVAGE_MODES].join(", ")})`,
+    );
+  }
+  const inheritedSalvage = autonomyMode === "auto" ? "autonomous" : autonomyMode;
+  ecosystem.readme = {
+    ...raw,
+    enabled: raw.enabled ?? true,
+    quickstart_depth: raw.quickstart_depth ?? "generous",
+    salvage_mode: raw.salvage_mode ?? inheritedSalvage,
+    insert_markers_on_init: raw.insert_markers_on_init ?? true,
+  };
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -121,6 +185,22 @@ export function parseConfig(configPath: string): WikiConfig {
       `Invalid autonomy mode '${mode}'. Valid modes: ${sorted}`,
     );
   }
+
+  // --- Apply ecosystem defaults ---
+  // Same fail-fast policy as `ecosystem.readme`: if the user wrote a
+  // non-object `ecosystem` value (e.g. `ecosystem: false`), reject rather
+  // than silently coercing — the value drives root-file behavior so silent
+  // coercion can produce unintended writes.
+  if ("ecosystem" in config && !isPlainObject(config["ecosystem"])) {
+    throw new Error(
+      `invalid ecosystem: ${JSON.stringify(config["ecosystem"])} (expected an object; omit the key entirely or use \`ecosystem: {}\` for an empty block)`,
+    );
+  }
+  if (!("ecosystem" in config)) {
+    config["ecosystem"] = {};
+  }
+  const ecosystem = config["ecosystem"] as Record<string, unknown>;
+  applyReadmeDefaults(ecosystem, mode);
 
   return config;
 }

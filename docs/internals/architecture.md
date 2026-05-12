@@ -50,7 +50,7 @@ flowchart TB
     end
     subgraph L3["Layer 3: Execution"]
         Scripts["TypeScript scripts<br/>(skills/doc-wiki/scripts/)<br/>cache · lint · graph · extract · index"]
-        Agents["Sub-agents<br/>(agents/)<br/>orm · mermaid · claude-md"]
+        Agents["Sub-agents<br/>(agents/)<br/>orm · mermaid · claude-md · readme"]
         Libs["Shared libraries<br/>(agents/lib/)<br/>wiki_db · wiki_orm · mermaid_augment"]
         Gather["gather() from narai-primitives<br/>(planner + parallel dispatcher)"]
         Connectors["7 connectors<br/>db · github · jira · confluence<br/>notion · aws · gcp"]
@@ -152,7 +152,7 @@ Every script has matching `*.test.ts` cases under `tests/`. Tests double as the 
 
 ### 3b. Agents
 
-Three sub-agents live under [`agents/`](../../agents/). Each has its own `AGENT.md` specification.
+Four sub-agents live under [`agents/`](../../agents/). Each has its own `AGENT.md` specification.
 
 #### `wiki-orm-agent`
 
@@ -178,6 +178,14 @@ Three sub-agents live under [`agents/`](../../agents/). Each has its own `AGENT.
 - **Tools:** Bash, Read, Write.
 - **Operations:** `generate` (full creation) and `update` (managed-section refresh only).
 - **Submodule handling:** Auto-discovers directories with their own `CLAUDE.md`, links them back to root.
+
+#### `wiki-readme-agent`
+
+- **Path:** [`agents/wiki-readme-agent/`](../../agents/wiki-readme-agent/)
+- **Purpose:** Repo-root `README.md` maintainer. Reads `wiki/getting-started.md` and the `<!-- wiki-managed: quickstart start/end -->` block of `README.md`, then runs an LLM-driven paragraph-level salvage to produce a fresh quickstart block at the configured depth (`minimal` / `standard` / `generous` from `ecosystem.readme.quickstart_depth`).
+- **Tools:** Bash, Read, Write.
+- **Dispatch:** Atlas Phase 8 dispatches this agent in parallel with `wiki-claude-md-agent`.
+- **Contract:** See [`agents/wiki-readme-agent/AGENT.md`](../../agents/wiki-readme-agent/AGENT.md) for the full spec.
 
 ### 3c. Shared libraries
 

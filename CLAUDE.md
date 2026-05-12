@@ -69,13 +69,14 @@ Deterministic operations: scaffolding, parsing, graph ops, lint, multimodal extr
 | `_optional.ts` | `importOptional()` and `isBinaryOnPath()` helpers for graceful degradation when an optional npm dep or external CLI is missing |
 | `_wiki_fs.ts` | Shared recursive `*.md` walker rooted at `<wikiRoot>/wiki/`, sorted lexicographically |
 
-### Agents (3) — `agents/`
+### Agents (4) — `agents/`
 
 External-source fetching is handled by the connectors bundled inside `narai-primitives`, dispatched through its `gather()` planner — there are no per-service subagents in doc-wiki. The remaining agents do wiki-specific derivation that has nothing to do with the connector workspace:
 
 | Agent | Purpose |
 |-------|---------|
 | `wiki-claude-md-agent` | Generate project `CLAUDE.md` from wiki pages |
+| `wiki-readme-agent` | Sync repo-root `README.md` quickstart block against `wiki/getting-started.md`; dispatched alongside `wiki-claude-md-agent` in atlas Phase 8 |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams |
 | `wiki-orm-agent` | ORM model detection and entity-to-table mapping (uses `wiki_db` to cross-validate schemas) |
 
@@ -180,3 +181,34 @@ Load-bearing invariants implementers must respect:
 - **Credential resolution uses the `narai-primitives/credentials` subpath.** Import `resolveSecret`, `registerProvider`, and provider classes from `narai-primitives/credentials` (absorbed into the bundle in v2.1). Connectors load their own credentials inside the connector process — doc-wiki does not pass credentials into `gather()`.
 - **ORM profile patterns are validated at load time.** `loadProfile` compiles every regex-valued pattern; a bad pattern throws `ProfileValueError` with the file path and offending pattern.
 - **Source-to-connector matching is data-driven.** `lookupBySource()` from `agents/lib/source_registry.ts` reads a static `BUILTIN_PATTERNS` list (one entry per connector bundled in `narai-primitives`). Custom patterns load via `ecosystem.agents.custom` in `wiki.config.yaml` — no code changes needed to add a new connector mapping. `lookupBySource` never dispatches a connector; it only classifies sources for `how_to_go_deeper.ts`.
+
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+- [`README.md`](README.md) — repo entry point + quickstart
+- [`docs/README.md`](docs/README.md) — public-facing documentation index
+- [`docs/getting-started.md`](docs/getting-started.md) — first-run walkthrough
+- [`docs/internals/architecture.md`](docs/internals/architecture.md) — full architecture overview
+
+### Coding agent configuration registry
+
+Per-tool configuration lives at the repo root in this very file family:
+
+| Tool | Config file |
+|---|---|
+| Claude Code | [`CLAUDE.md`](CLAUDE.md) |
+| Codex / OpenAI agents | [`AGENTS.md`](AGENTS.md) |
+| Gemini | [`GEMINI.md`](GEMINI.md) |
+| Cursor | [`.cursor/rules/doc-wiki.mdc`](.cursor/rules/doc-wiki.mdc) |
+| Aider | [`.aider/conventions.md`](.aider/conventions.md) |
+
+### Other references
+
+- [`docs/atlas.md`](docs/atlas.md) — `/doc-wiki:atlas` reference
+- [`docs/commands.md`](docs/commands.md) — every `/doc-wiki:*` slash command
+- [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` schema
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom → cause → fix
+- [`docs/connectors.md`](docs/connectors.md) — connector setup
+<!-- wiki-managed: reference end -->

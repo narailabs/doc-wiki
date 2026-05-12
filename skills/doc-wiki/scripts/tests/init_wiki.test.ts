@@ -361,7 +361,7 @@ describe("init_wiki — v2 config blocks", () => {
     ) as Record<string, any>;
   }
 
-  it("emits the ecosystem block with agents/credentials/database/orm/claude_md/mermaid", () => {
+  it("emits the ecosystem block with agents/credentials/database/orm/claude_md/readme/mermaid", () => {
     const wiki = tmpWiki(tmpPath);
     runInit(wiki);
     const cfg = loadCfg(wiki);
@@ -469,6 +469,44 @@ describe("init_wiki — v2 config blocks", () => {
     expect(cfg.credentials.provider).toBe("keychain");
     expect(cfg.credentials.fallback).toEqual(["env_var"]);
     expect(cfg.credentials.prefix).toBe("WIKI_");
+  });
+});
+
+// ── ecosystem.readme defaults ────────────────────────────────────────
+
+describe("init_wiki — ecosystem.readme defaults", () => {
+  let tmpPath: string;
+  beforeEach(() => {
+    tmpPath = makeTmpPath("init-wiki-readme-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function loadCfg(wiki: string): Record<string, any> {
+    return yaml.load(
+      fs.readFileSync(path.join(wiki, "wiki.config.yaml"), "utf-8"),
+    ) as Record<string, any>;
+  }
+
+  it("includes the readme block with documented defaults", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+    // salvage_mode is intentionally not seeded — it inherits from
+    // autonomy.mode at parse time (applyReadmeDefaults).
+    expect(cfg.ecosystem.readme).toEqual({
+      enabled: true,
+      quickstart_depth: "generous",
+      insert_markers_on_init: true,
+    });
+  });
+
+  it("omits salvage_mode so it inherits from autonomy.mode dynamically", () => {
+    const wiki = tmpWiki(tmpPath);
+    runInit(wiki);
+    const cfg = loadCfg(wiki);
+    expect(cfg.ecosystem.readme).not.toHaveProperty("salvage_mode");
   });
 });
 

@@ -131,6 +131,7 @@ Sub-agents live at `agents/`. External-source fetching is handled by the connect
 | `wiki-orm-agent` | ORM profile detection |
 | `wiki-mermaid-agent` | Mermaid diagram generation |
 | `wiki-claude-md-agent` | CLAUDE.md maintenance |
+| `wiki-readme-agent` | Sync repo-root `README.md` quickstart block against `wiki/getting-started.md`; dispatched alongside `wiki-claude-md-agent` in atlas Phase 8 |
 
 ## Post-Operation Hooks
 
@@ -150,3 +151,34 @@ Install dependencies and build first (Node 20 required):
 npm install
 npm run build
 ```
+
+<!-- wiki-managed: reference start -->
+## Reference
+
+### Documentation index
+
+- [`README.md`](README.md) — repo entry point + quickstart
+- [`docs/README.md`](docs/README.md) — public-facing documentation index
+- [`docs/getting-started.md`](docs/getting-started.md) — first-run walkthrough
+- [`docs/internals/architecture.md`](docs/internals/architecture.md) — full architecture overview
+
+### Coding agent configuration registry
+
+Per-tool configuration lives at the repo root in this very file family:
+
+| Tool | Config file |
+|---|---|
+| Claude Code | [`CLAUDE.md`](CLAUDE.md) |
+| Codex / OpenAI agents | [`AGENTS.md`](AGENTS.md) |
+| Gemini | [`GEMINI.md`](GEMINI.md) |
+| Cursor | [`.cursor/rules/doc-wiki.mdc`](.cursor/rules/doc-wiki.mdc) |
+| Aider | [`.aider/conventions.md`](.aider/conventions.md) |
+
+### Other references
+
+- [`docs/atlas.md`](docs/atlas.md) — `/doc-wiki:atlas` reference
+- [`docs/commands.md`](docs/commands.md) — every `/doc-wiki:*` slash command
+- [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` schema
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — symptom → cause → fix
+- [`docs/connectors.md`](docs/connectors.md) — connector setup
+<!-- wiki-managed: reference end -->
