@@ -264,6 +264,24 @@ describe("insertMarkers", () => {
     // Tilde-fence content survived intact
     expect(out).toContain("~~~markdown\n## Install\necho not real\n```\nmore content\n~~~");
   });
+
+  it("recognises install headings indented up to 3 spaces (CommonMark)", () => {
+    // CommonMark allows up to 3 leading spaces before ATX headings.
+    const readme = [
+      "# Title",
+      "",
+      "   ## Install", // 3-space indent — still a valid heading per CommonMark
+      "",
+      "Run npm install.",
+      "",
+      "## Usage",
+      "",
+    ].join("\n");
+    const out = insertMarkers(readme, "PLACEHOLDER");
+    // Marker landed after the indented install heading, not appended at EOF
+    expect(out).toContain(`   ## Install\n\n${MARKER_START}\nPLACEHOLDER\n${MARKER_END}`);
+    expect(out).toContain("## Usage");
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(

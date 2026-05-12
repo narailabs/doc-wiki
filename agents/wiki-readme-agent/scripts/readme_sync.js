@@ -20,12 +20,13 @@ import { parseFlags as parseSharedFlags } from "../../../skills/doc-wiki/scripts
 // ── Constants ───────────────────────────────────────────────────────
 export const MARKER_START = "<!-- wiki-managed: quickstart start -->";
 export const MARKER_END = "<!-- wiki-managed: quickstart end -->";
+// CommonMark allows up to 3 leading spaces before ATX headings.
 const INSTALL_HEADINGS = [
-    /^##\s+install\s*$/im,
-    /^##\s+installation\s*$/im,
-    /^##\s+setup\s*$/im,
-    /^##\s+get\s+started\s*$/im,
-    /^##\s+getting\s+started\s*$/im,
+    /^ {0,3}##\s+install\s*$/im,
+    /^ {0,3}##\s+installation\s*$/im,
+    /^ {0,3}##\s+setup\s*$/im,
+    /^ {0,3}##\s+get\s+started\s*$/im,
+    /^ {0,3}##\s+getting\s+started\s*$/im,
 ];
 // ── Errors ──────────────────────────────────────────────────────────
 export class MarkersMissingError extends Error {
@@ -156,8 +157,9 @@ export function insertMarkers(readme, placeholder) {
             break;
     }
     if (anchorLine === -1) {
-        // Fallback: first ## heading outside any fence.
-        anchorLine = findHeadingLineOutsideFence(readme, (line) => /^##\s+/.test(line));
+        // Fallback: first ## heading outside any fence (CommonMark allows up to
+        // 3 leading spaces of indentation on ATX headings).
+        anchorLine = findHeadingLineOutsideFence(readme, (line) => /^ {0,3}##\s+/.test(line));
     }
     if (anchorLine === -1) {
         // Last resort: append at the end.
