@@ -282,6 +282,37 @@ describe("insertMarkers", () => {
     expect(out).toContain(`   ## Install\n\n${MARKER_START}\nPLACEHOLDER\n${MARKER_END}`);
     expect(out).toContain("## Usage");
   });
+
+  it("recognises install headings with trailing qualifiers", () => {
+    // Common variants: parenthetical qualifier, em-dash subtitle, ATX closing ##.
+    const cases = [
+      "## Installation (npm)",
+      "## Install ##",
+      "## Getting Started — Docker",
+      "## Setup: prerequisites",
+    ];
+    for (const heading of cases) {
+      const readme = [
+        "# Title",
+        "",
+        "## Features",
+        "",
+        "Feature description.",
+        "",
+        heading,
+        "",
+        "Run npm install.",
+        "",
+      ].join("\n");
+      const out = insertMarkers(readme, "PLACEHOLDER");
+      // Marker must land AFTER the install variant, not after `## Features`
+      const featuresIdx = out.indexOf("## Features");
+      const installIdx = out.indexOf(heading);
+      const markerIdx = out.indexOf(MARKER_START);
+      expect(markerIdx).toBeGreaterThan(installIdx);
+      expect(markerIdx).toBeGreaterThan(featuresIdx);
+    }
+  });
 });
 
 const SCRIPTS_DIR = path.resolve(

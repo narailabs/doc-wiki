@@ -23,13 +23,17 @@ import { parseFlags as parseSharedFlags } from "../../../skills/doc-wiki/scripts
 export const MARKER_START = "<!-- wiki-managed: quickstart start -->";
 export const MARKER_END = "<!-- wiki-managed: quickstart end -->";
 
-// CommonMark allows up to 3 leading spaces before ATX headings.
+// CommonMark allows up to 3 leading spaces before ATX headings, and
+// permits trailing content after the heading word: optional qualifiers
+// (`## Installation (npm)`), an em-dash subtitle (`## Getting Started — Docker`),
+// or the ATX closing `##` sequence (`## Install ##`). Match by keyword
+// prefix with a word boundary so all of those resolve.
 const INSTALL_HEADINGS = [
-  /^ {0,3}##\s+install\s*$/im,
-  /^ {0,3}##\s+installation\s*$/im,
-  /^ {0,3}##\s+setup\s*$/im,
-  /^ {0,3}##\s+get\s+started\s*$/im,
-  /^ {0,3}##\s+getting\s+started\s*$/im,
+  /^ {0,3}##\s+install\b/im,
+  /^ {0,3}##\s+installation\b/im,
+  /^ {0,3}##\s+setup\b/im,
+  /^ {0,3}##\s+get\s+started\b/im,
+  /^ {0,3}##\s+getting\s+started\b/im,
 ];
 
 // ── Errors ──────────────────────────────────────────────────────────
