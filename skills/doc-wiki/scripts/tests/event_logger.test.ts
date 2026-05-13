@@ -611,6 +611,56 @@ describe("agent_calls[] breakdown", () => {
     expect(perAgent["jira"]).toBeCloseTo(0.25, 5);
     expect(perAgent["db_agent"]).toBeCloseTo(0.5, 5);
   });
+
+  // Regression: events that record cost as `total_cost_usd` (atlas op
+  // finalize step, or any event auto-normalized from agent_calls[])
+  // must contribute to the top-level total_cost_usd. Previously the
+  // aggregator only read `cost_usd`, so atlas's $7.60 silently dropped.
+  it("stats sums total_cost_usd when cost_usd is absent (atlas-style)", () => {
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+    const events = [
+      { ts: "2026-05-10T02:01:18+00:00", op: "init" },
+      {
+        ts: "2026-05-10T02:38:52+00:00",
+        op: "atlas",
+        atlas_run_id: "2026-05-10T02-01-52",
+        total_cost_usd: 7.6,
+        pages_generated: 38,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const stats = getStats(tmpPath);
+    expect(stats["total_events"]).toBe(2);
+    expect(approxEqual(stats["total_cost_usd"] as number, 7.6)).toBe(true);
+    // Sanity: both ops still show in the type breakdown.
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["init"]).toBe(1);
+    expect(opsByType["atlas"]).toBe(1);
+  });
+
+  // Regression: events that carry agent_calls[] (so the logger writes
+  // total_cost_usd but not cost_usd) must also contribute their
+  // synthesized total to the top-level aggregate, not just to
+  // per_agent_cost.
+  it("stats sums agent_calls-synthesized total_cost_usd at top level", () => {
+    logEvent(tmpPath, "ingest", {
+      agent_calls: [
+        {
+          agent: "jira", model: "haiku", tokens_in: 0, tokens_out: 0,
+          cost_usd: 0.25, elapsed_ms: 10, status: "success",
+        },
+        {
+          agent: "db_agent", model: null, tokens_in: 0, tokens_out: 0,
+          cost_usd: 0.5, elapsed_ms: 10, status: "success",
+        },
+      ],
+    });
+    const stats = getStats(tmpPath);
+    expect(approxEqual(stats["total_cost_usd"] as number, 0.75)).toBe(true);
+  });
 });
 
 // ── A6: includeZeroTokens flag for getStats ────────────────────────

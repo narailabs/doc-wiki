@@ -305,8 +305,14 @@ export function getStats(
     const op = typeof e["op"] === "string" ? e["op"] : "unknown";
     opsByType[op] = (opsByType[op] ?? 0) + 1;
 
-    const costVal = e["cost_usd"];
-    const cost = typeof costVal === "number" ? costVal : 0.0;
+    // Accept `total_cost_usd` as a fallback for `cost_usd`. The atlas
+    // op writes `total_cost_usd` directly (per SKILL.md finalize step),
+    // and `_normalizeAgentCalls` synthesizes the same field from
+    // `agent_calls[]`. Without this fallback, both classes of events
+    // contribute $0 to the top-level total even though their costs
+    // are real.
+    const costRaw = e["cost_usd"] ?? e["total_cost_usd"];
+    const cost = typeof costRaw === "number" ? costRaw : 0.0;
     totalCost += cost;
 
     // v2.1 per-op token aggregation. Accept several event-level keys so
