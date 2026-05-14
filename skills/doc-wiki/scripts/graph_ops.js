@@ -559,6 +559,21 @@ export function main(argv = process.argv.slice(2)) {
             const from = args.fromConcept ?? "";
             const to = args.toConcept ?? "";
             if (args.allPaths) {
+                // --all-paths is count-bounded (top 5 simple paths), not
+                // hop-bounded. references/operations.md says --max-hops and
+                // --via are ignored in this mode. Without a warning, a user
+                // passing them silently gets results that don't reflect those
+                // flags. Mirror event_logger's W1 stderr pattern so stdout
+                // stays machine-readable.
+                const ignored = [];
+                if (args.maxHops !== undefined)
+                    ignored.push("--max-hops");
+                if (args.via !== undefined)
+                    ignored.push("--via");
+                if (ignored.length > 0) {
+                    const verb = ignored.length === 1 ? "is" : "are";
+                    process.stderr.write(`[graph_ops] warning: ${ignored.join(" and ")} ${verb} ignored when --all-paths is set (path mode is count-bounded, not hop-bounded)\n`);
+                }
                 const paths = allPaths(args.edges ?? "", from, to);
                 if (paths.length === 0) {
                     process.stdout.write(JSON.stringify({
