@@ -6,7 +6,7 @@
  * against graph_ops.py's output.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -509,8 +509,6 @@ describe("TestGraphOpsCLI", () => {
   function runCliCapturingStderr(
     args: readonly string[],
   ): { stdout: string; stderr: string; status: number } {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
     const r = spawnSync("node", [CLI, ...args], { encoding: "utf-8" });
     return {
       stdout: r.stdout ?? "",
