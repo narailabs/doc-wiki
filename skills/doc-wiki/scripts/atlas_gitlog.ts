@@ -89,6 +89,10 @@ export function getLastAtlasTimestamp(wikiRoot: string): string | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     if (!line) continue;
+
+    // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+    if (!line.includes('"atlas"')) continue;
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
