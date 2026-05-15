@@ -37,6 +37,9 @@ function readEvents(wikiRoot, dateStr) {
         const line = rawLine.trim();
         if (!line)
             continue;
+        // Fast-path: skip JSON parse overhead if this line cannot match our date
+        if (!line.includes(dateStr))
+            continue;
         let entry;
         try {
             entry = JSON.parse(line);
