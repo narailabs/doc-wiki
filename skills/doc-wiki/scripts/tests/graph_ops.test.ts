@@ -6,7 +6,7 @@
  * against graph_ops.py's output.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -501,6 +501,100 @@ describe("TestGraphOpsCLI", () => {
       expect(first.from).toBe("A");
       expect(last.to).toBe("D");
     }
+  });
+
+  // runCli discards stderr on success exit; spawnSync captures both
+  // streams. Used by the warning tests below — keep local so the
+  // shared helper stays unchanged.
+  function runCliCapturingStderr(
+    args: readonly string[],
+  ): { stdout: string; stderr: string; status: number } {
+    const r = spawnSync("node", [CLI, ...args], { encoding: "utf-8" });
+    return {
+      stdout: r.stdout ?? "",
+      stderr: r.stderr ?? "",
+      status: r.status ?? 1,
+    };
+  }
+
+  it("cli_path_all_paths_warns_when_max_hops_is_also_passed", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--max-hops",
+      "4",
+    ]);
+    expect(r.status).toBe(0);
+    // stdout must still be machine-readable JSON.
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+    // stderr carries the warning.
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--max-hops");
+    expect(r.stderr).toContain("--all-paths");
+    expect(r.stderr).not.toContain("--via");
+  });
+
+  it("cli_path_all_paths_warns_when_via_is_also_passed", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--via",
+      "B",
+    ]);
+    expect(r.status).toBe(0);
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--via");
+    expect(r.stderr).not.toContain("--max-hops");
+  });
+
+  it("cli_path_all_paths_warns_with_both_flags_combined", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--max-hops",
+      "3",
+      "--via",
+      "B",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--max-hops");
+    expect(r.stderr).toContain("--via");
+    expect(r.stderr).toContain("are ignored");
+  });
+
+  it("cli_path_all_paths_no_warning_when_flags_absent", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
   });
 
   it("cli_add_writes_edge", () => {
