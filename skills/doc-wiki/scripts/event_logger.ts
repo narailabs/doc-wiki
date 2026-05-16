@@ -194,6 +194,20 @@ function _readEvents(
   for (const rawLine of raw.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
+
+    // Fast-path: if --since is active, use a strict regex anchored to the
+    // beginning of the JSON object to extract `ts` and check it before paying
+    // the JSON parse overhead.
+    if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+      const match = line.match(/^{"ts":"([^"]+)"/);
+      if (match && match[1]) {
+        const entryMs = parsePythonIsoformat(match[1]);
+        if (!Number.isNaN(entryMs) && entryMs < sinceMs) {
+          continue;
+        }
+      }
+    }
+
     const entry = JSON.parse(line) as Record<string, unknown>;
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
       const entryTs = entry["ts"];
