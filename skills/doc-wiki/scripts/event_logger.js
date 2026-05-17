@@ -150,7 +150,27 @@ function _readEvents(wikiRoot, since = null) {
         const line = rawLine.trim();
         if (!line)
             continue;
+        if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+            // ⚡ Bolt: Fast-path string check to avoid JSON.parse on old log lines.
+            // Use strict, anchored regex check to pre-filter relevant lines before
+            // parsing, preventing fragile regex matches on inner JSON fields.
+            const match = line.match(/^{"ts":"([^"]+)"/);
+            let entryMs = NaN;
+            let fastPathSuccess = false;
+            if (match) {
+                entryMs = parsePythonIsoformat(match[1]);
+                fastPathSuccess = true;
+            }
+            if (fastPathSuccess) {
+                // G-EVENTS-TS-STRICT
+                if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+                    continue;
+                }
+            }
+        }
         const entry = JSON.parse(line);
+        // We still do the strict parsing check just in case the fast-path didn't hit
+        // (e.g. "ts" was not the very first key in the JSON line)
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
             const entryTs = entry["ts"];
             const entryMs = typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
