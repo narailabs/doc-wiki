@@ -194,6 +194,16 @@ function _readEvents(
   for (const rawLine of raw.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
+    // Fast-path log parsing: avoid JSON.parse on every line if we can reject based on timestamp
+    if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+      const tsMatch = line.match(/^{"ts":"([^"]+)"/);
+      if (tsMatch && tsMatch[1]) {
+        const entryMs = parsePythonIsoformat(tsMatch[1]);
+        if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+          continue;
+        }
+      }
+    }
     const entry = JSON.parse(line) as Record<string, unknown>;
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
       const entryTs = entry["ts"];
