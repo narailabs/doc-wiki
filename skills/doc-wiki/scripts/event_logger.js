@@ -150,6 +150,18 @@ function _readEvents(wikiRoot, since = null) {
         const line = rawLine.trim();
         if (!line)
             continue;
+        if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+            // Fast-path: extract ts field without parsing the whole JSON
+            const match = line.match(/^{"ts":"([^"]+)"/);
+            if (match && match[1]) {
+                const entryMs = parsePythonIsoformat(match[1]);
+                // Fast-path should match exactly the slow-path discard logic below:
+                // if Number.isNaN(entryMs) || entryMs < sinceMs, it drops the event.
+                if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+                    continue;
+                }
+            }
+        }
         const entry = JSON.parse(line);
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
             const entryTs = entry["ts"];
