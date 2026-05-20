@@ -150,16 +150,37 @@ function _readEvents(wikiRoot, since = null) {
         const line = rawLine.trim();
         if (!line)
             continue;
+        if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+            // OPTIMIZATION: Use an anchored regex to extract the "ts" field.
+            // This provides a fast-path string check to avoid calling JSON.parse()
+            // on events outside the requested time window, which is a major
+            // bottleneck for large event.jsonl logs. If the regex does not match
+            // (e.g. malformed or unexpectedly ordered JSON), we fall through
+            // safely and parse normally.
+            const match = /^\{"ts":"([^"]+)"/.exec(line);
+            if (match) {
+                const entryMs = parsePythonIsoformat(match[1]);
+                // G-EVENTS-TS-STRICT: when --since is active, drop events whose
+                // `ts` cannot be parsed. Previously a NaN skipped only the
+                // `entryMs < sinceMs` check and fell through into `events.push`,
+                // so users asking "events in the last 24h" saw events with
+                // malformed timestamps. Fail-closed: if we can't place it on
+                // the timeline, it's not in the window.
+                if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+                    continue;
+                }
+                // If we matched the fast path and are in the window,
+                // we can safely parse and skip the secondary check.
+                const entry = JSON.parse(line);
+                events.push(entry);
+                continue;
+            }
+        }
         const entry = JSON.parse(line);
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
             const entryTs = entry["ts"];
             const entryMs = typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
-            // G-EVENTS-TS-STRICT: when --since is active, drop events whose
-            // `ts` cannot be parsed. Previously a NaN skipped only the
-            // `entryMs < sinceMs` check and fell through into `events.push`,
-            // so users asking "events in the last 24h" saw events with
-            // malformed timestamps. Fail-closed: if we can't place it on
-            // the timeline, it's not in the window.
+            // G-EVENTS-TS-STRICT: See above comment for behavior description.
             if (Number.isNaN(entryMs) || entryMs < sinceMs) {
                 continue;
             }
