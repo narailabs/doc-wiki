@@ -1,8 +1,14 @@
 # doc-wiki
 
+The doc-wiki plugin is an enterprise implementation of Andrej Karpathy LLM wiki pattern for codebase documentation.
+
+And more than documentation, this is a guide for Claude Code and other coding agents to be able to properly work on your codebase. We use regular markdown links instead of wikilinks in our case to allow for better progressive disclosure, as wiki references are added to CLAUDE.md so when working on code we have a live documentation allowing the agent to understand how the architecture, environments, processes, workflows, organization policies, etc. It integrates with many common enterprise tools (issue trackers, documentation systems, CI/CD, and custom systems) as well as most common ORM implementations allowing the documentation to cover how the code relates to data.
+
 > A documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helpers. Point it at a codebase, your Jira/Confluence/Notion/GitHub, and your databases — get a structured, queryable, self-healing wiki you can grow over time.
 
 doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Ten `/doc-wiki:*` slash commands cover the full lifecycle: bootstrap, atlas (full-codebase documentation in one pass), ingest, query, lint, fix, refresh, and cross-link the wiki as your project evolves. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
+
+It was built with enterprise level codebases, and support of complex systems, but it also works really for smaller codebases.
 
 ## What it is good for
 
