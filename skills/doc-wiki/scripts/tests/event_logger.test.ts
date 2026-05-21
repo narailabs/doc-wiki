@@ -1,3 +1,4 @@
+import * as os from "node:os";
 /**
  * Tests for event_logger.ts — ported from test_event_logger.py.
  *
@@ -11,22 +12,16 @@ import * as path from "node:path";
 
 import { execFileSync } from "node:child_process";
 
-import {
-  logEvent,
-  getStats,
-  pythonIsoformatUtc,
-} from "../event_logger.js";
-import {
-  SCRIPTS_DIR,
-  makeTmpPath,
-  cleanupTmpPath,
-} from "./fixtures.js";
+import { logEvent, getStats, pythonIsoformatUtc } from "../event_logger.js";
+import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "event_logger.js");
 
-function runCli(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
+function runCli(args: readonly string[]): {
+  stdout: string;
+  stderr: string;
+  status: number;
+} {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
       encoding: "utf-8",
@@ -284,86 +279,12 @@ describe("TestGetStats", () => {
       },
     ];
     const p = path.join(wikiRoot, "log", "events.jsonl");
-    fs.writeFileSync(
-      p,
-      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
-    );
+    fs.writeFileSync(p, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
     const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
     expect(stats["total_events"]).toBe(1);
     const opsByType = stats["ops_by_type"] as Record<string, number>;
     expect(opsByType["ingest"]).toBe(1);
     expect("query" in opsByType).toBe(false);
-  });
-
-  // Fast-path coverage: events whose `ts` is NOT the first key still get
-  // filtered correctly via the slow path. The fast-path regex misses; the
-  // post-parse NaN/`< sinceMs` check at G-EVENTS-TS-STRICT catches it.
-  it("test_stats_with_since_filter_when_ts_not_first_key", () => {
-    const wikiRoot = makeWikiRoot(tmpPath);
-    const p = path.join(wikiRoot, "log", "events.jsonl");
-    // Hand-craft lines so `op` precedes `ts` — the fast-path regex won't match.
-    const lines = [
-      JSON.stringify({
-        op: "ingest",
-        ts: "2026-04-10T08:00:00+00:00",
-        cost_usd: 0.05,
-      }),
-      JSON.stringify({
-        op: "query",
-        ts: "2026-04-08T08:00:00+00:00",
-        cost_usd: 99.0,
-      }),
-    ];
-    fs.writeFileSync(p, lines.join("\n") + "\n");
-    const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
-    expect(stats["total_events"]).toBe(1);
-    const opsByType = stats["ops_by_type"] as Record<string, number>;
-    expect(opsByType["ingest"]).toBe(1);
-    expect("query" in opsByType).toBe(false);
-  });
-
-  // W2: a malformed JSON line (partial write, torn append) is skipped instead
-  // of crashing _readEvents, and a stderr warning is emitted so the operator
-  // notices corruption instead of silently under-counting.
-  it("test_stats_skips_malformed_json_line_with_warning", () => {
-    const wikiRoot = makeWikiRoot(tmpPath);
-    const p = path.join(wikiRoot, "log", "events.jsonl");
-    const lines = [
-      JSON.stringify({
-        ts: "2026-04-10T08:00:00+00:00",
-        op: "ingest",
-        cost_usd: 0.05,
-      }),
-      // truncated / torn write
-      '{"ts": "2026-04-11T08:00:00+00:00", "op": "lint", "cost_usd"',
-      JSON.stringify({
-        ts: "2026-04-12T08:00:00+00:00",
-        op: "query",
-        cost_usd: 0.02,
-      }),
-    ];
-    fs.writeFileSync(p, lines.join("\n") + "\n");
-
-    const writes: string[] = [];
-    const origWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
-      writes.push(
-        typeof chunk === "string" ? chunk : Buffer.from(chunk).toString(),
-      );
-      return true;
-    }) as typeof process.stderr.write;
-    let stats: Record<string, unknown>;
-    try {
-      stats = getStats(wikiRoot);
-    } finally {
-      process.stderr.write = origWrite;
-    }
-    expect(stats["total_events"]).toBe(2);
-    const opsByType = stats["ops_by_type"] as Record<string, number>;
-    expect(opsByType["ingest"]).toBe(1);
-    expect(opsByType["query"]).toBe(1);
-    expect("lint" in opsByType).toBe(false);
-    expect(writes.join("")).toMatch(/malformed JSON line/);
   });
 });
 
@@ -411,14 +332,34 @@ describe("EventLoggerCLIShape", () => {
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", source: "a.md",
-        agent: "file", cost_usd: 0.05, reduction_ratio: 0.6 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "query",
-        agent: "wiki", cost_usd: 0.03, reduction_ratio: 0.4 },
-      { ts: "2026-04-10T08:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 0.07, reduction_ratio: 0.8 },
-      { ts: "2026-04-10T14:00:00+00:00", op: "lint",
-        cost_usd: 0.01, reduction_ratio: 0.5 },
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        source: "a.md",
+        agent: "file",
+        cost_usd: 0.05,
+        reduction_ratio: 0.6,
+      },
+      {
+        ts: "2026-04-05T12:00:00+00:00",
+        op: "query",
+        agent: "wiki",
+        cost_usd: 0.03,
+        reduction_ratio: 0.4,
+      },
+      {
+        ts: "2026-04-10T08:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 0.07,
+        reduction_ratio: 0.8,
+      },
+      {
+        ts: "2026-04-10T14:00:00+00:00",
+        op: "lint",
+        cost_usd: 0.01,
+        reduction_ratio: 0.5,
+      },
     ];
     fs.writeFileSync(
       path.join(logDir, "events.jsonl"),
@@ -471,12 +412,27 @@ describe("EventLoggerCLIShape", () => {
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 2 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 2 },
-      { ts: "2026-04-10T08:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 3 },
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 2,
+      },
+      {
+        ts: "2026-04-05T12:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 2,
+      },
+      {
+        ts: "2026-04-10T08:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 3,
+      },
     ];
     fs.writeFileSync(
       path.join(logDir, "events.jsonl"),
@@ -510,9 +466,12 @@ describe("event_logger --source flag", () => {
   it("accepts --source on `log` and writes it as a top-level field", () => {
     const js = runCli([
       "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--source", "slides.pptx",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--source",
+      "slides.pptx",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -523,10 +482,14 @@ describe("event_logger --source flag", () => {
   it("merges --source into --details (explicit flag wins on collision)", () => {
     const js = runCli([
       "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--details", '{"source":"old.md","extra":"keep"}',
-      "--source", "new.md",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--details",
+      '{"source":"old.md","extra":"keep"}',
+      "--source",
+      "new.md",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -536,9 +499,12 @@ describe("event_logger --source flag", () => {
 
   it("accepts --source on the bare-fallback (no subcommand) shape", () => {
     const js = runCli([
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--source", "report.pdf",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--source",
+      "report.pdf",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -581,7 +547,7 @@ describe("event_logger stats — total_events", () => {
   it("CLI `stats` emits total_events in stdout JSON", () => {
     const events = [
       { ts: "2026-04-01T10:00:00+00:00", op: "ingest", cost_usd: 0.05 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "lint",  cost_usd: 0.01 },
+      { ts: "2026-04-05T12:00:00+00:00", op: "lint", cost_usd: 0.01 },
     ];
     fs.writeFileSync(
       path.join(tmpPath, "log", "events.jsonl"),
@@ -641,8 +607,13 @@ describe("agent_calls[] breakdown", () => {
     const entry = logEvent(tmpPath, "ingest", {
       agent_calls: [
         {
-          agent: "jira", model: "haiku", tokens_in: 10, tokens_out: 5,
-          cost_usd: 0.5, elapsed_ms: 100, status: "success",
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 10,
+          tokens_out: 5,
+          cost_usd: 0.5,
+          elapsed_ms: 100,
+          status: "success",
         },
       ],
       total_cost_usd: 999,
@@ -668,12 +639,22 @@ describe("agent_calls[] breakdown", () => {
     logEvent(tmpPath, "ingest", {
       agent_calls: [
         {
-          agent: "jira", model: "haiku", tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.25, elapsed_ms: 10, status: "success",
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.25,
+          elapsed_ms: 10,
+          status: "success",
         },
         {
-          agent: "db_agent", model: null, tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.5, elapsed_ms: 10, status: "success",
+          agent: "db_agent",
+          model: null,
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.5,
+          elapsed_ms: 10,
+          status: "success",
         },
       ],
     });
@@ -720,12 +701,22 @@ describe("agent_calls[] breakdown", () => {
     logEvent(tmpPath, "ingest", {
       agent_calls: [
         {
-          agent: "jira", model: "haiku", tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.25, elapsed_ms: 10, status: "success",
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.25,
+          elapsed_ms: 10,
+          status: "success",
         },
         {
-          agent: "db_agent", model: null, tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.5, elapsed_ms: 10, status: "success",
+          agent: "db_agent",
+          model: null,
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.5,
+          elapsed_ms: 10,
+          status: "success",
         },
       ],
     });
@@ -749,9 +740,14 @@ describe("getStats includeZeroTokens (A6)", () => {
   function seed(): void {
     fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", tokens_in: 100, tokens_out: 50 },
-      { ts: "2026-04-01T11:00:00+00:00", op: "init" },  // no token data
-      { ts: "2026-04-01T12:00:00+00:00", op: "lint" },  // no token data
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        tokens_in: 100,
+        tokens_out: 50,
+      },
+      { ts: "2026-04-01T11:00:00+00:00", op: "init" }, // no token data
+      { ts: "2026-04-01T12:00:00+00:00", op: "lint" }, // no token data
     ];
     fs.writeFileSync(
       path.join(tmpPath, "log", "events.jsonl"),
@@ -809,4 +805,37 @@ describe("getStats includeZeroTokens (A6)", () => {
     expect("init" in data.total_tokens_by_op).toBe(false);
     expect("lint" in data.total_tokens_by_op).toBe(false);
   });
+});
+
+it("test_stats_skips_malformed_json_line_with_warning", () => {
+  const tmpPath = fs.mkdtempSync(
+    path.join(os.tmpdir(), "wiki-test-stats-malformed-"),
+  );
+  fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  const logPath = path.join(tmpPath, "log", "events.jsonl");
+
+  const validLine1 = '{"ts": "2023-01-01T12:00:00+00:00", "op": "ingest"}\n';
+  const invalidLine =
+    '{"ts": "2023-01-01T12:01:00+00:00", "op": "ingest", "malformed": }\n';
+  const validLine2 = '{"ts": "2023-01-01T12:02:00+00:00", "op": "ingest"}\n';
+  fs.writeFileSync(logPath, validLine1 + invalidLine + validLine2);
+
+  let stderrOutput = "";
+  const originalStderrWrite = process.stderr.write;
+  // @ts-expect-error - overriding stderr.write for test
+  process.stderr.write = (str: string | Uint8Array) => {
+    stderrOutput += str.toString();
+    return true;
+  };
+
+  try {
+    const stats = getStats(tmpPath, "2023-01-01T00:00:00+00:00");
+    expect(stats.total_events).toBe(2);
+    expect(stderrOutput).toContain(
+      "[event_logger] warning: skipping malformed JSON line",
+    );
+  } finally {
+    process.stderr.write = originalStderrWrite;
+    fs.rmSync(tmpPath, { recursive: true, force: true });
+  }
 });

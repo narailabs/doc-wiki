@@ -196,17 +196,16 @@ function _readEvents(
     if (!line) continue;
 
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
-      // Fast-path: extract `ts` via anchored regex to skip JSON.parse for old
-      // events. Relies on `appendEvent` writing `ts` as the first key with no
-      // leading whitespace (see the "Preserve Python's dict-literal key order"
-      // comment in `appendEvent`); if a writer ever breaks that invariant the
-      // regex misses and we silently degrade to the slow path below.
+      // Fast-path: use anchored regex to extract timestamp without JSON parsing
       const m = line.match(/^{"ts":"([^"]+)"/);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
-        // G-EVENTS-TS-STRICT (see slow path below for the original rationale):
-        // fail-closed on unparseable `ts` so events that can't be placed on
-        // the timeline are excluded from --since windows.
+        // G-EVENTS-TS-STRICT: when --since is active, drop events whose
+        // `ts` cannot be parsed. Previously a NaN skipped only the
+        // `entryMs < sinceMs` check and fell through into `events.push`,
+        // so users asking "events in the last 24h" saw events with
+        // malformed timestamps. Fail-closed: if we can't place it on
+        // the timeline, it's not in the window.
         if (Number.isNaN(entryMs) || entryMs < sinceMs) {
           continue;
         }
@@ -216,15 +215,9 @@ function _readEvents(
     let entry: Record<string, unknown>;
     try {
       entry = JSON.parse(line) as Record<string, unknown>;
-    } catch (err) {
-      // W2: a malformed line (partial write, torn append, manual edit gone
-      // wrong) used to throw out of _readEvents. We now skip it so a single
-      // corrupt line doesn't kill the whole read, but mirror the W1 pattern
-      // above — write to stderr so the operator notices instead of silently
-      // under-counting downstream stats.
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch {
       process.stderr.write(
-        `[event_logger] warning: skipping malformed JSON line: ${msg}\n`,
+        `[event_logger] warning: skipping malformed JSON line: ${line}\n`,
       );
       continue;
     }
@@ -233,12 +226,6 @@ function _readEvents(
       const entryTs = entry["ts"];
       const entryMs =
         typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
-      // G-EVENTS-TS-STRICT: when --since is active, drop events whose
-      // `ts` cannot be parsed. Previously a NaN skipped only the
-      // `entryMs < sinceMs` check and fell through into `events.push`,
-      // so users asking "events in the last 24h" saw events with
-      // malformed timestamps. Fail-closed: if we can't place it on
-      // the timeline, it's not in the window.
       if (Number.isNaN(entryMs) || entryMs < sinceMs) {
         continue;
       }
