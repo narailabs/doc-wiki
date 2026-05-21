@@ -194,17 +194,42 @@ function _readEvents(
   for (const rawLine of raw.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
-    const entry = JSON.parse(line) as Record<string, unknown>;
+
+    if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+      // Fast-path: extract `ts` via anchored regex to skip JSON.parse for old
+      // events. Relies on `appendEvent` writing `ts` as the first key with no
+      // leading whitespace. The character class excludes both `"` and `\` so
+      // any ts containing a JSON escape (like `\+` for `+`) misses the regex
+      // and safely falls through to the slow path for proper decoding.
+      const m = line.match(/^{"ts":"([^"\\]+)"/);
+      if (m) {
+        const entryMs = parsePythonIsoformat(m[1] as string);
+        // G-EVENTS-TS-STRICT: when --since is active, drop events whose
+        // `ts` cannot be parsed. Previously a NaN skipped only the
+        // `entryMs < sinceMs` check and fell through into `events.push`,
+        // so users asking "events in the last 24h" saw events with
+        // malformed timestamps. Fail-closed: if we can't place it on
+        // the timeline, it's not in the window.
+        if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+          continue;
+        }
+      }
+    }
+
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      process.stderr.write(
+        `[event_logger] warning: skipping malformed JSON line: ${line}\n`,
+      );
+      continue;
+    }
+
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
       const entryTs = entry["ts"];
       const entryMs =
         typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
-      // G-EVENTS-TS-STRICT: when --since is active, drop events whose
-      // `ts` cannot be parsed. Previously a NaN skipped only the
-      // `entryMs < sinceMs` check and fell through into `events.push`,
-      // so users asking "events in the last 24h" saw events with
-      // malformed timestamps. Fail-closed: if we can't place it on
-      // the timeline, it's not in the window.
       if (Number.isNaN(entryMs) || entryMs < sinceMs) {
         continue;
       }
@@ -369,8 +394,11 @@ export function getStats(
         const rec = c as Record<string, unknown>;
         const subAgent = rec["agent"];
         const subCost = rec["cost_usd"];
-        if (typeof subAgent === "string" && subAgent &&
-            typeof subCost === "number") {
+        if (
+          typeof subAgent === "string" &&
+          subAgent &&
+          typeof subCost === "number"
+        ) {
           perAgentCost[subAgent] = (perAgentCost[subAgent] ?? 0) + subCost;
         }
       }
