@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { loadIgnore, walkLivePages, walkArchivedPages } from "../_wiki_fs.js";
+import { loadIgnore, walkLivePages, walkArchivedPages, wikiPages } from "../_wiki_fs.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 describe("loadIgnore", () => {
@@ -226,5 +226,33 @@ describe("walkArchivedPages", () => {
       expect(path.isAbsolute(p.absPath)).toBe(true);
       expect(p.absPath).toContain(p.relPath.replace(/\//g, path.sep));
     }
+  });
+});
+
+describe("wikiPages (deprecated alias)", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("wiki-pages-alias-");
+    fs.mkdirSync(path.join(tmpPath, "wiki", "topic-a"), { recursive: true });
+    fs.mkdirSync(path.join(tmpPath, "wiki", "_archive", "topic-a"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "index.md"), "# Index\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "topic-a", "page.md"), "# Page\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "index.md"), "# Archived\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "topic-a", "old.md"), "# Old\n");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns the same paths as walkLivePages mapped to absPath", async () => {
+    const expected = (await walkLivePages(tmpPath)).map((p) => p.absPath);
+    expect(wikiPages(tmpPath)).toEqual(expected);
+  });
+
+  it("excludes _archive and other _ directories", () => {
+    const paths = wikiPages(tmpPath);
+    expect(paths.every((p) => !p.includes("_archive"))).toBe(true);
   });
 });

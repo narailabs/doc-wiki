@@ -109,39 +109,20 @@ export async function walkArchivedPages(wikiRoot: string): Promise<WikiPage[]> {
 // ── Legacy export ─────────────────────────────────────────────────────────────
 
 /**
- * Return absolute paths to every `.md` file under `<wikiRoot>/wiki/`,
- * sorted lexicographically. See module docstring for parity details.
+ * Return absolute paths to every live `.md` file under `<wikiRoot>/wiki/`,
+ * sorted lexicographically. Excludes directories starting with `_` (e.g.
+ * `_archive`, `_internal`).
  *
  * @deprecated Use `walkLivePages()` instead. This alias will be removed in
  * the next major release once all callers have been migrated.
  */
 export function wikiPages(wikiRoot: string): string[] {
   const wikiDir = path.join(wikiRoot, "wiki");
-  if (!fs.existsSync(wikiDir)) {
-    return [];
-  }
-  const out: string[] = [];
-  const stack: string[] = [wikiDir];
-  while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) continue;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.isFile() && full.endsWith(".md")) {
-        out.push(full);
-      }
-    }
-  }
-  out.sort();
-  return out;
+  return walkSync(
+    wikiDir,
+    wikiDir,
+    (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX),
+  ).map((p) => p.absPath);
 }
 
 // ── .wiki-ignore support ─────────────────────────────────────────────
