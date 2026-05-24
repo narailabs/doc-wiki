@@ -267,6 +267,7 @@ export function checkIsolatedNodes(wikiRoot: string): Issue[] {
   const edgesPath = path.join(wikiRoot, "graph", "edges.jsonl");
 
   const allPages = walkLivePages(wikiRoot);
+  // relPath uses POSIX separators (walkSync normalizes); edges.jsonl must match this convention.
   // Use relative paths matching edge format
   const pageRelPaths = allPages.map((p) => p.relPath);
 
