@@ -57,6 +57,18 @@ export interface StructuralFinding {
   message: string;
 }
 
+export type SourceExistenceStatus = "live" | "candidate" | "orphan";
+
+export interface SourceExistenceResult {
+  status: SourceExistenceStatus;
+  /** Count of local-path sources (non-remote). */
+  total: number;
+  /** Local paths that don't exist on disk. */
+  missing: string[];
+  /** missing/total; 0 when total === 0. */
+  ratio: number;
+}
+
 // ── Hash key ───────────────────────────────────────────────────────
 
 /**
@@ -349,32 +361,107 @@ export function findDuplicateDiagrams(wikiRoot: string): DuplicateDiagramFinding
   return findings;
 }
 
+// ── Source existence ───────────────────────────────────────────────
+
+const REMOTE_SCHEMES = [
+  "http:",
+  "https:",
+  "jira:",
+  "github:",
+  "confluence:",
+  "notion:",
+  "aws:",
+  "gcp:",
+];
+
+function _isRemoteScheme(s: string): boolean {
+  return REMOTE_SCHEMES.some((p) => s.startsWith(p));
+}
+
+/**
+ * Classify a wiki page's source files by checking whether each local-path
+ * source still exists on disk relative to `repoRoot`.
+ *
+ * - `live`      — all local paths present (or no local paths).
+ * - `candidate` — some paths missing, ratio >= threshold (default: 1.0).
+ * - `orphan`    — all local paths missing (ratio === 1.0 exactly).
+ *
+ * Remote sources (http, https, jira, github, confluence, notion, aws, gcp)
+ * are ignored and do not count toward `total`.
+ */
+export function sourceExistence(opts: {
+  wikiRoot: string;
+  repoRoot: string;
+  page: string;
+  threshold?: number;
+}): SourceExistenceResult {
+  let body: string;
+  try {
+    body = fs.readFileSync(opts.page, "utf-8");
+  } catch {
+    return { status: "orphan", total: 0, missing: [], ratio: 0 };
+  }
+  const { frontmatter } = parseFrontmatter(body);
+  const sourcesRaw = frontmatter?.["sources"];
+  const sources: string[] = Array.isArray(sourcesRaw)
+    ? (sourcesRaw.filter((s) => typeof s === "string") as string[])
+    : [];
+  const localPaths = sources.filter((s) => !_isRemoteScheme(s));
+  if (localPaths.length === 0) {
+    return { status: "live", total: 0, missing: [], ratio: 0 };
+  }
+  const missing: string[] = [];
+  for (const p of localPaths) {
+    const abs = path.resolve(opts.repoRoot, p);
+    if (!fs.existsSync(abs)) {
+      missing.push(p);
+    }
+  }
+  const ratio = missing.length / localPaths.length;
+  const threshold = opts.threshold ?? 1.0;
+  let status: SourceExistenceStatus;
+  if (ratio === 1.0) {
+    status = "orphan";
+  } else if (ratio >= threshold) {
+    status = "candidate";
+  } else {
+    status = "live";
+  }
+  return { status, total: localPaths.length, missing, ratio };
+}
+
 // ── CLI ────────────────────────────────────────────────────────────
 
 const FLAG_SPEC = {
   "--wiki-root": "wikiRoot",
+  "--repo-root": "repoRoot",
   "--page-hash": "pageHash",
   "--source-hash": "sourceHash",
   "--result": "result",
   "--page": "page",
+  "--threshold": "threshold",
 } as const;
 
-const HELP_TEXT = `usage: atlas_validate.js {cache-check,cache-store,cache-clear,structural,cross-doc} [...]
+const HELP_TEXT = `usage: atlas_validate.js {cache-check,cache-store,cache-clear,structural,cross-doc,source-existence} [...]
 
 Validation cache and structural checks for /doc-wiki:atlas Phase 5.
 
 Subcommands:
-  cache-check    --wiki-root <p> --page-hash <h> --source-hash <h>
-                 Lookup a cached validation result. Stdout: {hit, entry?}.
-  cache-store    --wiki-root <p> --page-hash <h> --source-hash <h> --result '<json>'
-                 Persist an LLM-derived validation result.
-  cache-clear    --wiki-root <p>
-                 Remove every cached validation entry. Stdout: {removed: N}.
-  structural     --wiki-root <p> --page <relpath>
-                 Run lint_checks on one page. Stdout: {findings: [...]}.
-  cross-doc      --wiki-root <p>
-                 Find architecture pages with overlapping diagrams + sources.
-                 Stdout: {findings: [{pages, sharedSources, sharedDiagramTitles}]}.
+  cache-check        --wiki-root <p> --page-hash <h> --source-hash <h>
+                     Lookup a cached validation result. Stdout: {hit, entry?}.
+  cache-store        --wiki-root <p> --page-hash <h> --source-hash <h> --result '<json>'
+                     Persist an LLM-derived validation result.
+  cache-clear        --wiki-root <p>
+                     Remove every cached validation entry. Stdout: {removed: N}.
+  structural         --wiki-root <p> --page <relpath>
+                     Run lint_checks on one page. Stdout: {findings: [...]}.
+  cross-doc          --wiki-root <p>
+                     Find architecture pages with overlapping diagrams + sources.
+                     Stdout: {findings: [{pages, sharedSources, sharedDiagramTitles}]}.
+  source-existence   --wiki-root <p> --repo-root <p> --page <abspath> [--threshold <n>]
+                     Check whether a page's local source files still exist.
+                     Stdout: {status, total, missing, ratio}.
+                     status: live | candidate | orphan
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -464,6 +551,27 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (sub === "cross-doc") {
     const findings = findDuplicateDiagrams(wikiRoot);
     process.stdout.write(JSON.stringify({ findings }) + "\n");
+    return 0;
+  }
+
+  if (sub === "source-existence") {
+    const repoRoot = parsed.values["repoRoot"];
+    const page = parsed.values["page"];
+    if (typeof repoRoot !== "string" || repoRoot.length === 0) {
+      process.stderr.write("--repo-root is required\n");
+      return 2;
+    }
+    if (typeof page !== "string" || page.length === 0) {
+      process.stderr.write("--page is required\n");
+      return 2;
+    }
+    const thresholdRaw = parsed.values["threshold"];
+    const threshold =
+      typeof thresholdRaw === "string" && thresholdRaw.length > 0
+        ? Number(thresholdRaw)
+        : undefined;
+    const result = sourceExistence({ wikiRoot, repoRoot, page, threshold });
+    process.stdout.write(JSON.stringify(result) + "\n");
     return 0;
   }
 
