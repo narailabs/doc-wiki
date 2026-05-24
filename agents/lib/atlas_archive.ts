@@ -9,7 +9,8 @@
  *   node atlas_archive.js sweep --wiki-root <p> --repo-root <p> --run-id <id>
  *                               [--autonomy conservative|balanced|autonomous|auto]
  *                               [--dry-run] [--threshold <n>]
- *   node atlas_archive.js unarchive ...   (Task 7 stub)
+ *   node atlas_archive.js unarchive --wiki-root <p> --page-or-slug <path-or-slug>
+ *                                   [--target <rel-path>] [--inbound-links rewrite|drop|leave]
  *   node atlas_archive.js rebuild-index --wiki-root <p>  (Task 8 stub)
  */
 import * as fs from "node:fs";
@@ -28,6 +29,26 @@ import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 // ── Public types ───────────────────────────────────────────────────────────────
 
 export type Autonomy = "conservative" | "balanced" | "autonomous" | "auto";
+
+export interface UnarchiveOptions {
+  wikiRoot: string;
+  pageOrSlug: string; // "wiki/_archive/billing/architecture.md" OR "architecture"
+  target?: string;    // override the archived_from value
+  inboundLinks: "rewrite" | "drop" | "leave";
+}
+
+export interface UnarchiveResult {
+  from: string;
+  to: string;
+  linksReverted: number;
+}
+
+export interface UnarchiveEvent {
+  ts: string;
+  op: "unarchive";
+  from: string; // wiki/_archive/<topic>/<page>.md
+  to: string;   // wiki/<topic>/<page>.md
+}
 
 export interface SweepOptions {
   wikiRoot: string;
@@ -201,7 +222,10 @@ async function applyArchive(
 
 // ── History journal ────────────────────────────────────────────────────────────
 
-async function appendHistory(wikiRoot: string, events: ArchiveEvent[]): Promise<void> {
+async function appendHistory(
+  wikiRoot: string,
+  events: Array<ArchiveEvent | UnarchiveEvent>,
+): Promise<void> {
   if (events.length === 0) return;
   const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
   const lines = events.map((e) => JSON.stringify(e)).join("\n") + "\n";
@@ -212,18 +236,25 @@ async function appendHistory(wikiRoot: string, events: ArchiveEvent[]): Promise<
 
 export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
   const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
-  let events: ArchiveEvent[] = [];
+  let allEvents: Array<ArchiveEvent | UnarchiveEvent> = [];
 
   if (fs.existsSync(journalPath)) {
     const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
     for (const line of lines) {
       try {
-        events.push(JSON.parse(line) as ArchiveEvent);
+        allEvents.push(JSON.parse(line) as ArchiveEvent | UnarchiveEvent);
       } catch {
         // skip malformed lines
       }
     }
   }
+
+  // Only keep archive events (op !== "unarchive") whose archived file still exists.
+  const events: ArchiveEvent[] = allEvents.filter((e): e is ArchiveEvent => {
+    if ("op" in e && e.op === "unarchive") return false;
+    const archAbsPath = path.join(wikiRoot, e.to);
+    return fs.existsSync(archAbsPath);
+  });
 
   // Sort newest-first by ts
   events.sort((a, b) => (a.ts > b.ts ? -1 : a.ts < b.ts ? 1 : 0));
@@ -268,6 +299,148 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
   const indexDir = path.join(wikiRoot, "wiki", "_archive");
   fs.mkdirSync(indexDir, { recursive: true });
   fs.writeFileSync(path.join(indexDir, "index.md"), lines.join("\n"), "utf-8");
+}
+
+// ── resolveArchivePath ────────────────────────────────────────────────────────
+
+interface ResolvedArchivePath {
+  absPath: string;
+  relPath: string; // relative to wikiRoot
+}
+
+/**
+ * Resolve pageOrSlug to the absolute path of an archived page.
+ *
+ * If pageOrSlug looks like a path under wiki/_archive/ (relative or absolute),
+ * use it directly. Otherwise, substring-match against all *.md files under
+ * wiki/_archive/ — throwing on ambiguous or no-match.
+ */
+async function resolveArchivePath(
+  wikiRoot: string,
+  pageOrSlug: string,
+): Promise<ResolvedArchivePath> {
+  const archiveRoot = path.join(wikiRoot, "wiki", "_archive");
+
+  // Direct path check: strip wikiRoot prefix if absolute, then test existence.
+  const candidateRel = path.isAbsolute(pageOrSlug)
+    ? path.relative(wikiRoot, pageOrSlug)
+    : pageOrSlug;
+
+  if (candidateRel.startsWith("wiki/_archive/") || candidateRel.startsWith("wiki\\_archive\\")) {
+    const abs = path.join(wikiRoot, candidateRel);
+    if (fs.existsSync(abs)) {
+      return { absPath: abs, relPath: candidateRel };
+    }
+  }
+
+  // Substring slug match: collect all *.md under wiki/_archive/
+  if (!fs.existsSync(archiveRoot)) {
+    throw new Error(`no archived page matching "${pageOrSlug}" — archive directory does not exist`);
+  }
+
+  const matches: ResolvedArchivePath[] = [];
+  function walk(dir: string): void {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs);
+      } else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+        const relPath = path.relative(wikiRoot, abs).replace(/\\/g, "/");
+        if (relPath.includes(pageOrSlug)) {
+          matches.push({ absPath: abs, relPath });
+        }
+      }
+    }
+  }
+  walk(archiveRoot);
+
+  if (matches.length === 0) {
+    throw new Error(`no archived page matching "${pageOrSlug}"`);
+  }
+  if (matches.length > 1) {
+    const paths = matches.map((m) => m.relPath).join(", ");
+    throw new Error(`ambiguous slug "${pageOrSlug}" matches: ${paths}`);
+  }
+  return matches[0]!;
+}
+
+// ── stripArchiveFrontmatter ───────────────────────────────────────────────────
+
+const ARCHIVE_FM_KEYS = new Set(["status", "archived_at", "archive_reason", "archived_from"]);
+
+/**
+ * Read the file at absPath, remove the four deprecation frontmatter fields,
+ * preserve everything else, write it back in place.
+ */
+async function stripArchiveFrontmatter(absPath: string): Promise<void> {
+  const raw = await fs.promises.readFile(absPath, "utf-8");
+  const { frontmatter, body } = parseFrontmatter(raw);
+  const fm: Record<string, unknown> = {};
+  if (frontmatter) {
+    for (const [k, v] of Object.entries(frontmatter)) {
+      if (!ARCHIVE_FM_KEYS.has(k)) {
+        fm[k] = v;
+      }
+    }
+  }
+  const newContent = `---\n${yaml.dump(fm)}---\n${body}`;
+  await fs.promises.writeFile(absPath, newContent, "utf-8");
+}
+
+// ── rewriteInboundLinksForUnarchive (Task 8 stub) ─────────────────────────────
+
+async function rewriteInboundLinksForUnarchive(
+  _opts: UnarchiveOptions,
+  _event: UnarchiveEvent,
+): Promise<number> {
+  // Task 8 will implement the real inverse-link rewrite.
+  return 0;
+}
+
+// ── unarchive ─────────────────────────────────────────────────────────────────
+
+export async function unarchive(opts: UnarchiveOptions): Promise<UnarchiveResult> {
+  const resolved = await resolveArchivePath(opts.wikiRoot, opts.pageOrSlug);
+
+  const raw = await fs.promises.readFile(resolved.absPath, "utf-8");
+  const { frontmatter } = parseFrontmatter(raw);
+  const archivedFrom =
+    opts.target ?? (frontmatter as Record<string, unknown> | null)?.[
+      "archived_from"
+    ] as string | undefined;
+
+  if (!archivedFrom) {
+    throw new Error(
+      `page ${resolved.relPath} lacks archived_from frontmatter; pass --target to specify restore path`,
+    );
+  }
+
+  const targetRel = opts.target ?? archivedFrom;
+  const targetAbs = path.resolve(opts.wikiRoot, targetRel);
+
+  if (fs.existsSync(targetAbs)) {
+    throw new Error(
+      `target ${targetRel} already exists; pass --target to restore elsewhere`,
+    );
+  }
+
+  // rename-first ordering for partial-failure safety
+  await fs.promises.mkdir(path.dirname(targetAbs), { recursive: true });
+  await fs.promises.rename(resolved.absPath, targetAbs);
+  await stripArchiveFrontmatter(targetAbs);
+
+  const event: UnarchiveEvent = {
+    ts: new Date().toISOString(),
+    op: "unarchive",
+    from: resolved.relPath,
+    to: targetRel,
+  };
+
+  await appendHistory(opts.wikiRoot, [event]);
+  await rebuildArchiveIndex(opts.wikiRoot);
+
+  const linksReverted = await rewriteInboundLinksForUnarchive(opts, event);
+  return { from: event.from, to: event.to, linksReverted };
 }
 
 // ── Main sweep ────────────────────────────────────────────────────────────────
@@ -366,6 +539,9 @@ const FLAG_SPEC = {
   "--autonomy": "autonomy",
   "--threshold": "threshold",
   "--dry-run": "dryRun",
+  "--page-or-slug": "pageOrSlug",
+  "--target": "target",
+  "--inbound-links": "inboundLinks",
 } as const;
 
 function usage(): void {
@@ -377,7 +553,9 @@ Subcommands:
                  [--autonomy conservative|balanced|autonomous|auto]
                  [--threshold <n>] [--dry-run]
                  Archive deprecated atlas pages. Stdout: JSON SweepResult.
-  unarchive      (Task 7 — not yet implemented)
+  unarchive      --wiki-root <p> --page-or-slug <path-or-slug>
+                 [--target <rel-path>] [--inbound-links rewrite|drop|leave]
+                 Restore an archived page to the live wiki.
   rebuild-index  --wiki-root <p>
                  Regenerate wiki/_archive/index.md from _archive_history.jsonl.
 `,
@@ -425,9 +603,38 @@ async function main(): Promise<number> {
   }
 
   if (sub === "unarchive") {
-    // Task 7 stub
-    process.stderr.write("unarchive: not yet implemented (Task 7)\n");
-    return 1;
+    let parsed;
+    try {
+      parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+    } catch (e) {
+      process.stderr.write(`${(e as Error).message}\n`);
+      return 2;
+    }
+    const wikiRoot = parsed.values["wikiRoot"];
+    const pageOrSlug = parsed.values["pageOrSlug"];
+    if (
+      typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+      typeof pageOrSlug !== "string" || pageOrSlug.length === 0
+    ) {
+      process.stderr.write("--wiki-root and --page-or-slug are required\n");
+      return 2;
+    }
+    const target =
+      typeof parsed.values["target"] === "string" && parsed.values["target"].length > 0
+        ? parsed.values["target"]
+        : undefined;
+    const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
+    const inboundLinks = (
+      typeof inboundLinksRaw === "string" ? inboundLinksRaw : "rewrite"
+    ) as UnarchiveOptions["inboundLinks"];
+    try {
+      const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
+      process.stdout.write(JSON.stringify(result) + "\n");
+      return 0;
+    } catch (e) {
+      process.stderr.write(`${(e as Error).message}\n`);
+      return 1;
+    }
   }
 
   if (sub === "rebuild-index") {

@@ -1,12 +1,12 @@
 /**
- * Tests for atlas_archive.ts — sweep action.
+ * Tests for atlas_archive.ts — sweep action + unarchive action.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-import { sweep, type SweepOptions } from "../atlas_archive.js";
+import { sweep, unarchive, type SweepOptions, type UnarchiveOptions } from "../atlas_archive.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -454,5 +454,239 @@ describe("sweep — non-atlas pages skipped", () => {
     expect(result.archived).toHaveLength(0);
     expect(result.candidates).toHaveLength(0);
     expect(fs.existsSync(path.join(wikiRoot, "wiki/misc/notes.md"))).toBe(true);
+  });
+});
+
+// ── Unarchive tests ────────────────────────────────────────────────────────────
+
+/** Write a page that looks as if sweep archived it. */
+function writeArchivedPage(
+  wikiRoot: string,
+  relPath: string, // e.g. "wiki/_archive/billing/architecture.md"
+  extraFm: Record<string, unknown> = {},
+  body = "page body\n",
+): void {
+  const abs = path.join(wikiRoot, relPath);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const fm: Record<string, unknown> = {
+    atlas_facet: "architecture",
+    status: "deprecated",
+    archived_at: "2026-01-15",
+    archive_reason: "all sources removed (src/billing/)",
+    archived_from: relPath.replace("wiki/_archive/", "wiki/"),
+    ...extraFm,
+  };
+  const content = `---\n${yaml.dump(fm)}---\n${body}`;
+  fs.writeFileSync(abs, content, "utf-8");
+}
+
+describe("unarchive — slug resolution", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-slug-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("resolves a unique substring slug to the full archived path", async () => {
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const r = await unarchive({
+      wikiRoot,
+      pageOrSlug: "architecture",
+      inboundLinks: "rewrite",
+    });
+    expect(r.from).toBe("wiki/_archive/billing/architecture.md");
+  });
+
+  it("resolves an exact relative path directly", async () => {
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const r = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+    expect(r.from).toBe("wiki/_archive/billing/architecture.md");
+  });
+
+  it("throws on ambiguous slug", async () => {
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    writeArchivedPage(wikiRoot, "wiki/_archive/payments/architecture.md", {
+      archived_from: "wiki/payments/architecture.md",
+    });
+    await expect(
+      unarchive({ wikiRoot, pageOrSlug: "architecture", inboundLinks: "rewrite" }),
+    ).rejects.toThrow(/ambiguous/i);
+  });
+
+  it("throws on no-match slug", async () => {
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    await expect(
+      unarchive({ wikiRoot, pageOrSlug: "nonexistent", inboundLinks: "rewrite" }),
+    ).rejects.toThrow(/no archived page/i);
+  });
+});
+
+describe("unarchive — happy path", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-happy-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("restores file, strips deprecation frontmatter, preserves other fields", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+
+    expect(fs.existsSync(path.join(wikiRoot, result.to))).toBe(true);
+    expect(fs.existsSync(path.join(wikiRoot, result.from))).toBe(false);
+
+    const raw = fs.readFileSync(path.join(wikiRoot, result.to), "utf-8");
+    const end = raw.indexOf("\n---\n", 4);
+    const fm = yaml.load(raw.slice(4, end)) as Record<string, unknown>;
+
+    expect(fm["status"]).toBeUndefined();
+    expect(fm["archived_at"]).toBeUndefined();
+    expect(fm["archive_reason"]).toBeUndefined();
+    expect(fm["archived_from"]).toBeUndefined();
+    expect(fm["atlas_facet"]).toBe("architecture"); // preserved
+  });
+
+  it("appends an unarchive event to _archive_history.jsonl", async () => {
+    await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+
+    const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
+    expect(fs.existsSync(journalPath)).toBe(true);
+    const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    const last = JSON.parse(lines.at(-1)!);
+    expect(last.op).toBe("unarchive");
+    expect(last.from).toBe("wiki/_archive/billing/architecture.md");
+  });
+
+  it("returns linksReverted: 0 (stub)", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+    expect(result.linksReverted).toBe(0);
+  });
+});
+
+describe("unarchive — collision", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-collision-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    // Occupant at the target path
+    writePage(wikiRoot, "wiki/billing/architecture.md", { title: "live copy" });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("aborts when target path is already occupied", async () => {
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/billing/architecture.md",
+        inboundLinks: "rewrite",
+      }),
+    ).rejects.toThrow(/already exists/i);
+
+    // Both files still on disk
+    expect(
+      fs.existsSync(path.join(wikiRoot, "wiki/_archive/billing/architecture.md")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md")),
+    ).toBe(true);
+  });
+});
+
+describe("unarchive — --target override", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-target-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("honors --target override to restore to a different path", async () => {
+    const r = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      target: "wiki/billing-v2/architecture.md",
+      inboundLinks: "rewrite",
+    });
+    expect(r.to).toBe("wiki/billing-v2/architecture.md");
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/billing-v2/architecture.md"))).toBe(true);
+    expect(
+      fs.existsSync(path.join(wikiRoot, "wiki/_archive/billing/architecture.md")),
+    ).toBe(false);
+  });
+});
+
+describe("unarchive — rebuildArchiveIndex skips unarchived events", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-idx-");
+    repoRoot = makeTmpPath("unarchive-idx-repo-");
+    setupOrphanFixture(wikiRoot, repoRoot);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("index does not list a page after it has been unarchived", async () => {
+    // Sweep to archive the page
+    await sweep(makeOpts(wikiRoot, repoRoot));
+
+    // Verify archived
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/architecture.md");
+    expect(fs.existsSync(archPath)).toBe(true);
+
+    // Unarchive it (collision: live path is gone so no conflict)
+    await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "leave",
+    });
+
+    const idxPath = path.join(wikiRoot, "wiki/_archive/index.md");
+    const idx = fs.readFileSync(idxPath, "utf-8");
+
+    // The page should no longer appear as an active archive entry
+    // (lines with "billing/architecture.md" are for the archive listing;
+    //  after unarchive it should either be absent or not linked as archived)
+    const archiveListLines = idx
+      .split("\n")
+      .filter((l) => l.startsWith("- [") && l.includes("billing/architecture.md"));
+    expect(archiveListLines).toHaveLength(0);
   });
 });
