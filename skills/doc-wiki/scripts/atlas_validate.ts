@@ -374,7 +374,7 @@ const REMOTE_SCHEMES = [
   "gcp:",
 ];
 
-function _isRemoteScheme(s: string): boolean {
+function isRemoteScheme(s: string): boolean {
   return REMOTE_SCHEMES.some((p) => s.startsWith(p));
 }
 
@@ -388,6 +388,9 @@ function _isRemoteScheme(s: string): boolean {
  *
  * Remote sources (http, https, jira, github, confluence, notion, aws, gcp)
  * are ignored and do not count toward `total`.
+ *
+ * Throws if the page file cannot be read (e.g. ENOENT, EACCES). The caller
+ * is responsible for handling missing pages — typically log + skip.
  */
 export function sourceExistence(opts: {
   wikiRoot: string;
@@ -395,18 +398,13 @@ export function sourceExistence(opts: {
   page: string;
   threshold?: number;
 }): SourceExistenceResult {
-  let body: string;
-  try {
-    body = fs.readFileSync(opts.page, "utf-8");
-  } catch {
-    return { status: "orphan", total: 0, missing: [], ratio: 0 };
-  }
+  const body = fs.readFileSync(opts.page, "utf-8");
   const { frontmatter } = parseFrontmatter(body);
   const sourcesRaw = frontmatter?.["sources"];
   const sources: string[] = Array.isArray(sourcesRaw)
     ? (sourcesRaw.filter((s) => typeof s === "string") as string[])
     : [];
-  const localPaths = sources.filter((s) => !_isRemoteScheme(s));
+  const localPaths = sources.filter((s) => !isRemoteScheme(s));
   if (localPaths.length === 0) {
     return { status: "live", total: 0, missing: [], ratio: 0 };
   }

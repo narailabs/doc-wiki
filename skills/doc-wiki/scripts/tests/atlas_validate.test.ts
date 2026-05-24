@@ -363,4 +363,10 @@ describe("sourceExistence", () => {
     expect(r.status).toBe("live");
     expect(r.total).toBe(0);
   });
+
+  it("throws when the page file does not exist", () => {
+    expect(() =>
+      sourceExistence({ wikiRoot, repoRoot, page: "/tmp/does-not-exist-atlas-validate.md" }),
+    ).toThrow();
+  });
 });
