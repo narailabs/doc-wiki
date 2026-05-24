@@ -254,6 +254,69 @@ describe("TestEdgeCases", () => {
   });
 });
 
+// ── Fast-path regex pre-filter tests ────────────────────────────────
+
+describe("TestFastPathRegexPrefilter", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("summary-fastpath-");
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  // The regex `/^{"ts":"([^"\\]+)"/` extracts the leading `ts` field
+  // without paying JSON.parse overhead, letting readEvents() reject
+  // lines whose date substring only appears inside an unrelated field
+  // (e.g. the event's `source` text). A miss falls through to full parse.
+
+  it("rejects line whose target date appears only inside another field", () => {
+    const wiki = makeInitializedWiki(tmpPath);
+    const eventsPath = path.join(wiki, "log", "events.jsonl");
+    // `ts` is for 2026-04-11, but the `source` field contains the
+    // string "2026-04-12" — without the regex pre-filter the includes()
+    // check would still pay JSON.parse cost, but more importantly the
+    // entry must not be counted for 2026-04-12.
+    const decoy = {
+      ts: "2026-04-11T10:00:00+00:00",
+      op: "ingest",
+      source: "report-from-2026-04-12.pdf",
+      cost_usd: 0.05,
+    };
+    const realEntry = {
+      ts: "2026-04-12T10:00:00+00:00",
+      op: "ingest",
+      source: "real.pdf",
+      cost_usd: 0.01,
+    };
+    fs.writeFileSync(
+      eventsPath,
+      [JSON.stringify(decoy), JSON.stringify(realEntry)].join("\n") + "\n",
+    );
+    const result = generateSummary(wiki, "2026-04-12");
+    // Only the real entry should be counted: 1 ingest, $0.0100 total.
+    // If the decoy bled through, total cost would be $0.0600 (0.05 + 0.01)
+    // and the ingest count would be 2.
+    expect(result).toContain("| ingest | 1 |");
+    expect(result).toContain("$0.0100");
+    expect(result).not.toContain("$0.0600");
+  });
+
+  it("falls through to JSON.parse when ts is not the first key", () => {
+    const wiki = makeInitializedWiki(tmpPath);
+    const eventsPath = path.join(wiki, "log", "events.jsonl");
+    // Manually emit a line where `op` precedes `ts`. The anchored regex
+    // will not match, but the date string IS present, so the line must
+    // still be processed by full JSON.parse and counted.
+    const nonCanonical =
+      '{"op":"ingest","ts":"2026-04-12T10:00:00+00:00","source":"x.pdf","cost_usd":0.05}';
+    fs.writeFileSync(eventsPath, nonCanonical + "\n");
+    const result = generateSummary(wiki, "2026-04-12");
+    expect(result).toContain("ingest");
+  });
+});
+
 // ── CLI tests ──────────────────────────────────────────────────────
 
 function runCli(
