@@ -844,3 +844,49 @@ describe("main() compute-sources subcommand", () => {
     expect(stderrChunks.join("")).toContain("--run-id is required");
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("countAtlasPages archive exclusion", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-archive-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    // Remove the starter pages so we start with a clean count.
+    for (const f of ["index.md", "summaries.md", "overview.md"]) {
+      fs.unlinkSync(path.join(wikiRoot, "wiki", f));
+    }
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("countAtlasPages ignores atlas-tagged pages under _archive/", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    writeAtlasPage(wikiRoot, "wiki/_archive/billing/architecture.md", "architecture", "r1");
+    writeAtlasPage(wikiRoot, "wiki/_archive/admin/architecture.md", "architecture", "r1");
+    // Only the live page should be counted.
+    expect(countAtlasPages(wikiRoot)).toBe(1);
+  });
+
+  it("countAllPages ignores pages under _archive/", () => {
+    writeNonAtlasPage(wikiRoot, "wiki/live/page.md");
+    writeNonAtlasPage(wikiRoot, "wiki/_archive/old/page.md");
+    expect(countAllPages(wikiRoot)).toBe(1);
+  });
+
+  it("detect-state ignores archived atlas pages when counting toward threshold", () => {
+    // 1 live atlas page + 5 archived atlas pages + a prior atlas event.
+    // Without exclusion, countAtlasPages would return 6 >= 3 → "existing".
+    // With exclusion it returns 1 < 3 → "fresh".
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "r1");
+    for (let i = 0; i < 5; i++) {
+      writeAtlasPage(wikiRoot, `wiki/_archive/topic${i}/architecture.md`, "architecture", "r1");
+    }
+    writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "r1" });
+    expect(detectState(wikiRoot)).toBe("fresh");
+  });
+});

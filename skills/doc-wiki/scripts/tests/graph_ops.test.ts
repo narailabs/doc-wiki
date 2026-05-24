@@ -721,3 +721,46 @@ describe("TestClusters", () => {
     expect(result).toEqual([]);
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("graph_ops archive exclusion", () => {
+  let tmpPath: string;
+  let edgesFile: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-archive-");
+    edgesFile = makeEmptyEdgesFile(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("shortestPath returns no path when target is an archived node", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const result = shortestPath(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md");
+    expect(result).toEqual([]);
+  });
+
+  it("shortestPath skips edges that route through archived nodes", () => {
+    // live-a → archived-mid → live-b: the only path goes through archive.
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/mid.md", "extends", "EXTRACTED");
+    addEdge(edgesFile, "wiki/_archive/mid.md", "wiki/live-b.md", "extends", "EXTRACTED");
+    const result = shortestPath(edgesFile, "wiki/live-a.md", "wiki/live-b.md");
+    expect(result).toEqual([]);
+  });
+
+  it("clusters does not include archived nodes", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const result = clusters(edgesFile);
+    const allNodes = result.flat();
+    expect(allNodes.some((n) => n.includes("_archive"))).toBe(false);
+  });
+
+  it("computeDegrees ignores archived nodes", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_archive"))).toBe(false);
+  });
+});

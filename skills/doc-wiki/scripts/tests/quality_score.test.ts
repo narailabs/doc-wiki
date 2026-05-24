@@ -561,3 +561,35 @@ describe("TestQualityScoreCLI", () => {
     expect(ts.stdout).toContain('"quality": 0');
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("scoreWiki archive exclusion", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("quality-archive-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("archived pages do not appear in the per-page score table", () => {
+    writePage(
+      path.join(wiki, "wiki", "live", "page.md"),
+      fullFrontmatter({ title: "Live Page" }),
+      "Live body content.\n",
+    );
+    writePage(
+      path.join(wiki, "wiki", "_archive", "old", "page.md"),
+      fullFrontmatter({ title: "Archived Page" }),
+      "Archived body content.\n",
+    );
+    const scores = scoreWiki(wiki);
+    const paths = scores.map((s) => s.page);
+    expect(paths.some((p) => p.includes("live/page.md"))).toBe(true);
+    expect(paths.some((p) => p.includes("_archive"))).toBe(false);
+  });
+});

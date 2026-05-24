@@ -287,6 +287,7 @@ export function scoreWiki(wikiRoot) {
     for (const page of walkLivePages(wikiRoot)) {
         const result = scorePage(page.absPath, ep);
         results.push({
+            // relPath uses POSIX separators (walkSync normalizes); edges.jsonl must match this convention.
             page: page.relPath,
             quality: result.quality,
             signals: result.signals,

@@ -57,7 +57,8 @@ export function countAtlasPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
-                walk(full);
+                if (!e.name.startsWith("_"))
+                    walk(full);
                 continue;
             }
             if (!e.isFile() || !full.endsWith(".md"))
@@ -101,7 +102,8 @@ export function countAllPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
-                walk(full);
+                if (!e.name.startsWith("_"))
+                    walk(full);
                 continue;
             }
             if (e.isFile() && full.endsWith(".md"))
@@ -526,7 +528,8 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
             for (const e of entries) {
                 const full = path.join(dir, e.name);
                 if (e.isDirectory()) {
-                    walk(full);
+                    if (!e.name.startsWith("_"))
+                        walk(full);
                     continue;
                 }
                 if (!e.isFile() || !full.endsWith(".md"))

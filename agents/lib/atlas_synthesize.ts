@@ -83,7 +83,7 @@ function _findAtlasPages(
     for (const e of entries) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        walk(full);
+        if (!e.name.startsWith("_")) walk(full);
         continue;
       }
       if (!e.isFile() || !full.endsWith(".md")) continue;

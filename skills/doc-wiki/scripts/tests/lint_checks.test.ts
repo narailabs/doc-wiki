@@ -1369,3 +1369,45 @@ describe("checkDeprecatedClaims", () => {
     expect(cats.size).toBe(1);
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("archive exclusion — lint produces no findings for _archive/ pages", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("lint-archive-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("archived page with broken link produces no lint findings", () => {
+    // Live page with a broken link — should surface an error.
+    const livePage = path.join(wiki, "wiki", "topic-a", "page.md");
+    writePage(livePage, fullFm(), "See [live broken](missing-live.md).\n");
+    // Archived page with a broken link — must be ignored by the linter.
+    const archivedPage = path.join(wiki, "wiki", "_archive", "topic-a", "page.md");
+    writePage(archivedPage, fullFm(), "See [archived broken](missing-archive.md).\n");
+
+    const issues = checkBrokenLinks(wiki);
+    // The live page's broken link is reported.
+    const liveIssues = issues.filter((i) => i.page.includes("missing-live") || i.detail.includes("missing-live"));
+    // The archived page produces no issues at all.
+    const archiveIssues = issues.filter((i) => i.page.includes("_archive"));
+    expect(archiveIssues).toEqual([]);
+  });
+
+  it("lintWiki produces no findings for archived pages", () => {
+    // Write an archived page with every frontmatter field missing (worst-case).
+    const archivedPage = path.join(wiki, "wiki", "_archive", "old-topic", "page.md");
+    fs.mkdirSync(path.dirname(archivedPage), { recursive: true });
+    fs.writeFileSync(archivedPage, "# No frontmatter at all\n\nSee [broken](does-not-exist.md).\n");
+
+    const result = lintWiki(wiki);
+    const archiveIssues = result.issues.filter((i) => i.page.includes("_archive"));
+    expect(archiveIssues).toEqual([]);
+  });
+});

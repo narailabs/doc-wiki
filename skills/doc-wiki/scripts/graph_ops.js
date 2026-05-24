@@ -24,6 +24,17 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
+// ── Archive filtering ───────────────────────────────────────────────
+/** Return true when a node key refers to a page under `wiki/_archive/`. */
+function isArchivedNode(node) {
+    // Normalise separators and check for the archive path segment.
+    const n = node.replace(/\\/g, "/");
+    return n.startsWith("wiki/_archive/") || n.includes("/wiki/_archive/");
+}
+/** Drop edges where either endpoint is an archived page. */
+function filterArchivedEdges(edges) {
+    return edges.filter((e) => !isArchivedNode(e.from) && !isArchivedNode(e.to));
+}
 // ── Constants ───────────────────────────────────────────────────────
 export const VALID_EDGE_TYPES = new Set([
     "supports",
@@ -149,7 +160,7 @@ export function listEdges(edgesPath, edgeType) {
  * matches Python: first appearance across edges (either endpoint) wins.
  */
 export function computeDegrees(edgesPath) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterArchivedEdges(readAllEdges(edgesPath));
     const degrees = {};
     for (const e of edges) {
         degrees[e.from] = (degrees[e.from] ?? 0) + 1;
@@ -198,7 +209,7 @@ export function isolatedNodes(edgesPath, allPages) {
  * of any member node across the edge file.
  */
 export function clusters(edgesPath, allPages) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterArchivedEdges(readAllEdges(edgesPath));
     const parent = new Map();
     const order = [];
     const ensure = (node) => {
@@ -260,7 +271,7 @@ export function clusters(edgesPath, allPages) {
  *  alphabetical comparator before passing neighbors to the BFS/DFS.
  */
 function buildGraph(edgesPath) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterArchivedEdges(readAllEdges(edgesPath));
     const graph = new Graph({ type: "directed", allowSelfLoops: true });
     const edgeMap = new Map();
     for (const e of edges) {

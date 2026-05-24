@@ -25,6 +25,20 @@ import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
 
+// ── Archive filtering ───────────────────────────────────────────────
+
+/** Return true when a node key refers to a page under `wiki/_archive/`. */
+function isArchivedNode(node: string): boolean {
+  // Normalise separators and check for the archive path segment.
+  const n = node.replace(/\\/g, "/");
+  return n.startsWith("wiki/_archive/") || n.includes("/wiki/_archive/");
+}
+
+/** Drop edges where either endpoint is an archived page. */
+function filterArchivedEdges(edges: Edge[]): Edge[] {
+  return edges.filter((e) => !isArchivedNode(e.from) && !isArchivedNode(e.to));
+}
+
 // ── Constants ───────────────────────────────────────────────────────
 
 export const VALID_EDGE_TYPES: ReadonlySet<string> = new Set([
@@ -195,7 +209,7 @@ export function listEdges(edgesPath: string, edgeType?: string | null): Edge[] {
  * matches Python: first appearance across edges (either endpoint) wins.
  */
 export function computeDegrees(edgesPath: string): Record<string, number> {
-  const edges = readAllEdges(edgesPath);
+  const edges = filterArchivedEdges(readAllEdges(edgesPath));
   const degrees: Record<string, number> = {};
   for (const e of edges) {
     degrees[e.from] = (degrees[e.from] ?? 0) + 1;
@@ -260,7 +274,7 @@ export function clusters(
   edgesPath: string,
   allPages?: readonly string[] | null,
 ): string[][] {
-  const edges = readAllEdges(edgesPath);
+  const edges = filterArchivedEdges(readAllEdges(edgesPath));
   const parent = new Map<string, string>();
   const order: string[] = [];
 
@@ -332,7 +346,7 @@ interface BuiltGraph {
  *  alphabetical comparator before passing neighbors to the BFS/DFS.
  */
 function buildGraph(edgesPath: string): BuiltGraph {
-  const edges = readAllEdges(edgesPath);
+  const edges = filterArchivedEdges(readAllEdges(edgesPath));
   const graph = new Graph({ type: "directed", allowSelfLoops: true });
   const edgeMap = new Map<string, Edge>();
   for (const e of edges) {
