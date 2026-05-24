@@ -14,6 +14,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
+const VALID_INBOUND_LINKS_MODES = new Set([
+    "rewrite",
+    "drop",
+    "leave",
+]);
 const VALID_AUTONOMY_MODES = new Set([
     "conservative",
     "balanced",
@@ -77,6 +82,27 @@ function applyReadmeDefaults(ecosystem, autonomyMode) {
         quickstart_depth: raw.quickstart_depth ?? "generous",
         salvage_mode: raw.salvage_mode ?? inheritedSalvage,
         insert_markers_on_init: raw.insert_markers_on_init ?? true,
+    };
+}
+function applyArchiveDefaults(ecosystem) {
+    if (ecosystem["archive"] !== undefined && !isPlainObject(ecosystem["archive"])) {
+        throw new Error(`invalid ecosystem.archive: ${JSON.stringify(ecosystem["archive"])} (expected an object; to disable use \`ecosystem.archive.enabled: false\`)`);
+    }
+    const raw = ecosystem["archive"] ?? {};
+    const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
+    const partial = typeof raw.partial_threshold === "number" ? raw.partial_threshold : 1.0;
+    if (partial < 0 || partial > 1) {
+        throw new Error(`invalid ecosystem.archive.partial_threshold: ${partial} (must be in [0.0, 1.0])`);
+    }
+    const mode = raw.inbound_links ?? "rewrite";
+    if (!VALID_INBOUND_LINKS_MODES.has(mode)) {
+        throw new Error(`invalid ecosystem.archive.inbound_links: ${mode} (expected one of: ${[...VALID_INBOUND_LINKS_MODES].join(", ")})`);
+    }
+    ecosystem.archive = {
+        ...raw,
+        enabled,
+        partial_threshold: partial,
+        inbound_links: mode,
     };
 }
 function isPlainObject(v) {
@@ -156,6 +182,7 @@ export function parseConfig(configPath) {
     }
     const ecosystem = config["ecosystem"];
     applyReadmeDefaults(ecosystem, mode);
+    applyArchiveDefaults(ecosystem);
     return config;
 }
 function parseArgs(argv) {
