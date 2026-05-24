@@ -340,6 +340,14 @@ describe("ecosystem.archive", () => {
     }
   });
 
+  it("rejects non-boolean enabled", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { enabled: "yes" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/enabled/);
+  });
+
   it("rejects scalar ecosystem.archive value with a helpful error", () => {
     const p = writeConfigYaml(tmpPath, {
       wiki: { name: "t" },

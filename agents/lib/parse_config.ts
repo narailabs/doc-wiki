@@ -127,7 +127,12 @@ function applyArchiveDefaults(ecosystem: Record<string, unknown>): void {
     );
   }
   const raw = (ecosystem["archive"] as Record<string, unknown> | undefined) ?? {};
-  const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+    throw new Error(
+      `invalid ecosystem.archive.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`,
+    );
+  }
+  const enabled = raw.enabled ?? true;
   const partial = typeof raw.partial_threshold === "number" ? raw.partial_threshold : 1.0;
   if (partial < 0 || partial > 1) {
     throw new Error(
