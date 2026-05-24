@@ -890,3 +890,47 @@ describe("countAtlasPages archive exclusion", () => {
     expect(detectState(wikiRoot)).toBe("fresh");
   });
 });
+
+describe("assembleGapReport archive exclusion", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-gap-archive-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    for (const f of ["index.md", "summaries.md", "overview.md"]) {
+      const p = path.join(wikiRoot, "wiki", f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("assembleGapReport does not count archived atlas pages as covering plan entries", () => {
+    const plan = {
+      topics: ["auth"],
+      facets: ["architecture"],
+      entries: [
+        {
+          topic: "auth",
+          facet: "architecture",
+          sources: ["src/auth/"],
+          output: "wiki/auth/architecture.md",
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    // Only an archived copy exists — the live output path is missing.
+    writeAtlasPage(wikiRoot, "wiki/_archive/auth/architecture.md", "architecture", "r1");
+
+    const report = assembleGapReport(wikiRoot, plan);
+    // Archived page must not satisfy coverage; auth/architecture must be flagged.
+    expect(report.topicsWithoutPages).toEqual(["auth"]);
+    expect(report.facetsWithoutCoverage).toEqual([
+      { topic: "auth", facet: "architecture" },
+    ]);
+    expect(report.sourceFilesWithNoPage).toContain("src/auth/");
+  });
+});

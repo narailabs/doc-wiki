@@ -27,11 +27,12 @@ import { bidirectional } from "graphology-shortest-path/unweighted.js";
 
 // ── Archive filtering ───────────────────────────────────────────────
 
-/** Return true when a node key refers to a page under `wiki/_archive/`. */
+/** Return true when a node key refers to a page under any `_`-prefixed
+ *  directory (e.g. `_archive`, `_drafts`, `_internal`).  This matches the
+ *  convention used by `walkLivePages` and the atlas walker, both of which
+ *  skip any directory whose basename starts with `_`. */
 function isArchivedNode(node: string): boolean {
-  // Normalise separators and check for the archive path segment.
-  const n = node.replace(/\\/g, "/");
-  return n.startsWith("wiki/_archive/") || n.includes("/wiki/_archive/");
+  return node.replace(/\\/g, "/").split("/").some((seg) => seg.startsWith("_"));
 }
 
 /** Drop edges where either endpoint is an archived page. */
@@ -193,9 +194,9 @@ export function removeEdge(
   return removed;
 }
 
-/** Return all edges, optionally filtered by type. */
+/** Return all edges, optionally filtered by type. Archived edges are excluded. */
 export function listEdges(edgesPath: string, edgeType?: string | null): Edge[] {
-  const edges = readAllEdges(edgesPath);
+  const edges = filterArchivedEdges(readAllEdges(edgesPath));
   if (edgeType !== undefined && edgeType !== null) {
     return edges.filter((e) => e.type === edgeType);
   }
