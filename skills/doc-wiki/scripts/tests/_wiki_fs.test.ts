@@ -1,13 +1,14 @@
 /**
  * Tests for _wiki_fs.ts — specifically the `loadIgnore` / `.wiki-ignore`
- * matcher. The `wikiPages` walker is exercised indirectly by tests for
+ * matcher and the new `walkLivePages` / `walkArchivedPages` helpers.
+ * The `wikiPages` walker is exercised indirectly by tests for
  * `lint_checks`, `quality_score`, and other consumers.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { loadIgnore } from "../_wiki_fs.js";
+import { loadIgnore, walkLivePages, walkArchivedPages } from "../_wiki_fs.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 describe("loadIgnore", () => {
@@ -93,5 +94,137 @@ describe("loadIgnore", () => {
     fs.mkdirSync(path.join(tmpPath, ".wiki-ignore"));
     const matcher = loadIgnore(tmpPath);
     expect(matcher.isIgnored("node_modules/foo.js")).toBe(false);
+  });
+});
+
+describe("walkLivePages", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("wiki-walk-live-");
+    // Base fixture:
+    //   wiki/index.md
+    //   wiki/topic-a/page.md
+    //   wiki/_archive/topic-a/old-page.md
+    //   wiki/_archive/index.md
+    fs.mkdirSync(path.join(tmpPath, "wiki", "topic-a"), { recursive: true });
+    fs.mkdirSync(path.join(tmpPath, "wiki", "_archive", "topic-a"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "index.md"), "# Index\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "topic-a", "page.md"), "# Page\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "index.md"), "# Archived Index\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "topic-a", "old-page.md"), "# Old\n");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("excludes any directory starting with _", async () => {
+    const pages = await walkLivePages(tmpPath);
+    expect(pages.map((p) => p.relPath)).toEqual([
+      "wiki/index.md",
+      "wiki/topic-a/page.md",
+    ]);
+  });
+
+  it("excludes _archive even when nested deeply", async () => {
+    // wiki/topic-b/_archive/legacy.md  — shouldn't happen in practice but guard
+    // wiki/_internal/draft.md          — any underscore-prefixed dir is skipped
+    fs.mkdirSync(path.join(tmpPath, "wiki", "topic-b", "_archive"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "topic-b", "_archive", "legacy.md"), "# Legacy\n");
+    fs.mkdirSync(path.join(tmpPath, "wiki", "_internal"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_internal", "draft.md"), "# Draft\n");
+
+    const pages = await walkLivePages(tmpPath);
+    const relPaths = pages.map((p) => p.relPath);
+    expect(relPaths).not.toContain("wiki/topic-b/_archive/legacy.md");
+    expect(relPaths).not.toContain("wiki/_internal/draft.md");
+    // Live pages are still found
+    expect(relPaths).toContain("wiki/index.md");
+    expect(relPaths).toContain("wiki/topic-a/page.md");
+  });
+
+  it("handles empty wiki (only wiki/index.md)", async () => {
+    const emptyRoot = makeTmpPath("wiki-walk-empty-");
+    try {
+      fs.mkdirSync(path.join(emptyRoot, "wiki"), { recursive: true });
+      fs.writeFileSync(path.join(emptyRoot, "wiki", "index.md"), "# Index\n");
+      const pages = await walkLivePages(emptyRoot);
+      expect(pages.map((p) => p.relPath)).toEqual(["wiki/index.md"]);
+    } finally {
+      cleanupTmpPath(emptyRoot);
+    }
+  });
+
+  it("returns empty array when wiki/ directory does not exist", async () => {
+    const freshRoot = makeTmpPath("wiki-walk-fresh-");
+    try {
+      const pages = await walkLivePages(freshRoot);
+      expect(pages).toEqual([]);
+    } finally {
+      cleanupTmpPath(freshRoot);
+    }
+  });
+
+  it("exposes both absPath and relPath on each WikiPage", async () => {
+    const pages = await walkLivePages(tmpPath);
+    for (const p of pages) {
+      expect(path.isAbsolute(p.absPath)).toBe(true);
+      expect(p.relPath).not.toMatch(/^\//);
+      expect(p.absPath).toContain(p.relPath.replace(/\//g, path.sep));
+    }
+  });
+});
+
+describe("walkArchivedPages", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("wiki-walk-arch-");
+    fs.mkdirSync(path.join(tmpPath, "wiki", "topic-a"), { recursive: true });
+    fs.mkdirSync(path.join(tmpPath, "wiki", "_archive", "topic-a"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "index.md"), "# Index\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "topic-a", "page.md"), "# Page\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "index.md"), "# Archived Index\n");
+    fs.writeFileSync(path.join(tmpPath, "wiki", "_archive", "topic-a", "old-page.md"), "# Old\n");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns only _archive/ pages", async () => {
+    const pages = await walkArchivedPages(tmpPath);
+    expect(pages.map((p) => p.relPath)).toEqual([
+      "wiki/_archive/index.md",
+      "wiki/_archive/topic-a/old-page.md",
+    ]);
+  });
+
+  it("returns empty array when _archive/ does not exist", async () => {
+    const noArchRoot = makeTmpPath("wiki-walk-noarch-");
+    try {
+      fs.mkdirSync(path.join(noArchRoot, "wiki"), { recursive: true });
+      fs.writeFileSync(path.join(noArchRoot, "wiki", "index.md"), "# Index\n");
+      const pages = await walkArchivedPages(noArchRoot);
+      expect(pages).toEqual([]);
+    } finally {
+      cleanupTmpPath(noArchRoot);
+    }
+  });
+
+  it("relPath is relative to wikiRoot (not to _archive/)", async () => {
+    const pages = await walkArchivedPages(tmpPath);
+    for (const p of pages) {
+      expect(p.relPath.startsWith("wiki/_archive/")).toBe(true);
+    }
+  });
+
+  it("absPath is absolute and consistent with relPath", async () => {
+    const pages = await walkArchivedPages(tmpPath);
+    for (const p of pages) {
+      expect(path.isAbsolute(p.absPath)).toBe(true);
+      expect(p.absPath).toContain(p.relPath.replace(/\//g, path.sep));
+    }
   });
 });
