@@ -248,6 +248,7 @@ describe("sweep — history journal", () => {
     expect(lines).toHaveLength(1);
 
     const event = JSON.parse(lines[0]!);
+    expect(event.op).toBe("archive");
     expect(event.from).toBe("wiki/billing/architecture.md");
     expect(event.to).toBe("wiki/_archive/billing/architecture.md");
     expect(event.atlas_run_id).toBe("test-run-001");
@@ -586,6 +587,32 @@ describe("unarchive — happy path", () => {
     });
     expect(result.linksReverted).toBe(0);
   });
+
+  it("stripArchiveFrontmatter: no frontmatter block when only deprecation keys remain", async () => {
+    // Write an archived page whose ONLY frontmatter keys are the four
+    // deprecation fields (no atlas_facet or other preserved keys).
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/only-deprecated.md");
+    fs.mkdirSync(path.dirname(archPath), { recursive: true });
+    fs.writeFileSync(
+      archPath,
+      `---\nstatus: deprecated\narchived_at: "2026-01-01"\narchive_reason: test\narchived_from: wiki/billing/only-deprecated.md\n---\nbody text\n`,
+      "utf-8",
+    );
+
+    await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/only-deprecated.md",
+      inboundLinks: "leave",
+    });
+
+    const restored = fs.readFileSync(
+      path.join(wikiRoot, "wiki/billing/only-deprecated.md"),
+      "utf-8",
+    );
+    // Must NOT start with "---" (no frontmatter block at all)
+    expect(restored.startsWith("---")).toBe(false);
+    expect(restored).toBe("body text\n");
+  });
 });
 
 describe("unarchive — collision", () => {
@@ -645,6 +672,8 @@ describe("unarchive — --target override", () => {
     expect(
       fs.existsSync(path.join(wikiRoot, "wiki/_archive/billing/architecture.md")),
     ).toBe(false);
+    // archived_from path ("wiki/billing/architecture.md") must NOT have been created
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md"))).toBe(false);
   });
 });
 

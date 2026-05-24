@@ -63,6 +63,7 @@ export interface SweepOptions {
 
 export interface ArchiveEvent {
   ts: string;
+  op: "archive";
   atlas_run_id: string;
   from: string;
   to: string;
@@ -186,6 +187,7 @@ function buildEvent(
     : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
   return {
     ts,
+    op: "archive",
     atlas_run_id: opts.runId,
     from: page.relPath,
     to: archRelPath,
@@ -251,7 +253,7 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
 
   // Only keep archive events (op !== "unarchive") whose archived file still exists.
   const events: ArchiveEvent[] = allEvents.filter((e): e is ArchiveEvent => {
-    if ("op" in e && e.op === "unarchive") return false;
+    if (e.op === "unarchive") return false;
     const archAbsPath = path.join(wikiRoot, e.to);
     return fs.existsSync(archAbsPath);
   });
@@ -383,7 +385,10 @@ async function stripArchiveFrontmatter(absPath: string): Promise<void> {
       }
     }
   }
-  const newContent = `---\n${yaml.dump(fm)}---\n${body}`;
+  const newContent =
+    Object.keys(fm).length === 0
+      ? body
+      : `---\n${yaml.dump(fm)}---\n${body}`;
   await fs.promises.writeFile(absPath, newContent, "utf-8");
 }
 
