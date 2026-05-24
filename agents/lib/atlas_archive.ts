@@ -160,12 +160,15 @@ function buildEvent(
   ts: string,
 ): ArchiveEvent {
   const archRelPath = toArchiveRelPath(page.relPath);
+  const reason = existence.ratio === 1.0
+    ? `all sources removed (${existence.missing.join(", ")})`
+    : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
   return {
     ts,
     atlas_run_id: opts.runId,
     from: page.relPath,
     to: archRelPath,
-    reason: `all sources removed (${existence.missing.join(", ")})`,
+    reason,
     missing_sources: [...existence.missing],
   };
 }
@@ -182,14 +185,18 @@ async function applyArchive(
   const archAbsPath = path.join(opts.wikiRoot, archRelPath);
   fs.mkdirSync(path.dirname(archAbsPath), { recursive: true });
 
-  // Stamp frontmatter on the source file first, then move.
-  stampFrontmatter(page.absPath, {
+  // Rename first — if this fails, the live file is untouched.
+  // If stamp fails after rename, the file is at the archive path with original
+  // frontmatter; the next sweep won't see it (outside walkLivePages).
+  fs.renameSync(page.absPath, archAbsPath);
+  const archiveReason = existence.ratio === 1.0
+    ? `all sources removed (${existence.missing.join(", ")})`
+    : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
+  stampFrontmatter(archAbsPath, {
     archived_from: page.relPath,
     archived_at: isoDate(ts),
-    archive_reason: `all sources removed (${existence.missing.join(", ")})`,
+    archive_reason: archiveReason,
   });
-
-  fs.renameSync(page.absPath, archAbsPath);
 }
 
 // ── History journal ────────────────────────────────────────────────────────────
@@ -303,12 +310,15 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
     if (existence.ratio === 1.0) {
       // All sources missing → orphan.
       const decision = decideAutonomy(opts.autonomy, "orphan");
-      const event = buildEvent(page, existence, resolvedOpts, ts);
       if (decision === "auto") {
-        if (!opts.dryRun) {
-          await applyArchive(page, existence, resolvedOpts, ts);
+        try {
+          if (!opts.dryRun) await applyArchive(page, existence, resolvedOpts, ts);
+          const event = buildEvent(page, existence, resolvedOpts, ts);
+          archived.push(event);
+        } catch (e) {
+          errors.push({ page: page.relPath, error: String(e) });
+          continue;
         }
-        archived.push(event);
       } else if (decision === "ask") {
         pendingConfirmation.push({ page: page.relPath, existence });
       }
@@ -316,12 +326,15 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
     } else if (existence.ratio >= partialThreshold) {
       // Partial removal exceeds threshold → treat as archive-eligible.
       const decision = decideAutonomy(opts.autonomy, "orphan");
-      const event = buildEvent(page, existence, resolvedOpts, ts);
       if (decision === "auto") {
-        if (!opts.dryRun) {
-          await applyArchive(page, existence, resolvedOpts, ts);
+        try {
+          if (!opts.dryRun) await applyArchive(page, existence, resolvedOpts, ts);
+          const event = buildEvent(page, existence, resolvedOpts, ts);
+          archived.push(event);
+        } catch (e) {
+          errors.push({ page: page.relPath, error: String(e) });
+          continue;
         }
-        archived.push(event);
       } else if (decision === "ask") {
         pendingConfirmation.push({ page: page.relPath, existence });
       }

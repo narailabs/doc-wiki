@@ -302,6 +302,132 @@ describe("sweep — archive index rebuild", () => {
   });
 });
 
+// ── Tests: applyArchive failure is caught (Issue 2) ───────────────────────────
+
+describe("sweep — applyArchive failure is caught", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("archive-err-");
+    repoRoot = makeTmpPath("archive-err-repo-");
+  });
+
+  afterEach(() => {
+    // Restore permissions so cleanup can delete everything
+    const archiveParent = path.join(wikiRoot, "wiki", "_archive");
+    if (fs.existsSync(archiveParent)) {
+      try { fs.chmodSync(archiveParent, 0o755); } catch { /* ignore */ }
+    }
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("catches applyArchive failure, adds to errors[], leaves other pages in archived[]", async () => {
+    // Page A: will fail (archive dir made read-only)
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/"],
+      title: "Billing Architecture",
+    });
+    // Page B: should succeed
+    writePage(wikiRoot, "wiki/payments/overview.md", {
+      atlas_facet: "overview",
+      sources: ["src/payments/"],
+      title: "Payments",
+    });
+
+    // Pre-create the _archive dir with a billing/ subdir that is read-only so
+    // renameSync into it will fail for billing/architecture.md only.
+    const billingArchiveDir = path.join(wikiRoot, "wiki", "_archive", "billing");
+    fs.mkdirSync(billingArchiveDir, { recursive: true });
+    fs.chmodSync(billingArchiveDir, 0o444);
+
+    const result = await sweep(makeOpts(wikiRoot, repoRoot));
+
+    // The failing page ends up in errors[], not archived[]
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.page).toBe("wiki/billing/architecture.md");
+
+    // The passing page is still archived
+    expect(result.archived).toHaveLength(1);
+    expect(result.archived[0]!.from).toBe("wiki/payments/overview.md");
+
+    // History file written for the successfully archived page
+    const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
+    expect(fs.existsSync(journalPath)).toBe(true);
+    const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!).from).toBe("wiki/payments/overview.md");
+  });
+});
+
+// ── Tests: partial-threshold reason string (Issue 3) ──────────────────────────
+
+describe("sweep — partial-threshold archive_reason accuracy", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("archive-reason-");
+    repoRoot = makeTmpPath("archive-reason-repo-");
+    // 1 of 3 sources missing
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/", "src/payments/", "src/invoices/"],
+      title: "Billing",
+    });
+    fs.mkdirSync(path.join(repoRoot, "src/payments"), { recursive: true });
+    fs.mkdirSync(path.join(repoRoot, "src/invoices"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("archive_reason contains missing/total counts for partial-threshold archive", async () => {
+    const result = await sweep(
+      makeOpts(wikiRoot, repoRoot, { autonomy: "autonomous", partialThreshold: 0.3 }),
+    );
+
+    expect(result.archived).toHaveLength(1);
+
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const fm = readFrontmatter(archPath);
+    const reason = fm["archive_reason"] as string;
+
+    // Must say "1 of 3" not "all sources removed"
+    expect(reason).toMatch(/1 of 3/);
+    expect(reason).not.toMatch(/^all sources removed/);
+    expect(reason).toContain("src/billing/");
+
+    // ArchiveEvent reason should also reflect the counts
+    expect(result.archived[0]!.reason).toMatch(/1 of 3/);
+  });
+
+  it("full-orphan archive_reason still says 'all sources removed'", async () => {
+    // Replace fixture: all 3 sources missing
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/", "src/payments/", "src/invoices/"],
+      title: "Billing",
+    });
+    // Remove the dirs so all sources are missing
+    fs.rmdirSync(path.join(repoRoot, "src/payments"));
+    fs.rmdirSync(path.join(repoRoot, "src/invoices"));
+
+    const result = await sweep(makeOpts(wikiRoot, repoRoot));
+
+    expect(result.archived).toHaveLength(1);
+    expect(result.archived[0]!.reason).toMatch(/^all sources removed/);
+
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const fm = readFrontmatter(archPath);
+    expect((fm["archive_reason"] as string)).toMatch(/^all sources removed/);
+  });
+});
+
 // ── Tests: non-atlas pages are skipped ────────────────────────────────────────
 
 describe("sweep — non-atlas pages skipped", () => {
