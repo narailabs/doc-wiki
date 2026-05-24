@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { computeDegrees } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
-import { wikiPages } from "./_wiki_fs.js";
+import { walkLivePages } from "./_wiki_fs.js";
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -331,11 +331,10 @@ export function scoreWiki(wikiRoot: string): WikiScore[] {
     return results;
   }
 
-  for (const page of wikiPages(wikiRoot)) {
-    const result = scorePage(page, ep);
-    const relPath = path.relative(wikiRoot, page);
+  for (const page of walkLivePages(wikiRoot)) {
+    const result = scorePage(page.absPath, ep);
     results.push({
-      page: relPath,
+      page: page.relPath,
       quality: result.quality,
       signals: result.signals,
     });

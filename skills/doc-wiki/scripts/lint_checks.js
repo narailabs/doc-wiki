@@ -26,7 +26,7 @@ import { clusters, isolatedNodes, listEdges } from "./graph_ops.js";
 import { lintPage as lintMermaidPage } from "./mermaid_lint.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter as parseFrontmatterRaw } from "./_frontmatter.js";
-import { wikiPages } from "./_wiki_fs.js";
+import { walkLivePages } from "./_wiki_fs.js";
 import { loadAllProfiles, detectOrm, } from "../../../agents/lib/wiki_orm/index.js";
 import { loadInventory, } from "../../../agents/lib/atlas_inventory.js";
 import { getLastAtlasRunId } from "./atlas_orchestrator.js";
@@ -74,9 +74,9 @@ function parseFrontmatter(content) {
  */
 function buildPageCache(wikiRoot) {
     const cache = new Map();
-    for (const page of wikiPages(wikiRoot)) {
-        const content = fs.readFileSync(page, { encoding: "utf-8" });
-        cache.set(page, { content, frontmatter: parseFrontmatter(content) });
+    for (const page of walkLivePages(wikiRoot)) {
+        const content = fs.readFileSync(page.absPath, { encoding: "utf-8" });
+        cache.set(page.absPath, { content, frontmatter: parseFrontmatter(content) });
     }
     return cache;
 }
@@ -183,9 +183,9 @@ export function checkOrphans(wikiRoot, cache) {
 export function checkIsolatedNodes(wikiRoot) {
     const issues = [];
     const edgesPath = path.join(wikiRoot, "graph", "edges.jsonl");
-    const allPages = wikiPages(wikiRoot);
+    const allPages = walkLivePages(wikiRoot);
     // Use relative paths matching edge format
-    const pageRelPaths = allPages.map((p) => path.relative(wikiRoot, p));
+    const pageRelPaths = allPages.map((p) => p.relPath);
     const isolated = isolatedNodes(edgesPath, pageRelPaths);
     for (const node of isolated) {
         issues.push(makeIssue("warning", "isolated_node", node, "Node has degree <= 1 in the knowledge graph"));
@@ -335,11 +335,11 @@ function pyRoundPercent(rate) {
 /** Run mermaid_lint's per-page validator across the wiki and return lint issues. */
 export function checkMermaidSyntax(wikiRoot) {
     const issues = [];
-    for (const page of wikiPages(wikiRoot)) {
-        const results = lintMermaidPage(page);
+    for (const page of walkLivePages(wikiRoot)) {
+        const results = lintMermaidPage(page.absPath);
         for (const mi of results) {
             for (const err of mi.errors) {
-                issues.push(makeIssue("warning", "mermaid_syntax", page, `line ${mi.line}: ${err}`));
+                issues.push(makeIssue("warning", "mermaid_syntax", page.absPath, `line ${mi.line}: ${err}`));
             }
         }
     }

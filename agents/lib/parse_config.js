@@ -89,7 +89,10 @@ function applyArchiveDefaults(ecosystem) {
         throw new Error(`invalid ecosystem.archive: ${JSON.stringify(ecosystem["archive"])} (expected an object; to disable use \`ecosystem.archive.enabled: false\`)`);
     }
     const raw = ecosystem["archive"] ?? {};
-    const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
+    if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+        throw new Error(`invalid ecosystem.archive.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`);
+    }
+    const enabled = raw.enabled ?? true;
     const partial = typeof raw.partial_threshold === "number" ? raw.partial_threshold : 1.0;
     if (partial < 0 || partial > 1) {
         throw new Error(`invalid ecosystem.archive.partial_threshold: ${partial} (must be in [0.0, 1.0])`);

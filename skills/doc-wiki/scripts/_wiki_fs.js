@@ -70,7 +70,7 @@ function walkSync(root, relBase, includeDir) {
  * `<wikiRoot>/wiki/`, excluding any directory whose basename starts with `_`
  * (e.g. `_archive`, `_internal`). Sorted lexicographically by `absPath`.
  */
-export async function walkLivePages(wikiRoot) {
+export function walkLivePages(wikiRoot) {
     const wikiDir = path.join(wikiRoot, "wiki");
     return walkSync(wikiDir, wikiRoot, (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX));
 }
@@ -80,48 +80,22 @@ export async function walkLivePages(wikiRoot) {
  * not exist. `relPath` on each record is relative to `wikiRoot`, so it
  * begins with `"wiki/_archive/"`.
  */
-export async function walkArchivedPages(wikiRoot) {
+export function walkArchivedPages(wikiRoot) {
     const archiveDir = path.join(wikiRoot, "wiki", "_archive");
     return walkSync(archiveDir, wikiRoot, () => true);
 }
 // ── Legacy export ─────────────────────────────────────────────────────────────
 /**
- * Return absolute paths to every `.md` file under `<wikiRoot>/wiki/`,
- * sorted lexicographically. See module docstring for parity details.
+ * Return absolute paths to every live `.md` file under `<wikiRoot>/wiki/`,
+ * sorted lexicographically. Excludes directories starting with `_` (e.g.
+ * `_archive`, `_internal`).
  *
  * @deprecated Use `walkLivePages()` instead. This alias will be removed in
  * the next major release once all callers have been migrated.
  */
 export function wikiPages(wikiRoot) {
     const wikiDir = path.join(wikiRoot, "wiki");
-    if (!fs.existsSync(wikiDir)) {
-        return [];
-    }
-    const out = [];
-    const stack = [wikiDir];
-    while (stack.length > 0) {
-        const dir = stack.pop();
-        if (dir === undefined)
-            continue;
-        let entries;
-        try {
-            entries = fs.readdirSync(dir, { withFileTypes: true });
-        }
-        catch {
-            continue;
-        }
-        for (const entry of entries) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                stack.push(full);
-            }
-            else if (entry.isFile() && full.endsWith(".md")) {
-                out.push(full);
-            }
-        }
-    }
-    out.sort();
-    return out;
+    return walkSync(wikiDir, wikiRoot, (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX)).map((p) => p.absPath);
 }
 /** Wraps the `ignore` package so callers only see `isIgnored`. */
 function wrap(ig) {
