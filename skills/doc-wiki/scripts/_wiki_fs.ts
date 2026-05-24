@@ -86,7 +86,7 @@ function walkSync(
  * `<wikiRoot>/wiki/`, excluding any directory whose basename starts with `_`
  * (e.g. `_archive`, `_internal`). Sorted lexicographically by `absPath`.
  */
-export async function walkLivePages(wikiRoot: string): Promise<WikiPage[]> {
+export function walkLivePages(wikiRoot: string): WikiPage[] {
   const wikiDir = path.join(wikiRoot, "wiki");
   return walkSync(
     wikiDir,
@@ -101,7 +101,7 @@ export async function walkLivePages(wikiRoot: string): Promise<WikiPage[]> {
  * not exist. `relPath` on each record is relative to `wikiRoot`, so it
  * begins with `"wiki/_archive/"`.
  */
-export async function walkArchivedPages(wikiRoot: string): Promise<WikiPage[]> {
+export function walkArchivedPages(wikiRoot: string): WikiPage[] {
   const archiveDir = path.join(wikiRoot, "wiki", "_archive");
   return walkSync(archiveDir, wikiRoot, () => true);
 }
@@ -120,7 +120,7 @@ export function wikiPages(wikiRoot: string): string[] {
   const wikiDir = path.join(wikiRoot, "wiki");
   return walkSync(
     wikiDir,
-    wikiDir,
+    wikiRoot,
     (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX),
   ).map((p) => p.absPath);
 }
