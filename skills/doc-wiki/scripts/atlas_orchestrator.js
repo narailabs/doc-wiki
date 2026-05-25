@@ -57,6 +57,7 @@ export function countAtlasPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
+                // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
                 if (!e.name.startsWith("_"))
                     walk(full);
                 continue;
@@ -102,6 +103,7 @@ export function countAllPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
+                // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
                 if (!e.name.startsWith("_"))
                     walk(full);
                 continue;
@@ -528,6 +530,7 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
             for (const e of entries) {
                 const full = path.join(dir, e.name);
                 if (e.isDirectory()) {
+                    // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
                     if (!e.name.startsWith("_"))
                         walk(full);
                     continue;

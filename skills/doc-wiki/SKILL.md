@@ -255,6 +255,15 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - **Semantic**: for each atlas page (sampled if `--validate-mode shallow`, all if `full`), compute `pageHash = sha256(body)` and `sourceHash = sha256(concat(sources))`. Probe `atlas_validate.js cache-check`; on miss, read page + sources and ask yourself: "Does this page still accurately describe the source(s)? List divergences." Store the result via `atlas_validate.js cache-store`.
    - Merge findings into `wiki/outputs/atlas/<run-id>/drift-report.md`.
 
+5b. **Archive sweep** — runs only when `ecosystem.archive.enabled: true` (default):
+    `node agents/lib/atlas_archive.js sweep --wiki-root <root> --repo-root <root> --autonomy <mode> --run-id <id>`
+    moves atlas pages whose local sources have all been deleted from the codebase into `wiki/_archive/`,
+    stamps deprecation frontmatter, appends to `_archive_history.jsonl`, rebuilds `wiki/_archive/index.md`,
+    and rewrites inbound links per `ecosystem.archive.inbound_links` mode. Under `balanced` / `conservative`
+    autonomy, the script returns a `pendingConfirmation` list and the orchestrator asks
+    "Archive `<page>`? [Y/n/skip-all]" per page. Partial removal (some-but-not-all sources missing) is
+    surfaced in the drift report only; never auto-archived.
+
 6. **Bootstrap / refresh** — for each plan entry not cached:
    - Save the plan snapshot first: `atlas_orchestrator.js save-plan --wiki-root <root> --run-id <id> --plan '<json>'`. The snapshot drives `--resume` so re-discovery doesn't change scope mid-run.
    - For `entry.facet == "data-model"`: dispatch `wiki-orm-agent` and write the result to `entry.output` with atlas frontmatter.
@@ -297,6 +306,15 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 - `atlas_run_id`: timestamp of the generating atlas run (`YYYY-MM-DDTHH-MM-SS`).
 
 These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
+
+Pages that have been archived gain four additional fields:
+
+- `status: deprecated`
+- `archived_at: <YYYY-MM-DD>`
+- `archive_reason: <free-text reason>`
+- `archived_from: <wiki-relative original path>`
+
+These are stamped by the Phase 5b sweep and stripped by `/doc-wiki:unarchive`.
 
 **Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with cross-links **written at page-creation time** (the post-op crosslink hook later refines, but never bootstraps, the section). The body section is **facet-conditional** so each audience gets the structure it needs.
 
@@ -348,11 +366,11 @@ The `audience` frontmatter drives the section choice; the `atlas_facet` drives w
 
 **Drift handling** honors `autonomy.mode` from `wiki.config.yaml`:
 
-| Autonomy | Stale (gitlog) | Structural | Semantic | Uncovered files |
-|---|---|---|---|---|
-| `conservative` | Ask before refresh | Report only | Report only | Ask before ingest |
-| `balanced` (default) | Auto-refresh | Auto-fix safe; report structural | Report; ask | Auto-ingest if matches current topic; else report |
-| `autonomous` / `auto` | Auto-refresh | Auto-fix all | Auto-fix; ask on conflicts | Auto-ingest |
+| Autonomy | Stale (gitlog) | Structural | Semantic | Uncovered files | Orphan sources (5b) | Partial (5b) |
+|---|---|---|---|---|---|---|
+| `conservative` | Ask before refresh | Report only | Report only | Ask before ingest | Report only | Report only |
+| `balanced` (default) | Auto-refresh | Auto-fix safe; report structural | Report; ask | Auto-ingest if matches current topic; else report | Ask per page | Report only |
+| `autonomous` / `auto` | Auto-refresh | Auto-fix all | Auto-fix; ask on conflicts | Auto-ingest | Auto-archive | Report only |
 
 **Cost ceiling**: pre-run estimate aborts if over `--max-cost`. Mid-run, if cumulative actual exceeds `1.5 × --max-cost`, finish the current page, save checkpoint, abort gracefully.
 
@@ -563,6 +581,39 @@ See also: `/doc-wiki:lint` query-absorption (above) — same coverage rule, diff
 Re-fetch previously-ingested sources, diff against stored versions, re-compile changed pages.
 
 **Batch resumption:** use `scripts/checkpoint.ts` with opName `"refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation. See `/doc-wiki:ingest` above for the pattern.
+
+### /doc-wiki:unarchive — Restore an archived page
+
+Restore a previously-archived wiki page from `wiki/_archive/` back to the active wiki.
+
+```
+/doc-wiki:unarchive <path-or-slug> [--target <wiki-relative-path>] [--yes]
+```
+
+**Arguments:**
+
+- `<path-or-slug>` — either a full path under `wiki/_archive/` (e.g. `wiki/_archive/auth/overview.md`) or a slug substring matched case-insensitively against the `archived_from` frontmatter field. If the substring matches more than one archived page, the orchestrator lists the candidates and asks the user to disambiguate.
+- `--target <wiki-relative-path>` — destination path relative to the wiki root (e.g. `wiki/auth/overview.md`). Defaults to the value of the `archived_from` frontmatter field. If the default target already exists on disk, the orchestrator stops and reports a conflict.
+- `--yes` — skip the confirmation prompt regardless of autonomy mode.
+
+**Flow:**
+
+1. **Resolve** — locate the archive entry by path or slug. If multiple matches, list and ask.
+2. **Target check** — determine destination from `--target` or `archived_from`. If the destination already exists, abort with a conflict message.
+3. **Move** — move the file from `wiki/_archive/<path>` to the resolved destination.
+4. **Strip frontmatter** — remove `status: deprecated`, `archived_at`, `archive_reason`, and `archived_from` fields from the page's frontmatter.
+5. **Append history** — append an `unarchive` event to `_archive_history.jsonl` recording `page`, `restored_to`, `restored_at`, and `triggered_by`.
+6. **Rebuild index** — regenerate `wiki/_archive/index.md` to reflect the removed entry.
+7. **Inverse link rewrite** — run `node agents/lib/atlas_archive.js rewrite-inbound-links-unarchive --wiki-root <root> --event-file <path-to-event-json>` to restore or update links in active wiki pages that were rewritten or dropped during the original archive sweep.
+8. **Post-op hooks** — run the standard crosslink and tag-harmonize passes (unless `--no-crosslink` / `--no-tag-harmonize`).
+
+**Autonomy gates:**
+
+| Autonomy | Behavior |
+|---|---|
+| `conservative` / `balanced` | Ask one confirmation before proceeding: "Restore `<page>` to `<target>`? [Y/n]" |
+| `autonomous` / `auto` | Proceed without prompt |
+| `--yes` | Overrides prompt at any autonomy level |
 
 ### /doc-wiki:stats — Token efficiency and cost metrics
 

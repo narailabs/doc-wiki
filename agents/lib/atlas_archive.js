@@ -9,7 +9,8 @@
  *   node atlas_archive.js sweep --wiki-root <p> --repo-root <p> --run-id <id>
  *                               [--autonomy conservative|balanced|autonomous|auto]
  *                               [--dry-run] [--threshold <n>]
- *   node atlas_archive.js unarchive ...   (Task 7 stub)
+ *   node atlas_archive.js unarchive --wiki-root <p> --page-or-slug <path-or-slug>
+ *                                   [--target <rel-path>] [--inbound-links rewrite|drop|leave]
  *   node atlas_archive.js rebuild-index --wiki-root <p>  (Task 8 stub)
  */
 import * as fs from "node:fs";
@@ -83,12 +84,16 @@ function stampFrontmatter(absPath, fields) {
 // ── ArchiveEvent builder ───────────────────────────────────────────────────────
 function buildEvent(page, existence, opts, ts) {
     const archRelPath = toArchiveRelPath(page.relPath);
+    const reason = existence.ratio === 1.0
+        ? `all sources removed (${existence.missing.join(", ")})`
+        : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
     return {
         ts,
+        op: "archive",
         atlas_run_id: opts.runId,
         from: page.relPath,
         to: archRelPath,
-        reason: `all sources removed (${existence.missing.join(", ")})`,
+        reason,
         missing_sources: [...existence.missing],
     };
 }
@@ -97,13 +102,18 @@ async function applyArchive(page, existence, opts, ts) {
     const archRelPath = toArchiveRelPath(page.relPath);
     const archAbsPath = path.join(opts.wikiRoot, archRelPath);
     fs.mkdirSync(path.dirname(archAbsPath), { recursive: true });
-    // Stamp frontmatter on the source file first, then move.
-    stampFrontmatter(page.absPath, {
+    // Rename first — if this fails, the live file is untouched.
+    // If stamp fails after rename, the file is at the archive path with original
+    // frontmatter; the next sweep won't see it (outside walkLivePages).
+    fs.renameSync(page.absPath, archAbsPath);
+    const archiveReason = existence.ratio === 1.0
+        ? `all sources removed (${existence.missing.join(", ")})`
+        : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
+    stampFrontmatter(archAbsPath, {
         archived_from: page.relPath,
         archived_at: isoDate(ts),
-        archive_reason: `all sources removed (${existence.missing.join(", ")})`,
+        archive_reason: archiveReason,
     });
-    fs.renameSync(page.absPath, archAbsPath);
 }
 // ── History journal ────────────────────────────────────────────────────────────
 async function appendHistory(wikiRoot, events) {
@@ -116,18 +126,25 @@ async function appendHistory(wikiRoot, events) {
 // ── Archive index rebuild ─────────────────────────────────────────────────────
 export async function rebuildArchiveIndex(wikiRoot) {
     const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
-    let events = [];
+    let allEvents = [];
     if (fs.existsSync(journalPath)) {
         const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
         for (const line of lines) {
             try {
-                events.push(JSON.parse(line));
+                allEvents.push(JSON.parse(line));
             }
             catch {
                 // skip malformed lines
             }
         }
     }
+    // Only keep archive events (op !== "unarchive") whose archived file still exists.
+    const events = allEvents.filter((e) => {
+        if (e.op === "unarchive")
+            return false;
+        const archAbsPath = path.join(wikiRoot, e.to);
+        return fs.existsSync(archAbsPath);
+    });
     // Sort newest-first by ts
     events.sort((a, b) => (a.ts > b.ts ? -1 : a.ts < b.ts ? 1 : 0));
     // Group by YYYY-MM
@@ -168,6 +185,273 @@ export async function rebuildArchiveIndex(wikiRoot) {
     fs.mkdirSync(indexDir, { recursive: true });
     fs.writeFileSync(path.join(indexDir, "index.md"), lines.join("\n"), "utf-8");
 }
+/**
+ * Resolve pageOrSlug to the absolute path of an archived page.
+ *
+ * If pageOrSlug looks like a path under wiki/_archive/ (relative or absolute),
+ * use it directly. Otherwise, substring-match against all *.md files under
+ * wiki/_archive/ — throwing on ambiguous or no-match.
+ */
+async function resolveArchivePath(wikiRoot, pageOrSlug) {
+    const archiveRoot = path.join(wikiRoot, "wiki", "_archive");
+    // Direct path check: strip wikiRoot prefix if absolute, then test existence.
+    const candidateRel = path.isAbsolute(pageOrSlug)
+        ? path.relative(wikiRoot, pageOrSlug)
+        : pageOrSlug;
+    if (candidateRel.startsWith("wiki/_archive/") || candidateRel.startsWith("wiki\\_archive\\")) {
+        const abs = path.join(wikiRoot, candidateRel);
+        if (fs.existsSync(abs)) {
+            return { absPath: abs, relPath: candidateRel };
+        }
+    }
+    // Substring slug match: collect all *.md under wiki/_archive/
+    if (!fs.existsSync(archiveRoot)) {
+        throw new Error(`no archived page matching "${pageOrSlug}" — archive directory does not exist`);
+    }
+    const matches = [];
+    function walk(dir) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const abs = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(abs);
+            }
+            else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+                const relPath = path.relative(wikiRoot, abs).replace(/\\/g, "/");
+                if (relPath.includes(pageOrSlug)) {
+                    matches.push({ absPath: abs, relPath });
+                }
+            }
+        }
+    }
+    walk(archiveRoot);
+    if (matches.length === 0) {
+        throw new Error(`no archived page matching "${pageOrSlug}"`);
+    }
+    if (matches.length > 1) {
+        const paths = matches.map((m) => m.relPath).join(", ");
+        throw new Error(`ambiguous slug "${pageOrSlug}" matches: ${paths}`);
+    }
+    return matches[0];
+}
+// ── stripArchiveFrontmatter ───────────────────────────────────────────────────
+const ARCHIVE_FM_KEYS = new Set(["status", "archived_at", "archive_reason", "archived_from"]);
+/**
+ * Read the file at absPath, remove the four deprecation frontmatter fields,
+ * preserve everything else, write it back in place.
+ */
+async function stripArchiveFrontmatter(absPath) {
+    const raw = await fs.promises.readFile(absPath, "utf-8");
+    const { frontmatter, body } = parseFrontmatter(raw);
+    const fm = {};
+    if (frontmatter) {
+        for (const [k, v] of Object.entries(frontmatter)) {
+            if (!ARCHIVE_FM_KEYS.has(k)) {
+                fm[k] = v;
+            }
+        }
+    }
+    const newContent = Object.keys(fm).length === 0
+        ? body
+        : `---\n${yaml.dump(fm)}---\n${body}`;
+    await fs.promises.writeFile(absPath, newContent, "utf-8");
+}
+// ── Code-block-aware text rewriter ────────────────────────────────────────────
+/**
+ * Split body text into alternating [non-code, code, non-code, ...] segments.
+ * Fenced code blocks (triple backtick) are "code" segments; everything else is
+ * "non-code".  Returns an array of { text, isCode } records.
+ */
+function splitOnFencedBlocks(body) {
+    const segments = [];
+    const fenceRe = /^```/m;
+    let remaining = body;
+    let inCode = false;
+    while (remaining.length > 0) {
+        const match = fenceRe.exec(remaining);
+        if (match === null) {
+            segments.push({ text: remaining, isCode: inCode });
+            break;
+        }
+        // Text before the fence delimiter (including the delimiter line itself)
+        const fenceLineEnd = remaining.indexOf("\n", match.index);
+        const splitAt = fenceLineEnd === -1 ? remaining.length : fenceLineEnd + 1;
+        const before = remaining.slice(0, splitAt);
+        segments.push({ text: before, isCode: inCode });
+        remaining = remaining.slice(splitAt);
+        inCode = !inCode;
+    }
+    return segments;
+}
+// ── rewriteInboundLinks ────────────────────────────────────────────────────────
+/**
+ * Walk all live wiki pages and update links that point to any of the just-archived
+ * pages, according to `mode`.
+ *
+ * Returns the total number of link substitutions made.
+ */
+export async function rewriteInboundLinks(opts) {
+    if (opts.mode === "leave" || opts.events.length === 0)
+        return 0;
+    // Build a lookup: wiki-relative from-path → to-path (archive destination)
+    const eventMap = new Map();
+    for (const e of opts.events) {
+        eventMap.set(e.from, e.to);
+    }
+    const livePages = walkLivePages(opts.wikiRoot);
+    let totalRewrites = 0;
+    const LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
+    for (const page of livePages) {
+        const raw = await fs.promises.readFile(page.absPath, "utf-8");
+        const segments = splitOnFencedBlocks(raw);
+        let changed = false;
+        const rewritten = segments.map(({ text, isCode }) => {
+            if (isCode)
+                return text;
+            let m;
+            const re = new RegExp(LINK_RE.source, "g");
+            let lastIndex = 0;
+            const out = [];
+            while ((m = re.exec(text)) !== null) {
+                const [whole, label, rawTarget] = m;
+                // Skip already-rewritten links
+                if (label.endsWith(" (archived)") && rawTarget.includes("_archive/")) {
+                    out.push(text.slice(lastIndex, m.index + whole.length));
+                    lastIndex = m.index + whole.length;
+                    continue;
+                }
+                // Resolve target to wiki-relative path
+                const pageDir = path.dirname(page.absPath);
+                const resolvedAbs = path.resolve(pageDir, rawTarget);
+                const resolvedRel = path
+                    .relative(opts.wikiRoot, resolvedAbs)
+                    .replace(/\\/g, "/");
+                const archiveTo = eventMap.get(resolvedRel);
+                if (!archiveTo) {
+                    out.push(text.slice(lastIndex, m.index + whole.length));
+                    lastIndex = m.index + whole.length;
+                    continue;
+                }
+                out.push(text.slice(lastIndex, m.index));
+                if (opts.mode === "rewrite") {
+                    const archAbsPath = path.join(opts.wikiRoot, archiveTo);
+                    const newRelTarget = path
+                        .relative(pageDir, archAbsPath)
+                        .replace(/\\/g, "/");
+                    out.push(`[${label} (archived)](${newRelTarget})`);
+                }
+                else {
+                    // drop mode: replace [label](target) with plain label text
+                    out.push(label);
+                }
+                totalRewrites++;
+                changed = true;
+                lastIndex = m.index + whole.length;
+            }
+            out.push(text.slice(lastIndex));
+            return out.join("");
+        });
+        if (changed) {
+            await fs.promises.writeFile(page.absPath, rewritten.join(""), "utf-8");
+        }
+    }
+    return totalRewrites;
+}
+// ── rewriteInboundLinksForUnarchive ───────────────────────────────────────────
+/**
+ * Walk all live wiki pages and revert any links that were rewritten when the page
+ * was archived: `[label (archived)](…/_archive/…)` → `[label](…/original/…)`.
+ *
+ * Returns the number of link reversions made.
+ */
+export async function rewriteInboundLinksForUnarchive(opts) {
+    const { event, wikiRoot } = opts;
+    // The archived path and the restored (live) path, both wiki-relative.
+    const archiveRelPath = event.from; // "wiki/_archive/billing/architecture.md"
+    const liveRelPath = event.to; // "wiki/billing/architecture.md"
+    const livePages = walkLivePages(wikiRoot);
+    let totalReverted = 0;
+    const LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
+    for (const page of livePages) {
+        const raw = await fs.promises.readFile(page.absPath, "utf-8");
+        const segments = splitOnFencedBlocks(raw);
+        let changed = false;
+        const rewritten = segments.map(({ text, isCode }) => {
+            if (isCode)
+                return text;
+            let m;
+            const re = new RegExp(LINK_RE.source, "g");
+            let lastIndex = 0;
+            const out = [];
+            while ((m = re.exec(text)) !== null) {
+                const [whole, label, rawTarget] = m;
+                // Only process links that look like rewritten archive links:
+                // label must end with " (archived)" AND path must be under _archive/.
+                if (!label.endsWith(" (archived)") || !rawTarget.includes("_archive/")) {
+                    out.push(text.slice(lastIndex, m.index + whole.length));
+                    lastIndex = m.index + whole.length;
+                    continue;
+                }
+                // Resolve to wiki-relative to check it matches the archive path
+                const pageDir = path.dirname(page.absPath);
+                const resolvedAbs = path.resolve(pageDir, rawTarget);
+                const resolvedRel = path
+                    .relative(wikiRoot, resolvedAbs)
+                    .replace(/\\/g, "/");
+                if (resolvedRel !== archiveRelPath) {
+                    out.push(text.slice(lastIndex, m.index + whole.length));
+                    lastIndex = m.index + whole.length;
+                    continue;
+                }
+                // Strip " (archived)" suffix and repoint to the live path
+                const originalLabel = label.slice(0, -" (archived)".length);
+                const liveAbsPath = path.join(wikiRoot, liveRelPath);
+                const newRelTarget = path
+                    .relative(pageDir, liveAbsPath)
+                    .replace(/\\/g, "/");
+                out.push(text.slice(lastIndex, m.index));
+                out.push(`[${originalLabel}](${newRelTarget})`);
+                totalReverted++;
+                changed = true;
+                lastIndex = m.index + whole.length;
+            }
+            out.push(text.slice(lastIndex));
+            return out.join("");
+        });
+        if (changed) {
+            await fs.promises.writeFile(page.absPath, rewritten.join(""), "utf-8");
+        }
+    }
+    return totalReverted;
+}
+// ── unarchive ─────────────────────────────────────────────────────────────────
+export async function unarchive(opts) {
+    const resolved = await resolveArchivePath(opts.wikiRoot, opts.pageOrSlug);
+    const raw = await fs.promises.readFile(resolved.absPath, "utf-8");
+    const { frontmatter } = parseFrontmatter(raw);
+    const archivedFrom = opts.target ?? frontmatter?.["archived_from"];
+    if (!archivedFrom) {
+        throw new Error(`page ${resolved.relPath} lacks archived_from frontmatter; pass --target to specify restore path`);
+    }
+    const targetRel = opts.target ?? archivedFrom;
+    const targetAbs = path.resolve(opts.wikiRoot, targetRel);
+    if (fs.existsSync(targetAbs)) {
+        throw new Error(`target ${targetRel} already exists; pass --target to restore elsewhere`);
+    }
+    // rename-first ordering for partial-failure safety
+    await fs.promises.mkdir(path.dirname(targetAbs), { recursive: true });
+    await fs.promises.rename(resolved.absPath, targetAbs);
+    await stripArchiveFrontmatter(targetAbs);
+    const event = {
+        ts: new Date().toISOString(),
+        op: "unarchive",
+        from: resolved.relPath,
+        to: targetRel,
+    };
+    await appendHistory(opts.wikiRoot, [event]);
+    await rebuildArchiveIndex(opts.wikiRoot);
+    const linksReverted = await rewriteInboundLinksForUnarchive({ wikiRoot: opts.wikiRoot, event });
+    return { from: event.from, to: event.to, linksReverted };
+}
 // ── Main sweep ────────────────────────────────────────────────────────────────
 export async function sweep(opts) {
     const partialThreshold = opts.partialThreshold ?? 1.0;
@@ -202,12 +486,17 @@ export async function sweep(opts) {
         if (existence.ratio === 1.0) {
             // All sources missing → orphan.
             const decision = decideAutonomy(opts.autonomy, "orphan");
-            const event = buildEvent(page, existence, resolvedOpts, ts);
             if (decision === "auto") {
-                if (!opts.dryRun) {
-                    await applyArchive(page, existence, resolvedOpts, ts);
+                try {
+                    if (!opts.dryRun)
+                        await applyArchive(page, existence, resolvedOpts, ts);
+                    const event = buildEvent(page, existence, resolvedOpts, ts);
+                    archived.push(event);
                 }
-                archived.push(event);
+                catch (e) {
+                    errors.push({ page: page.relPath, error: String(e) });
+                    continue;
+                }
             }
             else if (decision === "ask") {
                 pendingConfirmation.push({ page: page.relPath, existence });
@@ -217,12 +506,17 @@ export async function sweep(opts) {
         else if (existence.ratio >= partialThreshold) {
             // Partial removal exceeds threshold → treat as archive-eligible.
             const decision = decideAutonomy(opts.autonomy, "orphan");
-            const event = buildEvent(page, existence, resolvedOpts, ts);
             if (decision === "auto") {
-                if (!opts.dryRun) {
-                    await applyArchive(page, existence, resolvedOpts, ts);
+                try {
+                    if (!opts.dryRun)
+                        await applyArchive(page, existence, resolvedOpts, ts);
+                    const event = buildEvent(page, existence, resolvedOpts, ts);
+                    archived.push(event);
                 }
-                archived.push(event);
+                catch (e) {
+                    errors.push({ page: page.relPath, error: String(e) });
+                    continue;
+                }
             }
             else if (decision === "ask") {
                 pendingConfirmation.push({ page: page.relPath, existence });
@@ -240,7 +534,11 @@ export async function sweep(opts) {
     if (!opts.dryRun && archived.length > 0) {
         await appendHistory(opts.wikiRoot, archived);
         await rebuildArchiveIndex(opts.wikiRoot);
-        // Inbound link rewrite: Task 8 placeholder
+        await rewriteInboundLinks({
+            wikiRoot: opts.wikiRoot,
+            events: archived,
+            mode: resolvedOpts.inboundLinks ?? "rewrite",
+        });
     }
     return { archived, candidates, errors, pendingConfirmation };
 }
@@ -252,18 +550,32 @@ const FLAG_SPEC = {
     "--autonomy": "autonomy",
     "--threshold": "threshold",
     "--dry-run": "dryRun",
+    "--page-or-slug": "pageOrSlug",
+    "--target": "target",
+    "--inbound-links": "inboundLinks",
+    "--events-file": "eventsFile",
+    "--mode": "mode",
+    "--event-file": "eventFile",
 };
 function usage() {
-    process.stdout.write(`usage: atlas_archive.js {sweep,unarchive,rebuild-index} [...]
+    process.stdout.write(`usage: atlas_archive.js {sweep,unarchive,rebuild-index,rewrite-inbound-links,rewrite-inbound-links-unarchive} [...]
 
 Subcommands:
   sweep          --wiki-root <p> --repo-root <p> --run-id <id>
                  [--autonomy conservative|balanced|autonomous|auto]
                  [--threshold <n>] [--dry-run]
                  Archive deprecated atlas pages. Stdout: JSON SweepResult.
-  unarchive      (Task 7 — not yet implemented)
+  unarchive      --wiki-root <p> --page-or-slug <path-or-slug>
+                 [--target <rel-path>] [--inbound-links rewrite|drop|leave]
+                 Restore an archived page to the live wiki.
   rebuild-index  --wiki-root <p>
                  Regenerate wiki/_archive/index.md from _archive_history.jsonl.
+  rewrite-inbound-links
+                 --wiki-root <p> --events-file <path> --mode rewrite|drop|leave
+                 Rewrite links pointing to pages listed in events-file (JSON array).
+  rewrite-inbound-links-unarchive
+                 --wiki-root <p> --event-file <path>
+                 Revert (archived) links for a single UnarchiveEvent (JSON object).
 `);
 }
 async function main() {
@@ -303,9 +615,35 @@ async function main() {
         return 0;
     }
     if (sub === "unarchive") {
-        // Task 7 stub
-        process.stderr.write("unarchive: not yet implemented (Task 7)\n");
-        return 1;
+        let parsed;
+        try {
+            parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+        }
+        catch (e) {
+            process.stderr.write(`${e.message}\n`);
+            return 2;
+        }
+        const wikiRoot = parsed.values["wikiRoot"];
+        const pageOrSlug = parsed.values["pageOrSlug"];
+        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+            typeof pageOrSlug !== "string" || pageOrSlug.length === 0) {
+            process.stderr.write("--wiki-root and --page-or-slug are required\n");
+            return 2;
+        }
+        const target = typeof parsed.values["target"] === "string" && parsed.values["target"].length > 0
+            ? parsed.values["target"]
+            : undefined;
+        const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
+        const inboundLinks = (typeof inboundLinksRaw === "string" ? inboundLinksRaw : "rewrite");
+        try {
+            const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
+            process.stdout.write(JSON.stringify(result) + "\n");
+            return 0;
+        }
+        catch (e) {
+            process.stderr.write(`${e.message}\n`);
+            return 1;
+        }
     }
     if (sub === "rebuild-index") {
         let parsed;
@@ -323,6 +661,50 @@ async function main() {
         }
         await rebuildArchiveIndex(wikiRoot);
         process.stdout.write(JSON.stringify({ ok: true }) + "\n");
+        return 0;
+    }
+    if (sub === "rewrite-inbound-links") {
+        let parsed;
+        try {
+            parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+        }
+        catch (e) {
+            process.stderr.write(`${e.message}\n`);
+            return 2;
+        }
+        const wikiRoot = parsed.values["wikiRoot"];
+        const eventsFile = parsed.values["eventsFile"];
+        const modeRaw = parsed.values["mode"] ?? "rewrite";
+        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+            typeof eventsFile !== "string" || eventsFile.length === 0) {
+            process.stderr.write("--wiki-root and --events-file are required\n");
+            return 2;
+        }
+        const mode = (typeof modeRaw === "string" ? modeRaw : "rewrite");
+        const events = JSON.parse(fs.readFileSync(eventsFile, "utf-8"));
+        const count = await rewriteInboundLinks({ wikiRoot, events, mode });
+        process.stdout.write(JSON.stringify({ rewrites: count }) + "\n");
+        return 0;
+    }
+    if (sub === "rewrite-inbound-links-unarchive") {
+        let parsed;
+        try {
+            parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+        }
+        catch (e) {
+            process.stderr.write(`${e.message}\n`);
+            return 2;
+        }
+        const wikiRoot = parsed.values["wikiRoot"];
+        const eventFile = parsed.values["eventFile"];
+        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+            typeof eventFile !== "string" || eventFile.length === 0) {
+            process.stderr.write("--wiki-root and --event-file are required\n");
+            return 2;
+        }
+        const event = JSON.parse(fs.readFileSync(eventFile, "utf-8"));
+        const count = await rewriteInboundLinksForUnarchive({ wikiRoot, event });
+        process.stdout.write(JSON.stringify({ reverted: count }) + "\n");
         return 0;
     }
     process.stderr.write(`unknown subcommand: ${sub}\n`);
