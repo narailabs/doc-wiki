@@ -713,6 +713,11 @@ export async function unarchive(opts: UnarchiveOptions): Promise<UnarchiveResult
 // ── Main sweep ────────────────────────────────────────────────────────────────
 
 export async function sweep(opts: SweepOptions): Promise<SweepResult> {
+  if (!(AUTONOMY_MODES as readonly string[]).includes(opts.autonomy)) {
+    throw new Error(
+      `invalid autonomy '${opts.autonomy}'; expected one of: ${AUTONOMY_MODES.join(", ")}`,
+    );
+  }
   const partialThreshold = opts.partialThreshold ?? 1.0;
   const resolvedOpts: SweepOptions = { inboundLinks: "rewrite", ...opts, partialThreshold };
 
@@ -886,12 +891,28 @@ export async function main(): Promise<number> {
       return 2;
     }
     const autonomyRaw = parsed.values["autonomy"] ?? "autonomous";
-    const autonomy = (typeof autonomyRaw === "string" ? autonomyRaw : "autonomous") as Autonomy;
+    if (
+      typeof autonomyRaw !== "string" ||
+      !(AUTONOMY_MODES as readonly string[]).includes(autonomyRaw)
+    ) {
+      process.stderr.write(
+        `error: invalid --autonomy value '${autonomyRaw}'; expected one of: ${AUTONOMY_MODES.join(", ")}\n`,
+      );
+      return 2;
+    }
+    const autonomy = autonomyRaw as Autonomy;
     const thresholdRaw = parsed.values["threshold"];
-    const partialThreshold =
-      typeof thresholdRaw === "string" && thresholdRaw.length > 0
-        ? Number(thresholdRaw)
-        : undefined;
+    let partialThreshold: number | undefined;
+    if (typeof thresholdRaw === "string" && thresholdRaw.length > 0) {
+      const n = Number(thresholdRaw);
+      if (isNaN(n) || n < 0.0 || n > 1.0) {
+        process.stderr.write(
+          `error: --partial-threshold must be a number in [0.0, 1.0]; got '${thresholdRaw}'\n`,
+        );
+        return 2;
+      }
+      partialThreshold = n;
+    }
     const dryRun = "dryRun" in parsed.values;
     const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun });
     process.stdout.write(JSON.stringify(result) + "\n");

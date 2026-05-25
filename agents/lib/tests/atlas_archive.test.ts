@@ -13,6 +13,7 @@ import {
   rewriteInboundLinksForUnarchive,
   main as atlasArchiveMain,
   REWRITE_MODES,
+  AUTONOMY_MODES,
   type SweepOptions,
   type UnarchiveOptions,
   type ArchiveEvent,
@@ -1470,6 +1471,167 @@ describe("CLI unarchive — rejects invalid --inbound-links value", () => {
       const msg = stderrChunks.join("");
       expect(msg).toContain("rewrtie");
       expect(msg).toContain("rewrite, drop, leave");
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
+  });
+});
+
+// ── Tests: Fix 1 — unarchive source path containment ─────────────────────────
+
+describe("resolveArchivePath — path traversal blocked", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("resolve-traversal-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("throws path-containment error for traversal slug like wiki/_archive/../../../tmp/foo.md", async () => {
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/../../../tmp/foo.md",
+        inboundLinks: "leave",
+      }),
+    ).rejects.toThrow(/path traversal detected/i);
+  });
+
+  it("legitimate full path wiki/_archive/billing/architecture.md still works", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "leave",
+    });
+    expect(result.from).toContain("wiki/_archive/billing/architecture.md");
+    expect(result.to).toContain("wiki/billing/architecture.md");
+  });
+});
+
+// ── Tests: Fix 2 — sweep autonomy validation ──────────────────────────────────
+
+describe("sweep — rejects invalid autonomy at library layer", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("sweep-autonomy-lib-");
+    repoRoot = makeTmpPath("sweep-autonomy-repo-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("throws on invalid autonomy value", async () => {
+    await expect(
+      sweep(makeOpts(wikiRoot, repoRoot, { autonomy: "autonmous" as any })),
+    ).rejects.toThrow(/invalid autonomy 'autonmous'/);
+  });
+});
+
+describe("CLI sweep — rejects invalid --autonomy value", () => {
+  let origArgv: string[];
+
+  beforeEach(() => {
+    origArgv = process.argv.slice();
+  });
+
+  afterEach(() => {
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("exits 2 and prints error for unknown --autonomy", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node", "atlas_archive.js", "sweep",
+        "--wiki-root", "/tmp/wr",
+        "--repo-root", "/tmp/rr",
+        "--run-id", "test-run",
+        "--autonomy", "autonmous",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("autonmous");
+      expect(msg).toContain(AUTONOMY_MODES.join(", "));
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
+  });
+});
+
+// ── Tests: Fix 3 — --partial-threshold range check ───────────────────────────
+
+describe("CLI sweep — rejects out-of-range --partial-threshold", () => {
+  let origArgv: string[];
+
+  beforeEach(() => {
+    origArgv = process.argv.slice();
+  });
+
+  afterEach(() => {
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("exits 2 with helpful error for --partial-threshold 1.5", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node", "atlas_archive.js", "sweep",
+        "--wiki-root", "/tmp/wr",
+        "--repo-root", "/tmp/rr",
+        "--run-id", "test-run",
+        "--threshold", "1.5",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("1.5");
+      expect(msg).toContain("[0.0, 1.0]");
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
+  });
+
+  it("exits 2 with helpful error for --partial-threshold -0.1", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node", "atlas_archive.js", "sweep",
+        "--wiki-root", "/tmp/wr",
+        "--repo-root", "/tmp/rr",
+        "--run-id", "test-run",
+        "--threshold", "-0.1",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("-0.1");
+      expect(msg).toContain("[0.0, 1.0]");
     } finally {
       process.stderr.write = origWrite as any;
     }

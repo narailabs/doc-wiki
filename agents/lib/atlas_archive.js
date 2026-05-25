@@ -483,6 +483,9 @@ export async function unarchive(opts) {
 }
 // ── Main sweep ────────────────────────────────────────────────────────────────
 export async function sweep(opts) {
+    if (!AUTONOMY_MODES.includes(opts.autonomy)) {
+        throw new Error(`invalid autonomy '${opts.autonomy}'; expected one of: ${AUTONOMY_MODES.join(", ")}`);
+    }
     const partialThreshold = opts.partialThreshold ?? 1.0;
     const resolvedOpts = { inboundLinks: "rewrite", ...opts, partialThreshold };
     const livePages = walkLivePages(opts.wikiRoot);
@@ -651,11 +654,22 @@ export async function main() {
             return 2;
         }
         const autonomyRaw = parsed.values["autonomy"] ?? "autonomous";
-        const autonomy = (typeof autonomyRaw === "string" ? autonomyRaw : "autonomous");
+        if (typeof autonomyRaw !== "string" ||
+            !AUTONOMY_MODES.includes(autonomyRaw)) {
+            process.stderr.write(`error: invalid --autonomy value '${autonomyRaw}'; expected one of: ${AUTONOMY_MODES.join(", ")}\n`);
+            return 2;
+        }
+        const autonomy = autonomyRaw;
         const thresholdRaw = parsed.values["threshold"];
-        const partialThreshold = typeof thresholdRaw === "string" && thresholdRaw.length > 0
-            ? Number(thresholdRaw)
-            : undefined;
+        let partialThreshold;
+        if (typeof thresholdRaw === "string" && thresholdRaw.length > 0) {
+            const n = Number(thresholdRaw);
+            if (isNaN(n) || n < 0.0 || n > 1.0) {
+                process.stderr.write(`error: --partial-threshold must be a number in [0.0, 1.0]; got '${thresholdRaw}'\n`);
+                return 2;
+            }
+            partialThreshold = n;
+        }
         const dryRun = "dryRun" in parsed.values;
         const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun });
         process.stdout.write(JSON.stringify(result) + "\n");
