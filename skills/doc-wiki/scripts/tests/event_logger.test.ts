@@ -840,6 +840,155 @@ it("test_stats_skips_malformed_json_line_with_warning", () => {
   }
 });
 
+// ── archive/unarchive op recognition and stats filtering ────────────
+
+describe("archive/unarchive op support", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-archive-");
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("event_logger accepts op: archive without warning", () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // @ts-expect-error - overriding stderr.write for test
+    process.stderr.write = (s: string | Uint8Array) => {
+      stderrChunks.push(s.toString());
+      return true;
+    };
+    try {
+      const entry = logEvent(tmpPath, "archive", { page: "old-page.md" });
+      expect(entry["op"]).toBe("archive");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    expect(stderrChunks.join("")).toBe("");
+  });
+
+  it("event_logger accepts op: unarchive without warning", () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // @ts-expect-error - overriding stderr.write for test
+    process.stderr.write = (s: string | Uint8Array) => {
+      stderrChunks.push(s.toString());
+      return true;
+    };
+    try {
+      const entry = logEvent(tmpPath, "unarchive", { page: "old-page.md" });
+      expect(entry["op"]).toBe("unarchive");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    expect(stderrChunks.join("")).toBe("");
+  });
+
+  it("stats excludes archive events from totals by default", () => {
+    // Mix of ingest + archive events with costs and tokens.
+    const events = [
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        tokens_in: 1000,
+        tokens_out: 500,
+        cost_usd: 0.05,
+      },
+      {
+        ts: "2026-04-02T10:00:00+00:00",
+        op: "archive",
+        tokens_in: 50,
+        tokens_out: 10,
+        cost_usd: 0.001,
+      },
+      {
+        ts: "2026-04-03T10:00:00+00:00",
+        op: "refresh",
+        tokens_in: 800,
+        tokens_out: 400,
+        cost_usd: 0.04,
+      },
+      {
+        ts: "2026-04-04T10:00:00+00:00",
+        op: "unarchive",
+        tokens_in: 30,
+        tokens_out: 5,
+        cost_usd: 0.0005,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+
+    const stats = getStats(tmpPath);
+
+    // Only ingest + refresh events counted.
+    expect(stats["total_events"]).toBe(2);
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["ingest"]).toBe(1);
+    expect(opsByType["refresh"]).toBe(1);
+    expect("archive" in opsByType).toBe(false);
+    expect("unarchive" in opsByType).toBe(false);
+    // Cost excludes archive/unarchive events (0.05 + 0.04 = 0.09).
+    expect(approxEqual(stats["total_cost_usd"] as number, 0.09)).toBe(true);
+  });
+
+  it("stats --include-archived counts archive events", () => {
+    // Mix of refresh + unarchive events.
+    const events = [
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "refresh",
+        tokens_in: 800,
+        tokens_out: 400,
+        cost_usd: 0.04,
+      },
+      {
+        ts: "2026-04-02T10:00:00+00:00",
+        op: "unarchive",
+        tokens_in: 30,
+        tokens_out: 5,
+        cost_usd: 0.0005,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+
+    // Default: excludes unarchive.
+    const statsDefault = getStats(tmpPath);
+    expect(statsDefault["total_events"]).toBe(1);
+
+    // With includeArchived: counts both.
+    const statsAll = getStats(tmpPath, null, { includeArchived: true });
+    expect(statsAll["total_events"]).toBe(2);
+    const opsByType = statsAll["ops_by_type"] as Record<string, number>;
+    expect(opsByType["refresh"]).toBe(1);
+    expect(opsByType["unarchive"]).toBe(1);
+    // Total cost includes both (0.04 + 0.0005 = 0.0405).
+    expect(
+      approxEqual(statsAll["total_cost_usd"] as number, 0.0405),
+    ).toBe(true);
+
+    // CLI: --include-archived flag produces same result.
+    const cliResult = runCli([
+      "stats",
+      "--wiki-root",
+      tmpPath,
+      "--include-archived",
+    ]);
+    expect(cliResult.status).toBe(0);
+    const cliData = JSON.parse(cliResult.stdout) as Record<string, unknown>;
+    expect(cliData["total_events"]).toBe(2);
+  });
+});
+
 it("test_stats_with_since_filter_when_ts_contains_json_escape", () => {
   const tmpPath = fs.mkdtempSync(
     path.join(os.tmpdir(), "wiki-test-stats-escape-"),
