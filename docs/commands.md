@@ -2,11 +2,11 @@
 
 Every `/doc-wiki:*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../skills/doc-wiki/SKILL.md) for the full procedural detail.
 
-The ten commands group into three lifecycles:
+The eleven commands group into three lifecycles:
 
 - **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
 - **Search** — find and analyze: `/doc-wiki:query` (synthesis or path mode), `/doc-wiki:stats`
-- **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`
+- **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:unarchive`
 
 ---
 
@@ -482,6 +482,67 @@ Use the `/schedule` skill. For interactive review (default `balanced` autonomy),
 For unattended pipelines, set autonomy to `auto` and schedule the command directly — novel archives will be batch-promoted with no prompting.
 
 **See also:** [`SKILL.md` § /doc-wiki:promote](../skills/doc-wiki/SKILL.md). The `/doc-wiki:lint` query-absorption pass uses the same coverage rule.
+
+---
+
+### `/doc-wiki:unarchive` — Restore an archived page
+
+Move an atlas-archived page from `wiki/_archive/` back into the live wiki, strip its deprecation frontmatter, and revert inbound `(archived)` links.
+
+#### Synopsis
+
+```text
+/doc-wiki:unarchive <path-or-slug> [--target <wiki-relative-path>] [--yes]
+```
+
+#### Args
+
+| Arg / flag | Type | Default | Purpose |
+|---|---|---|---|
+| `<path-or-slug>` | string | **required** | Either `wiki/_archive/<topic>/<page>.md` (full path) or a single-token slug. Slug resolution is a substring match against archived filenames; if 0 or >1 match, the command lists candidates and asks. |
+| `--target` | path | `archived_from` frontmatter field | Override the restoration destination. Useful when the original topic directory was also deleted. |
+| `--yes` | flag | (off) | Skip the per-page confirmation prompt under `balanced` / `conservative` autonomy. |
+
+#### Target resolution
+
+Identical pattern to `/doc-wiki:promote`:
+
+| Input | Resolution |
+|---|---|
+| Full path (`wiki/_archive/billing/architecture.md`) | Use as-is |
+| Single token | Filename substring match; ambiguous → list candidates and ask |
+
+#### What it does
+
+1. Resolves the page; reads its `archived_from` frontmatter to determine the restoration target (overridden by `--target`).
+2. If the target's parent directory doesn't exist, creates it.
+3. If a live page already exists at the target path, aborts with a clear error — never overwrites live content.
+4. Moves the file to the target path.
+5. Strips the four archive frontmatter fields (`status`, `archived_at`, `archive_reason`, `archived_from`). Preserves all other fields including `atlas_facet` and `atlas_run_id`.
+6. Appends an `unarchived` event to `wiki/_archive_history.jsonl`.
+7. Rewrites `wiki/_archive/index.md` (the restored page disappears from the listing).
+8. Scans live pages for `(archived)` inbound links pointing at the restored path and reverts them to plain links.
+9. Runs post-op hooks (crosslink + tag-harmonize) so the restored page rejoins summaries, quality scoring, and graph traversal.
+
+Autonomy gating: `conservative` and `balanced` ask one confirmation per invocation; `autonomous` and `auto` proceed without prompt. `--yes` overrides at any level.
+
+#### Examples
+
+```text
+# Restore by full archive path
+/doc-wiki:unarchive wiki/_archive/billing/architecture.md
+
+# Restore by slug (substring match against archived filenames)
+/doc-wiki:unarchive billing-architecture
+
+# Restore to a different location when the original topic dir is gone
+/doc-wiki:unarchive billing-architecture --target wiki/legacy/billing-architecture.md
+
+# Skip the confirmation prompt
+/doc-wiki:unarchive billing-architecture --yes
+```
+
+**See also:** [`SKILL.md` § /doc-wiki:unarchive](../skills/doc-wiki/SKILL.md), [`atlas.md` § Archived pages](atlas.md#archived-pages), [`configuration.md` § ecosystem.archive](configuration.md#ecosystem-section).
 
 ---
 

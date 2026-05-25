@@ -104,6 +104,11 @@ ecosystem:
     auto_generate: true
     types: [erDiagram, sequenceDiagram, graph]
     lint_syntax: true
+
+  archive:
+    enabled: true              # whether atlas Phase 5b (archive sweep) runs
+    partial_threshold: 1.0     # 0.0–1.0; archive only when this fraction of local sources is gone (1.0 = all)
+    inbound_links: rewrite     # rewrite | drop | leave
 ```
 
 The `ecosystem.agents.custom` block is how you register a custom local connector with doc-wiki — see [`connectors.md`](connectors.md#adding-a-custom-local-connector). Each entry maps URL patterns (or scheme prefixes) to the connector's invocation template; `source_registry.ts` uses these to classify sources during `/doc-wiki:ingest`.
@@ -111,6 +116,16 @@ The `ecosystem.agents.custom` block is how you register a custom local connector
 The `ecosystem.database` block configures `wiki-orm-agent`'s cross-validation flow against a live DB. The actual connection lives under `connectors.db` in `.connectors/config.yaml`; this block just enables the cross-validation behavior and defines a wiki-side audit log.
 
 The `ecosystem.rest` block controls REST-endpoint detection during `/doc-wiki:atlas` Phase 1b. It is **off by default** so the inventory step stays fast on repos that aren't HTTP services. Set `enabled: true` to opt in. The flag is read automatically by `atlas_inventory.js generate`, so the orchestrator doesn't have to know whether to pass `--enable-rest` — see [`atlas.md` § Phase 1b](atlas.md#phase-1b--inventory-the-repo). Override at the CLI with `--enable-rest` when needed regardless of config.
+
+The `ecosystem.archive` block controls `/doc-wiki:atlas` Phase 5b — the archive sweep that moves atlas-managed pages whose local source paths no longer exist into `wiki/_archive/`. When `enabled: false`, Phase 5b is a no-op (logs that archiving is disabled and skips). The block is written with defaults by `init_wiki.ts` and validated by `parse_config.ts`.
+
+| Field | Type | Default | Allowed values | Meaning |
+|---|---|---|---|---|
+| `enabled` | bool | `true` | `true` / `false` | Whether atlas Phase 5b (archive sweep) runs |
+| `partial_threshold` | float | `1.0` | `0.0`–`1.0` | Minimum missing-source ratio to trigger archive (`1.0` = archive only when ALL local sources are gone; `0.5` = archive when half or more are gone) |
+| `inbound_links` | string | `rewrite` | `rewrite` / `drop` / `leave` | How live-page links pointing at an archived page are handled: `rewrite` appends `(archived)` to the label and updates the path; `drop` removes the link leaving the label as plain text; `leave` does nothing (rely on lint to surface broken links) |
+
+For operator guidance on archiving, restoration, and the `wiki/_archive/` layout, see [`atlas.md` § Archived pages](atlas.md#archived-pages).
 
 `custom_profiles` is a list of inline [`RestProfile`](rest-profiles.md) objects — same shape as the YAML files under [`agents/lib/rest_profiles/`](../agents/lib/rest_profiles/). Custom profiles win on name collision with shipped profiles, so this slot is the right place to teach atlas about an in-house framework without modifying doc-wiki:
 
