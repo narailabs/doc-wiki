@@ -4,14 +4,11 @@ This project has a documentation wiki skill. Before searching the codebase with 
 
 ## Commands
 
-- `/doc-wiki:init` -- Bootstrap wiki: `node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
-- `/doc-wiki:onboard` -- Detect language, ORM, database, external services; configure wiki
-- `/doc-wiki:ingest` -- Fetch, extract, compile sources into wiki pages
-- `/doc-wiki:query` -- Two modes: synthesis (`<question>`) for summary-first search, or path mode (`--from <a> --to <b>`) for shortest-path traversal via `node skills/doc-wiki/scripts/graph_ops.js path --edges <wiki-root>/graph/edges.jsonl`
+- `/doc-wiki:init` -- Bootstrap wiki (includes ecosystem onboarding in Phase 3): `node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
+- `/doc-wiki:ingest` -- Fetch, extract, compile sources into wiki pages; use `--refresh` to re-fetch previously ingested sources
+- `/doc-wiki:query` -- Two modes: synthesis (`<question>`) for summary-first search with `--promote <file>` to save answer as a page, or path mode (`--from <a> --to <b>`) for shortest-path traversal via `node skills/doc-wiki/scripts/graph_ops.js path --edges <wiki-root>/graph/edges.jsonl`
 - `/doc-wiki:lint` -- Health check: `node skills/doc-wiki/scripts/lint_checks.js --wiki-root <wiki-root>`
-- `/doc-wiki:fix` -- Quick corrections with diff preview
-- `/doc-wiki:promote` -- Convert query answer from `outputs/queries/` to permanent wiki page
-- `/doc-wiki:refresh` -- Re-fetch and update from original sources
+- `/doc-wiki:edit` -- Targeted page edit with diff preview
 - `/doc-wiki:stats` -- Token efficiency: `node skills/doc-wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d`
 
 ## Script Paths
@@ -49,7 +46,7 @@ Install dependencies (Node 20 required): `npm install && npm run build`
 
 ## Post-Operation Hooks
 
-After write operations (ingest, fix, promote, refresh), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+After write operations (ingest, edit), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 ## Documentation
 
