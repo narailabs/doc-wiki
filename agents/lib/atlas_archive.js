@@ -483,6 +483,7 @@ export async function sweep(opts) {
     const candidates = [];
     const errors = [];
     const pendingConfirmation = [];
+    const reported = [];
     const ts = new Date().toISOString();
     for (const page of atlasPages) {
         let existence;
@@ -522,7 +523,15 @@ export async function sweep(opts) {
             else if (decision === "ask") {
                 pendingConfirmation.push({ page: page.relPath, existence });
             }
-            // "report-only" → no action, not added to archived
+            else {
+                // "report-only" (conservative) → surface in reported[]
+                reported.push({
+                    page: page.relPath,
+                    status: "orphan",
+                    reason: `All sources missing: ${existence.missing.join(", ")}`,
+                    missing_sources: [...existence.missing],
+                });
+            }
         }
         else if (existence.ratio >= partialThreshold) {
             // Partial removal exceeds threshold → treat as archive-eligible.
@@ -541,6 +550,15 @@ export async function sweep(opts) {
             }
             else if (decision === "ask") {
                 pendingConfirmation.push({ page: page.relPath, existence });
+            }
+            else {
+                // "report-only" (conservative) → surface in reported[]
+                reported.push({
+                    page: page.relPath,
+                    status: "candidate",
+                    reason: `${Math.round(existence.ratio * 100)}% of sources missing: ${existence.missing.join(", ")}`,
+                    missing_sources: [...existence.missing],
+                });
             }
         }
         else {
@@ -561,7 +579,7 @@ export async function sweep(opts) {
             mode: resolvedOpts.inboundLinks ?? "rewrite",
         });
     }
-    return { archived, candidates, errors, pendingConfirmation };
+    return { archived, candidates, errors, pendingConfirmation, reported };
 }
 // ── CLI ────────────────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
