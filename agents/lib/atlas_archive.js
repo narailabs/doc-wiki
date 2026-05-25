@@ -323,9 +323,13 @@ export async function rewriteInboundLinks(opts) {
                     lastIndex = m.index + whole.length;
                     continue;
                 }
+                // Split off fragment/query so resolution works on the bare path
+                const fragIdx = rawTarget.search(/[#?]/);
+                const pathPart = fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
+                const suffix = fragIdx === -1 ? "" : rawTarget.slice(fragIdx);
                 // Resolve target to wiki-relative path
                 const pageDir = path.dirname(page.absPath);
-                const resolvedAbs = path.resolve(pageDir, rawTarget);
+                const resolvedAbs = path.resolve(pageDir, pathPart);
                 const resolvedRel = path
                     .relative(opts.wikiRoot, resolvedAbs)
                     .replace(/\\/g, "/");
@@ -341,7 +345,7 @@ export async function rewriteInboundLinks(opts) {
                     const newRelTarget = path
                         .relative(pageDir, archAbsPath)
                         .replace(/\\/g, "/");
-                    out.push(`[${label} (archived)](${newRelTarget})`);
+                    out.push(`[${label} (archived)](${newRelTarget}${suffix})`);
                 }
                 else {
                     // drop mode: replace [label](target) with plain label text
@@ -395,9 +399,13 @@ export async function rewriteInboundLinksForUnarchive(opts) {
                     lastIndex = m.index + whole.length;
                     continue;
                 }
+                // Split off fragment/query so resolution works on the bare path
+                const fragIdx = rawTarget.search(/[#?]/);
+                const pathPart = fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
+                const suffix = fragIdx === -1 ? "" : rawTarget.slice(fragIdx);
                 // Resolve to wiki-relative to check it matches the archive path
                 const pageDir = path.dirname(page.absPath);
-                const resolvedAbs = path.resolve(pageDir, rawTarget);
+                const resolvedAbs = path.resolve(pageDir, pathPart);
                 const resolvedRel = path
                     .relative(wikiRoot, resolvedAbs)
                     .replace(/\\/g, "/");
@@ -413,7 +421,7 @@ export async function rewriteInboundLinksForUnarchive(opts) {
                     .relative(pageDir, liveAbsPath)
                     .replace(/\\/g, "/");
                 out.push(text.slice(lastIndex, m.index));
-                out.push(`[${originalLabel}](${newRelTarget})`);
+                out.push(`[${originalLabel}](${newRelTarget}${suffix})`);
                 totalReverted++;
                 changed = true;
                 lastIndex = m.index + whole.length;
