@@ -6,7 +6,7 @@ And more than documentation, this is a guide for Claude Code and other coding ag
 
 > A documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helpers. Point it at a codebase, your Jira/Confluence/Notion/GitHub, and your databases — get a structured, queryable, self-healing wiki you can grow over time.
 
-doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Seven `/doc-wiki:*` slash commands cover the full lifecycle: init (scaffold + onboard), atlas (full-codebase documentation in one pass), ingest, query, lint, edit, and stats. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
+doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Eight `/doc-wiki:*` slash commands cover the full lifecycle: init (scaffold + onboard), atlas (full-codebase documentation in one pass), ingest, query, lint, edit, unarchive (restore an archived page), and stats. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
 
 It was built with enterprise level codebases, and support of complex systems, but it also works really for smaller codebases.
 

@@ -16,7 +16,7 @@ The eight commands group into three lifecycles:
 
 Create the directory scaffold, initial configuration, and interactively onboard the project. This is the recommended first-run entry point for new wikis — it runs scaffold + onboarding in one pass and optionally chains into `/doc-wiki:atlas`.
 
-**Synopsis:** `/doc-wiki:init [--path <wiki-root>] [--domain <domain>] [--name <wiki-name>]`
+**Synopsis:** `/doc-wiki:init [--path <wiki-root>] [--domain <domain>] [--name <wiki-name>] [--atlas | --no-atlas]`
 
 **Args:**
 
@@ -25,6 +25,8 @@ Create the directory scaffold, initial configuration, and interactively onboard 
 | `--path` | path | `docs/<app-name-kebab-case>-wiki/` (inferred from `package.json`, `pyproject.toml`, etc., then confirmed via prompt) | Wiki root directory (created if missing). The naming pattern is chosen so the folder, opened as an Obsidian vault, takes the app's name rather than a generic `wiki` label. |
 | `--domain` | string | `general` | Broad topic for the wiki (e.g. `backend-services`, `infra`) |
 | `--name` | string | (project name) | Wiki name; appears in frontmatter and overview |
+| `--atlas` | flag | (interactive prompt) | After onboarding, unconditionally chain `/doc-wiki:atlas` with default facets. Mutually exclusive with `--no-atlas`. |
+| `--no-atlas` | flag | (interactive prompt) | After onboarding, stop without prompting about atlas. Useful for non-interactive scripts. Mutually exclusive with `--atlas`. |
 
 **What it does (four-phase flow):**
 
