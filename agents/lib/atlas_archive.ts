@@ -88,11 +88,23 @@ export interface PendingArchive {
   existence: SourceExistenceResult;
 }
 
+/** An archive candidate surfaced in conservative mode (report-only).
+ *  The page was NOT moved; it is included here for visibility. */
+export interface ReportedArchive {
+  page: string;
+  status: "orphan" | "candidate";
+  reason: string;
+  missing_sources: string[];
+}
+
 export interface SweepResult {
   archived: ArchiveEvent[];
   candidates: CandidateReport[];
   errors: ErrorReport[];
   pendingConfirmation: PendingArchive[];
+  /** Populated in conservative mode: pages that would be archived/candidated
+   *  if autonomy permitted. Empty in balanced/autonomous/auto modes. */
+  reported: ReportedArchive[];
 }
 
 // ── Autonomy decision ──────────────────────────────────────────────────────────
@@ -697,6 +709,7 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
   const candidates: CandidateReport[] = [];
   const errors: ErrorReport[] = [];
   const pendingConfirmation: PendingArchive[] = [];
+  const reported: ReportedArchive[] = [];
 
   const ts = new Date().toISOString();
 
@@ -735,8 +748,15 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
         }
       } else if (decision === "ask") {
         pendingConfirmation.push({ page: page.relPath, existence });
+      } else {
+        // "report-only" (conservative) → surface in reported[]
+        reported.push({
+          page: page.relPath,
+          status: "orphan",
+          reason: `All sources missing: ${existence.missing.join(", ")}`,
+          missing_sources: [...existence.missing],
+        });
       }
-      // "report-only" → no action, not added to archived
     } else if (existence.ratio >= partialThreshold) {
       // Partial removal exceeds threshold → treat as archive-eligible.
       const decision = decideAutonomy(opts.autonomy, "orphan");
@@ -751,6 +771,14 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
         }
       } else if (decision === "ask") {
         pendingConfirmation.push({ page: page.relPath, existence });
+      } else {
+        // "report-only" (conservative) → surface in reported[]
+        reported.push({
+          page: page.relPath,
+          status: "candidate",
+          reason: `${Math.round(existence.ratio * 100)}% of sources missing: ${existence.missing.join(", ")}`,
+          missing_sources: [...existence.missing],
+        });
       }
     } else {
       // Partial removal below threshold → candidate (reported, not archived).
@@ -772,7 +800,7 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
     });
   }
 
-  return { archived, candidates, errors, pendingConfirmation };
+  return { archived, candidates, errors, pendingConfirmation, reported };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────────────────

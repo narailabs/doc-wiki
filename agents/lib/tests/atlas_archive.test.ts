@@ -17,6 +17,7 @@ import {
   type UnarchiveEvent,
   type RewriteArchiveLinksOptions,
   type RewriteUnarchiveLinksOptions,
+  type ReportedArchive,
 } from "../atlas_archive.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
@@ -180,6 +181,11 @@ describe("sweep — autonomy gates", () => {
     expect(result.pendingConfirmation).toHaveLength(0);
     // Live page must still exist
     expect(fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md"))).toBe(true);
+    // But the orphan must appear in reported[]
+    expect(result.reported).toHaveLength(1);
+    expect(result.reported[0]!.page).toBe("wiki/billing/architecture.md");
+    expect(result.reported[0]!.status).toBe("orphan");
+    expect(result.reported[0]!.missing_sources).toContain("src/billing/");
   });
 
   it("balanced autonomy populates pendingConfirmation without archiving", async () => {
@@ -204,6 +210,68 @@ describe("sweep — autonomy gates", () => {
   it("'auto' autonomy is treated the same as 'autonomous'", async () => {
     const result = await sweep(makeOpts(wikiRoot, repoRoot, { autonomy: "auto" }));
     expect(result.archived).toHaveLength(1);
+  });
+
+  it("autonomous mode orphan goes to archived[], NOT reported[]", async () => {
+    const result = await sweep(makeOpts(wikiRoot, repoRoot, { autonomy: "autonomous" }));
+
+    expect(result.archived).toHaveLength(1);
+    expect(result.reported).toHaveLength(0);
+  });
+});
+
+// ── Tests: conservative mode reported[] field ──────────────────────────────────
+
+describe("sweep — conservative mode reported[] field", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("conservative + orphan → page in reported[] with status='orphan', not in archived[]", async () => {
+    wikiRoot = makeTmpPath("archive-cons-orphan-");
+    repoRoot = makeTmpPath("archive-cons-orphan-repo-");
+    setupOrphanFixture(wikiRoot, repoRoot);
+
+    const result = await sweep(makeOpts(wikiRoot, repoRoot, { autonomy: "conservative" }));
+
+    expect(result.archived).toHaveLength(0);
+    expect(result.reported).toHaveLength(1);
+    const entry = result.reported[0]!;
+    expect(entry.page).toBe("wiki/billing/architecture.md");
+    expect(entry.status).toBe("orphan");
+    expect(entry.missing_sources).toContain("src/billing/");
+  });
+
+  it("conservative + partial at threshold → page in reported[] with status='candidate', not in archived[] or candidates[]", async () => {
+    wikiRoot = makeTmpPath("archive-cons-partial-");
+    repoRoot = makeTmpPath("archive-cons-partial-repo-");
+    // 2 of 2 sources missing (ratio = 1.0, all missing) — use partial threshold < 1.0
+    // to put a partial-removal page over the archive threshold.
+    // 1 of 2 sources missing → ratio = 0.5; set threshold to 0.3 so it qualifies.
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/", "src/payments/"],
+      title: "Billing",
+    });
+    fs.mkdirSync(path.join(repoRoot, "src/payments"), { recursive: true });
+    // src/billing/ is absent → ratio = 0.5, threshold = 0.3
+
+    const result = await sweep(
+      makeOpts(wikiRoot, repoRoot, { autonomy: "conservative", partialThreshold: 0.3 }),
+    );
+
+    expect(result.archived).toHaveLength(0);
+    // Not in candidates[] either — conservative blocks even candidate reporting via reported[]
+    expect(result.candidates).toHaveLength(0);
+    expect(result.reported).toHaveLength(1);
+    const entry = result.reported[0]!;
+    expect(entry.page).toBe("wiki/billing/architecture.md");
+    expect(entry.status).toBe("candidate");
+    expect(entry.missing_sources).toContain("src/billing/");
   });
 });
 
