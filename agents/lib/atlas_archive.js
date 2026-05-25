@@ -22,6 +22,7 @@ import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js"
 import { sourceExistence, } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { checkPathContainment } from "narai-primitives/toolkit";
+export const REWRITE_MODES = ["rewrite", "drop", "leave"];
 function decideAutonomy(autonomy, _kind) {
     switch (autonomy) {
         case "conservative":
@@ -295,6 +296,9 @@ function splitOnFencedBlocks(body) {
  * Returns the total number of link substitutions made.
  */
 export async function rewriteInboundLinks(opts) {
+    if (!REWRITE_MODES.includes(opts.mode)) {
+        throw new Error(`invalid mode '${opts.mode}'; expected one of: ${REWRITE_MODES.join(", ")}`);
+    }
     if (opts.mode === "leave" || opts.events.length === 0)
         return 0;
     // Build a lookup: wiki-relative from-path → to-path (archive destination)
@@ -617,7 +621,7 @@ Subcommands:
                  Revert (archived) links for a single UnarchiveEvent (JSON object).
 `);
 }
-async function main() {
+export async function main() {
     const argv = process.argv.slice(2);
     if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
         usage();
@@ -673,7 +677,12 @@ async function main() {
             ? parsed.values["target"]
             : undefined;
         const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
-        const inboundLinks = (typeof inboundLinksRaw === "string" ? inboundLinksRaw : "rewrite");
+        if (typeof inboundLinksRaw !== "string" ||
+            !REWRITE_MODES.includes(inboundLinksRaw)) {
+            process.stderr.write(`error: invalid --inbound-links value '${inboundLinksRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`);
+            return 2;
+        }
+        const inboundLinks = inboundLinksRaw;
         try {
             const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
             process.stdout.write(JSON.stringify(result) + "\n");
@@ -719,7 +728,11 @@ async function main() {
             process.stderr.write("--wiki-root and --events-file are required\n");
             return 2;
         }
-        const mode = (typeof modeRaw === "string" ? modeRaw : "rewrite");
+        if (typeof modeRaw !== "string" || !REWRITE_MODES.includes(modeRaw)) {
+            process.stderr.write(`error: invalid --mode value '${modeRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`);
+            return 2;
+        }
+        const mode = modeRaw;
         const events = JSON.parse(fs.readFileSync(eventsFile, "utf-8"));
         const count = await rewriteInboundLinks({ wikiRoot, events, mode });
         process.stdout.write(JSON.stringify({ rewrites: count }) + "\n");

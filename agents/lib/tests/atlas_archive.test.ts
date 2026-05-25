@@ -11,6 +11,8 @@ import {
   unarchive,
   rewriteInboundLinks,
   rewriteInboundLinksForUnarchive,
+  main as atlasArchiveMain,
+  REWRITE_MODES,
   type SweepOptions,
   type UnarchiveOptions,
   type ArchiveEvent,
@@ -1370,5 +1372,106 @@ describe("unarchive — rebuildArchiveIndex skips unarchived events", () => {
       .split("\n")
       .filter((l) => l.startsWith("- [") && l.includes("billing/architecture.md"));
     expect(archiveListLines).toHaveLength(0);
+  });
+});
+
+// ── Tests: --mode / --inbound-links validation ────────────────────────────────
+
+describe("rewriteInboundLinks — rejects invalid mode at library layer", () => {
+  it("throws when mode is not one of the allowed values", async () => {
+    await expect(
+      rewriteInboundLinks({
+        wikiRoot: "/irrelevant",
+        events: [],
+        mode: "rewrtie" as any,
+      }),
+    ).rejects.toThrow(/invalid mode 'rewrtie'.*rewrite, drop, leave/);
+  });
+
+  it("does not throw for each valid mode", async () => {
+    for (const m of REWRITE_MODES) {
+      // events is empty → returns 0 immediately (after mode check passes)
+      await expect(
+        rewriteInboundLinks({ wikiRoot: "/irrelevant", events: [], mode: m }),
+      ).resolves.toBe(0);
+    }
+  });
+});
+
+describe("CLI rewrite-inbound-links — rejects invalid --mode value", () => {
+  let origArgv: string[];
+
+  beforeEach(() => {
+    origArgv = process.argv.slice();
+  });
+
+  afterEach(() => {
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("exits 2 and prints error for unknown --mode", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node",
+        "atlas_archive.js",
+        "rewrite-inbound-links",
+        "--wiki-root", "/tmp/wr",
+        "--events-file", "/tmp/ev.json",
+        "--mode", "rewrtie",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("rewrtie");
+      expect(msg).toContain("rewrite, drop, leave");
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
+  });
+});
+
+describe("CLI unarchive — rejects invalid --inbound-links value", () => {
+  let origArgv: string[];
+
+  beforeEach(() => {
+    origArgv = process.argv.slice();
+  });
+
+  afterEach(() => {
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("exits 2 and prints error for unknown --inbound-links", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node",
+        "atlas_archive.js",
+        "unarchive",
+        "--wiki-root", "/tmp/wr",
+        "--page-or-slug", "some-page",
+        "--inbound-links", "rewrtie",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("rewrtie");
+      expect(msg).toContain("rewrite, drop, leave");
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
   });
 });

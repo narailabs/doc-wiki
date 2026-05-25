@@ -31,11 +31,14 @@ import { checkPathContainment } from "narai-primitives/toolkit";
 
 export type Autonomy = "conservative" | "balanced" | "autonomous" | "auto";
 
+export const REWRITE_MODES = ["rewrite", "drop", "leave"] as const;
+export type RewriteMode = (typeof REWRITE_MODES)[number];
+
 export interface UnarchiveOptions {
   wikiRoot: string;
   pageOrSlug: string; // "wiki/_archive/billing/architecture.md" OR "architecture"
   target?: string;    // override the archived_from value
-  inboundLinks: "rewrite" | "drop" | "leave";
+  inboundLinks: RewriteMode;
 }
 
 export interface UnarchiveResult {
@@ -59,7 +62,7 @@ export interface SweepOptions {
   dryRun?: boolean;
   /** Fraction of missing sources to trigger archive. Default: 1.0 (all missing). */
   partialThreshold?: number;
-  inboundLinks?: "rewrite" | "drop" | "leave";
+  inboundLinks?: RewriteMode;
 }
 
 export interface ArchiveEvent {
@@ -416,7 +419,7 @@ async function stripArchiveFrontmatter(absPath: string): Promise<void> {
 export interface RewriteArchiveLinksOptions {
   wikiRoot: string;
   events: ArchiveEvent[];
-  mode: "rewrite" | "drop" | "leave";
+  mode: RewriteMode;
 }
 
 export interface RewriteUnarchiveLinksOptions {
@@ -465,6 +468,11 @@ function splitOnFencedBlocks(body: string): Array<{ text: string; isCode: boolea
  * Returns the total number of link substitutions made.
  */
 export async function rewriteInboundLinks(opts: RewriteArchiveLinksOptions): Promise<number> {
+  if (!(REWRITE_MODES as readonly string[]).includes(opts.mode)) {
+    throw new Error(
+      `invalid mode '${opts.mode}'; expected one of: ${REWRITE_MODES.join(", ")}`,
+    );
+  }
   if (opts.mode === "leave" || opts.events.length === 0) return 0;
 
   // Build a lookup: wiki-relative from-path → to-path (archive destination)
@@ -844,7 +852,7 @@ Subcommands:
   );
 }
 
-async function main(): Promise<number> {
+export async function main(): Promise<number> {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
     usage();
@@ -906,9 +914,16 @@ async function main(): Promise<number> {
         ? parsed.values["target"]
         : undefined;
     const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
-    const inboundLinks = (
-      typeof inboundLinksRaw === "string" ? inboundLinksRaw : "rewrite"
-    ) as UnarchiveOptions["inboundLinks"];
+    if (
+      typeof inboundLinksRaw !== "string" ||
+      !(REWRITE_MODES as readonly string[]).includes(inboundLinksRaw)
+    ) {
+      process.stderr.write(
+        `error: invalid --inbound-links value '${inboundLinksRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`,
+      );
+      return 2;
+    }
+    const inboundLinks = inboundLinksRaw as RewriteMode;
     try {
       const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
       process.stdout.write(JSON.stringify(result) + "\n");
@@ -955,8 +970,13 @@ async function main(): Promise<number> {
       process.stderr.write("--wiki-root and --events-file are required\n");
       return 2;
     }
-    const mode = (typeof modeRaw === "string" ? modeRaw : "rewrite") as
-      RewriteArchiveLinksOptions["mode"];
+    if (typeof modeRaw !== "string" || !(REWRITE_MODES as readonly string[]).includes(modeRaw)) {
+      process.stderr.write(
+        `error: invalid --mode value '${modeRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`,
+      );
+      return 2;
+    }
+    const mode = modeRaw as RewriteMode;
     const events = JSON.parse(
       fs.readFileSync(eventsFile, "utf-8"),
     ) as ArchiveEvent[];
