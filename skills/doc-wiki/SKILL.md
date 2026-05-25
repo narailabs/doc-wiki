@@ -480,12 +480,12 @@ The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If t
 
 #### Re-fetching with `--refresh`
 
-When invoked with `--refresh`, `/doc-wiki:ingest` re-fetches a previously-ingested source instead of registering a new one. Two scope flags:
+When invoked with `--refresh`, `/doc-wiki:ingest` re-fetches a previously-ingested source instead of registering a new one. The set of previously-ingested sources is reconstructed from the `op: ingest` entries in `<wikiRoot>/log/events.jsonl` (filter via `event_logger.js`'s `--op ingest` mode). Two scope flags:
 
-- `--source <s>`: re-fetch a single source matching `<s>` (URL, label, or path) against `<wikiRoot>/raw/index.json`.
-- `--all`: re-fetch every source recorded in `<wikiRoot>/raw/index.json`.
+- `--source <s>`: re-fetch a single previously-ingested source whose URL, label, or path matches `<s>`.
+- `--all`: re-fetch every previously-ingested source.
 
-The flow: read the source registry, re-run `gather()` against each entry, diff the new payload against `<wikiRoot>/raw/<source>/`, re-compile only changed pages, update indexes, log a `refresh` event per source. Supports checkpoint resume — interrupted batches can be re-run; only un-checked entries are retried. Use `scripts/checkpoint.ts` with `opName "refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation.
+The flow: enumerate prior ingest events, re-run `gather()` against each source, diff the new payload against `<wikiRoot>/raw/<source>/`, re-compile only changed pages, update indexes, log a `refresh` event per source. Supports checkpoint resume — interrupted batches can be re-run; only un-checked entries are retried. Use `scripts/checkpoint.ts` with `opName "refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation.
 
 `ingest <src>` (new source) and `ingest --refresh` (re-fetch) are mutually exclusive at the wrapper layer.
 
