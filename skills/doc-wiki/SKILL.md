@@ -40,7 +40,19 @@ The wiki exposes 7 slash commands, dispatched by this section. Each subsection b
 - `/doc-wiki:edit` — targeted page changes
 - `/doc-wiki:stats` — token efficiency and cost metrics
 
-### /doc-wiki:init — Bootstrap a wiki
+### /doc-wiki:init — Bootstrap a wiki (scaffold + onboard + optional atlas)
+
+This is the single first-run command. It scaffolds the wiki directory, runs the ecosystem onboarding Q&A, and offers to dispatch `/doc-wiki:atlas` at the end so a brand-new repo reaches a usable wiki in one invocation.
+
+**Args:** `[--path <root>] [--domain <d>] [--name <n>] [--no-atlas | --atlas]`
+
+`--atlas` and `--no-atlas` are mutually exclusive; passing both errors before any side effects.
+
+**Phase 1 — Detect existing state.**
+- If `<root>/wiki.config.yaml` exists: `AskUserQuestion` "Wiki already initialized. Re-run onboarding?". Skip Phase 2 (scaffold) either way; on "yes" continue to Phase 3 (onboarding Q&A); on "no" skip directly to Phase 4 (atlas decision).
+- Otherwise: continue to Phase 2.
+
+**Phase 2 — Scaffold.**
 
 Create the directory scaffold and initial configuration.
 
@@ -65,11 +77,11 @@ After running the script, create initial files:
 - `wiki/summaries.md` — enriched summary index (empty initially)
 - `wiki/overview.md` — evolving big-picture synthesis
 
-### /doc-wiki:onboard — Interactive onboarding Q&A
+**Phase 3 — Onboarding Q&A.**
 
 Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.ts` for config I/O and dispatches `wiki-orm-agent` for ORM/database detection.
 
-**Phase 1 — Auto-detect language/framework:**
+**Phase 3, step 1 — Auto-detect language/framework:**
 
 Scan the project root for build files and infer the stack:
 
@@ -85,7 +97,7 @@ Scan the project root for build files and infer the stack:
 
 Present findings and ask user to confirm or correct.
 
-**Phase 2 — Detect ORM:**
+**Phase 3, step 2 — Detect ORM:**
 
 Dispatch `wiki-orm-agent` (via Agent tool) to scan for entity definitions matching shipped ORM profiles:
 
@@ -99,7 +111,7 @@ Dispatch `wiki-orm-agent` (via Agent tool) to scan for entity definitions matchi
 
 Present detected ORM profile and entity count. Ask user to confirm.
 
-**Phase 3 — Detect database:**
+**Phase 3, step 3 — Detect database:**
 
 Detect the database engine yourself by reading these files (no subagent dispatch needed):
 
@@ -109,7 +121,7 @@ Detect the database engine yourself by reading these files (no subagent dispatch
 
 When live introspection is needed (verify schema matches code), run `gather({ prompt: "describe schema for <db>", consumer: "doc-wiki" })` — the `db` connector inside `narai-primitives` handles it via the policy gate. Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
 
-**Phase 4 — External services Q&A:**
+**Phase 3, step 4 — External services Q&A:**
 
 Ask the user about each external source integration:
 
@@ -120,9 +132,9 @@ Ask the user about each external source integration:
 5. "Do you use **Notion** for documentation or knowledge base?"
 6. "Do you use **GitHub** wikis, discussions, or project boards?"
 
-For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go into the enabled allowlist for `consumers.doc-wiki` in Phase 4b.
+For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go into the enabled allowlist for `consumers.doc-wiki` in Phase 3, step 4b.
 
-**Phase 4b — Set up connector access:**
+**Phase 3, step 4b — Set up connector access:**
 
 `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which reads `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (repo overlay) to know which connectors are enabled and how to authenticate. If neither file exists yet, walk the user through creating one.
 
@@ -133,7 +145,7 @@ For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go
 
 2. **If both are missing** — bootstrap from the example:
    - Tell the user: "Your wiki needs `~/.connectors/config.yaml` to access the external services you enabled. I'll generate a starter from `.connectors/config.example.yaml`."
-   - For each connector the user said "yes" to in Phase 4, ask one credential question:
+   - For each connector the user said "yes" to in Phase 3, step 4, ask one credential question:
      - **Jira/Confluence:** "Where does your Atlassian API token live? (env var name, keychain label, or file path)"
      - **GitHub:** "Where does your GitHub personal access token live?"
      - **Notion:** "Where does your Notion integration token live?"
@@ -142,11 +154,11 @@ For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go
    - Compose the YAML and write it to `~/.connectors/config.yaml`. Include only the enabled connectors and a `consumers.doc-wiki` block listing them.
    - Verify the file parses by reading it back and looking for the expected `connectors` keys (no need to invoke `loadResolvedConfig()` from a one-shot script — a bad YAML file will be obvious).
 
-3. **If at least one already exists** — just confirm the enabled connectors line up with the user's Phase 4 answers. Suggest edits if there's a gap (e.g., user said "yes Confluence" but no `confluence:` block exists). Never edit an existing config without explicit confirmation.
+3. **If at least one already exists** — just confirm the enabled connectors line up with the user's Phase 3, step 4 answers. Suggest edits if there's a gap (e.g., user said "yes Confluence" but no `confluence:` block exists). Never edit an existing config without explicit confirmation.
 
 Once the file is in place, the user's `/doc-wiki:ingest <source>` calls will resolve credentials automatically via the connector's own credential loader — doc-wiki never reads or stores the secrets directly.
 
-**Phase 5 — Choose autonomy mode:**
+**Phase 3, step 5 — Choose autonomy mode:**
 
 Present the four autonomy modes and ask user to choose:
 
@@ -157,7 +169,7 @@ Present the four autonomy modes and ask user to choose:
 
 Default: `balanced`.
 
-**Phase 6a — README quickstart preference:**
+**Phase 3, step 6a — README quickstart preference:**
 
 Ask the user via `AskUserQuestion`:
 
@@ -172,11 +184,11 @@ Ask the user via `AskUserQuestion`:
 
 If the user picked any "Yes", dispatch `Agent(wiki-readme-agent)` with `{action: "init", project_root, wiki_root, quickstart_depth}` to insert markers into `README.md` if it exists and has none.
 
-**Phase 6 — Install hooks + scaffold:**
+**Phase 3, step 6 — Install hooks + scaffold:**
 
 1. Offer to install PreToolUse always-on hooks for the detected platform
 
-**Phase 6b — Optional multimodal deps (Q&A):**
+**Phase 3, step 6b — Optional multimodal deps (Q&A):**
 
 Ask the user once, before writing the config:
 
@@ -195,7 +207,7 @@ When the user says yes, print the exact commands (but DO NOT run them — Claude
 - Linux: `pipx install yt-dlp faster-whisper` (or the distro's package manager)
 - Windows: `pipx install yt-dlp faster-whisper`
 
-2. Generate/update `wiki.config.yaml` with all detected settings (including the `ecosystem.multimodal.enabled` choice from Phase 6b):
+2. Generate/update `wiki.config.yaml` with all detected settings (including the `ecosystem.multimodal.enabled` choice from Phase 3, step 6b):
    ```bash
    node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
    ```
@@ -204,7 +216,14 @@ When the user says yes, print the exact commands (but DO NOT run them — Claude
    node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
    ```
 
-**Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
+**Output of Phase 3:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
+
+**Phase 4 — Atlas decision.**
+- If `--no-atlas`: stop.
+- If `--atlas`: dispatch `/doc-wiki:atlas` with the default facet set.
+- Otherwise: `AskUserQuestion` "Generate full documentation now with /doc-wiki:atlas? (Recommended for first-run.)"
+  - Yes → dispatch `/doc-wiki:atlas`.
+  - No → stop, print "Run /doc-wiki:atlas later when ready."
 
 ### /doc-wiki:atlas — Full application documentation
 
@@ -641,7 +660,7 @@ Files are read by the AI tool only when the user explicitly asks "what skills/ag
 The Reference appendix is regenerated on:
 
 1. `/doc-wiki:init` — initial appendix written with empty registry (no per-tool config files yet).
-2. `/doc-wiki:onboard` — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
+2. `/doc-wiki:init` Phase 3 (Onboarding Q&A) — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
 3. `/doc-wiki:atlas` Phase 8 (finalize) — refreshed alongside the rest of the wiki.
 4. Any direct `Agent(wiki-claude-md-agent)` invocation.
 
@@ -679,7 +698,7 @@ The wiki-specific derivation agents (dispatched directly via the Agent tool, not
 | `wiki-claude-md-agent` | Regenerate the `<!-- wiki-managed: reference start/end -->` block in AI-tool root files (`CLAUDE.md`, `AGENTS.md`, etc.) and refresh per-tool config files under `docs/<wiki-folder>/ai-dev/`; dispatched by atlas Phase 8. |
 | `wiki-readme-agent` | Sync repo-root `README.md` quickstart marker block against `wiki/getting-started.md` with LLM salvage; dispatched by atlas Phase 8. |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams for wiki pages. |
-| `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:onboard` and atlas Phase 6. |
+| `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:init` (Phase 3) and atlas Phase 6. |
 
 ## Reference files
 
