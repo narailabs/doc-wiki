@@ -579,15 +579,15 @@ node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
 
 The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
 
-**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:query --promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:query --review` — same coverage rule, different entry point.
+**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:edit` on the most relevant existing page, or (b) a `/doc-wiki:query --promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:query --review` — same coverage rule, different entry point.
 
 **Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
 
 Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
 
-### /doc-wiki:fix — Quick corrections
+### /doc-wiki:edit — Targeted page changes
 
-1. User identifies the page and issue
+1. User identifies the page and what to change
 2. Read the page
 3. Show diff (current vs proposed)
 4. Apply if autonomy mode permits
