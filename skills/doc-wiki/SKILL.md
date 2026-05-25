@@ -647,6 +647,8 @@ After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the
 
 **Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page.
 
+**Archive-link rewrite (pre-crosslink):** When the operation includes archive sweep events, run `atlas_archive.js rewrite-inbound-links --wiki-root <root> --events-file <path-to-events-json> --mode <rewrite|drop|leave>` BEFORE the standard crosslink pass. For unarchive operations, run `atlas_archive.js rewrite-inbound-links-unarchive --wiki-root <root> --event-file <path-to-event-json>` instead. Both produce idempotent text edits and are safe to re-run.
+
 Skip hooks with `--no-crosslink` or `--no-tag-harmonize` flags.
 
 ## Quality scoring

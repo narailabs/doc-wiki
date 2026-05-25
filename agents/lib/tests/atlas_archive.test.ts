@@ -6,7 +6,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-import { sweep, unarchive, type SweepOptions, type UnarchiveOptions } from "../atlas_archive.js";
+import {
+  sweep,
+  unarchive,
+  rewriteInboundLinks,
+  rewriteInboundLinksForUnarchive,
+  type SweepOptions,
+  type UnarchiveOptions,
+  type ArchiveEvent,
+  type UnarchiveEvent,
+  type RewriteArchiveLinksOptions,
+  type RewriteUnarchiveLinksOptions,
+} from "../atlas_archive.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -579,13 +590,13 @@ describe("unarchive — happy path", () => {
     expect(last.from).toBe("wiki/_archive/billing/architecture.md");
   });
 
-  it("returns linksReverted: 0 (stub)", async () => {
+  it("returns linksReverted as a number", async () => {
     const result = await unarchive({
       wikiRoot,
       pageOrSlug: "wiki/_archive/billing/architecture.md",
       inboundLinks: "rewrite",
     });
-    expect(result.linksReverted).toBe(0);
+    expect(typeof result.linksReverted).toBe("number");
   });
 
   it("stripArchiveFrontmatter: no frontmatter block when only deprecation keys remain", async () => {
@@ -674,6 +685,317 @@ describe("unarchive — --target override", () => {
     ).toBe(false);
     // archived_from path ("wiki/billing/architecture.md") must NOT have been created
     expect(fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md"))).toBe(false);
+  });
+});
+
+// ── Helpers for link-rewrite tests ───────────────────────────────────────────
+
+function makeBillingEvent(ts = "2026-01-15T00:00:00.000Z"): ArchiveEvent {
+  return {
+    ts,
+    op: "archive",
+    atlas_run_id: "run-001",
+    from: "wiki/billing/architecture.md",
+    to: "wiki/_archive/billing/architecture.md",
+    reason: "all sources removed",
+    missing_sources: ["src/billing/"],
+  };
+}
+
+function makeUnarchiveBillingEvent(ts = "2026-02-01T00:00:00.000Z"): UnarchiveEvent {
+  return {
+    ts,
+    op: "unarchive",
+    from: "wiki/_archive/billing/architecture.md",
+    to: "wiki/billing/architecture.md",
+  };
+}
+
+// ── rewriteInboundLinks tests ─────────────────────────────────────────────────
+
+describe("rewriteInboundLinks — rewrite mode", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-rewrite-");
+    // Source page: wiki/auth/jwt.md contains a link to the page being archived
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      `---\ntitle: JWT\n---\nSee [Billing flow](../billing/architecture.md) for details.\n`,
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("rewrite mode: live link to archived page gets (archived) label and _archive/ path", async () => {
+    const opts: RewriteArchiveLinksOptions = {
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "rewrite",
+    };
+    await rewriteInboundLinks(opts);
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[Billing flow (archived)](../_archive/billing/architecture.md)");
+  });
+
+  it("drop mode: link is stripped, label becomes plain text", async () => {
+    const opts: RewriteArchiveLinksOptions = {
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "drop",
+    };
+    await rewriteInboundLinks(opts);
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("Billing flow");
+    expect(body).not.toMatch(/\[Billing flow\]/);
+  });
+
+  it("leave mode: no changes to inbound links", async () => {
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    const before = fs.readFileSync(jwtPath, "utf-8");
+    const opts: RewriteArchiveLinksOptions = {
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "leave",
+    };
+    await rewriteInboundLinks(opts);
+    const after = fs.readFileSync(jwtPath, "utf-8");
+    expect(after).toBe(before);
+  });
+
+  it("rewrite is idempotent: re-run on already-rewritten page is a no-op", async () => {
+    const opts: RewriteArchiveLinksOptions = {
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "rewrite",
+    };
+    await rewriteInboundLinks(opts);
+    const first = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    await rewriteInboundLinks(opts);
+    const second = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(second).toBe(first);
+  });
+});
+
+describe("rewriteInboundLinksForUnarchive", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-unarchive-");
+    // Pre-state: link is already rewritten to (archived) form
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      `---\ntitle: JWT\n---\nSee [Billing flow (archived)](../_archive/billing/architecture.md) for details.\n`,
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("unarchive reverts (archived) label and _archive/ path", async () => {
+    const opts: RewriteUnarchiveLinksOptions = {
+      wikiRoot,
+      event: makeUnarchiveBillingEvent(),
+    };
+    await rewriteInboundLinksForUnarchive(opts);
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[Billing flow](../billing/architecture.md)");
+  });
+});
+
+describe("rewriteInboundLinks — code-block skip", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-codeblock-");
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    // Link inside a fenced code block — must NOT be rewritten
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\n" +
+        "Normal text.\n" +
+        "```\n" +
+        "See [Billing flow](../billing/architecture.md) for details.\n" +
+        "```\n" +
+        "After code block.\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("does not rewrite links inside fenced code blocks", async () => {
+    await rewriteInboundLinks({
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "rewrite",
+    });
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    // Original link inside code block must be unchanged
+    expect(body).toContain("[Billing flow](../billing/architecture.md)");
+    // The (archived) form must NOT appear
+    expect(body).not.toContain("(archived)");
+  });
+});
+
+describe("rewriteInboundLinks — multiple events", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-multi-");
+    // Page links to both billing and payments pages
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\n" +
+        "See [Billing flow](../billing/architecture.md) and [Payments overview](../payments/overview.md).\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("rewrites all matching links when multiple events are provided", async () => {
+    const billingEvent = makeBillingEvent();
+    const paymentsEvent: ArchiveEvent = {
+      ts: "2026-01-15T00:00:00.000Z",
+      op: "archive",
+      atlas_run_id: "run-001",
+      from: "wiki/payments/overview.md",
+      to: "wiki/_archive/payments/overview.md",
+      reason: "all sources removed",
+      missing_sources: ["src/payments/"],
+    };
+    await rewriteInboundLinks({
+      wikiRoot,
+      events: [billingEvent, paymentsEvent],
+      mode: "rewrite",
+    });
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[Billing flow (archived)](../_archive/billing/architecture.md)");
+    expect(body).toContain("[Payments overview (archived)](../_archive/payments/overview.md)");
+  });
+});
+
+describe("rewriteInboundLinks — no-op page", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-noop-");
+    // Page that links to something unrelated — not the archived page
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\nSee [Other page](../other/overview.md).\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("does not modify pages with no links to any archived target", async () => {
+    const before = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    await rewriteInboundLinks({
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "rewrite",
+    });
+    const after = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(after).toBe(before);
+  });
+});
+
+describe("rewriteInboundLinks — deeply nested target", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-deep-");
+    // Page at wiki/auth/jwt.md links to wiki/auth/oauth/spec.md
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\nSee [OAuth spec](oauth/spec.md) for details.\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("rewrites a link to a deeply-nested archived page", async () => {
+    const deepEvent: ArchiveEvent = {
+      ts: "2026-01-15T00:00:00.000Z",
+      op: "archive",
+      atlas_run_id: "run-001",
+      from: "wiki/auth/oauth/spec.md",
+      to: "wiki/_archive/auth/oauth/spec.md",
+      reason: "all sources removed",
+      missing_sources: ["src/oauth/"],
+    };
+    await rewriteInboundLinks({
+      wikiRoot,
+      events: [deepEvent],
+      mode: "rewrite",
+    });
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[OAuth spec (archived)](../_archive/auth/oauth/spec.md)");
+  });
+});
+
+// ── Integration: sweep calls rewriteInboundLinks ──────────────────────────────
+
+describe("sweep — calls rewriteInboundLinks when inboundLinks=rewrite", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("sweep-links-");
+    repoRoot = makeTmpPath("sweep-links-repo-");
+    // The orphan page
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/"],
+      title: "Billing Architecture",
+    });
+    // A page that links to the orphan
+    const refPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: JWT\n---\nSee [Billing flow](../billing/architecture.md).\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+  });
+
+  it("sweep rewrites inbound links after archiving", async () => {
+    await sweep(makeOpts(wikiRoot, repoRoot, { inboundLinks: "rewrite" }));
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[Billing flow (archived)](../_archive/billing/architecture.md)");
   });
 });
 
