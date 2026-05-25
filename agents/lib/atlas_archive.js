@@ -456,8 +456,15 @@ export async function unarchive(opts) {
     }
     const targetRel = opts.target ?? archivedFrom;
     const targetAbs = path.resolve(opts.wikiRoot, targetRel);
-    if (!checkPathContainment(targetAbs, opts.wikiRoot)) {
-        throw new Error(`path containment violation: restore target "${targetRel}" resolves outside wiki root`);
+    const wikiSubtreeRoot = path.join(opts.wikiRoot, "wiki");
+    if (!checkPathContainment(targetAbs, wikiSubtreeRoot)) {
+        throw new Error(`path containment violation: restore target "${targetRel}" resolves outside wiki/ subtree`);
+    }
+    // Relative paths must start with "wiki/" (catches e.g. "wiki.config.yaml" or
+    // an absolute path that somehow passed containment but is not in wiki/).
+    const targetRelPosix = targetRel.replace(/\\/g, "/");
+    if (!path.isAbsolute(targetRel) && !targetRelPosix.startsWith("wiki/")) {
+        throw new Error(`path containment violation: restore target "${targetRel}" is not inside wiki/ subtree`);
     }
     if (fs.existsSync(targetAbs)) {
         throw new Error(`target ${targetRel} already exists; pass --target to restore elsewhere`);

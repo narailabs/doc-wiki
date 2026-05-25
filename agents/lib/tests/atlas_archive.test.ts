@@ -1603,6 +1603,92 @@ describe("CLI sweep — rejects invalid --autonomy value", () => {
   });
 });
 
+// ── Tests: Codex Fix 1 — unarchive target constrained to wiki/ subtree ────────
+
+describe("unarchive — target constrained to wiki/ subtree", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-wikisubtree-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("throws containment error when --target is wiki.config.yaml (outside wiki/)", async () => {
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/billing/architecture.md",
+        target: "wiki.config.yaml",
+        inboundLinks: "leave",
+      }),
+    ).rejects.toThrow(/path containment/i);
+  });
+
+  it("throws containment error when archived_from resolves outside wiki/ (e.g. ../wiki.config.yaml)", async () => {
+    // Overwrite the archived page's frontmatter so archived_from escapes wiki/
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const fm = {
+      atlas_facet: "architecture",
+      status: "deprecated",
+      archived_at: "2026-01-15",
+      archive_reason: "all sources removed (src/billing/)",
+      archived_from: "../wiki.config.yaml",
+    };
+    fs.writeFileSync(archPath, `---\n${yaml.dump(fm)}---\npage body\n`, "utf-8");
+
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/billing/architecture.md",
+        inboundLinks: "leave",
+      }),
+    ).rejects.toThrow(/path containment/i);
+  });
+
+  it("succeeds when --target is inside wiki/ subtree", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      target: "wiki/billing-v2/architecture.md",
+      inboundLinks: "leave",
+    });
+    expect(result.to).toBe("wiki/billing-v2/architecture.md");
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/billing-v2/architecture.md"))).toBe(true);
+  });
+});
+
+// ── Tests: Codex Fix 2 — resolveArchivePath canonicalizes .. segments ──────────
+
+describe("resolveArchivePath — canonicalizes .. segments in direct path", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("resolve-dotdot-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("resolves wiki/_archive/billing/../billing/architecture.md to the canonical relPath", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/../billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+    // Must canonicalize to the same relPath as the direct path without ..
+    expect(result.from).toBe("wiki/_archive/billing/architecture.md");
+    expect(result.to).toBe("wiki/billing/architecture.md");
+    // The restored file must actually exist
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md"))).toBe(true);
+  });
+});
+
 // ── Tests: Fix 3 — --partial-threshold range check ───────────────────────────
 
 describe("CLI sweep — rejects out-of-range --partial-threshold", () => {
