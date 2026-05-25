@@ -30,6 +30,7 @@ import { checkPathContainment } from "narai-primitives/toolkit";
 // ── Public types ───────────────────────────────────────────────────────────────
 
 export type Autonomy = "conservative" | "balanced" | "autonomous" | "auto";
+export const AUTONOMY_MODES = ["conservative", "balanced", "autonomous", "auto"] as const;
 
 export const REWRITE_MODES = ["rewrite", "drop", "leave"] as const;
 export type RewriteMode = (typeof REWRITE_MODES)[number];
@@ -351,9 +352,14 @@ async function resolveArchivePath(
     : pageOrSlug;
 
   if (candidateRel.startsWith("wiki/_archive/") || candidateRel.startsWith("wiki\\_archive\\")) {
-    const abs = path.join(wikiRoot, candidateRel);
-    if (fs.existsSync(abs)) {
-      return { absPath: abs, relPath: candidateRel };
+    const absPath = path.resolve(wikiRoot, candidateRel);
+    if (!checkPathContainment(absPath, path.join(wikiRoot, "wiki", "_archive"))) {
+      throw new Error(
+        `path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`,
+      );
+    }
+    if (fs.existsSync(absPath)) {
+      return { absPath, relPath: candidateRel };
     }
   }
 

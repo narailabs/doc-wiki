@@ -22,6 +22,7 @@ import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js"
 import { sourceExistence, } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { checkPathContainment } from "narai-primitives/toolkit";
+export const AUTONOMY_MODES = ["conservative", "balanced", "autonomous", "auto"];
 export const REWRITE_MODES = ["rewrite", "drop", "leave"];
 function decideAutonomy(autonomy, _kind) {
     switch (autonomy) {
@@ -205,9 +206,12 @@ async function resolveArchivePath(wikiRoot, pageOrSlug) {
         ? path.relative(wikiRoot, pageOrSlug)
         : pageOrSlug;
     if (candidateRel.startsWith("wiki/_archive/") || candidateRel.startsWith("wiki\\_archive\\")) {
-        const abs = path.join(wikiRoot, candidateRel);
-        if (fs.existsSync(abs)) {
-            return { absPath: abs, relPath: candidateRel };
+        const absPath = path.resolve(wikiRoot, candidateRel);
+        if (!checkPathContainment(absPath, path.join(wikiRoot, "wiki", "_archive"))) {
+            throw new Error(`path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`);
+        }
+        if (fs.existsSync(absPath)) {
+            return { absPath, relPath: candidateRel };
         }
     }
     // Substring slug match: collect all *.md under wiki/_archive/
