@@ -467,16 +467,20 @@ export async function rewriteInboundLinks(opts: RewriteArchiveLinksOptions): Pro
     const rewritten = segments.map(({ text, isCode }) => {
       if (isCode) return text;
 
-      let result = text;
       let m: RegExpExecArray | null;
       const re = new RegExp(LINK_RE.source, "g");
+      let lastIndex = 0;
+      const out: string[] = [];
 
       while ((m = re.exec(text)) !== null) {
-        const label = m[1]!;
-        const rawTarget = m[2]!;
+        const [whole, label, rawTarget] = m as RegExpExecArray & [string, string, string];
 
         // Skip already-rewritten links
-        if (label.endsWith(" (archived)") && rawTarget.includes("_archive/")) continue;
+        if (label.endsWith(" (archived)") && rawTarget.includes("_archive/")) {
+          out.push(text.slice(lastIndex, m.index + whole.length));
+          lastIndex = m.index + whole.length;
+          continue;
+        }
 
         // Resolve target to wiki-relative path
         const pageDir = path.dirname(page.absPath);
@@ -486,26 +490,30 @@ export async function rewriteInboundLinks(opts: RewriteArchiveLinksOptions): Pro
           .replace(/\\/g, "/");
 
         const archiveTo = eventMap.get(resolvedRel);
-        if (!archiveTo) continue;
+        if (!archiveTo) {
+          out.push(text.slice(lastIndex, m.index + whole.length));
+          lastIndex = m.index + whole.length;
+          continue;
+        }
 
+        out.push(text.slice(lastIndex, m.index));
         if (opts.mode === "rewrite") {
           const archAbsPath = path.join(opts.wikiRoot, archiveTo);
           const newRelTarget = path
             .relative(pageDir, archAbsPath)
             .replace(/\\/g, "/");
-          const newLink = `[${label} (archived)](${newRelTarget})`;
-          result = result.replace(m[0], newLink);
-          totalRewrites++;
-          changed = true;
+          out.push(`[${label} (archived)](${newRelTarget})`);
         } else {
           // drop mode: replace [label](target) with plain label text
-          result = result.replace(m[0], label);
-          totalRewrites++;
-          changed = true;
+          out.push(label);
         }
+        totalRewrites++;
+        changed = true;
+        lastIndex = m.index + whole.length;
       }
 
-      return result;
+      out.push(text.slice(lastIndex));
+      return out.join("");
     });
 
     if (changed) {
@@ -546,16 +554,21 @@ export async function rewriteInboundLinksForUnarchive(
     const rewritten = segments.map(({ text, isCode }) => {
       if (isCode) return text;
 
-      let result = text;
       let m: RegExpExecArray | null;
       const re = new RegExp(LINK_RE.source, "g");
+      let lastIndex = 0;
+      const out: string[] = [];
 
       while ((m = re.exec(text)) !== null) {
-        const label = m[1]!;
-        const rawTarget = m[2]!;
+        const [whole, label, rawTarget] = m as RegExpExecArray & [string, string, string];
 
-        // Only process links that look like rewritten archive links
-        if (!label.endsWith(" (archived)")) continue;
+        // Only process links that look like rewritten archive links:
+        // label must end with " (archived)" AND path must be under _archive/.
+        if (!label.endsWith(" (archived)") || !rawTarget.includes("_archive/")) {
+          out.push(text.slice(lastIndex, m.index + whole.length));
+          lastIndex = m.index + whole.length;
+          continue;
+        }
 
         // Resolve to wiki-relative to check it matches the archive path
         const pageDir = path.dirname(page.absPath);
@@ -564,7 +577,11 @@ export async function rewriteInboundLinksForUnarchive(
           .relative(wikiRoot, resolvedAbs)
           .replace(/\\/g, "/");
 
-        if (resolvedRel !== archiveRelPath) continue;
+        if (resolvedRel !== archiveRelPath) {
+          out.push(text.slice(lastIndex, m.index + whole.length));
+          lastIndex = m.index + whole.length;
+          continue;
+        }
 
         // Strip " (archived)" suffix and repoint to the live path
         const originalLabel = label.slice(0, -" (archived)".length);
@@ -573,13 +590,15 @@ export async function rewriteInboundLinksForUnarchive(
           .relative(pageDir, liveAbsPath)
           .replace(/\\/g, "/");
 
-        const newLink = `[${originalLabel}](${newRelTarget})`;
-        result = result.replace(m[0], newLink);
+        out.push(text.slice(lastIndex, m.index));
+        out.push(`[${originalLabel}](${newRelTarget})`);
         totalReverted++;
         changed = true;
+        lastIndex = m.index + whole.length;
       }
 
-      return result;
+      out.push(text.slice(lastIndex));
+      return out.join("");
     });
 
     if (changed) {

@@ -923,6 +923,74 @@ describe("rewriteInboundLinks — no-op page", () => {
   });
 });
 
+describe("rewriteInboundLinks — duplicate links in single page", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-dup-");
+    // wiki/auth/jwt.md has TWO identical links to the same archived target
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\n" +
+        "See [Billing flow](../billing/architecture.md) and again [Billing flow](../billing/architecture.md).\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("rewrite rewrites duplicate links in a single page", async () => {
+    const opts: RewriteArchiveLinksOptions = {
+      wikiRoot,
+      events: [makeBillingEvent()],
+      mode: "rewrite",
+    };
+    const count = await rewriteInboundLinks(opts);
+    expect(count).toBe(2);
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    // Both occurrences should be rewritten
+    const matches = body.match(/\[Billing flow \(archived\)\]\(\.\.\/\_archive\/billing\/architecture\.md\)/g);
+    expect(matches).toHaveLength(2);
+    // Original form must not remain
+    expect(body).not.toContain("[Billing flow](../billing/architecture.md)");
+  });
+});
+
+describe("rewriteInboundLinksForUnarchive — _archive/ path guard", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("link-inverse-guard-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("does not revert a hand-authored (archived) label whose path is not under _archive/", async () => {
+    // A page with a hand-authored link: label ends with (archived) but path
+    // does NOT go through _archive/ — inverse pass must leave it alone.
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    const originalContent =
+      "---\ntitle: JWT\n---\n" +
+      "See [Billing flow (archived)](../billing/architecture.md) for details.\n";
+    fs.writeFileSync(jwtPath, originalContent, "utf-8");
+
+    await rewriteInboundLinksForUnarchive({
+      wikiRoot,
+      event: makeUnarchiveBillingEvent(),
+    });
+
+    const after = fs.readFileSync(jwtPath, "utf-8");
+    expect(after).toBe(originalContent);
+  });
+});
+
 describe("rewriteInboundLinks — deeply nested target", () => {
   let wikiRoot: string;
 
