@@ -10,7 +10,7 @@
  * rebuild; before this module it was left to LLM judgment.
  *
  * Behaviour:
- *   - Walks `<wikiRoot>/wiki/**\/*.md` via `_wiki_fs.wikiPages`.
+ *   - Walks `<wikiRoot>/wiki/**\/*.md` via `_wiki_fs.walkLivePages`.
  *   - Skips the index (`wiki/index.md`) and summaries (`wiki/summaries.md`)
  *     themselves so we don't recurse / self-reference.
  *   - Emits one bulleted line per page:
@@ -33,7 +33,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
-import { wikiPages } from "./_wiki_fs.js";
+import { walkLivePages } from "./_wiki_fs.js";
 import { buildBanlistSection } from "./banlist.js";
 export const START_MARKER = "<!-- wiki-managed: summaries start -->";
 export const END_MARKER = "<!-- wiki-managed: summaries end -->";
@@ -135,12 +135,12 @@ function spliceManagedBlock(existing, managed) {
 export function rebuildSummaries(wikiRoot, options = {}) {
     const maxSummaryChars = options.maxSummaryChars ?? DEFAULT_SUMMARY_CHARS;
     const summaries = [];
-    for (const abs of wikiPages(wikiRoot)) {
-        const s = readPage(wikiRoot, abs);
+    for (const p of walkLivePages(wikiRoot)) {
+        const s = readPage(wikiRoot, p.absPath);
         if (s !== null)
             summaries.push(s);
     }
-    // wikiPages is sorted lexicographically; summaries inherit that order.
+    // walkLivePages is sorted lexicographically; summaries inherit that order.
     const banlist = buildBanlistSection(wikiRoot);
     const managed = renderManagedBlock(summaries, banlist, maxSummaryChars);
     const summariesPath = path.join(wikiRoot, "wiki", "summaries.md");

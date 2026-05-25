@@ -19,20 +19,45 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import ignore, { type Ignore } from "ignore";
 
+// ── Typed page record ────────────────────────────────────────────────────────
+
 /**
- * Return absolute paths to every `.md` file under `<wikiRoot>/wiki/`,
- * sorted lexicographically. See module docstring for parity details.
+ * A single wiki page returned by `walkLivePages` or `walkArchivedPages`.
  */
-export function wikiPages(wikiRoot: string): string[] {
-  const wikiDir = path.join(wikiRoot, "wiki");
-  if (!fs.existsSync(wikiDir)) {
-    return [];
-  }
-  const out: string[] = [];
-  const stack: string[] = [wikiDir];
+export interface WikiPage {
+  /** Absolute filesystem path to the `.md` file. */
+  absPath: string;
+  /** POSIX-relative path from `wikiRoot` (e.g. `"wiki/topic/page.md"`). */
+  relPath: string;
+}
+
+// ── Directory exclusion convention ───────────────────────────────────────────
+// Any directory whose basename starts with `_` is reserved and excluded from
+// the live-pages walk. `_archive` is the canonical archive location; other
+// `_*` dirs (e.g. `_internal`, `_drafts`) are treated the same way.
+const EXCLUDE_PREFIX = "_";
+
+/**
+ * Shared recursive walker. Yields `WikiPage` records for every `.md` file
+ * reachable from `root`, recursing into subdirectories for which
+ * `includeDir(absDir)` returns `true`. Results are sorted lexicographically
+ * by `absPath`.
+ *
+ * `relPath` is expressed relative to `relBase` (a POSIX path used as the
+ * common prefix when building `relPath` from the absolute paths). Pass
+ * `relBase === root` for the normal case where `relPath` is relative to
+ * the same root as `absPath`.
+ */
+function walkSync(
+  root: string,
+  relBase: string,
+  includeDir: (absDir: string) => boolean,
+): WikiPage[] {
+  if (!fs.existsSync(root)) return [];
+  const out: WikiPage[] = [];
+  const stack: string[] = [root];
   while (stack.length > 0) {
-    const dir = stack.pop();
-    if (dir === undefined) continue;
+    const dir = stack.pop()!;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -42,14 +67,57 @@ export function wikiPages(wikiRoot: string): string[] {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        stack.push(full);
+        if (includeDir(full)) stack.push(full);
       } else if (entry.isFile() && full.endsWith(".md")) {
-        out.push(full);
+        // relPath: POSIX-relative from relBase to the file
+        const rel = path.relative(relBase, full).split(path.sep).join("/");
+        out.push({ absPath: full, relPath: rel });
       }
     }
   }
-  out.sort();
+  out.sort((a, b) => (a.absPath < b.absPath ? -1 : a.absPath > b.absPath ? 1 : 0));
   return out;
+}
+
+// ── New helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Return `WikiPage` records for every live `.md` file under
+ * `<wikiRoot>/wiki/`, excluding any directory whose basename starts with `_`
+ * (e.g. `_archive`, `_internal`). Sorted lexicographically by `absPath`.
+ */
+export function walkLivePages(wikiRoot: string): WikiPage[] {
+  const wikiDir = path.join(wikiRoot, "wiki");
+  return walkSync(
+    wikiDir,
+    wikiRoot,
+    (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX),
+  );
+}
+
+/**
+ * Return `WikiPage` records for every `.md` file under
+ * `<wikiRoot>/wiki/_archive/`. Returns `[]` if the archive directory does
+ * not exist. `relPath` on each record is relative to `wikiRoot`, so it
+ * begins with `"wiki/_archive/"`.
+ */
+export function walkArchivedPages(wikiRoot: string): WikiPage[] {
+  const archiveDir = path.join(wikiRoot, "wiki", "_archive");
+  return walkSync(archiveDir, wikiRoot, () => true);
+}
+
+// ── Legacy export ─────────────────────────────────────────────────────────────
+
+/**
+ * Return absolute paths to every live `.md` file under `<wikiRoot>/wiki/`,
+ * sorted lexicographically. Excludes directories starting with `_` (e.g.
+ * `_archive`, `_internal`).
+ *
+ * @deprecated Use `walkLivePages()` instead. This alias will be removed in
+ * the next major release once all callers have been migrated.
+ */
+export function wikiPages(wikiRoot: string): string[] {
+  return walkLivePages(wikiRoot).map((p) => p.absPath);
 }
 
 // ── .wiki-ignore support ─────────────────────────────────────────────

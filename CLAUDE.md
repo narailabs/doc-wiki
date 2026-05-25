@@ -34,9 +34,11 @@ Three slash commands take a new repo from zero to a working wiki:
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Slash commands (10) — `commands/`
+### Slash commands (11) — `commands/`
 
-Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (`/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`, `unarchive.md`. (`/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+
+Pages atlas detects as orphaned (sources removed from code) are moved to `wiki/_archive/` and excluded from the main wiki surface. Restore via `/doc-wiki:unarchive <slug>`.
 
 ### TypeScript scripts (24) — `skills/doc-wiki/scripts/`
 

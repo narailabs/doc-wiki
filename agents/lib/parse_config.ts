@@ -15,6 +15,12 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
 
+const VALID_INBOUND_LINKS_MODES: ReadonlySet<string> = new Set([
+  "rewrite",
+  "drop",
+  "leave",
+]);
+
 const VALID_AUTONOMY_MODES: ReadonlySet<string> = new Set([
   "conservative",
   "balanced",
@@ -42,6 +48,12 @@ const DEFAULTS = {
     mode: "balanced",
   },
 } as const;
+
+export interface ArchiveConfig {
+  enabled: boolean;          // default: true
+  partial_threshold: number; // 0.0–1.0, default: 1.0
+  inbound_links: "rewrite" | "drop" | "leave"; // default: "rewrite"
+}
 
 /** A wiki config dict after defaults have been applied. Kept loose on purpose
  *  to mirror the dynamic dict shape the Python reference returns. */
@@ -105,6 +117,44 @@ function applyReadmeDefaults(
     quickstart_depth: raw.quickstart_depth ?? "generous",
     salvage_mode: raw.salvage_mode ?? inheritedSalvage,
     insert_markers_on_init: raw.insert_markers_on_init ?? true,
+  };
+}
+
+function applyArchiveDefaults(ecosystem: Record<string, unknown>): void {
+  if (ecosystem["archive"] !== undefined && !isPlainObject(ecosystem["archive"])) {
+    throw new Error(
+      `invalid ecosystem.archive: ${JSON.stringify(ecosystem["archive"])} (expected an object; to disable use \`ecosystem.archive.enabled: false\`)`,
+    );
+  }
+  const raw = (ecosystem["archive"] as Record<string, unknown> | undefined) ?? {};
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") {
+    throw new Error(
+      `invalid ecosystem.archive.enabled: ${JSON.stringify(raw.enabled)} (expected true or false)`,
+    );
+  }
+  const enabled = raw.enabled ?? true;
+  if (raw.partial_threshold !== undefined && typeof raw.partial_threshold !== "number") {
+    throw new Error(
+      `invalid ecosystem.archive.partial_threshold must be a number, got ${typeof raw.partial_threshold}: ${JSON.stringify(raw.partial_threshold)}`,
+    );
+  }
+  const partial = raw.partial_threshold ?? 1.0;
+  if (partial < 0 || partial > 1) {
+    throw new Error(
+      `invalid ecosystem.archive.partial_threshold: ${partial} (must be in [0.0, 1.0])`,
+    );
+  }
+  const mode = raw.inbound_links ?? "rewrite";
+  if (!VALID_INBOUND_LINKS_MODES.has(mode as string)) {
+    throw new Error(
+      `invalid ecosystem.archive.inbound_links: ${mode} (expected one of: ${[...VALID_INBOUND_LINKS_MODES].join(", ")})`,
+    );
+  }
+  ecosystem.archive = {
+    ...raw,
+    enabled,
+    partial_threshold: partial,
+    inbound_links: mode as ArchiveConfig["inbound_links"],
   };
 }
 
@@ -201,6 +251,7 @@ export function parseConfig(configPath: string): WikiConfig {
   }
   const ecosystem = config["ecosystem"] as Record<string, unknown>;
   applyReadmeDefaults(ecosystem, mode);
+  applyArchiveDefaults(ecosystem);
 
   return config;
 }

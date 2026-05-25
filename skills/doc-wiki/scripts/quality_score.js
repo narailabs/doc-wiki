@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { computeDegrees } from "./graph_ops.js";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
-import { wikiPages } from "./_wiki_fs.js";
+import { walkLivePages } from "./_wiki_fs.js";
 // ── Constants ───────────────────────────────────────────────────────
 const REQUIRED_FIELDS = new Set([
     "title",
@@ -284,11 +284,11 @@ export function scoreWiki(wikiRoot) {
     if (!fs.existsSync(wikiDir)) {
         return results;
     }
-    for (const page of wikiPages(wikiRoot)) {
-        const result = scorePage(page, ep);
-        const relPath = path.relative(wikiRoot, page);
+    for (const page of walkLivePages(wikiRoot)) {
+        const result = scorePage(page.absPath, ep);
         results.push({
-            page: relPath,
+            // relPath uses POSIX separators (walkSync normalizes); edges.jsonl must match this convention.
+            page: page.relPath,
             quality: result.quality,
             signals: result.signals,
         });

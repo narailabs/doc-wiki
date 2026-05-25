@@ -310,13 +310,33 @@ function median(values: readonly number[]): number {
  *   appears in `total_tokens_by_op` — those without any token data
  *   render as `0`. Useful for capacity-style dashboards that need a
  *   stable, predictable key set across runs.
+ *
+ * `opts.includeArchived` (default `false`):
+ *   By default, `archive` and `unarchive` events are excluded from all
+ *   aggregations (total_events, ops_by_type, total_cost_usd, etc.) because
+ *   they are housekeeping ops, not content-production ops. Set to `true`
+ *   to include them in all totals.
  */
+
+/** Op types that are considered housekeeping and excluded from stats by default. */
+const ARCHIVE_OPS = new Set(["archive", "unarchive"]);
+
 export function getStats(
   wikiRoot: string,
   since: string | null = null,
-  opts: { includeRatios?: boolean; includeZeroTokens?: boolean } = {},
+  opts: {
+    includeRatios?: boolean;
+    includeZeroTokens?: boolean;
+    includeArchived?: boolean;
+  } = {},
 ): Record<string, unknown> {
-  const events = _readEvents(wikiRoot, since);
+  const allEvents = _readEvents(wikiRoot, since);
+  const events =
+    opts.includeArchived === true
+      ? allEvents
+      : allEvents.filter(
+          (e) => !ARCHIVE_OPS.has(typeof e["op"] === "string" ? e["op"] : ""),
+        );
 
   const opsByType: Record<string, number> = {};
   let totalCost = 0.0;
@@ -462,6 +482,8 @@ interface ParsedArgs {
   /** A6: when true, total_tokens_by_op contains a 0-entry for every op
    *  observed in the log (including ops that emitted no token data). */
   includeZeroTokens?: boolean;
+  /** When true, archive/unarchive events are included in stats totals. */
+  includeArchived?: boolean;
   /** Sugar over `--details '{"source":"..."}'` — SKILL.md step 12 documents
    *  this flag for the common ingest case. Merged into `details.source`
    *  before logging; if `--details` already carries `source`, the explicit
@@ -511,6 +533,11 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     // A6: boolean-style flag — no value follows. Consume just one token.
     if (a === "--include-zero-tokens") {
       out.includeZeroTokens = true;
+      i++;
+      continue;
+    }
+    if (a === "--include-archived") {
+      out.includeArchived = true;
       i++;
       continue;
     }
@@ -580,6 +607,10 @@ stats options:
                         even ops whose events carried no token data
                         (those render as 0). Default: omit zero-token
                         ops to keep per-op cost averages clean.
+  --include-archived    Include archive and unarchive events in all
+                        stats totals (total_events, ops_by_type,
+                        total_cost_usd, etc.). Default: exclude them
+                        since they are housekeeping, not content ops.
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -630,6 +661,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     const result = getStats(args.wikiRoot, since, {
       includeRatios: true,
       includeZeroTokens: args.includeZeroTokens === true,
+      includeArchived: args.includeArchived === true,
     });
     delete result["_ratios"];
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");

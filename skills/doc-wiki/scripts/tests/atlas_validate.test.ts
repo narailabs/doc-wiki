@@ -16,6 +16,7 @@ import {
   storeValidationCache,
   clearValidationCache,
   findDuplicateDiagrams,
+  sourceExistence,
   VALIDATE_CACHE_SUBDIR,
   VALIDATE_CACHE_VERSION,
 } from "../atlas_validate.js";
@@ -225,5 +226,147 @@ describe("findDuplicateDiagrams", () => {
     writeArchPage(wikiRoot, "wiki/c/architecture.md", ["src/shared/"], ["Topology"]);
     const findings = findDuplicateDiagrams(wikiRoot);
     expect(findings).toHaveLength(3); // pairs: (a,b), (a,c), (b,c)
+  });
+});
+
+// ── sourceExistence ───────────────────────────────────────────────────
+
+function writeWikiPage(
+  wikiRoot: string,
+  relPath: string,
+  sources: string[],
+): string {
+  const full = path.join(wikiRoot, relPath);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  const fm = yaml.dump({ title: "test", type: "concept", sources });
+  fs.writeFileSync(full, "---\n" + fm + "---\n\nbody\n");
+  return full;
+}
+
+describe("sourceExistence", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+  let repoRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("source-existence-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    // Use wikiRoot as repoRoot so we can create source files inside it.
+    repoRoot = wikiRoot;
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns live for URL-only pages (no local paths)", () => {
+    const page = writeWikiPage(wikiRoot, "wiki/remote.md", [
+      "https://example.com",
+      "jira://PROJ-123",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("live");
+    expect(r.total).toBe(0);
+    expect(r.missing).toEqual([]);
+    expect(r.ratio).toBe(0);
+  });
+
+  it("returns orphan when all local paths are missing", () => {
+    const page = writeWikiPage(wikiRoot, "wiki/gone.md", [
+      "src/deleted/foo.ts",
+      "src/deleted/bar.ts",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("orphan");
+    expect(r.missing).toEqual(["src/deleted/foo.ts", "src/deleted/bar.ts"]);
+    expect(r.ratio).toBe(1.0);
+    expect(r.total).toBe(2);
+  });
+
+  it("returns candidate when ratio meets threshold", () => {
+    // Create 2 of the 3 source files; 1 is missing → ratio = 1/3 ≈ 0.333
+    fs.mkdirSync(path.join(repoRoot, "src", "present"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "src", "present", "a.ts"), "");
+    fs.writeFileSync(path.join(repoRoot, "src", "present", "b.ts"), "");
+    const page = writeWikiPage(wikiRoot, "wiki/partial.md", [
+      "src/present/a.ts",
+      "src/present/b.ts",
+      "src/missing/c.ts",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page, threshold: 0.3 });
+    expect(r.status).toBe("candidate");
+    expect(r.missing).toEqual(["src/missing/c.ts"]);
+    expect(r.ratio).toBeCloseTo(0.333, 2);
+  });
+
+  it("returns live when ratio is below threshold (default threshold=1.0)", () => {
+    // 1 of 5 sources missing → ratio = 0.2; default threshold is 1.0 → live
+    fs.mkdirSync(path.join(repoRoot, "src", "live"), { recursive: true });
+    for (const name of ["a.ts", "b.ts", "c.ts", "d.ts"]) {
+      fs.writeFileSync(path.join(repoRoot, "src", "live", name), "");
+    }
+    const page = writeWikiPage(wikiRoot, "wiki/mostly-live.md", [
+      "src/live/a.ts",
+      "src/live/b.ts",
+      "src/live/c.ts",
+      "src/live/d.ts",
+      "src/live/missing.ts",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("live");
+    expect(r.ratio).toBeCloseTo(0.2, 5);
+  });
+
+  it("ignores remote schemes and counts only local paths", () => {
+    // 2 URLs + 1 missing local path → total=1, missing=1, ratio=1.0 → orphan
+    const page = writeWikiPage(wikiRoot, "wiki/mixed.md", [
+      "https://docs.example.com/api",
+      "github://org/repo",
+      "src/vanished/module.ts",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("orphan");
+    expect(r.total).toBe(1);
+    expect(r.missing).toEqual(["src/vanished/module.ts"]);
+    expect(r.ratio).toBe(1.0);
+  });
+
+  it("returns live when page has no sources frontmatter field", () => {
+    const full = path.join(wikiRoot, "wiki", "no-sources.md");
+    fs.writeFileSync(full, "---\ntitle: No Sources\n---\n\nbody\n");
+    const r = sourceExistence({ wikiRoot, repoRoot, page: full });
+    expect(r.status).toBe("live");
+    expect(r.total).toBe(0);
+    expect(r.ratio).toBe(0);
+  });
+
+  it("handles absolute source paths correctly", () => {
+    // An absolute path that exists should not count as missing.
+    const absFile = path.join(repoRoot, "src", "abs.ts");
+    fs.mkdirSync(path.dirname(absFile), { recursive: true });
+    fs.writeFileSync(absFile, "");
+    const page = writeWikiPage(wikiRoot, "wiki/abspage.md", [absFile]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("live");
+    expect(r.total).toBe(1);
+    expect(r.missing).toEqual([]);
+  });
+
+  it("all remote schemes are ignored: confluence, notion, aws, gcp", () => {
+    const page = writeWikiPage(wikiRoot, "wiki/all-remote.md", [
+      "confluence://space/page",
+      "notion://workspace/db",
+      "aws://s3/bucket/key",
+      "gcp://storage/bucket/object",
+    ]);
+    const r = sourceExistence({ wikiRoot, repoRoot, page });
+    expect(r.status).toBe("live");
+    expect(r.total).toBe(0);
+  });
+
+  it("throws when the page file does not exist", () => {
+    expect(() =>
+      sourceExistence({ wikiRoot, repoRoot, page: "/tmp/does-not-exist-atlas-validate.md" }),
+    ).toThrow();
   });
 });
