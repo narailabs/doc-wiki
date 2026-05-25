@@ -1146,6 +1146,57 @@ describe("rewriteInboundLinksForUnarchive — preserves URL fragment on unarchiv
   });
 });
 
+// ── Tests: Comment 2 — path containment on unarchive ─────────────────────────
+
+describe("unarchive — path containment guard", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-containment-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("throws path containment error when --target escapes wiki root", async () => {
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/billing/architecture.md",
+        target: "../escape.md",
+        inboundLinks: "leave",
+      }),
+    ).rejects.toThrow(/path containment/i);
+  });
+
+  it("throws path containment error when archived_from escapes wiki root", async () => {
+    // Write an archived page whose archived_from frontmatter points outside root
+    const archPath = path.join(wikiRoot, "wiki/_archive/billing/architecture.md");
+    const fm = {
+      atlas_facet: "architecture",
+      status: "deprecated",
+      archived_at: "2026-01-15",
+      archive_reason: "all sources removed (src/billing/)",
+      archived_from: "../../etc/foo.md",
+    };
+    fs.writeFileSync(
+      archPath,
+      `---\n${yaml.dump(fm)}---\npage body\n`,
+      "utf-8",
+    );
+
+    await expect(
+      unarchive({
+        wikiRoot,
+        pageOrSlug: "wiki/_archive/billing/architecture.md",
+        inboundLinks: "leave",
+      }),
+    ).rejects.toThrow(/path containment/i);
+  });
+});
+
 describe("unarchive — rebuildArchiveIndex skips unarchived events", () => {
   let wikiRoot: string;
   let repoRoot: string;

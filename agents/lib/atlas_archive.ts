@@ -25,6 +25,7 @@ import {
   type SourceExistenceResult,
 } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
+import { checkPathContainment } from "narai-primitives/toolkit";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -645,6 +646,12 @@ export async function unarchive(opts: UnarchiveOptions): Promise<UnarchiveResult
 
   const targetRel = opts.target ?? archivedFrom;
   const targetAbs = path.resolve(opts.wikiRoot, targetRel);
+
+  if (!checkPathContainment(targetAbs, opts.wikiRoot)) {
+    throw new Error(
+      `path containment violation: restore target "${targetRel}" resolves outside wiki root`,
+    );
+  }
 
   if (fs.existsSync(targetAbs)) {
     throw new Error(
