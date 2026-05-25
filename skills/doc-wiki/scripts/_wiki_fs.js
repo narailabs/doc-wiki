@@ -94,8 +94,7 @@ export function walkArchivedPages(wikiRoot) {
  * the next major release once all callers have been migrated.
  */
 export function wikiPages(wikiRoot) {
-    const wikiDir = path.join(wikiRoot, "wiki");
-    return walkSync(wikiDir, wikiRoot, (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX)).map((p) => p.absPath);
+    return walkLivePages(wikiRoot).map((p) => p.absPath);
 }
 /** Wraps the `ignore` package so callers only see `isIgnored`. */
 function wrap(ig) {
