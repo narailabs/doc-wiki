@@ -350,16 +350,17 @@ async function resolveArchivePath(
   const candidateRel = path.isAbsolute(pageOrSlug)
     ? path.relative(wikiRoot, pageOrSlug)
     : pageOrSlug;
+  const candidateRelPosix = candidateRel.replace(/\\/g, "/");
 
-  if (candidateRel.startsWith("wiki/_archive/") || candidateRel.startsWith("wiki\\_archive\\")) {
-    const absPath = path.resolve(wikiRoot, candidateRel);
+  if (candidateRelPosix.startsWith("wiki/_archive/")) {
+    const absPath = path.resolve(wikiRoot, candidateRelPosix);
     if (!checkPathContainment(absPath, path.join(wikiRoot, "wiki", "_archive"))) {
       throw new Error(
         `path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`,
       );
     }
     if (fs.existsSync(absPath)) {
-      return { absPath, relPath: candidateRel };
+      return { absPath, relPath: candidateRelPosix };
     }
   }
 

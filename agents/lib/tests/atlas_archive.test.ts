@@ -1512,6 +1512,36 @@ describe("resolveArchivePath — path traversal blocked", () => {
   });
 });
 
+// ── Tests: Fix — Windows-style path normalized to POSIX ──────────────────────
+
+describe("resolveArchivePath — Windows-style path normalized to POSIX", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("resolve-posix-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("backslash path resolves to the same relPath as the POSIX equivalent", async () => {
+    // Simulate a Windows-style input without requiring Windows at runtime.
+    const backslashed = "wiki\\_archive\\billing\\architecture.md";
+    const r = await unarchive({
+      wikiRoot,
+      pageOrSlug: backslashed,
+      inboundLinks: "leave",
+    });
+    // relPath must be POSIX-normalized — same value as the forward-slash form
+    expect(r.from).toBe("wiki/_archive/billing/architecture.md");
+    expect(r.from).not.toContain("\\");
+    // File is actually restored (link rewrite can compare correctly)
+    expect(fs.existsSync(path.join(wikiRoot, r.to))).toBe(true);
+  });
+});
+
 // ── Tests: Fix 2 — sweep autonomy validation ──────────────────────────────────
 
 describe("sweep — rejects invalid autonomy at library layer", () => {
