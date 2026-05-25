@@ -602,7 +602,15 @@ Restore a previously-archived wiki page from `wiki/_archive/` back to the active
 2. **Target check** — determine destination from `--target` or `archived_from`. If the destination already exists, abort with a conflict message.
 3. **Move** — move the file from `wiki/_archive/<path>` to the resolved destination.
 4. **Strip frontmatter** — remove `status: deprecated`, `archived_at`, `archive_reason`, and `archived_from` fields from the page's frontmatter.
-5. **Append history** — append an `unarchive` event to `_archive_history.jsonl` recording `page`, `restored_to`, `restored_at`, and `triggered_by`.
+5. **Append history** — append an `unarchive` event to `_archive_history.jsonl`. The event shape is:
+   ```jsonc
+   {
+     "ts": "2026-05-24T16:10:00Z",     // ISO8601 timestamp
+     "op": "unarchive",                 // discriminator (vs "archive")
+     "from": "wiki/_archive/billing/architecture.md",  // the archived path
+     "to": "wiki/billing/architecture.md"              // restored target
+   }
+   ```
 6. **Rebuild index** — regenerate `wiki/_archive/index.md` to reflect the removed entry.
 7. **Inverse link rewrite** — run `node agents/lib/atlas_archive.js rewrite-inbound-links-unarchive --wiki-root <root> --event-file <path-to-event-json>` to restore or update links in active wiki pages that were rewritten or dropped during the original archive sweep.
 8. **Post-op hooks** — run the standard crosslink and tag-harmonize passes (unless `--no-crosslink` / `--no-tag-harmonize`).

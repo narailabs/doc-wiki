@@ -117,12 +117,7 @@ export function walkArchivedPages(wikiRoot: string): WikiPage[] {
  * the next major release once all callers have been migrated.
  */
 export function wikiPages(wikiRoot: string): string[] {
-  const wikiDir = path.join(wikiRoot, "wiki");
-  return walkSync(
-    wikiDir,
-    wikiRoot,
-    (absDir) => !path.basename(absDir).startsWith(EXCLUDE_PREFIX),
-  ).map((p) => p.absPath);
+  return walkLivePages(wikiRoot).map((p) => p.absPath);
 }
 
 // ── .wiki-ignore support ─────────────────────────────────────────────

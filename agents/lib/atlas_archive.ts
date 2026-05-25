@@ -286,6 +286,12 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
   ];
 
   const sortedMonths = [...groups.keys()].sort((a, b) => (a > b ? -1 : 1));
+
+  if (sortedMonths.length === 0) {
+    lines.push("No pages currently archived.");
+    lines.push("");
+  }
+
   for (const month of sortedMonths) {
     lines.push(`## ${month}`);
     lines.push("");
