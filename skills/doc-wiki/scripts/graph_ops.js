@@ -24,6 +24,22 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import Graph from "graphology";
 import { bidirectional } from "graphology-shortest-path/unweighted.js";
+// ── Excluded-node filtering ─────────────────────────────────────────
+/** Return true when a node key refers to a page under any `_`-prefixed
+ *  directory (e.g. `_archive`, `_drafts`, `_internal`).  This matches the
+ *  convention used by `walkLivePages` and the atlas walker, both of which
+ *  skip any directory whose basename starts with `_`.
+ *
+ *  Only directory segments are checked; the filename (last segment) is NOT
+ *  considered, so a file like `wiki/topic/_index.md` is NOT excluded. */
+function isExcludedNode(node) {
+    const segments = node.replace(/\\/g, "/").split("/");
+    return segments.slice(0, -1).some((seg) => seg.startsWith("_"));
+}
+/** Drop edges where either endpoint is an excluded page. */
+function filterExcludedEdges(edges) {
+    return edges.filter((e) => !isExcludedNode(e.from) && !isExcludedNode(e.to));
+}
 // ── Constants ───────────────────────────────────────────────────────
 export const VALID_EDGE_TYPES = new Set([
     "supports",
@@ -135,9 +151,9 @@ export function removeEdge(edgesPath, fromPage, toPage, edgeType) {
     }
     return removed;
 }
-/** Return all edges, optionally filtered by type. */
+/** Return all edges, optionally filtered by type. Excluded edges are omitted. */
 export function listEdges(edgesPath, edgeType) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterExcludedEdges(readAllEdges(edgesPath));
     if (edgeType !== undefined && edgeType !== null) {
         return edges.filter((e) => e.type === edgeType);
     }
@@ -149,7 +165,7 @@ export function listEdges(edgesPath, edgeType) {
  * matches Python: first appearance across edges (either endpoint) wins.
  */
 export function computeDegrees(edgesPath) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterExcludedEdges(readAllEdges(edgesPath));
     const degrees = {};
     for (const e of edges) {
         degrees[e.from] = (degrees[e.from] ?? 0) + 1;
@@ -198,7 +214,7 @@ export function isolatedNodes(edgesPath, allPages) {
  * of any member node across the edge file.
  */
 export function clusters(edgesPath, allPages) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterExcludedEdges(readAllEdges(edgesPath));
     const parent = new Map();
     const order = [];
     const ensure = (node) => {
@@ -260,7 +276,7 @@ export function clusters(edgesPath, allPages) {
  *  alphabetical comparator before passing neighbors to the BFS/DFS.
  */
 function buildGraph(edgesPath) {
-    const edges = readAllEdges(edgesPath);
+    const edges = filterExcludedEdges(readAllEdges(edgesPath));
     const graph = new Graph({ type: "directed", allowSelfLoops: true });
     const edgeMap = new Map();
     for (const e of edges) {
@@ -559,6 +575,21 @@ export function main(argv = process.argv.slice(2)) {
             const from = args.fromConcept ?? "";
             const to = args.toConcept ?? "";
             if (args.allPaths) {
+                // --all-paths is count-bounded (top 5 simple paths), not
+                // hop-bounded. references/operations.md says --max-hops and
+                // --via are ignored in this mode. Without a warning, a user
+                // passing them silently gets results that don't reflect those
+                // flags. Mirror event_logger's W1 stderr pattern so stdout
+                // stays machine-readable.
+                const ignored = [];
+                if (args.maxHops !== undefined)
+                    ignored.push("--max-hops");
+                if (args.via !== undefined)
+                    ignored.push("--via");
+                if (ignored.length > 0) {
+                    const verb = ignored.length === 1 ? "is" : "are";
+                    process.stderr.write(`[graph_ops] warning: ${ignored.join(" and ")} ${verb} ignored when --all-paths is set (path mode is count-bounded, not hop-bounded)\n`);
+                }
                 const paths = allPaths(args.edges ?? "", from, to);
                 if (paths.length === 0) {
                     process.stdout.write(JSON.stringify({

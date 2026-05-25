@@ -81,6 +81,16 @@ node skills/doc-wiki/scripts/quality_score.js --wiki-root <wiki-root>
 
 Read the target page, show a diff of current vs proposed changes, and apply if appropriate.
 
+### /doc-wiki:unarchive -- Restore an archived page
+
+Move an atlas-archived page from `wiki/_archive/` back into the live wiki, strip deprecation frontmatter, and revert inbound `(archived)` links.
+
+```bash
+node agents/lib/atlas_archive.js unarchive --wiki-root <wiki-root> --page <archive-path> [--target <wiki-relative-path>] [--yes]
+```
+
+Pages atlas detects as orphaned (sources removed from code) are moved to `wiki/_archive/` and excluded from the main wiki surface. Restore via `/doc-wiki:unarchive <slug>`.
+
 ### /doc-wiki:query path mode -- Shortest path between concepts
 
 When `/doc-wiki:query` is given `--from <a>` and `--to <b>` instead of a positional question, it runs in path mode:

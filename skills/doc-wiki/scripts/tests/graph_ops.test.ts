@@ -6,7 +6,7 @@
  * against graph_ops.py's output.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -503,6 +503,100 @@ describe("TestGraphOpsCLI", () => {
     }
   });
 
+  // runCli discards stderr on success exit; spawnSync captures both
+  // streams. Used by the warning tests below — keep local so the
+  // shared helper stays unchanged.
+  function runCliCapturingStderr(
+    args: readonly string[],
+  ): { stdout: string; stderr: string; status: number } {
+    const r = spawnSync("node", [CLI, ...args], { encoding: "utf-8" });
+    return {
+      stdout: r.stdout ?? "",
+      stderr: r.stderr ?? "",
+      status: r.status ?? 1,
+    };
+  }
+
+  it("cli_path_all_paths_warns_when_max_hops_is_also_passed", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--max-hops",
+      "4",
+    ]);
+    expect(r.status).toBe(0);
+    // stdout must still be machine-readable JSON.
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+    // stderr carries the warning.
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--max-hops");
+    expect(r.stderr).toContain("--all-paths");
+    expect(r.stderr).not.toContain("--via");
+  });
+
+  it("cli_path_all_paths_warns_when_via_is_also_passed", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--via",
+      "B",
+    ]);
+    expect(r.status).toBe(0);
+    expect(() => JSON.parse(r.stdout)).not.toThrow();
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--via");
+    expect(r.stderr).not.toContain("--max-hops");
+  });
+
+  it("cli_path_all_paths_warns_with_both_flags_combined", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+      "--max-hops",
+      "3",
+      "--via",
+      "B",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("[graph_ops] warning");
+    expect(r.stderr).toContain("--max-hops");
+    expect(r.stderr).toContain("--via");
+    expect(r.stderr).toContain("are ignored");
+  });
+
+  it("cli_path_all_paths_no_warning_when_flags_absent", () => {
+    const r = runCliCapturingStderr([
+      "path",
+      "--edges",
+      edgesFile,
+      "--from",
+      "A",
+      "--to",
+      "D",
+      "--all-paths",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+
   it("cli_add_writes_edge", () => {
     const fresh = path.join(tmpPath, "fresh.jsonl");
     fs.writeFileSync(fresh, "");
@@ -625,5 +719,86 @@ describe("TestClusters", () => {
     // readAllEdges silently returns [] on missing files.
     const result = clusters(path.join(tmpPath, "does-not-exist.jsonl"));
     expect(result).toEqual([]);
+  });
+});
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("graph_ops archive exclusion", () => {
+  let tmpPath: string;
+  let edgesFile: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-archive-");
+    edgesFile = makeEmptyEdgesFile(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("shortestPath returns no path when target is an archived node", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const result = shortestPath(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md");
+    expect(result).toEqual([]);
+  });
+
+  it("shortestPath skips edges that route through archived nodes", () => {
+    // live-a → archived-mid → live-b: the only path goes through archive.
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/mid.md", "extends", "EXTRACTED");
+    addEdge(edgesFile, "wiki/_archive/mid.md", "wiki/live-b.md", "extends", "EXTRACTED");
+    const result = shortestPath(edgesFile, "wiki/live-a.md", "wiki/live-b.md");
+    expect(result).toEqual([]);
+  });
+
+  it("clusters does not include archived nodes", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const result = clusters(edgesFile);
+    const allNodes = result.flat();
+    expect(allNodes.some((n) => n.includes("_archive"))).toBe(false);
+  });
+
+  it("computeDegrees ignores archived nodes", () => {
+    addEdge(edgesFile, "wiki/live-a.md", "wiki/_archive/old-b.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_archive"))).toBe(false);
+  });
+});
+
+// ── isExcludedNode: directory-only exclusion ───────────────────────────────────
+
+describe("graph_ops isExcludedNode — directory-only exclusion", () => {
+  let tmpPath: string;
+  let edgesFile: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-excl-");
+    edgesFile = makeEmptyEdgesFile(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("file whose name starts with _ is NOT excluded (no underscore dir)", () => {
+    // wiki/topic/_index.md — filename starts with _ but no dir does.
+    addEdge(edgesFile, "wiki/topic/_index.md", "wiki/other/page.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    // _index.md should appear in degree counts (not filtered out)
+    expect(Object.keys(degrees)).toContain("wiki/topic/_index.md");
+  });
+
+  it("file under a directory starting with _ IS excluded", () => {
+    // wiki/_archive/foo.md — directory _archive starts with _
+    addEdge(edgesFile, "wiki/live.md", "wiki/_archive/foo.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_archive"))).toBe(false);
+  });
+
+  it("file under an intermediate directory starting with _ IS excluded", () => {
+    // wiki/topic/_drafts/foo.md — intermediate dir _drafts starts with _
+    addEdge(edgesFile, "wiki/live.md", "wiki/topic/_drafts/foo.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_drafts"))).toBe(false);
   });
 });

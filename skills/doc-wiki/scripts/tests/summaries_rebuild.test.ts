@@ -255,3 +255,36 @@ describe("summaries_rebuild CLI", () => {
     expect(result.stdout).toContain("usage:");
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("summaries_rebuild archive exclusion", () => {
+  let tmpPath: string;
+  let wiki: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("summaries-archive-");
+    wiki = makeInitializedWiki(tmpPath);
+  });
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("archived pages do not appear in summaries.md", () => {
+    writePage(wiki, "live/page.md", {
+      title: "Live Page",
+      summary: "A live page summary.",
+      tags: ["live"],
+    });
+    writePage(wiki, "_archive/old/page.md", {
+      title: "Archived Page",
+      summary: "An archived page summary.",
+      tags: ["archived"],
+    });
+    rebuildSummaries(wiki);
+    const content = readSummaries(wiki);
+    expect(content).toContain("[Live Page](live/page.md)");
+    expect(content).not.toContain("Archived Page");
+    expect(content).not.toContain("_archive");
+  });
+});

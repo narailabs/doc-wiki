@@ -256,3 +256,121 @@ describe("ecosystem.readme", () => {
     expect(() => parseConfig(p)).toThrow(/expected an object/);
   });
 });
+
+describe("ecosystem.archive", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("parse-cfg-archive-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("defaults are applied when block is absent", () => {
+    const p = writeConfigYaml(tmpPath, { wiki: { name: "X" } });
+    const cfg = parseConfig(p) as {
+      ecosystem: {
+        archive: {
+          enabled: boolean;
+          partial_threshold: number;
+          inbound_links: string;
+        };
+      };
+    };
+    expect(cfg.ecosystem.archive).toEqual({
+      enabled: true,
+      partial_threshold: 1.0,
+      inbound_links: "rewrite",
+    });
+  });
+
+  it("partial_threshold out of range throws", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: 1.5 } },
+    });
+    expect(() => parseConfig(p)).toThrow(/partial_threshold/);
+  });
+
+  it("partial_threshold below zero throws", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: -0.1 } },
+    });
+    expect(() => parseConfig(p)).toThrow(/partial_threshold/);
+  });
+
+  it("inbound_links accepts only known modes", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { inbound_links: "bogus" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/inbound_links/);
+  });
+
+  it("user-overridden values are preserved", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { enabled: false } },
+    });
+    const cfg = parseConfig(p) as {
+      ecosystem: {
+        archive: {
+          enabled: boolean;
+          partial_threshold: number;
+          inbound_links: string;
+        };
+      };
+    };
+    expect(cfg.ecosystem.archive.enabled).toBe(false);
+    expect(cfg.ecosystem.archive.partial_threshold).toBe(1.0);
+    expect(cfg.ecosystem.archive.inbound_links).toBe("rewrite");
+  });
+
+  it("accepts all three valid inbound_links modes", () => {
+    for (const mode of ["rewrite", "drop", "leave"]) {
+      const p = writeConfigYaml(tmpPath, {
+        wiki: { name: "X" },
+        ecosystem: { archive: { inbound_links: mode } },
+      });
+      const cfg = parseConfig(p) as { ecosystem: { archive: { inbound_links: string } } };
+      expect(cfg.ecosystem.archive.inbound_links).toBe(mode);
+    }
+  });
+
+  it("rejects non-boolean enabled", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { enabled: "yes" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/enabled/);
+  });
+
+  it("rejects scalar ecosystem.archive value with a helpful error", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "t" },
+      ecosystem: { archive: false },
+    });
+    expect(() => parseConfig(p)).toThrow(/invalid ecosystem.archive/);
+  });
+
+  it("rejects string partial_threshold with error mentioning field and type", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: "0.3" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/partial_threshold/);
+    expect(() => parseConfig(p)).toThrow(/string/);
+  });
+
+  it("accepts numeric partial_threshold 0.3", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: 0.3 } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { archive: { partial_threshold: number } } };
+    expect(cfg.ecosystem.archive.partial_threshold).toBeCloseTo(0.3);
+  });
+});

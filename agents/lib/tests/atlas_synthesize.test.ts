@@ -687,3 +687,36 @@ describe("groupManifestByTopicFacet", () => {
     expect(groupManifestByTopicFacet(inv, ["billing"])).toEqual({});
   });
 });
+
+// ── Archive exclusion ──────────────────────────────────────────────
+
+describe("atlas_synthesize archive exclusion", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-syn-archive-");
+    wikiRoot = makeWikiRoot(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("overview bundle omits archived topic pages", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/architecture.md", "architecture", "live arch body");
+    writeAtlasPage(wikiRoot, "wiki/_archive/billing/architecture.md", "architecture", "archived arch body");
+    const bundle = assembleOverviewInputs(wikiRoot);
+    expect(bundle.sources).toContain("wiki/auth/architecture.md");
+    expect(bundle.sources.some((s) => s.includes("_archive"))).toBe(false);
+    expect(bundle.text).not.toContain("archived arch body");
+  });
+
+  it("integrations bundle omits archived api pages", () => {
+    writeAtlasPage(wikiRoot, "wiki/auth/api.md", "api", "live api body");
+    writeAtlasPage(wikiRoot, "wiki/_archive/billing/api.md", "api", "archived api body");
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    expect(bundle.sources.some((s) => s.includes("_archive"))).toBe(false);
+    expect(bundle.text).not.toContain("archived api body");
+  });
+});

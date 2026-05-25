@@ -150,16 +150,37 @@ function _readEvents(wikiRoot, since = null) {
         const line = rawLine.trim();
         if (!line)
             continue;
-        const entry = JSON.parse(line);
+        if (sinceMs !== null && !Number.isNaN(sinceMs)) {
+            // Fast-path: extract `ts` via anchored regex to skip JSON.parse for old
+            // events. Relies on `appendEvent` writing `ts` as the first key with no
+            // leading whitespace. The character class excludes both `"` and `\` so
+            // any ts containing a JSON escape (like `\+` for `+`) misses the regex
+            // and safely falls through to the slow path for proper decoding.
+            const m = line.match(/^{"ts":"([^"\\]+)"/);
+            if (m) {
+                const entryMs = parsePythonIsoformat(m[1]);
+                // G-EVENTS-TS-STRICT: when --since is active, drop events whose
+                // `ts` cannot be parsed. Previously a NaN skipped only the
+                // `entryMs < sinceMs` check and fell through into `events.push`,
+                // so users asking "events in the last 24h" saw events with
+                // malformed timestamps. Fail-closed: if we can't place it on
+                // the timeline, it's not in the window.
+                if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+                    continue;
+                }
+            }
+        }
+        let entry;
+        try {
+            entry = JSON.parse(line);
+        }
+        catch {
+            process.stderr.write(`[event_logger] warning: skipping malformed JSON line: ${line}\n`);
+            continue;
+        }
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
             const entryTs = entry["ts"];
             const entryMs = typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
-            // G-EVENTS-TS-STRICT: when --since is active, drop events whose
-            // `ts` cannot be parsed. Previously a NaN skipped only the
-            // `entryMs < sinceMs` check and fell through into `events.push`,
-            // so users asking "events in the last 24h" saw events with
-            // malformed timestamps. Fail-closed: if we can't place it on
-            // the timeline, it's not in the window.
             if (Number.isNaN(entryMs) || entryMs < sinceMs) {
                 continue;
             }
@@ -242,9 +263,20 @@ function median(values) {
  *   appears in `total_tokens_by_op` — those without any token data
  *   render as `0`. Useful for capacity-style dashboards that need a
  *   stable, predictable key set across runs.
+ *
+ * `opts.includeArchived` (default `false`):
+ *   By default, `archive` and `unarchive` events are excluded from all
+ *   aggregations (total_events, ops_by_type, total_cost_usd, etc.) because
+ *   they are housekeeping ops, not content-production ops. Set to `true`
+ *   to include them in all totals.
  */
+/** Op types that are considered housekeeping and excluded from stats by default. */
+const ARCHIVE_OPS = new Set(["archive", "unarchive"]);
 export function getStats(wikiRoot, since = null, opts = {}) {
-    const events = _readEvents(wikiRoot, since);
+    const allEvents = _readEvents(wikiRoot, since);
+    const events = opts.includeArchived === true
+        ? allEvents
+        : allEvents.filter((e) => !ARCHIVE_OPS.has(typeof e["op"] === "string" ? e["op"] : ""));
     const opsByType = {};
     let totalCost = 0.0;
     const ratios = [];
@@ -255,8 +287,14 @@ export function getStats(wikiRoot, since = null, opts = {}) {
     for (const e of events) {
         const op = typeof e["op"] === "string" ? e["op"] : "unknown";
         opsByType[op] = (opsByType[op] ?? 0) + 1;
-        const costVal = e["cost_usd"];
-        const cost = typeof costVal === "number" ? costVal : 0.0;
+        // Accept `total_cost_usd` as a fallback for `cost_usd`. The atlas
+        // op writes `total_cost_usd` directly (per SKILL.md finalize step),
+        // and `_normalizeAgentCalls` synthesizes the same field from
+        // `agent_calls[]`. Without this fallback, both classes of events
+        // contribute $0 to the top-level total even though their costs
+        // are real.
+        const costRaw = e["cost_usd"] ?? e["total_cost_usd"];
+        const cost = typeof costRaw === "number" ? costRaw : 0.0;
         totalCost += cost;
         // v2.1 per-op token aggregation. Accept several event-level keys so
         // producers that emit `tokens`, `total_tokens`, or `tokens_in + tokens_out`
@@ -313,7 +351,8 @@ export function getStats(wikiRoot, since = null, opts = {}) {
                 const rec = c;
                 const subAgent = rec["agent"];
                 const subCost = rec["cost_usd"];
-                if (typeof subAgent === "string" && subAgent &&
+                if (typeof subAgent === "string" &&
+                    subAgent &&
                     typeof subCost === "number") {
                     perAgentCost[subAgent] = (perAgentCost[subAgent] ?? 0) + subCost;
                 }
@@ -406,6 +445,11 @@ function parseArgs(argv) {
             i++;
             continue;
         }
+        if (a === "--include-archived") {
+            out.includeArchived = true;
+            i++;
+            continue;
+        }
         let name;
         let value;
         if (a.startsWith("--")) {
@@ -473,6 +517,10 @@ stats options:
                         even ops whose events carried no token data
                         (those render as 0). Default: omit zero-token
                         ops to keep per-op cost averages clean.
+  --include-archived    Include archive and unarchive events in all
+                        stats totals (total_events, ops_by_type,
+                        total_cost_usd, etc.). Default: exclude them
+                        since they are housekeeping, not content ops.
 `;
 export function main(argv = process.argv.slice(2)) {
     let args;
@@ -514,6 +562,7 @@ export function main(argv = process.argv.slice(2)) {
         const result = getStats(args.wikiRoot, since, {
             includeRatios: true,
             includeZeroTokens: args.includeZeroTokens === true,
+            includeArchived: args.includeArchived === true,
         });
         delete result["_ratios"];
         process.stdout.write(JSON.stringify(result, null, 2) + "\n");

@@ -17,6 +17,7 @@ This document explains how the layers fit together, what each script and agent i
 - [Diagram 2 — `/doc-wiki:ingest` pipeline](#diagram-2-wiki-ingest-pipeline)
 - [Diagram 3 — `gather()` internals](#diagram-3-gather-internals)
 - [Diagram 4 — `/doc-wiki:atlas` pipeline](#diagram-4-doc-wikiatlas-pipeline)
+  - [Phase 5b — archive sweep](#phase-5b--archive-sweep)
 - [Reference docs](#reference-docs)
 - [Multi-platform wrappers](#multi-platform-wrappers)
 - [Architecture contracts](#architecture-contracts)
@@ -330,9 +331,11 @@ flowchart TD
     P4[Phase 4: Estimate cost\natlas_orchestrator.js estimate-cost] --> P4D{over --max-cost?}
     P4D -- yes --> ABORT[Abort with hint]
     P4D -- no --> P5{state == fresh?}
-    P5 -- yes --> P6
+    P5 -- yes --> P5B
     P5 -- no --> P5V[Phase 5: Validate existing\nstructural + gitlog +\nsemantic with cache]
-    P5V --> P6
+    P5V --> P5B
+    P5B[Phase 5b: Archive sweep\natlas_archive.js sweep\nautonomy-gated]
+    P5B --> P6
     P6[Phase 6: Bootstrap / refresh\nper topic × facet:\n/doc-wiki:ingest --output ...\n/doc-wiki:ingest --refresh --source ...]
     P6 --> P7
     P7[Phase 7: Synthesize globals\nwiki/overview.md\nwiki/integrations.md\nwiki/deploy.md]
@@ -343,10 +346,28 @@ flowchart TD
     classDef llm fill:#fff3cd,stroke:#856404
     classDef det fill:#d4edda,stroke:#155724
     classDef gate fill:#f8d7da,stroke:#721c24
-    class P1,P4,P8 det
+    class P1,P4,P5B,P8 det
     class P2,P3,P5V,P6,P7 llm
     class P4D,P5 gate
 ```
+
+### Phase 5b — archive sweep
+
+Phase 5b runs between Phase 5 (Validate) and Phase 6 (Bootstrap/refresh). Its purpose is to move atlas-managed pages whose local source paths have been deleted out of the live wiki surface before the refresh pass begins — so atlas doesn't waste cost re-ingesting orphaned content, and synthesis globals (Phase 7) never include stale module documentation.
+
+**Detection via `source-existence`.** The sweep calls `atlas_validate.js source-existence` for each atlas-tagged live page. This subcommand iterates the page's `sources:` frontmatter, skipping URL-scheme entries (which are not a local-archive concern) and checking local paths via `fs.access`. It returns `{ status: "live" | "candidate" | "orphan", missing: string[], ratio: number }`. A page is an `orphan` when `ratio == 1.0` — all local sources are gone. Partially-missing pages (`candidate`) are reported in the drift report but never auto-archived; the default threshold is 1.0, configurable via `ecosystem.archive.partial_threshold`.
+
+**Autonomy gates.** Like every write-capable operation in doc-wiki, the sweep respects the configured autonomy level. Under `conservative`, only a drift-report entry is produced. Under `balanced` (the default), the operator is prompted page-by-page (`Archive wiki/billing/architecture.md? [Y/n/skip-all]`). Under `autonomous` and `auto`, pages are moved without prompting and the action is logged to the event journal.
+
+**Frontmatter mutation.** When a page is archived, the sweep moves the file from `wiki/<topic>/<page>.md` to `wiki/_archive/<topic>/<page>.md` and stamps four new frontmatter fields: `status: deprecated`, `archived_at`, `archive_reason`, and `archived_from` (the original wiki-relative path). The `atlas_facet` and `atlas_run_id` fields are preserved — the page is still an atlas-managed artifact, just in the deprecated state.
+
+**Persistence.** Each archive event is appended to `wiki/_archive_history.jsonl` (newline-delimited JSON, append-only). After the sweep completes, `wiki/_archive/index.md` is rewritten from the history log — newest first, grouped by archive month — so operators always have a browsable listing of what has been archived and when.
+
+**Inbound-link rewrite.** After moving a file, the sweep scans all live pages for markdown links pointing at the now-stale path and rewrites them per the `ecosystem.archive.inbound_links` mode (`rewrite` / `drop` / `leave`; default `rewrite`). The `rewrite` mode appends `(archived)` to the link label and updates the path to `wiki/_archive/…`. This pass is idempotent — re-running on already-rewritten links is a no-op.
+
+**Exclusions after archiving.** Once a page is under `wiki/_archive/`, it is excluded from lint checks (`broken_links`, `code_ref_drift`, `isolated_node`), `summaries_rebuild`, `quality_score`, `graph_ops` path queries, `atlas_synthesize` input bundles, and future atlas Phase 6 refresh iterations. The `_wiki_fs.ts` walker exposes two named helpers to enforce this split: `walkLivePages()` (the default; excludes `_*` directories) and `walkArchivedPages()` (only `wiki/_archive/`).
+
+For the full design, autonomy table, edge cases, and migration notes, see the design spec at [`docs/superpowers/specs/2026-05-24-archive-deprecated-pages-design.md`](../superpowers/specs/2026-05-24-archive-deprecated-pages-design.md). Implementation lives in [`agents/lib/atlas_archive.ts`](../../agents/lib/atlas_archive.ts).
 
 Green = deterministic (TypeScript helpers); yellow = LLM-driven (the orchestrator skill itself); red = decision gates that may abort or branch.
 

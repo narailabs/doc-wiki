@@ -16,9 +16,11 @@ This document is the operator-facing walkthrough of the eight phases. The archit
   - [Phase 3 — Confirm topics](#phase-3--confirm-topics)
   - [Phase 4 — Estimate cost](#phase-4--estimate-cost)
   - [Phase 5 — Validate existing](#phase-5--validate-existing)
+  - [Phase 5b — Archive sweep](#phase-5b--archive-sweep)
   - [Phase 6 — Bootstrap / refresh](#phase-6--bootstrap--refresh)
   - [Phase 7 — Synthesize globals](#phase-7--synthesize-globals)
   - [Phase 8 — Finalize](#phase-8--finalize)
+- [Archived pages](#archived-pages)
 - [Configuration](#configuration)
 - [Output structure](#output-structure)
 - [Resuming a partial run](#resuming-a-partial-run)
@@ -37,6 +39,7 @@ A single `/doc-wiki:atlas` invocation runs eight serial phases. The first four p
 | 3 | Confirm topics | LLM, autonomy-gated | committed topic list |
 | 4 | Estimate cost | `atlas_orchestrator.js estimate-cost` + `compute-sources` | `Plan` JSON + `CostEstimate` |
 | 5 | Validate existing | LLM + `atlas_validate.js` + `atlas_gitlog.js` | drift report |
+| 5b | Archive sweep | `atlas_archive.js sweep`, autonomy-gated | archived pages + `_archive_history.jsonl` + `_archive/index.md` |
 | 6 | Bootstrap / refresh | per-topic-facet `/doc-wiki:ingest` and `/doc-wiki:ingest --refresh` | per-topic atlas pages |
 | 7 | Synthesize globals | LLM over `atlas_synthesize.js` bundles | `wiki/overview.md`, `integrations.md`, `deploy.md`, etc. |
 | 8 | Finalize | `lint_checks.js` + index update + crosslink + `op: atlas` event | gap report, drift report, cost report |
@@ -151,6 +154,18 @@ Skipped when state is `fresh`. Otherwise:
 
 The drift report is written at `wiki/outputs/atlas/<run-id>/drift-report.md`.
 
+### Phase 5b — Archive sweep
+
+Phase 5b runs immediately after Phase 5 and before Phase 6, so archived pages are removed from the live wiki surface before any refresh work begins. This prevents atlas from spending LLM budget re-ingesting sources for modules that have been deleted, and ensures Phase 7 synthesis globals never include stale orphaned documentation.
+
+**What triggers archiving.** The sweep checks each atlas-tagged live page against its `sources:` frontmatter. Only local-path sources are checked — URL-scheme entries (`http://`, `jira://`, `github://`, etc.) are skipped. A page is flagged for archiving when all of its local sources no longer exist on disk (the default `partial_threshold` of `1.0` means archiving fires only when every local source is gone). Pages where only some sources are missing appear in the drift report as `candidate` entries but are never auto-archived.
+
+**Autonomy gating.** Under `conservative`, the sweep is read-only and produces a drift-report entry only. Under `balanced` (the default), you are prompted once per orphan page (`Archive wiki/billing/architecture.md? [Y/n/skip-all]`). Under `autonomous` and `auto`, pages are moved without prompting.
+
+**What happens to the page.** The file moves from `wiki/<topic>/<page>.md` to `wiki/_archive/<topic>/<page>.md`. Four archive frontmatter fields are stamped on the page (`status: deprecated`, `archived_at`, `archive_reason`, `archived_from`). The event is appended to `wiki/_archive_history.jsonl`. After the sweep, `wiki/_archive/index.md` is rewritten to list all archived pages grouped by archive month.
+
+**Inbound links.** Live pages that link to the now-archived path are updated per `ecosystem.archive.inbound_links` (default `rewrite` — appends `(archived)` to the label and updates the path to `wiki/_archive/…`). See [configuration](configuration.md#ecosystem-section) for the `drop` and `leave` alternatives.
+
 ### Phase 6 — Bootstrap / refresh
 
 For each `(topic, facet)` entry in the plan:
@@ -190,6 +205,38 @@ Five deterministic steps:
 
 The cost report (actual vs estimated, per-entry breakdown) lands at `wiki/outputs/atlas/<run-id>/cost-report.md`.
 
+## Archived pages
+
+Atlas Phase 5b may move pages to `wiki/_archive/` when their local source paths no longer exist. Archived pages are preserved on disk (doc-wiki never deletes content) but are excluded from the main wiki surface: they do not appear in `wiki/summaries.md`, quality scoring, synthesis globals, graph-path queries, or lint findings.
+
+**Where to find them.** Browse `wiki/_archive/index.md` — an auto-maintained listing grouped by archive month. You can also read the raw event log at `wiki/_archive_history.jsonl`.
+
+**How to restore.** Run `/doc-wiki:unarchive <path-or-slug>`. The command:
+
+1. Moves the file back to its original location (from `archived_from` frontmatter), or to `--target <path>` if the original directory no longer exists.
+2. Strips the four archive frontmatter fields (`status`, `archived_at`, `archive_reason`, `archived_from`).
+3. Appends an `unarchived` event to `_archive_history.jsonl` and rewrites `_archive/index.md`.
+4. Reverts inbound `(archived)` links in live pages back to plain links.
+5. Runs post-op hooks (crosslink + tag-harmonize) so the restored page rejoins all indexes.
+
+```text
+# Restore by full archive path
+/doc-wiki:unarchive wiki/_archive/billing/architecture.md
+
+# Restore by slug (substring match against archived filenames)
+/doc-wiki:unarchive billing-architecture
+
+# Restore to a different location when the original topic dir is gone
+/doc-wiki:unarchive billing-architecture --target wiki/legacy/billing-architecture.md
+
+# Skip the per-page confirmation prompt
+/doc-wiki:unarchive billing-architecture --yes
+```
+
+If the target path is already occupied by a live page, the command aborts with a clear error — it never overwrites live content.
+
+**Configuration knobs.** Three fields under `ecosystem.archive` in `wiki.config.yaml` control archive behavior — see [`configuration.md` § ecosystem.archive](configuration.md#ecosystem-section).
+
 ## Configuration
 
 Atlas reads from `wiki.config.yaml`. The relevant blocks:
@@ -199,6 +246,7 @@ Atlas reads from `wiki.config.yaml`. The relevant blocks:
 | `autonomy.mode` | Whether Phase 3 prompts and how Phase 8 lint fixes apply | [`configuration.md` § autonomy](configuration.md#autonomy-section) |
 | `ecosystem.orm` | Which ORM profiles drive Phase 1b entity discovery | [`configuration.md` § ecosystem](configuration.md#ecosystem-section) |
 | `ecosystem.rest` | Whether Phase 1b walks REST endpoints, and which custom profiles to load | [`configuration.md` § ecosystem.rest](configuration.md#ecosystem-section) and [`rest-profiles.md`](rest-profiles.md) |
+| `ecosystem.archive` | Whether Phase 5b runs, partial-removal threshold, inbound-link rewrite mode | [`configuration.md` § ecosystem.archive](configuration.md#ecosystem-section) |
 | `lint` | Per-category severity overrides applied in Phase 8 | [`configuration.md` § lint](configuration.md#lint-section) |
 
 CLI flags are documented in [`commands.md` § /doc-wiki:atlas](commands.md#doc-wikiatlas--full-application-documentation).

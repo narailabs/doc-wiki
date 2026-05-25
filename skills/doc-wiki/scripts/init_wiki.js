@@ -203,6 +203,11 @@ function buildConfig(domain, name) {
                 quickstart_depth: "generous",
                 insert_markers_on_init: true,
             },
+            archive: {
+                enabled: true,
+                partial_threshold: 1.0,
+                inbound_links: "rewrite",
+            },
             mermaid: {
                 auto_generate: true,
                 types: ["erDiagram", "sequenceDiagram", "graph"],

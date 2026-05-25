@@ -1,3 +1,4 @@
+import * as os from "node:os";
 /**
  * Tests for event_logger.ts — ported from test_event_logger.py.
  *
@@ -11,22 +12,16 @@ import * as path from "node:path";
 
 import { execFileSync } from "node:child_process";
 
-import {
-  logEvent,
-  getStats,
-  pythonIsoformatUtc,
-} from "../event_logger.js";
-import {
-  SCRIPTS_DIR,
-  makeTmpPath,
-  cleanupTmpPath,
-} from "./fixtures.js";
+import { logEvent, getStats, pythonIsoformatUtc } from "../event_logger.js";
+import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "event_logger.js");
 
-function runCli(
-  args: readonly string[],
-): { stdout: string; stderr: string; status: number } {
+function runCli(args: readonly string[]): {
+  stdout: string;
+  stderr: string;
+  status: number;
+} {
   try {
     const stdout = execFileSync("node", [CLI, ...args], {
       encoding: "utf-8",
@@ -284,10 +279,7 @@ describe("TestGetStats", () => {
       },
     ];
     const p = path.join(wikiRoot, "log", "events.jsonl");
-    fs.writeFileSync(
-      p,
-      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
-    );
+    fs.writeFileSync(p, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
     const stats = getStats(wikiRoot, "2026-04-09T00:00:00+00:00");
     expect(stats["total_events"]).toBe(1);
     const opsByType = stats["ops_by_type"] as Record<string, number>;
@@ -340,14 +332,34 @@ describe("EventLoggerCLIShape", () => {
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", source: "a.md",
-        agent: "file", cost_usd: 0.05, reduction_ratio: 0.6 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "query",
-        agent: "wiki", cost_usd: 0.03, reduction_ratio: 0.4 },
-      { ts: "2026-04-10T08:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 0.07, reduction_ratio: 0.8 },
-      { ts: "2026-04-10T14:00:00+00:00", op: "lint",
-        cost_usd: 0.01, reduction_ratio: 0.5 },
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        source: "a.md",
+        agent: "file",
+        cost_usd: 0.05,
+        reduction_ratio: 0.6,
+      },
+      {
+        ts: "2026-04-05T12:00:00+00:00",
+        op: "query",
+        agent: "wiki",
+        cost_usd: 0.03,
+        reduction_ratio: 0.4,
+      },
+      {
+        ts: "2026-04-10T08:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 0.07,
+        reduction_ratio: 0.8,
+      },
+      {
+        ts: "2026-04-10T14:00:00+00:00",
+        op: "lint",
+        cost_usd: 0.01,
+        reduction_ratio: 0.5,
+      },
     ];
     fs.writeFileSync(
       path.join(logDir, "events.jsonl"),
@@ -400,12 +412,27 @@ describe("EventLoggerCLIShape", () => {
     const logDir = path.join(tmpPath, "log");
     fs.mkdirSync(logDir, { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 2 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 2 },
-      { ts: "2026-04-10T08:00:00+00:00", op: "ingest",
-        agent: "file", cost_usd: 5, reduction_ratio: 3 },
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 2,
+      },
+      {
+        ts: "2026-04-05T12:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 2,
+      },
+      {
+        ts: "2026-04-10T08:00:00+00:00",
+        op: "ingest",
+        agent: "file",
+        cost_usd: 5,
+        reduction_ratio: 3,
+      },
     ];
     fs.writeFileSync(
       path.join(logDir, "events.jsonl"),
@@ -439,9 +466,12 @@ describe("event_logger --source flag", () => {
   it("accepts --source on `log` and writes it as a top-level field", () => {
     const js = runCli([
       "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--source", "slides.pptx",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--source",
+      "slides.pptx",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -452,10 +482,14 @@ describe("event_logger --source flag", () => {
   it("merges --source into --details (explicit flag wins on collision)", () => {
     const js = runCli([
       "log",
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--details", '{"source":"old.md","extra":"keep"}',
-      "--source", "new.md",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--details",
+      '{"source":"old.md","extra":"keep"}',
+      "--source",
+      "new.md",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -465,9 +499,12 @@ describe("event_logger --source flag", () => {
 
   it("accepts --source on the bare-fallback (no subcommand) shape", () => {
     const js = runCli([
-      "--op", "ingest",
-      "--wiki-root", tmpPath,
-      "--source", "report.pdf",
+      "--op",
+      "ingest",
+      "--wiki-root",
+      tmpPath,
+      "--source",
+      "report.pdf",
     ]);
     expect(js.status).toBe(0);
     const entry = JSON.parse(js.stdout) as Record<string, unknown>;
@@ -510,7 +547,7 @@ describe("event_logger stats — total_events", () => {
   it("CLI `stats` emits total_events in stdout JSON", () => {
     const events = [
       { ts: "2026-04-01T10:00:00+00:00", op: "ingest", cost_usd: 0.05 },
-      { ts: "2026-04-05T12:00:00+00:00", op: "lint",  cost_usd: 0.01 },
+      { ts: "2026-04-05T12:00:00+00:00", op: "lint", cost_usd: 0.01 },
     ];
     fs.writeFileSync(
       path.join(tmpPath, "log", "events.jsonl"),
@@ -570,8 +607,13 @@ describe("agent_calls[] breakdown", () => {
     const entry = logEvent(tmpPath, "ingest", {
       agent_calls: [
         {
-          agent: "jira", model: "haiku", tokens_in: 10, tokens_out: 5,
-          cost_usd: 0.5, elapsed_ms: 100, status: "success",
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 10,
+          tokens_out: 5,
+          cost_usd: 0.5,
+          elapsed_ms: 100,
+          status: "success",
         },
       ],
       total_cost_usd: 999,
@@ -597,12 +639,22 @@ describe("agent_calls[] breakdown", () => {
     logEvent(tmpPath, "ingest", {
       agent_calls: [
         {
-          agent: "jira", model: "haiku", tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.25, elapsed_ms: 10, status: "success",
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.25,
+          elapsed_ms: 10,
+          status: "success",
         },
         {
-          agent: "db_agent", model: null, tokens_in: 0, tokens_out: 0,
-          cost_usd: 0.5, elapsed_ms: 10, status: "success",
+          agent: "db_agent",
+          model: null,
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.5,
+          elapsed_ms: 10,
+          status: "success",
         },
       ],
     });
@@ -610,6 +662,66 @@ describe("agent_calls[] breakdown", () => {
     const perAgent = stats["per_agent_cost"] as Record<string, number>;
     expect(perAgent["jira"]).toBeCloseTo(0.25, 5);
     expect(perAgent["db_agent"]).toBeCloseTo(0.5, 5);
+  });
+
+  // Regression: events that record cost as `total_cost_usd` (atlas op
+  // finalize step, or any event auto-normalized from agent_calls[])
+  // must contribute to the top-level total_cost_usd. Previously the
+  // aggregator only read `cost_usd`, so atlas's $7.60 silently dropped.
+  it("stats sums total_cost_usd when cost_usd is absent (atlas-style)", () => {
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+    const events = [
+      { ts: "2026-05-10T02:01:18+00:00", op: "init" },
+      {
+        ts: "2026-05-10T02:38:52+00:00",
+        op: "atlas",
+        atlas_run_id: "2026-05-10T02-01-52",
+        total_cost_usd: 7.6,
+        pages_generated: 38,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    const stats = getStats(tmpPath);
+    expect(stats["total_events"]).toBe(2);
+    expect(approxEqual(stats["total_cost_usd"] as number, 7.6)).toBe(true);
+    // Sanity: both ops still show in the type breakdown.
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["init"]).toBe(1);
+    expect(opsByType["atlas"]).toBe(1);
+  });
+
+  // Regression: events that carry agent_calls[] (so the logger writes
+  // total_cost_usd but not cost_usd) must also contribute their
+  // synthesized total to the top-level aggregate, not just to
+  // per_agent_cost.
+  it("stats sums agent_calls-synthesized total_cost_usd at top level", () => {
+    logEvent(tmpPath, "ingest", {
+      agent_calls: [
+        {
+          agent: "jira",
+          model: "haiku",
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.25,
+          elapsed_ms: 10,
+          status: "success",
+        },
+        {
+          agent: "db_agent",
+          model: null,
+          tokens_in: 0,
+          tokens_out: 0,
+          cost_usd: 0.5,
+          elapsed_ms: 10,
+          status: "success",
+        },
+      ],
+    });
+    const stats = getStats(tmpPath);
+    expect(approxEqual(stats["total_cost_usd"] as number, 0.75)).toBe(true);
   });
 });
 
@@ -628,9 +740,14 @@ describe("getStats includeZeroTokens (A6)", () => {
   function seed(): void {
     fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
     const events = [
-      { ts: "2026-04-01T10:00:00+00:00", op: "ingest", tokens_in: 100, tokens_out: 50 },
-      { ts: "2026-04-01T11:00:00+00:00", op: "init" },  // no token data
-      { ts: "2026-04-01T12:00:00+00:00", op: "lint" },  // no token data
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        tokens_in: 100,
+        tokens_out: 50,
+      },
+      { ts: "2026-04-01T11:00:00+00:00", op: "init" }, // no token data
+      { ts: "2026-04-01T12:00:00+00:00", op: "lint" }, // no token data
     ];
     fs.writeFileSync(
       path.join(tmpPath, "log", "events.jsonl"),
@@ -688,4 +805,204 @@ describe("getStats includeZeroTokens (A6)", () => {
     expect("init" in data.total_tokens_by_op).toBe(false);
     expect("lint" in data.total_tokens_by_op).toBe(false);
   });
+});
+
+it("test_stats_skips_malformed_json_line_with_warning", () => {
+  const tmpPath = fs.mkdtempSync(
+    path.join(os.tmpdir(), "wiki-test-stats-malformed-"),
+  );
+  fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  const logPath = path.join(tmpPath, "log", "events.jsonl");
+
+  const validLine1 = '{"ts": "2023-01-01T12:00:00+00:00", "op": "ingest"}\n';
+  const invalidLine =
+    '{"ts": "2023-01-01T12:01:00+00:00", "op": "ingest", "malformed": }\n';
+  const validLine2 = '{"ts": "2023-01-01T12:02:00+00:00", "op": "ingest"}\n';
+  fs.writeFileSync(logPath, validLine1 + invalidLine + validLine2);
+
+  let stderrOutput = "";
+  const originalStderrWrite = process.stderr.write;
+  // @ts-expect-error - overriding stderr.write for test
+  process.stderr.write = (str: string | Uint8Array) => {
+    stderrOutput += str.toString();
+    return true;
+  };
+
+  try {
+    const stats = getStats(tmpPath, "2023-01-01T00:00:00+00:00");
+    expect(stats.total_events).toBe(2);
+    expect(stderrOutput).toContain(
+      "[event_logger] warning: skipping malformed JSON line",
+    );
+  } finally {
+    process.stderr.write = originalStderrWrite;
+    fs.rmSync(tmpPath, { recursive: true, force: true });
+  }
+});
+
+// ── archive/unarchive op recognition and stats filtering ────────────
+
+describe("archive/unarchive op support", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("event-archive-");
+    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("event_logger accepts op: archive without warning", () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // @ts-expect-error - overriding stderr.write for test
+    process.stderr.write = (s: string | Uint8Array) => {
+      stderrChunks.push(s.toString());
+      return true;
+    };
+    try {
+      const entry = logEvent(tmpPath, "archive", { page: "old-page.md" });
+      expect(entry["op"]).toBe("archive");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    expect(stderrChunks.join("")).toBe("");
+  });
+
+  it("event_logger accepts op: unarchive without warning", () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // @ts-expect-error - overriding stderr.write for test
+    process.stderr.write = (s: string | Uint8Array) => {
+      stderrChunks.push(s.toString());
+      return true;
+    };
+    try {
+      const entry = logEvent(tmpPath, "unarchive", { page: "old-page.md" });
+      expect(entry["op"]).toBe("unarchive");
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    expect(stderrChunks.join("")).toBe("");
+  });
+
+  it("stats excludes archive events from totals by default", () => {
+    // Mix of ingest + archive events with costs and tokens.
+    const events = [
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "ingest",
+        tokens_in: 1000,
+        tokens_out: 500,
+        cost_usd: 0.05,
+      },
+      {
+        ts: "2026-04-02T10:00:00+00:00",
+        op: "archive",
+        tokens_in: 50,
+        tokens_out: 10,
+        cost_usd: 0.001,
+      },
+      {
+        ts: "2026-04-03T10:00:00+00:00",
+        op: "refresh",
+        tokens_in: 800,
+        tokens_out: 400,
+        cost_usd: 0.04,
+      },
+      {
+        ts: "2026-04-04T10:00:00+00:00",
+        op: "unarchive",
+        tokens_in: 30,
+        tokens_out: 5,
+        cost_usd: 0.0005,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+
+    const stats = getStats(tmpPath);
+
+    // Only ingest + refresh events counted.
+    expect(stats["total_events"]).toBe(2);
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["ingest"]).toBe(1);
+    expect(opsByType["refresh"]).toBe(1);
+    expect("archive" in opsByType).toBe(false);
+    expect("unarchive" in opsByType).toBe(false);
+    // Cost excludes archive/unarchive events (0.05 + 0.04 = 0.09).
+    expect(approxEqual(stats["total_cost_usd"] as number, 0.09)).toBe(true);
+  });
+
+  it("stats --include-archived counts archive events", () => {
+    // Mix of refresh + unarchive events.
+    const events = [
+      {
+        ts: "2026-04-01T10:00:00+00:00",
+        op: "refresh",
+        tokens_in: 800,
+        tokens_out: 400,
+        cost_usd: 0.04,
+      },
+      {
+        ts: "2026-04-02T10:00:00+00:00",
+        op: "unarchive",
+        tokens_in: 30,
+        tokens_out: 5,
+        cost_usd: 0.0005,
+      },
+    ];
+    fs.writeFileSync(
+      path.join(tmpPath, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+
+    // Default: excludes unarchive.
+    const statsDefault = getStats(tmpPath);
+    expect(statsDefault["total_events"]).toBe(1);
+
+    // With includeArchived: counts both.
+    const statsAll = getStats(tmpPath, null, { includeArchived: true });
+    expect(statsAll["total_events"]).toBe(2);
+    const opsByType = statsAll["ops_by_type"] as Record<string, number>;
+    expect(opsByType["refresh"]).toBe(1);
+    expect(opsByType["unarchive"]).toBe(1);
+    // Total cost includes both (0.04 + 0.0005 = 0.0405).
+    expect(
+      approxEqual(statsAll["total_cost_usd"] as number, 0.0405),
+    ).toBe(true);
+
+    // CLI: --include-archived flag produces same result.
+    const cliResult = runCli([
+      "stats",
+      "--wiki-root",
+      tmpPath,
+      "--include-archived",
+    ]);
+    expect(cliResult.status).toBe(0);
+    const cliData = JSON.parse(cliResult.stdout) as Record<string, unknown>;
+    expect(cliData["total_events"]).toBe(2);
+  });
+});
+
+it("test_stats_with_since_filter_when_ts_contains_json_escape", () => {
+  const tmpPath = fs.mkdtempSync(
+    path.join(os.tmpdir(), "wiki-test-stats-escape-"),
+  );
+  fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
+  const logPath = path.join(tmpPath, "log", "events.jsonl");
+
+  const t1 = '{"ts": "2023-01-01T12:00:00+00:00", "op": "ingest"}\n';
+  const t2 = '{"ts": "2023-01-01T12:01:00\\u002b00:00", "op": "query"}\n';
+  const t3 = '{"ts": "2023-01-01T12:02:00+00:00", "op": "ingest"}\n';
+  fs.writeFileSync(logPath, t1 + t2 + t3);
+
+  const stats = getStats(tmpPath, "2023-01-01T12:00:30+00:00");
+  expect(stats.total_events).toBe(2);
+  expect(stats.ops_by_type["query"]).toBe(1);
+  fs.rmSync(tmpPath, { recursive: true, force: true });
 });

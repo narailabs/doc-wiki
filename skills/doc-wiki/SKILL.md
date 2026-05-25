@@ -1,6 +1,6 @@
 ---
 name: doc-wiki
-description: Manage the current codebase's doc-wiki — bootstrap with optional atlas (init), full-doc generation (atlas), source ingest from Jira/Confluence/GitHub/Notion/AWS/GCP/databases/files/URLs with `--refresh` for re-fetch (ingest), search + synthesis with promote-to-page and shortest-path modes (query), health check + self-heal (lint), targeted page edit (edit), token/cost metrics (stats). Always invoke when the user mentions "the wiki" or "the docs", or asks to set up doc-wiki, onboard this repo, ingest a URL into docs, refresh docs, look up something in the wiki, find a path between two concepts, save the last query answer as a page, check wiki health, fix/edit a wiki page, or see wiki cost metrics — even if "wiki" is not said explicitly. Slash commands — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:stats`. Skip for unrelated docs work (arbitrary README edits, code comments, projects without `wiki.config.yaml`).
+description: Manage the current codebase's doc-wiki — bootstrap with optional atlas (init), full-doc generation (atlas), source ingest from Jira/Confluence/GitHub/Notion/AWS/GCP/databases/files/URLs with `--refresh` for re-fetch (ingest), search + synthesis with promote-to-page and shortest-path modes (query), health check + self-heal (lint), targeted page edit (edit), restore an archived page (unarchive), token/cost metrics (stats). Always invoke when the user mentions "the wiki" or "the docs", or asks to set up doc-wiki, onboard this repo, ingest a URL into docs, refresh docs, look up something in the wiki, find a concept path, save the last query answer as a page, check wiki health, fix/edit a wiki page, restore an archived page, or see wiki cost metrics — even if "wiki" is not said explicitly. Slash commands — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:unarchive`, `:stats`. Skip for unrelated docs work (arbitrary README edits, code comments, projects without `wiki.config.yaml`).
 ---
 
 # doc-wiki — Documentation Wiki Generator & Maintainer
@@ -30,7 +30,7 @@ Requires Node 20.
 
 ## Commands
 
-The wiki exposes 7 slash commands, dispatched by this section. Each subsection below documents the flow:
+The wiki exposes 8 slash commands, dispatched by this section. Each subsection below documents the flow:
 
 - `/doc-wiki:init` — scaffold + onboard (+ optional atlas chain)
 - `/doc-wiki:atlas` — full application documentation
@@ -38,6 +38,7 @@ The wiki exposes 7 slash commands, dispatched by this section. Each subsection b
 - `/doc-wiki:query` — summary-first search and synthesis (`--promote` saves an answer; `--review` triages archives)
 - `/doc-wiki:lint` — health check + auto-heal
 - `/doc-wiki:edit` — targeted page changes
+- `/doc-wiki:unarchive` — restore an archived page from `wiki/_archive/`
 - `/doc-wiki:stats` — token efficiency and cost metrics
 
 ### /doc-wiki:init — Bootstrap a wiki (scaffold + onboard + optional atlas)
@@ -284,6 +285,15 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - **Semantic**: for each atlas page (sampled if `--validate-mode shallow`, all if `full`), compute `pageHash = sha256(body)` and `sourceHash = sha256(concat(sources))`. Probe `atlas_validate.js cache-check`; on miss, read page + sources and ask yourself: "Does this page still accurately describe the source(s)? List divergences." Store the result via `atlas_validate.js cache-store`.
    - Merge findings into `wiki/outputs/atlas/<run-id>/drift-report.md`.
 
+5b. **Archive sweep** — runs only when `ecosystem.archive.enabled: true` (default):
+    `node agents/lib/atlas_archive.js sweep --wiki-root <root> --repo-root <root> --autonomy <mode> --run-id <id>`
+    moves atlas pages whose local sources have all been deleted from the codebase into `wiki/_archive/`,
+    stamps deprecation frontmatter, appends to `_archive_history.jsonl`, rebuilds `wiki/_archive/index.md`,
+    and rewrites inbound links per `ecosystem.archive.inbound_links` mode. Under `balanced` / `conservative`
+    autonomy, the script returns a `pendingConfirmation` list and the orchestrator asks
+    "Archive `<page>`? [Y/n/skip-all]" per page. Partial removal (some-but-not-all sources missing) is
+    surfaced in the drift report only; never auto-archived.
+
 6. **Bootstrap / refresh** — for each plan entry not cached:
    - Save the plan snapshot first: `atlas_orchestrator.js save-plan --wiki-root <root> --run-id <id> --plan '<json>'`. The snapshot drives `--resume` so re-discovery doesn't change scope mid-run.
    - For `entry.facet == "data-model"`: dispatch `wiki-orm-agent` and write the result to `entry.output` with atlas frontmatter.
@@ -326,6 +336,15 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
 - `atlas_run_id`: timestamp of the generating atlas run (`YYYY-MM-DDTHH-MM-SS`).
 
 These let atlas recognize its own pages on re-runs and skip semantic-cache invalidation when nothing changed.
+
+Pages that have been archived gain four additional fields:
+
+- `status: deprecated`
+- `archived_at: <YYYY-MM-DD>`
+- `archive_reason: <free-text reason>`
+- `archived_from: <wiki-relative original path>`
+
+These are stamped by the Phase 5b sweep and stripped by `/doc-wiki:unarchive`.
 
 **Page template** — every atlas page targets 300–800 lines, splits to sibling subpages beyond, starts with a TL;DR, and ends with cross-links **written at page-creation time** (the post-op crosslink hook later refines, but never bootstraps, the section). The body section is **facet-conditional** so each audience gets the structure it needs.
 
@@ -377,11 +396,11 @@ The `audience` frontmatter drives the section choice; the `atlas_facet` drives w
 
 **Drift handling** honors `autonomy.mode` from `wiki.config.yaml`:
 
-| Autonomy | Stale (gitlog) | Structural | Semantic | Uncovered files |
-|---|---|---|---|---|
-| `conservative` | Ask before refresh | Report only | Report only | Ask before ingest |
-| `balanced` (default) | Auto-refresh | Auto-fix safe; report structural | Report; ask | Auto-ingest if matches current topic; else report |
-| `autonomous` / `auto` | Auto-refresh | Auto-fix all | Auto-fix; ask on conflicts | Auto-ingest |
+| Autonomy | Stale (gitlog) | Structural | Semantic | Uncovered files | Orphan sources (5b) | Partial (5b) |
+|---|---|---|---|---|---|---|
+| `conservative` | Ask before refresh | Report only | Report only | Ask before ingest | Report only | Report only |
+| `balanced` (default) | Auto-refresh | Auto-fix safe; report structural | Report; ask | Auto-ingest if matches current topic; else report | Ask per page | Report only |
+| `autonomous` / `auto` | Auto-refresh | Auto-fix all | Auto-fix; ask on conflicts | Auto-ingest | Auto-archive | Report only |
 
 **Cost ceiling**: pre-run estimate aborts if over `--max-cost`. Mid-run, if cumulative actual exceeds `1.5 × --max-cost`, finish the current page, save checkpoint, abort gracefully.
 
@@ -593,6 +612,47 @@ Read `references/quality.md` for scoring rules and `references/autonomy.md` for 
 4. Apply if autonomy mode permits
 5. Log + run post-op hooks
 
+### /doc-wiki:unarchive — Restore an archived page
+
+Restore a previously-archived wiki page from `wiki/_archive/` back to the active wiki.
+
+```
+/doc-wiki:unarchive <path-or-slug> [--target <wiki-relative-path>] [--yes]
+```
+
+**Arguments:**
+
+- `<path-or-slug>` — either a full path under `wiki/_archive/` (e.g. `wiki/_archive/auth/overview.md`) or a slug substring matched case-insensitively against the `archived_from` frontmatter field. If the substring matches more than one archived page, the orchestrator lists the candidates and asks the user to disambiguate.
+- `--target <wiki-relative-path>` — destination path relative to the wiki root (e.g. `wiki/auth/overview.md`). Defaults to the value of the `archived_from` frontmatter field. If the default target already exists on disk, the orchestrator stops and reports a conflict.
+- `--yes` — skip the confirmation prompt regardless of autonomy mode.
+
+**Flow:**
+
+1. **Resolve** — locate the archive entry by path or slug. If multiple matches, list and ask.
+2. **Target check** — determine destination from `--target` or `archived_from`. If the destination already exists, abort with a conflict message.
+3. **Move** — move the file from `wiki/_archive/<path>` to the resolved destination.
+4. **Strip frontmatter** — remove `status: deprecated`, `archived_at`, `archive_reason`, and `archived_from` fields from the page's frontmatter.
+5. **Append history** — append an `unarchive` event to `_archive_history.jsonl`. The event shape is:
+   ```jsonc
+   {
+     "ts": "2026-05-24T16:10:00Z",     // ISO8601 timestamp
+     "op": "unarchive",                 // discriminator (vs "archive")
+     "from": "wiki/_archive/billing/architecture.md",  // the archived path
+     "to": "wiki/billing/architecture.md"              // restored target
+   }
+   ```
+6. **Rebuild index** — regenerate `wiki/_archive/index.md` to reflect the removed entry.
+7. **Inverse link rewrite** — run `node agents/lib/atlas_archive.js rewrite-inbound-links-unarchive --wiki-root <root> --event-file <path-to-event-json>` to restore or update links in active wiki pages that were rewritten or dropped during the original archive sweep.
+8. **Post-op hooks** — run the standard crosslink and tag-harmonize passes (unless `--no-crosslink` / `--no-tag-harmonize`).
+
+**Autonomy gates:**
+
+| Autonomy | Behavior |
+|---|---|
+| `conservative` / `balanced` | Ask one confirmation before proceeding: "Restore `<page>` to `<target>`? [Y/n]" |
+| `autonomous` / `auto` | Proceed without prompt |
+| `--yes` | Overrides prompt at any autonomy level |
+
 ### /doc-wiki:stats — Token efficiency and cost metrics
 
 ```bash
@@ -672,9 +732,11 @@ The total Reference appendix MUST stay under ~30 lines per root file. The "Other
 
 After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
 
-**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query --promote`) gets corrected — do not silently fill it in.
+**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query --promote`) gets corrected — do not silently fill it in. When generating fresh `## Related Pages` links, never create new inbound links to archived pages. Treat archived pages as link targets ONLY when a pre-existing link already points there (handled by `atlas_archive.rewriteInboundLinks`).
 
-**Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page.
+**Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page. Skip any page under `wiki/_archive/` — archived pages have frozen frontmatter and do not participate in tag vocabulary discovery.
+
+**Archive-link rewrite (pre-crosslink):** When the operation includes archive sweep events, run `atlas_archive.js rewrite-inbound-links --wiki-root <root> --events-file <path-to-events-json> --mode <rewrite|drop|leave>` BEFORE the standard crosslink pass. For unarchive operations, run `atlas_archive.js rewrite-inbound-links-unarchive --wiki-root <root> --event-file <path-to-event-json>` instead. Both produce idempotent text edits and are safe to re-run.
 
 Skip hooks with `--no-crosslink` or `--no-tag-harmonize` flags.
 

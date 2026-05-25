@@ -109,7 +109,8 @@ export function countAtlasPages(wikiRoot: string): number {
     for (const e of entries) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        walk(full);
+        // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+        if (!e.name.startsWith("_")) walk(full);
         continue;
       }
       if (!e.isFile() || !full.endsWith(".md")) continue;
@@ -148,7 +149,8 @@ export function countAllPages(wikiRoot: string): number {
     for (const e of entries) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        walk(full);
+        // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+        if (!e.name.startsWith("_")) walk(full);
         continue;
       }
       if (e.isFile() && full.endsWith(".md")) count++;
@@ -175,6 +177,10 @@ export function getLastAtlasRunId(wikiRoot: string): string | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     if (!line) continue;
+
+    // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+    if (!line.includes('"atlas"')) continue;
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -255,6 +261,10 @@ export function getRollingPerIngestAvg(
   for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
     const line = lines[i];
     if (!line) continue;
+
+    // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
+    if (!line.includes('"ingest"')) continue;
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -628,7 +638,8 @@ export function assembleGapReport(
       for (const e of entries) {
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
-          walk(full);
+          // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+          if (!e.name.startsWith("_")) walk(full);
           continue;
         }
         if (!e.isFile() || !full.endsWith(".md")) continue;

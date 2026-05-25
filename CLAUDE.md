@@ -29,14 +29,16 @@ Three slash commands take a new repo from zero to a working wiki:
 ## Architecture
 
 - **Main skill:** `skills/doc-wiki/SKILL.md` — orchestrates all `/doc-wiki:*` commands
-- **Slash-command wrappers:** `commands/*.md` — 7 thin wrappers so `/doc-wiki:init`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query`, `/doc-wiki:lint`, `/doc-wiki:edit`, `/doc-wiki:stats` appear in Claude Code's slash-command autocomplete and route into the skill
+- **Slash-command wrappers:** `commands/*.md` — 8 thin wrappers so `/doc-wiki:init`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query`, `/doc-wiki:lint`, `/doc-wiki:edit`, `/doc-wiki:unarchive`, `/doc-wiki:stats` appear in Claude Code's slash-command autocomplete and route into the skill
 - **Source-fetch dispatch:** `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which plans and spawns the bundled connector CLIs in parallel. The wiki-side Mermaid augmentation runs on the raw envelopes via `agents/lib/mermaid_augment.ts`. There is **one path**: gather → applyMermaid. The legacy `wiki-<svc>-agent` subagents + their per-service wrappers were decommissioned — their CLI-resolution and Mermaid responsibilities are now wholly owned by the hub and `mermaid_augment.ts`.
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Slash commands (7) — `commands/`
+### Slash commands (8) — `commands/`
 
-Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `edit.md`, `stats.md`. (`init` now covers setup + optional atlas chain; `ingest` includes `--refresh`; `query` includes `--promote`/`--review`; `edit` replaces the old `fix`. `/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `edit.md`, `unarchive.md`, `stats.md`. (`init` covers setup + optional atlas chain (replacing the old standalone `onboard`); `ingest` includes `--refresh` (replacing the old `refresh`); `query` includes `--promote`/`--review` (replacing the old `promote`); `edit` replaces the old `fix`; `unarchive` restores a page from `wiki/_archive/`. `/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+
+Pages atlas detects as orphaned (sources removed from code) are moved to `wiki/_archive/` and excluded from the main wiki surface. Restore via `/doc-wiki:unarchive <slug>`.
 
 ### TypeScript scripts (24) — `skills/doc-wiki/scripts/`
 

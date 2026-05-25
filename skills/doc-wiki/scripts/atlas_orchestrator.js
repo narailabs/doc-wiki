@@ -57,7 +57,9 @@ export function countAtlasPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
-                walk(full);
+                // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+                if (!e.name.startsWith("_"))
+                    walk(full);
                 continue;
             }
             if (!e.isFile() || !full.endsWith(".md"))
@@ -101,7 +103,9 @@ export function countAllPages(wikiRoot) {
         for (const e of entries) {
             const full = path.join(dir, e.name);
             if (e.isDirectory()) {
-                walk(full);
+                // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+                if (!e.name.startsWith("_"))
+                    walk(full);
                 continue;
             }
             if (e.isFile() && full.endsWith(".md"))
@@ -130,6 +134,9 @@ export function getLastAtlasRunId(wikiRoot) {
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i];
         if (!line)
+            continue;
+        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+        if (!line.includes('"atlas"'))
             continue;
         let parsed;
         try {
@@ -206,6 +213,9 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
         const line = lines[i];
         if (!line)
+            continue;
+        // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
+        if (!line.includes('"ingest"'))
             continue;
         let parsed;
         try {
@@ -520,7 +530,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
             for (const e of entries) {
                 const full = path.join(dir, e.name);
                 if (e.isDirectory()) {
-                    walk(full);
+                    // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+                    if (!e.name.startsWith("_"))
+                        walk(full);
                     continue;
                 }
                 if (!e.isFile() || !full.endsWith(".md"))

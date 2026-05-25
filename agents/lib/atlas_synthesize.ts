@@ -83,7 +83,8 @@ function _findAtlasPages(
     for (const e of entries) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        walk(full);
+        // Skip _-prefixed dirs (archive, drafts, etc.) — see _wiki_fs.ts EXCLUDE_PREFIX
+        if (!e.name.startsWith("_")) walk(full);
         continue;
       }
       if (!e.isFile() || !full.endsWith(".md")) continue;
