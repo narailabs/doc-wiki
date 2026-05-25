@@ -486,7 +486,7 @@ Two modes — picked by argument shape:
 5. Synthesize answer with inline citations
 6. Surface contradictions and knowledge gaps
 7. Archive answer to `outputs/queries/`
-8. Offer to promote to wiki page via `/doc-wiki:promote`
+8. Offer to promote to wiki page via `/doc-wiki:query --promote` (see Post-answer promote prompt below)
 
 Log token efficiency: `node {skill_path}/scripts/event_logger.js --op query --wiki-root <wiki-root> --details '{"tokens_in": N, "tokens_out": M, "reduction_ratio": R}'`
 
@@ -498,38 +498,11 @@ node {skill_path}/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-
 
 Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--via`, `--all-paths`. Read-only — no autonomy gate, no archive, no synthesis.
 
-### /doc-wiki:lint — Health check + auto-heal
+#### Post-answer promote prompt (synthesis mode)
 
-Run structural checks via script, then LLM-driven checks yourself:
+After rendering a synthesis-mode answer + citations, run `AskUserQuestion` "Save this answer as a permanent wiki page?". Gated by autonomy mode the same way other interactive prompts are (suppressed in non-interactive autonomy levels). Path mode skips this prompt. On "yes", run the single-promote flow below against the freshly-written archive in `outputs/queries/`.
 
-```bash
-node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
-```
-
-The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
-
-**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:promote --review` — same coverage rule, different entry point.
-
-**Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
-
-Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
-
-### /doc-wiki:fix — Quick corrections
-
-1. User identifies the page and issue
-2. Read the page
-3. Show diff (current vs proposed)
-4. Apply if autonomy mode permits
-5. Log + run post-op hooks
-
-### /doc-wiki:promote — Query answer -> wiki page
-
-Two modes — picked by argument shape:
-
-- **Single mode** (default): convert one archived query answer into a permanent wiki page.
-- **Review mode** (`--review`): bulk-triage many archived answers in one pass with per-item approval.
-
-#### Target resolution (single mode)
+#### `--promote <file|last|N>` — explicit promote of an archived answer
 
 Resolve the target argument with the first matching rule:
 
@@ -543,9 +516,9 @@ Resolve the target argument with the first matching rule:
 
 Pick by mtime via `ls -1t <wiki-root>/outputs/queries/*.md`. Always exclude `outputs/queries/.promoted/` and `outputs/queries/.deleted/` — these subdirs hold archives that were already triaged.
 
-The slash form `/doc-wiki:promote last query` is the canonical, deterministic phrasing. The bare form (typed without the slash, e.g. `promote last query`) is best-effort — the skill description's keyword set covers it, but ambiguous contexts may need a clarifying turn.
+The slash form `/doc-wiki:query --promote last query` is the canonical, deterministic phrasing. The bare form (typed without the slash, e.g. `promote last query`) is best-effort — the skill description's keyword set covers it, but ambiguous contexts may need a clarifying turn.
 
-#### Single-mode flow
+Single-promote flow:
 
 1. Resolve the target.
 2. Read the query archive.
@@ -555,10 +528,10 @@ The slash form `/doc-wiki:promote last query` is the canonical, deterministic ph
 6. Move the source archive to `outputs/queries/.promoted/<filename>` so it is not re-suggested by `--review` or by `/doc-wiki:lint` query-absorption.
 7. Run post-op hooks (crosslink + tag-harmonize).
 
-#### Review mode (`--review`)
+#### `--review [--since <dur>] [--limit <N>] [--topic <dir>]` — bulk archive triage
 
 ```
-/doc-wiki:promote --review [--since <duration>] [--limit <N>] [--topic <directory>]
+/doc-wiki:query --review [--since <duration>] [--limit <N>] [--topic <directory>]
 ```
 
 Bulk archive triage with per-item approval. `--since` filters by mtime (e.g. `7d`, `24h`); `--limit` caps candidates; `--topic` overrides topic for every promotion in this batch.
@@ -569,13 +542,13 @@ For each candidate (oldest first, skipping `.promoted/` and `.deleted/`):
 2. Run the same coverage check `/doc-wiki:lint` query-absorption uses: is this insight already on a wiki page?
 3. If covered → skip silently (or in `conservative`, ask "Already covered by `<page>`. Promote anyway?").
 4. If novel → present `[P]romote / [S]kip / [D]elete archive / [A]bort batch`.
-5. On `P` → run the single-mode flow (steps 1-7 above) for this archive.
+5. On `P` → run the single-promote flow (steps 1-7 above) for this archive.
 6. On `D` → move to `outputs/queries/.deleted/<filename>`. Never `rm` — preserve for audit.
 7. On `A` → stop, summarize what was done so far.
 
 End the run with one line: `<X> promoted, <Y> skipped, <Z> deleted, <W> already-covered`.
 
-#### Autonomy interaction
+**Autonomy interaction:**
 
 | Mode | Per-archive prompt | "Already covered" |
 |---|---|---|
@@ -586,17 +559,39 @@ End the run with one line: `<X> promoted, <Y> skipped, <Z> deleted, <W> already-
 
 `balanced` is the "individual user approval" workflow.
 
-#### Periodic execution
-
-For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/schedule` skill rather than an unattended run:
+**Periodic execution:** For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/schedule` skill rather than an unattended run:
 
 ```
-/schedule "Run /doc-wiki:promote --review --since 7d" "every Monday at 9am"
+/schedule "Run /doc-wiki:query --review --since 7d" "every Monday at 9am"
 ```
 
 For unattended pipelines, set autonomy to `auto` and schedule the command directly — the orchestrator will batch-promote novel archives without prompting.
 
-See also: `/doc-wiki:lint` query-absorption (above) — same coverage rule, different entry point.
+See also: `/doc-wiki:lint` query-absorption (below) — same coverage rule, different entry point.
+
+### /doc-wiki:lint — Health check + auto-heal
+
+Run structural checks via script, then LLM-driven checks yourself:
+
+```bash
+node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
+```
+
+The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
+
+**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:query --promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:query --review` — same coverage rule, different entry point.
+
+**Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
+
+Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
+
+### /doc-wiki:fix — Quick corrections
+
+1. User identifies the page and issue
+2. Read the page
+3. Show diff (current vs proposed)
+4. Apply if autonomy mode permits
+5. Log + run post-op hooks
 
 ### /doc-wiki:stats — Token efficiency and cost metrics
 
@@ -677,7 +672,7 @@ The total Reference appendix MUST stay under ~30 lines per root file. The "Other
 
 After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
 
-**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:promote`) gets corrected — do not silently fill it in.
+**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query --promote`) gets corrected — do not silently fill it in.
 
 **Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page.
 
