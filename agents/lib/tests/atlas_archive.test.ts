@@ -22,7 +22,7 @@ import {
   type RewriteUnarchiveLinksOptions,
   type ReportedArchive,
 } from "../atlas_archive.js";
-import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { makeTmpPath, cleanupTmpPath, writeConfigYaml } from "./fixtures.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1748,6 +1748,131 @@ describe("CLI sweep — rejects out-of-range --partial-threshold", () => {
       const msg = stderrChunks.join("");
       expect(msg).toContain("-0.1");
       expect(msg).toContain("[0.0, 1.0]");
+    } finally {
+      process.stderr.write = origWrite as any;
+    }
+  });
+});
+
+// ── Tests: CLI sweep honors ecosystem.archive.inbound_links from config ────────
+
+describe("CLI sweep — ecosystem.archive.inbound_links from config", () => {
+  let wikiRoot: string;
+  let repoRoot: string;
+  let origArgv: string[];
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("archive-cfg-inbound-");
+    repoRoot = makeTmpPath("archive-cfg-inbound-repo-");
+    origArgv = process.argv.slice();
+
+    // An orphan atlas page with an inbound link from jwt.md
+    writePage(wikiRoot, "wiki/billing/architecture.md", {
+      atlas_facet: "architecture",
+      sources: ["src/billing/"],
+      title: "Billing Architecture",
+    });
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      `---\ntitle: JWT\n---\nSee [Billing flow](../billing/architecture.md) for details.\n`,
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+    cleanupTmpPath(repoRoot);
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("config inbound_links=drop: sweep archives without rewriting inbound links (jwt.md unchanged)", async () => {
+    writeConfigYaml(wikiRoot, {
+      wiki: { name: "test-wiki" },
+      ecosystem: { archive: { inbound_links: "drop" } },
+    });
+
+    process.argv = [
+      "node", "atlas_archive.js", "sweep",
+      "--wiki-root", wikiRoot,
+      "--repo-root", repoRoot,
+      "--run-id", "test-run-cfg",
+    ];
+    const code = await atlasArchiveMain();
+    expect(code).toBe(0);
+
+    // Page was archived
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/billing/architecture.md"))).toBe(false);
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/_archive/billing/architecture.md"))).toBe(true);
+
+    // jwt.md link was NOT rewritten (drop = remove link markup, but original link text stays)
+    const jwtContent = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    // "rewrite" would have produced "(archived)" — must not appear
+    expect(jwtContent).not.toContain("(archived)");
+    // "drop" replaces [label](target) with plain label — no markdown link syntax
+    expect(jwtContent).not.toMatch(/\[Billing flow\]\(/);
+  });
+
+  it("config inbound_links=rewrite but --inbound-links drop on CLI → CLI flag wins", async () => {
+    writeConfigYaml(wikiRoot, {
+      wiki: { name: "test-wiki" },
+      ecosystem: { archive: { inbound_links: "rewrite" } },
+    });
+
+    process.argv = [
+      "node", "atlas_archive.js", "sweep",
+      "--wiki-root", wikiRoot,
+      "--repo-root", repoRoot,
+      "--run-id", "test-run-cfg-override",
+      "--inbound-links", "drop",
+    ];
+    const code = await atlasArchiveMain();
+    expect(code).toBe(0);
+
+    // Page archived
+    expect(fs.existsSync(path.join(wikiRoot, "wiki/_archive/billing/architecture.md"))).toBe(true);
+
+    // CLI flag "drop" wins over config "rewrite": no (archived) suffix in link
+    const jwtContent = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(jwtContent).not.toContain("(archived)");
+    expect(jwtContent).not.toMatch(/\[Billing flow\]\(/);
+  });
+});
+
+describe("CLI sweep — rejects invalid --inbound-links value", () => {
+  let origArgv: string[];
+
+  beforeEach(() => {
+    origArgv = process.argv.slice();
+  });
+
+  afterEach(() => {
+    process.argv.length = 0;
+    for (const a of origArgv) process.argv.push(a);
+  });
+
+  it("exits 2 with helpful error for --inbound-links bogus", async () => {
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: any, ...args: any[]) => {
+      stderrChunks.push(String(chunk));
+      return origWrite(chunk, ...args);
+    };
+    try {
+      process.argv = [
+        "node", "atlas_archive.js", "sweep",
+        "--wiki-root", "/tmp/wr",
+        "--repo-root", "/tmp/rr",
+        "--run-id", "test-run",
+        "--inbound-links", "bogus",
+      ];
+      const code = await atlasArchiveMain();
+      expect(code).toBe(2);
+      const msg = stderrChunks.join("");
+      expect(msg).toContain("bogus");
+      expect(msg).toContain(REWRITE_MODES.join(", "));
     } finally {
       process.stderr.write = origWrite as any;
     }

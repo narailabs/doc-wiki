@@ -26,6 +26,7 @@ import {
 } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { checkPathContainment } from "narai-primitives/toolkit";
+import { parseConfig, ConfigFileNotFoundError, type ArchiveConfig } from "./parse_config.js";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -867,7 +868,9 @@ Subcommands:
   sweep          --wiki-root <p> --repo-root <p> --run-id <id>
                  [--autonomy conservative|balanced|autonomous|auto]
                  [--threshold <n>] [--dry-run]
+                 [--inbound-links rewrite|drop|leave]
                  Archive deprecated atlas pages. Stdout: JSON SweepResult.
+                 --inbound-links overrides ecosystem.archive.inbound_links from wiki.config.yaml.
   unarchive      --wiki-root <p> --page-or-slug <path-or-slug>
                  [--target <rel-path>] [--inbound-links rewrite|drop|leave]
                  Restore an archived page to the live wiki.
@@ -934,7 +937,35 @@ export async function main(): Promise<number> {
       partialThreshold = n;
     }
     const dryRun = "dryRun" in parsed.values;
-    const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun });
+
+    // Resolve inboundLinks: CLI flag overrides config; config defaults to "rewrite".
+    let configInboundLinks: RewriteMode = "rewrite";
+    const configPath = path.join(wikiRoot, "wiki.config.yaml");
+    try {
+      const cfg = parseConfig(configPath);
+      const archiveCfg = (cfg["ecosystem"] as Record<string, unknown> | undefined)?.["archive"] as ArchiveConfig | undefined;
+      if (archiveCfg?.inbound_links) {
+        configInboundLinks = archiveCfg.inbound_links;
+      }
+    } catch {
+      // Config missing or invalid — fall back to default "rewrite".
+    }
+
+    const inboundLinksRaw = parsed.values["inboundLinks"];
+    let inboundLinks: RewriteMode;
+    if (typeof inboundLinksRaw === "string" && inboundLinksRaw.length > 0) {
+      if (!(REWRITE_MODES as readonly string[]).includes(inboundLinksRaw)) {
+        process.stderr.write(
+          `error: invalid --inbound-links value '${inboundLinksRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`,
+        );
+        return 2;
+      }
+      inboundLinks = inboundLinksRaw as RewriteMode;
+    } else {
+      inboundLinks = configInboundLinks;
+    }
+
+    const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun, inboundLinks });
     process.stdout.write(JSON.stringify(result) + "\n");
     return 0;
   }
