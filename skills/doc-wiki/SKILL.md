@@ -1,6 +1,6 @@
 ---
 name: doc-wiki
-description: Manage a documentation wiki — generate, ingest sources, query, lint, fix, promote, refresh. Triggers on requests about documentation, knowledge bases, archived queries, ORM mapping, or database schemas, including phrasings like "promote last query", "lint the wiki", or "fix the auth page".
+description: Manage the current codebase's doc-wiki — bootstrap with optional atlas (init), full-doc generation (atlas), source ingest from Jira/Confluence/GitHub/Notion/AWS/GCP/databases/files/URLs with `--refresh` for re-fetch (ingest), search + synthesis with promote-to-page and shortest-path modes (query), health check + self-heal (lint), targeted page edit (edit), token/cost metrics (stats). Always invoke when the user mentions "the wiki" or "the docs", or asks to set up doc-wiki, onboard this repo, ingest a URL into docs, refresh docs, look up something in the wiki, find a path between two concepts, save the last query answer as a page, check wiki health, fix/edit a wiki page, or see wiki cost metrics — even if "wiki" is not said explicitly. Slash commands — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:stats`. Skip for unrelated docs work (arbitrary README edits, code comments, projects without `wiki.config.yaml`).
 ---
 
 # doc-wiki — Documentation Wiki Generator & Maintainer
@@ -29,6 +29,16 @@ npm run build
 Requires Node 20.
 
 ## Commands
+
+The wiki exposes 7 slash commands, dispatched by this section. Each subsection below documents the flow:
+
+- `/doc-wiki:init` — scaffold + onboard (+ optional atlas chain)
+- `/doc-wiki:atlas` — full application documentation
+- `/doc-wiki:ingest` — fetch + extract + compile a source (`--refresh` re-fetches)
+- `/doc-wiki:query` — summary-first search and synthesis (`--promote` saves an answer; `--review` triages archives)
+- `/doc-wiki:lint` — health check + auto-heal
+- `/doc-wiki:edit` — targeted page changes
+- `/doc-wiki:stats` — token efficiency and cost metrics
 
 ### /doc-wiki:init — Bootstrap a wiki
 
