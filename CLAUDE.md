@@ -19,24 +19,24 @@ This file (`CLAUDE.md`) is the project-memory layer that Claude Code loads autom
 Three slash commands take a new repo from zero to a working wiki:
 
 ```
-/doc-wiki:init         # scaffold wiki/ + wiki.config.yaml
-/doc-wiki:onboard      # detect stack, ORM, DB; set up ~/.connectors/config.yaml
+/doc-wiki:init         # scaffold + onboard + (optionally) chain /doc-wiki:atlas
 /doc-wiki:ingest <src> # fetch a source, compile, link, diagram, index
+/doc-wiki:query <q>    # search the wiki, optionally save the answer as a page
 ```
 
-`/doc-wiki:onboard` walks the user through configuring `narai-primitives`'s `~/.connectors/config.yaml` from `.connectors/config.example.yaml` (in this repo). After that, every `/doc-wiki:ingest <jira-url>`, `/doc-wiki:ingest <github-repo>`, etc. routes through `gather()` to the right connector — no per-service setup needed.
+`/doc-wiki:init` Phase 3 (onboarding) walks the user through configuring `narai-primitives`'s `~/.connectors/config.yaml` from `.connectors/config.example.yaml` (in this repo). After that, every `/doc-wiki:ingest <jira-url>`, `/doc-wiki:ingest <github-repo>`, etc. routes through `gather()` to the right connector — no per-service setup needed.
 
 ## Architecture
 
 - **Main skill:** `skills/doc-wiki/SKILL.md` — orchestrates all `/doc-wiki:*` commands
-- **Slash-command wrappers:** `commands/doc-wiki:*.md` — 10 thin wrappers so `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, etc. appear in Claude Code's slash-command autocomplete and route into the skill
+- **Slash-command wrappers:** `commands/*.md` — 7 thin wrappers so `/doc-wiki:init`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query`, `/doc-wiki:lint`, `/doc-wiki:edit`, `/doc-wiki:stats` appear in Claude Code's slash-command autocomplete and route into the skill
 - **Source-fetch dispatch:** `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which plans and spawns the bundled connector CLIs in parallel. The wiki-side Mermaid augmentation runs on the raw envelopes via `agents/lib/mermaid_augment.ts`. There is **one path**: gather → applyMermaid. The legacy `wiki-<svc>-agent` subagents + their per-service wrappers were decommissioned — their CLI-resolution and Mermaid responsibilities are now wholly owned by the hub and `mermaid_augment.ts`.
 - **No standalone CLI** — all LLM calls go through Claude Code's session
 - **Runtime:** Node 20. All scripts are TypeScript; `npm run build` emits sibling `.js` files that are invoked with `node`.
 
-### Slash commands (10) — `commands/`
+### Slash commands (7) — `commands/`
 
-Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `onboard.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `fix.md`, `promote.md`, `refresh.md`, `stats.md`. (`/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
+Thin wrappers so each documented `/doc-wiki:*` subcommand is discoverable in Claude Code's slash-command autocomplete. Each wrapper invokes the `doc-wiki` skill with the matching subcommand and passes `$ARGUMENTS` through. Files: `init.md`, `atlas.md`, `ingest.md`, `query.md`, `lint.md`, `edit.md`, `stats.md`. (`init` now covers setup + optional atlas chain; `ingest` includes `--refresh`; `query` includes `--promote`/`--review`; `edit` replaces the old `fix`. `/doc-wiki:atlas` is a meta-orchestrator over `/doc-wiki:ingest` that documents the entire codebase in one phased pass with topic discovery, cost estimation, and existing-content validation; shortest-path between concepts is path mode of `/doc-wiki:query` — `--from <a> --to <b>` shells out to `graph_ops.js path`.)
 
 ### TypeScript scripts (24) — `skills/doc-wiki/scripts/`
 
