@@ -434,7 +434,7 @@ These are load-bearing invariants. Implementers must respect them; reviewers sho
 
 8. **Idempotent Mermaid injection.** `mermaid_inject.ts` wraps blocks in `<!-- wiki-mermaid: <title> start/end -->` markers. Re-ingest replaces stale diagrams in place; never duplicates.
 
-9. **Post-op hooks run automatically.** After write operations (ingest, fix, promote, refresh), crosslink and tag-harmonize passes run if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+9. **Post-op hooks run automatically.** After write operations (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), crosslink and tag-harmonize passes run if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 10. **Autonomy mode controls writes.** Every change respects the configured autonomy level. Per-category overrides allow finer control (e.g., `auto` for crosslinks but `balanced` for new pages).
 

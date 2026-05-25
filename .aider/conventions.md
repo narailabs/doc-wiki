@@ -46,7 +46,7 @@ Install dependencies (Node 20 required): `npm install && npm run build`
 
 ## Post-Operation Hooks
 
-After write operations (ingest, edit), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+After write operations (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 ## Documentation
 

@@ -730,7 +730,7 @@ The total Reference appendix MUST stay under ~30 lines per root file. The "Other
 
 ## Post-Operation Hooks
 
-After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
+After any write operation (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run BOTH hooks if the wiki has >= 3 pages:
 
 **Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query --promote`) gets corrected — do not silently fill it in. When generating fresh `## Related Pages` links, never create new inbound links to archived pages. Treat archived pages as link targets ONLY when a pre-existing link already points there (handled by `atlas_archive.rewriteInboundLinks`).
 

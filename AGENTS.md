@@ -138,7 +138,7 @@ Sub-agents live at `agents/`. External-source fetching is handled by the connect
 
 ## Post-Operation Hooks
 
-After any write operation (ingest, edit), run crosslink and tag-harmonize passes if the wiki has 3 or more pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+After any write operation (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run crosslink and tag-harmonize passes if the wiki has 3 or more pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 ## Invocation Pattern
 
