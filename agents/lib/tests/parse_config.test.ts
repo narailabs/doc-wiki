@@ -355,4 +355,22 @@ describe("ecosystem.archive", () => {
     });
     expect(() => parseConfig(p)).toThrow(/invalid ecosystem.archive/);
   });
+
+  it("rejects string partial_threshold with error mentioning field and type", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: "0.3" } },
+    });
+    expect(() => parseConfig(p)).toThrow(/partial_threshold/);
+    expect(() => parseConfig(p)).toThrow(/string/);
+  });
+
+  it("accepts numeric partial_threshold 0.3", () => {
+    const p = writeConfigYaml(tmpPath, {
+      wiki: { name: "X" },
+      ecosystem: { archive: { partial_threshold: 0.3 } },
+    });
+    const cfg = parseConfig(p) as { ecosystem: { archive: { partial_threshold: number } } };
+    expect(cfg.ecosystem.archive.partial_threshold).toBeCloseTo(0.3);
+  });
 });
