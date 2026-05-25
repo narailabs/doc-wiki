@@ -764,3 +764,41 @@ describe("graph_ops archive exclusion", () => {
     expect(Object.keys(degrees).some((k) => k.includes("_archive"))).toBe(false);
   });
 });
+
+// ── isExcludedNode: directory-only exclusion ───────────────────────────────────
+
+describe("graph_ops isExcludedNode — directory-only exclusion", () => {
+  let tmpPath: string;
+  let edgesFile: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-excl-");
+    edgesFile = makeEmptyEdgesFile(tmpPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("file whose name starts with _ is NOT excluded (no underscore dir)", () => {
+    // wiki/topic/_index.md — filename starts with _ but no dir does.
+    addEdge(edgesFile, "wiki/topic/_index.md", "wiki/other/page.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    // _index.md should appear in degree counts (not filtered out)
+    expect(Object.keys(degrees)).toContain("wiki/topic/_index.md");
+  });
+
+  it("file under a directory starting with _ IS excluded", () => {
+    // wiki/_archive/foo.md — directory _archive starts with _
+    addEdge(edgesFile, "wiki/live.md", "wiki/_archive/foo.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_archive"))).toBe(false);
+  });
+
+  it("file under an intermediate directory starting with _ IS excluded", () => {
+    // wiki/topic/_drafts/foo.md — intermediate dir _drafts starts with _
+    addEdge(edgesFile, "wiki/live.md", "wiki/topic/_drafts/foo.md", "extends", "EXTRACTED");
+    const degrees = computeDegrees(edgesFile);
+    expect(Object.keys(degrees).some((k) => k.includes("_drafts"))).toBe(false);
+  });
+});

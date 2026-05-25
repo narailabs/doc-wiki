@@ -30,9 +30,13 @@ import { bidirectional } from "graphology-shortest-path/unweighted.js";
 /** Return true when a node key refers to a page under any `_`-prefixed
  *  directory (e.g. `_archive`, `_drafts`, `_internal`).  This matches the
  *  convention used by `walkLivePages` and the atlas walker, both of which
- *  skip any directory whose basename starts with `_`. */
+ *  skip any directory whose basename starts with `_`.
+ *
+ *  Only directory segments are checked; the filename (last segment) is NOT
+ *  considered, so a file like `wiki/topic/_index.md` is NOT excluded. */
 function isExcludedNode(node: string): boolean {
-  return node.replace(/\\/g, "/").split("/").some((seg) => seg.startsWith("_"));
+  const segments = node.replace(/\\/g, "/").split("/");
+  return segments.slice(0, -1).some((seg) => seg.startsWith("_"));
 }
 
 /** Drop edges where either endpoint is an excluded page. */
