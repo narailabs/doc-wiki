@@ -1197,6 +1197,71 @@ describe("unarchive — path containment guard", () => {
   });
 });
 
+// ── Tests: Comment 3 — --inbound-links mode on unarchive ─────────────────────
+
+describe("unarchive — inbound-links mode", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("unarchive-links-mode-");
+    writeArchivedPage(wikiRoot, "wiki/_archive/billing/architecture.md");
+    // A page with an already-rewritten archived link
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    fs.mkdirSync(path.dirname(jwtPath), { recursive: true });
+    fs.writeFileSync(
+      jwtPath,
+      "---\ntitle: JWT\n---\nSee [Billing flow (archived)](../_archive/billing/architecture.md) for details.\n",
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  it("leave mode: does not rewrite any inbound links, linksReverted is 0", async () => {
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    const before = fs.readFileSync(jwtPath, "utf-8");
+
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "leave",
+    });
+
+    expect(result.linksReverted).toBe(0);
+    const after = fs.readFileSync(jwtPath, "utf-8");
+    expect(after).toBe(before);
+  });
+
+  it("rewrite mode: reverts (archived) links, linksReverted > 0", async () => {
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "rewrite",
+    });
+
+    expect(result.linksReverted).toBeGreaterThan(0);
+    const body = fs.readFileSync(path.join(wikiRoot, "wiki/auth/jwt.md"), "utf-8");
+    expect(body).toContain("[Billing flow](../billing/architecture.md)");
+  });
+
+  it("drop mode: treated as leave — does not rewrite links, linksReverted is 0", async () => {
+    const jwtPath = path.join(wikiRoot, "wiki/auth/jwt.md");
+    const before = fs.readFileSync(jwtPath, "utf-8");
+
+    const result = await unarchive({
+      wikiRoot,
+      pageOrSlug: "wiki/_archive/billing/architecture.md",
+      inboundLinks: "drop",
+    });
+
+    expect(result.linksReverted).toBe(0);
+    const after = fs.readFileSync(jwtPath, "utf-8");
+    expect(after).toBe(before);
+  });
+});
+
 describe("unarchive — rebuildArchiveIndex skips unarchived events", () => {
   let wikiRoot: string;
   let repoRoot: string;

@@ -674,7 +674,13 @@ export async function unarchive(opts: UnarchiveOptions): Promise<UnarchiveResult
   await appendHistory(opts.wikiRoot, [event]);
   await rebuildArchiveIndex(opts.wikiRoot);
 
-  const linksReverted = await rewriteInboundLinksForUnarchive({ wikiRoot: opts.wikiRoot, event });
+  // "drop" was forward-only (drop links to a page being archived); on unarchive
+  // there are no archive-style links to drop, so treat it as "leave".
+  const effectiveMode = opts.inboundLinks === "drop" ? "leave" : opts.inboundLinks;
+  const linksReverted =
+    effectiveMode === "rewrite"
+      ? await rewriteInboundLinksForUnarchive({ wikiRoot: opts.wikiRoot, event })
+      : 0;
   return { from: event.from, to: event.to, linksReverted };
 }
 
