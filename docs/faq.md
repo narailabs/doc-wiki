@@ -22,17 +22,17 @@ Yes — the wiki is plain markdown with YAML frontmatter. Edit anything you want
 
 **What gets overwritten** on `refresh` / `lint --fix` / next `/doc-wiki:ingest` of the same source: content inside the markers, auto-derived frontmatter fields when the source has changed.
 
-For diff-reviewed targeted edits, use `/doc-wiki:fix <page-path> "<issue description>"`. See [`wiki-output.md` § Editing pages by hand](wiki-output.md#editing-pages-by-hand).
+For diff-reviewed targeted edits, use `/doc-wiki:edit <page-path> "<change description>"`. See [`wiki-output.md` § Editing pages by hand](wiki-output.md#editing-pages-by-hand).
 
 ### Does it work without external connectors?
 
 Yes. Every connector in `~/.connectors/config.yaml` is opt-in — the file even ships with all seven connector blocks commented out. If you only ingest local files (`/doc-wiki:ingest README.md`, `/doc-wiki:ingest src/`), no external services are touched.
 
-To skip the connector questions during onboarding, answer "no" to all six external-service prompts in `/doc-wiki:onboard` Phase 4. You can always add connectors later — see [recipe 5](recipes.md#5-add-a-new-external-service-mid-stream).
+To skip the connector questions during onboarding, answer "no" to all six external-service prompts in `/doc-wiki:init` Phase 3 (Onboarding). You can always add connectors later — see [recipe 5](recipes.md#5-add-a-new-external-service-mid-stream).
 
 ### Can I use this for non-code documentation?
 
-Yes. `/doc-wiki:ingest` works on any text, markdown, PDF, or URL — the underlying compilation step doesn't care whether it's source code or research notes. The ORM / database / REST detection in `/doc-wiki:onboard` is **optional** (you can skip it), so a research-project or product-docs wiki works fine.
+Yes. `/doc-wiki:ingest` works on any text, markdown, PDF, or URL — the underlying compilation step doesn't care whether it's source code or research notes. The ORM / database / REST detection in `/doc-wiki:init` Phase 3 (Onboarding) is **optional** (you can skip it), so a research-project or product-docs wiki works fine.
 
 The atlas pipeline is biased toward codebases (its topic discovery uses code-dir heuristics), but `/doc-wiki:ingest` itself is content-agnostic.
 
@@ -97,7 +97,7 @@ All four route into the same orchestrator skill. The slash commands (`/doc-wiki:
 
 Three things:
 
-1. **Persistence.** Every query is archived; `/doc-wiki:promote` turns a useful answer into a permanent page. The wiki accumulates institutional knowledge — re-asking the same question costs $0.005 instead of `$cost-of-rereading-the-repo`.
+1. **Persistence.** Every query is archived; `/doc-wiki:query --promote` turns a useful answer into a permanent page. The wiki accumulates institutional knowledge — re-asking the same question costs $0.005 instead of `$cost-of-rereading-the-repo`.
 2. **Drift detection.** Every wiki page records source content hashes. `/doc-wiki:lint` flags pages whose underlying code has changed, so stale documentation is detectable rather than invisible.
 3. **Cross-source linking.** `gather()` pulls related context from Jira / Confluence / GitHub / DB schemas during ingest, so a single wiki page can synthesize code + the ticket that spec'd it + the design doc behind that ticket. See [recipe 6](recipes.md#6-multi-source-ingest-of-one-feature).
 
@@ -121,9 +121,9 @@ Topic discovery itself unions five signals: top-level code dirs, ORM domains, ex
 
 ### What happens if I rename a wiki page?
 
-`/doc-wiki:lint` flags broken inbound links pointing at the old name. `/doc-wiki:lint --fix` resolves what it can unambiguously (single-target renames). For ambiguous cases, use `/doc-wiki:fix <surviving-page> "update reference to <new-name>"`.
+`/doc-wiki:lint` flags broken inbound links pointing at the old name. `/doc-wiki:lint --fix` resolves what it can unambiguously (single-target renames). For ambiguous cases, use `/doc-wiki:edit <surviving-page> "update reference to <new-name>"`.
 
-If the rename was driven by an upstream source rename, `/doc-wiki:refresh --source <source>` will recompile from the new source name and the orphaned old-name page can be deleted by hand.
+If the rename was driven by an upstream source rename, `/doc-wiki:ingest --refresh --source <source>` will recompile from the new source name and the orphaned old-name page can be deleted by hand.
 
 ## Where to next
 

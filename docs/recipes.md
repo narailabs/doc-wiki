@@ -21,15 +21,14 @@ You just installed the plugin (see [`getting-started.md`](getting-started.md) fo
 
 ```text
 /doc-wiki:init
-/doc-wiki:onboard
 /doc-wiki:ingest README.md
 /doc-wiki:query "what does this project do?"
 ```
 
 **What you get:**
 
-- `wiki.config.yaml` populated with detected language, ORM, and DB.
-- `~/.connectors/config.yaml` bootstrapped if you said yes to any external service in onboard's six questions.
+- `wiki.config.yaml` populated with detected language, ORM, and DB (set up during `/doc-wiki:init` Phase 3 — Onboarding).
+- `~/.connectors/config.yaml` bootstrapped if you said yes to any external service in onboarding's six questions.
 - One compiled wiki page under `wiki/` with frontmatter, narrative, optional Mermaid diagrams, and a "How to Go Deeper" section.
 - An archived `/doc-wiki:query` answer under `wiki/outputs/queries/`.
 
@@ -67,22 +66,22 @@ The "wikis grow by use, not by upfront planning" pattern. Treat coverage gaps as
 ```text
 /doc-wiki:query "how does the rate limiter handle bursts?"
 # (the answer surfaces a gap — maybe one page is light)
-/doc-wiki:promote last query --topic infra
+/doc-wiki:query --promote last --topic infra
 # (next time you ask a related question, the wiki has it)
 /doc-wiki:query "what happens when the rate limit is exhausted?"
 ```
 
-**Why it works:** every `/doc-wiki:query` is archived under `wiki/outputs/queries/<timestamp>.md`. `/doc-wiki:promote` converts the most recent (or any specific archive) into a permanent wiki page, places it under `wiki/<topic>/<slug>.md`, updates indexes, and runs the post-op crosslink + tag-harmonize hooks so it links to existing pages.
+**Why it works:** every `/doc-wiki:query` is archived under `wiki/outputs/queries/<timestamp>.md`. `/doc-wiki:query --promote` converts the most recent (or any specific archive) into a permanent wiki page, places it under `wiki/<topic>/<slug>.md`, updates indexes, and runs the post-op crosslink + tag-harmonize hooks so it links to existing pages.
 
 **Variant — bulk triage** when archives have piled up:
 
 ```text
-/doc-wiki:promote --review --since 7d
+/doc-wiki:query --review --since 7d
 ```
 
 Walks every archive from the last week, asks `[P]romote / [S]kip / [D]elete / [A]bort`. Already-covered insights are auto-skipped under `balanced` autonomy.
 
-**See also:** [`commands.md` § /doc-wiki:promote](commands.md#doc-wikipromote--query-answer-to-permanent-page).
+**See also:** [`commands.md` § /doc-wiki:query promote mode](commands.md#promote-mode).
 
 ---
 
@@ -91,23 +90,23 @@ Walks every archive from the last week, asks `[P]romote / [S]kip / [D]elete / [A
 Keep a mature wiki fresh: re-fetch upstream sources, heal structural drift, triage accumulated queries, sanity-check spend.
 
 ```text
-/doc-wiki:refresh --all
+/doc-wiki:ingest --refresh --all
 /doc-wiki:lint --fix
-/doc-wiki:promote --review --since 7d
+/doc-wiki:query --review --since 7d
 /doc-wiki:stats --since 7d --per-agent
 ```
 
 **What each does:**
 
-- `refresh --all` — reads `log/events.jsonl`, re-fetches every previously ingested source through the same connector, recomputes content hashes, recompiles only the pages whose source changed.
+- `ingest --refresh --all` — reads `log/events.jsonl`, re-fetches every previously ingested source through the same connector, recomputes content hashes, recompiles only the pages whose source changed.
 - `lint --fix` — runs broken-link / missing-frontmatter / orphan / code-ref-drift / provenance-gap checks; applies safe auto-fixes per your autonomy mode.
-- `promote --review --since 7d` — bulk-triage one week of archived queries.
+- `query --review --since 7d` — bulk-triage one week of archived queries.
 - `stats --since 7d --per-agent` — total tokens, p50/p95 reduction ratios, total spend, per-agent breakdown including connector calls.
 
 **Run unattended** (when you have the `/schedule` skill):
 
 ```text
-/schedule "Run /doc-wiki:refresh --all && /doc-wiki:lint --fix" "every Monday at 9am"
+/schedule "Run /doc-wiki:ingest --refresh --all && /doc-wiki:lint --fix" "every Monday at 9am"
 ```
 
 For unattended runs, set `autonomy.mode: auto` in `wiki.config.yaml` so prompts are skipped.
@@ -139,10 +138,10 @@ Then in Claude Code:
 
 The hub planner now sees `jira` is enabled, dispatches to it on the URL, and the resulting envelope is decorated with a Mermaid diagram (Jira-issue shape) and compiled into a wiki page.
 
-**Quicker: re-run onboard.** `/doc-wiki:onboard` is idempotent. Run it again and answer "yes" to Jira when asked — it'll add the block for you and prompt for credential refs.
+**Quicker: re-run onboarding.** `/doc-wiki:init` is idempotent. Re-running on an initialized wiki prompts "Wiki already initialized. Re-run onboarding?" — answer yes, then answer "yes" to Jira when asked; it'll add the block for you and prompt for credential refs.
 
 ```text
-/doc-wiki:onboard
+/doc-wiki:init
 ```
 
 **See also:** [`connectors.md`](connectors.md), [`configuration.md`](configuration.md).
@@ -165,7 +164,7 @@ Each `/doc-wiki:ingest` produces a separate compiled page. The crosslink post-ho
 **Useful follow-up:**
 
 ```text
-/doc-wiki:promote last query --topic auth
+/doc-wiki:query --promote last --topic auth
 ```
 
 Promotes the cross-source synthesis into a permanent page that any future query can build on.

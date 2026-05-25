@@ -37,7 +37,7 @@ A single `/doc-wiki:atlas` invocation runs eight serial phases. The first four p
 | 3 | Confirm topics | LLM, autonomy-gated | committed topic list |
 | 4 | Estimate cost | `atlas_orchestrator.js estimate-cost` + `compute-sources` | `Plan` JSON + `CostEstimate` |
 | 5 | Validate existing | LLM + `atlas_validate.js` + `atlas_gitlog.js` | drift report |
-| 6 | Bootstrap / refresh | per-topic-facet `/doc-wiki:ingest` and `/doc-wiki:refresh` | per-topic atlas pages |
+| 6 | Bootstrap / refresh | per-topic-facet `/doc-wiki:ingest` and `/doc-wiki:ingest --refresh` | per-topic atlas pages |
 | 7 | Synthesize globals | LLM over `atlas_synthesize.js` bundles | `wiki/overview.md`, `integrations.md`, `deploy.md`, etc. |
 | 8 | Finalize | `lint_checks.js` + index update + crosslink + `op: atlas` event | gap report, drift report, cost report |
 
@@ -48,12 +48,14 @@ Per-topic ingests in Phase 6 may run in parallel within the phase boundary (defa
 Before `/doc-wiki:atlas` can run productively:
 
 - The wiki has been initialized — [`/doc-wiki:init`](commands.md#doc-wikiinit--bootstrap-a-wiki) has populated `wiki.config.yaml`.
-- Connectors are configured if you intend to ingest from external services — [`/doc-wiki:onboard`](commands.md#doc-wikionboard--interactive-onboarding) has written `~/.connectors/config.yaml` (see [`configuration.md`](configuration.md) and [`connectors.md`](connectors.md)).
+- Connectors are configured if you intend to ingest from external services — `/doc-wiki:init` Phase 3 (Onboarding) has written `~/.connectors/config.yaml` (see [`configuration.md`](configuration.md) and [`connectors.md`](connectors.md)).
 - The repo is at the ref you want to document. Atlas does not reset or stash; uncommitted edits are inventoried as-is.
 
 For real LLM-driven runs, your Anthropic credentials must be available to Claude Code. `--dry-run` skips every LLM call.
 
 ## Quickstart
+
+Atlas can be invoked directly via `/doc-wiki:atlas`, or implicitly via the post-onboarding prompt at the end of `/doc-wiki:init` — the recommended first-run entry point for new wikis.
 
 The default invocation is the right one for a fresh wiki:
 
@@ -154,7 +156,7 @@ The drift report is written at `wiki/outputs/atlas/<run-id>/drift-report.md`.
 For each `(topic, facet)` entry in the plan:
 
 - `state == fresh` or no existing page for the entry — dispatch `/doc-wiki:ingest` against the entry's sources, with `--output wiki/<topic>/<facet>.md` so the destination is pinned.
-- Existing page that is stale or under-covered — dispatch `/doc-wiki:refresh --source <ref>`.
+- Existing page that is stale or under-covered — dispatch `/doc-wiki:ingest --refresh --source <ref>`.
 
 Per-entry ingests honor `--scope <topic>` and `--facets <list>`; out-of-scope work is simply not iterated. Default concurrency is 3 — three entries run in parallel, balancing throughput against connector rate limits.
 
@@ -250,6 +252,6 @@ The `--max-cost` flag is your guard rail. The pre-Phase-6 estimate uses a rollin
 ## Related commands
 
 - [`/doc-wiki:ingest`](commands.md#doc-wikiingest--fetch-extract-compile) — single-source compile; what Phase 6 dispatches per entry.
-- [`/doc-wiki:refresh`](commands.md#doc-wikirefresh--re-fetch-and-update) — re-fetch and update an existing page; used by Phase 6 for stale entries.
+- [`/doc-wiki:ingest --refresh`](commands.md#refresh-mode) — re-fetch and update an existing page; used by Phase 6 for stale entries.
 - [`/doc-wiki:lint`](commands.md#doc-wikilint--health-check-and-auto-heal) — runs as part of Phase 8; the new `--inventory-run-id` flag scopes the `references_inventory` check to a specific atlas run.
 - [`/doc-wiki:query`](commands.md#doc-wikiquery--summary-first-search-synthesis-and-shortest-path) — interactive search over the resulting wiki.
