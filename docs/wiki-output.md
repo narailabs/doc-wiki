@@ -218,7 +218,7 @@ What gets overwritten on `refresh` / `lint --fix` / next `/doc-wiki:ingest` of t
 For diff-reviewed targeted edits (where you want the LLM to propose a change and show you the diff before applying), use:
 
 ```text
-/doc-wiki:fix wiki/auth/authentication.md "the SQL example uses the old schema name"
+/doc-wiki:edit wiki/auth/authentication.md "the SQL example uses the old schema name"
 ```
 
 This reads the page, drafts a fix matching your description, shows a diff, and applies on confirm (or auto-applies in `autonomous` / `auto` modes).

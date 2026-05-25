@@ -39,11 +39,11 @@ flowchart TB
     User([User])
     subgraph L1["Layer 1: Slash commands (commands/)"]
         WInit["/doc-wiki:init"]
-        WOnboard["/doc-wiki:onboard"]
+        WEdit["/doc-wiki:edit"]
         WIngest["/doc-wiki:ingest"]
         WQuery["/doc-wiki:query"]
         WLint["/doc-wiki:lint"]
-        WMore["…5 more"]
+        WMore["…2 more"]
     end
     subgraph L2["Layer 2: wiki skill orchestrator (skills/doc-wiki/SKILL.md)"]
         Orch["State machine:<br/>parse config → dispatch → synthesize → log"]
@@ -74,18 +74,16 @@ Reading the diagram: the user invokes a slash command, which calls into the skil
 
 ## Layer 1 — Slash commands
 
-Nine `commands/doc-wiki:*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
+Seven `commands/*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
 
 | Command | What it does |
 |---|---|
-| [`/doc-wiki:init`](../../commands/init.md) | Bootstrap the wiki directory scaffold and default config |
-| [`/doc-wiki:onboard`](../../commands/onboard.md) | Interactive setup: detect language, ORM, DB, configure connectors |
-| [`/doc-wiki:ingest`](../../commands/ingest.md) | Fetch, extract, and compile a source into wiki pages |
-| [`/doc-wiki:query`](../../commands/query.md) | Summary-first search + synthesis (synthesis mode) or shortest-path between concepts (path mode, `--from <a> --to <b>`) |
+| [`/doc-wiki:init`](../../commands/init.md) | Bootstrap scaffold + connector setup (Phase 3) + optional atlas chain |
+| [`/doc-wiki:atlas`](../../commands/atlas.md) | Full application documentation in a phased pass |
+| [`/doc-wiki:ingest`](../../commands/ingest.md) | Fetch, extract, and compile a source; `--refresh` re-fetches previously ingested sources |
+| [`/doc-wiki:query`](../../commands/query.md) | Summary-first search + synthesis; `--promote` / `--review` saves the answer as a permanent page |
 | [`/doc-wiki:lint`](../../commands/lint.md) | Structural health check and auto-heal |
-| [`/doc-wiki:fix`](../../commands/fix.md) | Targeted correction to a single wiki page |
-| [`/doc-wiki:promote`](../../commands/promote.md) | Convert an archived `/doc-wiki:query` answer into a permanent page |
-| [`/doc-wiki:refresh`](../../commands/refresh.md) | Re-fetch and update previously ingested sources |
+| [`/doc-wiki:edit`](../../commands/edit.md) | Targeted correction to a single wiki page |
 | [`/doc-wiki:stats`](../../commands/stats.md) | Token efficiency and cost metrics from the event log |
 
 Each wrapper looks roughly like:
@@ -122,7 +120,7 @@ Cross-cutting concerns are documented once and reused across commands:
 - **Config I/O** — every command starts by calling `parse_config.ts` to read `wiki.config.yaml`.
 - **Caching** — content-hash dedup via `cache_manager.ts` happens before any expensive operation.
 - **Event logging** — every operation appends a structured event to `log/events.jsonl` via `event_logger.ts`.
-- **Post-op hooks** — after any write op (ingest, fix, promote, refresh), the orchestrator runs **crosslink** + **tag-harmonize** passes, but only if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+- **Post-op hooks** — after any write op (ingest, edit, query --promote), the orchestrator runs **crosslink** + **tag-harmonize** passes, but only if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 - **Autonomy mode** — every change respects the configured autonomy level (`conservative` / `balanced` / `autonomous` / `auto`). See [`skills/doc-wiki/references/autonomy.md`](../../skills/doc-wiki/references/autonomy.md).
 
 ## Layer 3 — Execution
@@ -145,7 +143,7 @@ Grouped by purpose:
 | **Extraction** | `extract_binary.ts`, `extract_multimodal.ts` | PDF / DOCX / PPTX text extraction; audio / video / image transcription |
 | **Security** | `security_check.ts` | URL validation, path containment, label sanitization |
 | **Indexing** | `mermaid_inject.ts`, `how_to_go_deeper.ts` | Idempotent diagram splicing; "How to Go Deeper" link generation |
-| **Hooks** | `hook_installer.ts` | Install PreToolUse hooks into `.claude/settings.json` (used by `/doc-wiki:onboard` phase 6) |
+| **Hooks** | `hook_installer.ts` | Install PreToolUse hooks into `.claude/settings.json` (used by `/doc-wiki:init` Phase 3, step 6) |
 | **Helpers** | `_cli_args.ts`, `_frontmatter.ts`, `_optional.ts`, `_wiki_fs.ts` | Shared argument parsing, YAML frontmatter, optional-dep loader, filesystem utilities |
 
 Every script has matching `*.test.ts` cases under `tests/`. Tests double as the most reliable usage examples — when in doubt about what a script accepts, read its tests.
@@ -335,7 +333,7 @@ flowchart TD
     P5 -- yes --> P6
     P5 -- no --> P5V[Phase 5: Validate existing\nstructural + gitlog +\nsemantic with cache]
     P5V --> P6
-    P6[Phase 6: Bootstrap / refresh\nper topic × facet:\n/doc-wiki:ingest --output ...\n/doc-wiki:refresh --source ...]
+    P6[Phase 6: Bootstrap / refresh\nper topic × facet:\n/doc-wiki:ingest --output ...\n/doc-wiki:ingest --refresh --source ...]
     P6 --> P7
     P7[Phase 7: Synthesize globals\nwiki/overview.md\nwiki/integrations.md\nwiki/deploy.md]
     P7 --> P8
