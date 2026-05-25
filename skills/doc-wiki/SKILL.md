@@ -288,7 +288,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - Save the plan snapshot first: `atlas_orchestrator.js save-plan --wiki-root <root> --run-id <id> --plan '<json>'`. The snapshot drives `--resume` so re-discovery doesn't change scope mid-run.
    - For `entry.facet == "data-model"`: dispatch `wiki-orm-agent` and write the result to `entry.output` with atlas frontmatter.
    - For other facets: dispatch `/doc-wiki:ingest <source-list> --output <entry.output> --no-crosslink --no-tag-harmonize` (defer post-op hooks to Phase 8).
-   - For drift-flagged stale pages: dispatch `/doc-wiki:refresh --source <source>`.
+   - For drift-flagged stale pages: dispatch `/doc-wiki:ingest --refresh --source <source>`.
    - For uncovered files matching a current-run topic (per autonomy mode): `/doc-wiki:ingest <file> --output <inferred>`.
    - Use `scripts/checkpoint.ts` with `opName: "atlas"` to record completed `(topic, facet)` pairs as `<topic>:<facet>`. On `--resume`, load the snapshot via `load-plan` and skip recorded pairs.
 
@@ -459,6 +459,17 @@ clearCheckpoint(wikiRoot, "ingest");
 
 The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If the batch is interrupted, re-running `/doc-wiki:ingest <same-folder>` picks up where it stopped.
 
+#### Re-fetching with `--refresh`
+
+When invoked with `--refresh`, `/doc-wiki:ingest` re-fetches a previously-ingested source instead of registering a new one. Two scope flags:
+
+- `--source <s>`: re-fetch a single source matching `<s>` (URL, label, or path) against `<wikiRoot>/raw/index.json`.
+- `--all`: re-fetch every source recorded in `<wikiRoot>/raw/index.json`.
+
+The flow: read the source registry, re-run `gather()` against each entry, diff the new payload against `<wikiRoot>/raw/<source>/`, re-compile only changed pages, update indexes, log a `refresh` event per source. Supports checkpoint resume — interrupted batches can be re-run; only un-checked entries are retried. Use `scripts/checkpoint.ts` with `opName "refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation.
+
+`ingest <src>` (new source) and `ingest --refresh` (re-fetch) are mutually exclusive at the wrapper layer.
+
 ### /doc-wiki:query — Summary-first search + synthesis
 
 Two modes — picked by argument shape:
@@ -586,12 +597,6 @@ For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/
 For unattended pipelines, set autonomy to `auto` and schedule the command directly — the orchestrator will batch-promote novel archives without prompting.
 
 See also: `/doc-wiki:lint` query-absorption (above) — same coverage rule, different entry point.
-
-### /doc-wiki:refresh — Re-fetch and update from original sources
-
-Re-fetch previously-ingested sources, diff against stored versions, re-compile changed pages.
-
-**Batch resumption:** use `scripts/checkpoint.ts` with opName `"refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation. See `/doc-wiki:ingest` above for the pattern.
 
 ### /doc-wiki:stats — Token efficiency and cost metrics
 
