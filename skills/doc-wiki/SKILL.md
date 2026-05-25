@@ -1,6 +1,6 @@
 ---
 name: doc-wiki
-description: Manage a documentation wiki — generate, ingest sources, query, lint, fix, promote, refresh. Triggers on requests about documentation, knowledge bases, archived queries, ORM mapping, or database schemas, including phrasings like "promote last query", "lint the wiki", or "fix the auth page".
+description: Manage the current codebase's doc-wiki — bootstrap with optional atlas (init), full-doc generation (atlas), source ingest from Jira/Confluence/GitHub/Notion/AWS/GCP/databases/files/URLs with `--refresh` for re-fetch (ingest), search + synthesis with promote-to-page and shortest-path modes (query), health check + self-heal (lint), targeted page edit (edit), restore an archived page (unarchive), token/cost metrics (stats). Always invoke when the user mentions "the wiki" or "the docs", or asks to set up doc-wiki, onboard this repo, ingest a URL into docs, refresh docs, look up something in the wiki, find a concept path, save the last query answer as a page, check wiki health, fix/edit a wiki page, restore an archived page, or see wiki cost metrics — even if "wiki" is not said explicitly. Slash commands — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:unarchive`, `:stats`. Skip for unrelated docs work — arbitrary README edits, code comments, or general programming questions.
 ---
 
 # doc-wiki — Documentation Wiki Generator & Maintainer
@@ -30,7 +30,30 @@ Requires Node 20.
 
 ## Commands
 
-### /doc-wiki:init — Bootstrap a wiki
+The wiki exposes 8 slash commands, dispatched by this section. Each subsection below documents the flow:
+
+- `/doc-wiki:init` — scaffold + onboard (+ optional atlas chain)
+- `/doc-wiki:atlas` — full application documentation
+- `/doc-wiki:ingest` — fetch + extract + compile a source (`--refresh` re-fetches)
+- `/doc-wiki:query` — summary-first search and synthesis (`--promote` saves an answer; `--review` triages archives)
+- `/doc-wiki:lint` — health check + auto-heal
+- `/doc-wiki:edit` — targeted page changes
+- `/doc-wiki:unarchive` — restore an archived page from `wiki/_archive/`
+- `/doc-wiki:stats` — token efficiency and cost metrics
+
+### /doc-wiki:init — Bootstrap a wiki (scaffold + onboard + optional atlas)
+
+This is the single first-run command. It scaffolds the wiki directory, runs the ecosystem onboarding Q&A, and offers to dispatch `/doc-wiki:atlas` at the end so a brand-new repo reaches a usable wiki in one invocation.
+
+**Args:** `[--path <root>] [--domain <d>] [--name <n>] [--no-atlas | --atlas]`
+
+`--atlas` and `--no-atlas` are mutually exclusive; passing both errors before any side effects.
+
+**Phase 1 — Detect existing state.**
+- If `<root>/wiki.config.yaml` exists: `AskUserQuestion` "Wiki already initialized. Re-run onboarding?". Skip Phase 2 (scaffold) either way; on "yes" continue to Phase 3 (onboarding Q&A); on "no" skip directly to Phase 4 (atlas decision).
+- Otherwise: continue to Phase 2.
+
+**Phase 2 — Scaffold.**
 
 Create the directory scaffold and initial configuration.
 
@@ -55,11 +78,11 @@ After running the script, create initial files:
 - `wiki/summaries.md` — enriched summary index (empty initially)
 - `wiki/overview.md` — evolving big-picture synthesis
 
-### /doc-wiki:onboard — Interactive onboarding Q&A
+**Phase 3 — Onboarding Q&A.**
 
 Interactive setup that detects the codebase ecosystem and configures wiki infrastructure. This is YOUR reasoning — not a script. Uses `parse_config.ts` for config I/O and dispatches `wiki-orm-agent` for ORM/database detection.
 
-**Phase 1 — Auto-detect language/framework:**
+**Phase 3, step 1 — Auto-detect language/framework:**
 
 Scan the project root for build files and infer the stack:
 
@@ -75,7 +98,7 @@ Scan the project root for build files and infer the stack:
 
 Present findings and ask user to confirm or correct.
 
-**Phase 2 — Detect ORM:**
+**Phase 3, step 2 — Detect ORM:**
 
 Dispatch `wiki-orm-agent` (via Agent tool) to scan for entity definitions matching shipped ORM profiles:
 
@@ -89,7 +112,7 @@ Dispatch `wiki-orm-agent` (via Agent tool) to scan for entity definitions matchi
 
 Present detected ORM profile and entity count. Ask user to confirm.
 
-**Phase 3 — Detect database:**
+**Phase 3, step 3 — Detect database:**
 
 Detect the database engine yourself by reading these files (no subagent dispatch needed):
 
@@ -99,7 +122,7 @@ Detect the database engine yourself by reading these files (no subagent dispatch
 
 When live introspection is needed (verify schema matches code), run `gather({ prompt: "describe schema for <db>", consumer: "doc-wiki" })` — the `db` connector inside `narai-primitives` handles it via the policy gate. Present detected database(s) and connection details (redacted credentials). Ask user to confirm.
 
-**Phase 4 — External services Q&A:**
+**Phase 3, step 4 — External services Q&A:**
 
 Ask the user about each external source integration:
 
@@ -110,9 +133,9 @@ Ask the user about each external source integration:
 5. "Do you use **Notion** for documentation or knowledge base?"
 6. "Do you use **GitHub** wikis, discussions, or project boards?"
 
-For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go into the enabled allowlist for `consumers.doc-wiki` in Phase 4b.
+For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go into the enabled allowlist for `consumers.doc-wiki` in Phase 3, step 4b.
 
-**Phase 4b — Set up connector access:**
+**Phase 3, step 4b — Set up connector access:**
 
 `/doc-wiki:ingest` step 7 calls `gather()` from `narai-primitives`, which reads `~/.connectors/config.yaml` (user-global) and `./.connectors/config.yaml` (repo overlay) to know which connectors are enabled and how to authenticate. If neither file exists yet, walk the user through creating one.
 
@@ -123,7 +146,7 @@ For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go
 
 2. **If both are missing** — bootstrap from the example:
    - Tell the user: "Your wiki needs `~/.connectors/config.yaml` to access the external services you enabled. I'll generate a starter from `.connectors/config.example.yaml`."
-   - For each connector the user said "yes" to in Phase 4, ask one credential question:
+   - For each connector the user said "yes" to in Phase 3, step 4, ask one credential question:
      - **Jira/Confluence:** "Where does your Atlassian API token live? (env var name, keychain label, or file path)"
      - **GitHub:** "Where does your GitHub personal access token live?"
      - **Notion:** "Where does your Notion integration token live?"
@@ -132,11 +155,11 @@ For each "yes", record the connector ID (e.g. `jira`, `confluence`) — these go
    - Compose the YAML and write it to `~/.connectors/config.yaml`. Include only the enabled connectors and a `consumers.doc-wiki` block listing them.
    - Verify the file parses by reading it back and looking for the expected `connectors` keys (no need to invoke `loadResolvedConfig()` from a one-shot script — a bad YAML file will be obvious).
 
-3. **If at least one already exists** — just confirm the enabled connectors line up with the user's Phase 4 answers. Suggest edits if there's a gap (e.g., user said "yes Confluence" but no `confluence:` block exists). Never edit an existing config without explicit confirmation.
+3. **If at least one already exists** — just confirm the enabled connectors line up with the user's Phase 3, step 4 answers. Suggest edits if there's a gap (e.g., user said "yes Confluence" but no `confluence:` block exists). Never edit an existing config without explicit confirmation.
 
 Once the file is in place, the user's `/doc-wiki:ingest <source>` calls will resolve credentials automatically via the connector's own credential loader — doc-wiki never reads or stores the secrets directly.
 
-**Phase 5 — Choose autonomy mode:**
+**Phase 3, step 5 — Choose autonomy mode:**
 
 Present the four autonomy modes and ask user to choose:
 
@@ -147,7 +170,7 @@ Present the four autonomy modes and ask user to choose:
 
 Default: `balanced`.
 
-**Phase 6a — README quickstart preference:**
+**Phase 3, step 6a — README quickstart preference:**
 
 Ask the user via `AskUserQuestion`:
 
@@ -162,11 +185,11 @@ Ask the user via `AskUserQuestion`:
 
 If the user picked any "Yes", dispatch `Agent(wiki-readme-agent)` with `{action: "init", project_root, wiki_root, quickstart_depth}` to insert markers into `README.md` if it exists and has none.
 
-**Phase 6 — Install hooks + scaffold:**
+**Phase 3, step 6 — Install hooks + scaffold:**
 
 1. Offer to install PreToolUse always-on hooks for the detected platform
 
-**Phase 6b — Optional multimodal deps (Q&A):**
+**Phase 3, step 6b — Optional multimodal deps (Q&A):**
 
 Ask the user once, before writing the config:
 
@@ -185,7 +208,7 @@ When the user says yes, print the exact commands (but DO NOT run them — Claude
 - Linux: `pipx install yt-dlp faster-whisper` (or the distro's package manager)
 - Windows: `pipx install yt-dlp faster-whisper`
 
-2. Generate/update `wiki.config.yaml` with all detected settings (including the `ecosystem.multimodal.enabled` choice from Phase 6b):
+2. Generate/update `wiki.config.yaml` with all detected settings (including the `ecosystem.multimodal.enabled` choice from Phase 3, step 6b):
    ```bash
    node {skill_path}/scripts/parse_config.js --config <wiki-root>/wiki.config.yaml
    ```
@@ -194,7 +217,14 @@ When the user says yes, print the exact commands (but DO NOT run them — Claude
    node {skill_path}/scripts/init_wiki.js --path <wiki-root> --domain "<detected-domain>" --name "<project-name>"
    ```
 
-**Output:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
+**Output of Phase 3:** A fully configured `wiki.config.yaml` with language, framework, ORM profile, database, external sources, autonomy mode, and multimodal preference. Wiki scaffold created if it did not already exist.
+
+**Phase 4 — Atlas decision.**
+- If `--no-atlas`: stop.
+- If `--atlas`: dispatch `/doc-wiki:atlas` with the default facet set.
+- Otherwise: `AskUserQuestion` "Generate full documentation now with /doc-wiki:atlas? (Recommended for first-run.)"
+  - Yes → dispatch `/doc-wiki:atlas`.
+  - No → stop, print "Run /doc-wiki:atlas later when ready."
 
 ### /doc-wiki:atlas — Full application documentation
 
@@ -268,7 +298,7 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - Save the plan snapshot first: `atlas_orchestrator.js save-plan --wiki-root <root> --run-id <id> --plan '<json>'`. The snapshot drives `--resume` so re-discovery doesn't change scope mid-run.
    - For `entry.facet == "data-model"`: dispatch `wiki-orm-agent` and write the result to `entry.output` with atlas frontmatter.
    - For other facets: dispatch `/doc-wiki:ingest <source-list> --output <entry.output> --no-crosslink --no-tag-harmonize` (defer post-op hooks to Phase 8).
-   - For drift-flagged stale pages: dispatch `/doc-wiki:refresh --source <source>`.
+   - For drift-flagged stale pages: dispatch `/doc-wiki:ingest --refresh --source <source>`.
    - For uncovered files matching a current-run topic (per autonomy mode): `/doc-wiki:ingest <file> --output <inferred>`.
    - Use `scripts/checkpoint.ts` with `opName: "atlas"` to record completed `(topic, facet)` pairs as `<topic>:<facet>`. On `--resume`, load the snapshot via `load-plan` and skip recorded pairs.
 
@@ -448,6 +478,17 @@ clearCheckpoint(wikiRoot, "ingest");
 
 The checkpoint file is `<wikiRoot>/.wiki-checkpoint.json`, keyed by opName. If the batch is interrupted, re-running `/doc-wiki:ingest <same-folder>` picks up where it stopped.
 
+#### Re-fetching with `--refresh`
+
+When invoked with `--refresh`, `/doc-wiki:ingest` re-fetches a previously-ingested source instead of registering a new one. The set of previously-ingested sources is reconstructed from the `op: ingest` entries in `<wikiRoot>/log/events.jsonl` (filter via `event_logger.js`'s `--op ingest` mode). Two scope flags:
+
+- `--source <s>`: re-fetch a single previously-ingested source whose URL, label, or path matches `<s>`.
+- `--all`: re-fetch every previously-ingested source.
+
+The flow: enumerate prior ingest events, re-run `gather()` against each source, diff the new payload against `<wikiRoot>/raw/<source>/`, re-compile only changed pages, update indexes, log a `refresh` event per source. Supports checkpoint resume — interrupted batches can be re-run; only un-checked entries are retried. Use `scripts/checkpoint.ts` with `opName "refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation.
+
+`ingest <src>` (new source) and `ingest --refresh` (re-fetch) are mutually exclusive at the wrapper layer.
+
 ### /doc-wiki:query — Summary-first search + synthesis
 
 Two modes — picked by argument shape:
@@ -464,7 +505,7 @@ Two modes — picked by argument shape:
 5. Synthesize answer with inline citations
 6. Surface contradictions and knowledge gaps
 7. Archive answer to `outputs/queries/`
-8. Offer to promote to wiki page via `/doc-wiki:promote`
+8. Offer to promote to wiki page via `/doc-wiki:query --promote` (see Post-answer promote prompt below)
 
 Log token efficiency: `node {skill_path}/scripts/event_logger.js --op query --wiki-root <wiki-root> --details '{"tokens_in": N, "tokens_out": M, "reduction_ratio": R}'`
 
@@ -476,38 +517,11 @@ node {skill_path}/scripts/graph_ops.js path --from "<concept-a>" --to "<concept-
 
 Returns the typed-edge chain connecting two concepts. Supports `--max-hops`, `--via`, `--all-paths`. Read-only — no autonomy gate, no archive, no synthesis.
 
-### /doc-wiki:lint — Health check + auto-heal
+#### Post-answer promote prompt (synthesis mode)
 
-Run structural checks via script, then LLM-driven checks yourself:
+After rendering a synthesis-mode answer + citations, run `AskUserQuestion` "Save this answer as a permanent wiki page?". Gated by autonomy mode the same way other interactive prompts are (suppressed in non-interactive autonomy levels). Path mode skips this prompt. On "yes", run the single-promote flow below against the freshly-written archive in `outputs/queries/`.
 
-```bash
-node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
-```
-
-The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
-
-**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:fix` on the most relevant existing page, or (b) a `/doc-wiki:promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:promote --review` — same coverage rule, different entry point.
-
-**Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
-
-Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
-
-### /doc-wiki:fix — Quick corrections
-
-1. User identifies the page and issue
-2. Read the page
-3. Show diff (current vs proposed)
-4. Apply if autonomy mode permits
-5. Log + run post-op hooks
-
-### /doc-wiki:promote — Query answer -> wiki page
-
-Two modes — picked by argument shape:
-
-- **Single mode** (default): convert one archived query answer into a permanent wiki page.
-- **Review mode** (`--review`): bulk-triage many archived answers in one pass with per-item approval.
-
-#### Target resolution (single mode)
+#### `--promote <file|last|N>` — explicit promote of an archived answer
 
 Resolve the target argument with the first matching rule:
 
@@ -521,9 +535,9 @@ Resolve the target argument with the first matching rule:
 
 Pick by mtime via `ls -1t <wiki-root>/outputs/queries/*.md`. Always exclude `outputs/queries/.promoted/` and `outputs/queries/.deleted/` — these subdirs hold archives that were already triaged.
 
-The slash form `/doc-wiki:promote last query` is the canonical, deterministic phrasing. The bare form (typed without the slash, e.g. `promote last query`) is best-effort — the skill description's keyword set covers it, but ambiguous contexts may need a clarifying turn.
+The slash form `/doc-wiki:query --promote last query` is the canonical, deterministic phrasing. The bare form (typed without the slash, e.g. `promote last query`) is best-effort — the skill description's keyword set covers it, but ambiguous contexts may need a clarifying turn.
 
-#### Single-mode flow
+Single-promote flow:
 
 1. Resolve the target.
 2. Read the query archive.
@@ -533,10 +547,10 @@ The slash form `/doc-wiki:promote last query` is the canonical, deterministic ph
 6. Move the source archive to `outputs/queries/.promoted/<filename>` so it is not re-suggested by `--review` or by `/doc-wiki:lint` query-absorption.
 7. Run post-op hooks (crosslink + tag-harmonize).
 
-#### Review mode (`--review`)
+#### `--review [--since <dur>] [--limit <N>] [--topic <dir>]` — bulk archive triage
 
 ```
-/doc-wiki:promote --review [--since <duration>] [--limit <N>] [--topic <directory>]
+/doc-wiki:query --review [--since <duration>] [--limit <N>] [--topic <directory>]
 ```
 
 Bulk archive triage with per-item approval. `--since` filters by mtime (e.g. `7d`, `24h`); `--limit` caps candidates; `--topic` overrides topic for every promotion in this batch.
@@ -547,13 +561,13 @@ For each candidate (oldest first, skipping `.promoted/` and `.deleted/`):
 2. Run the same coverage check `/doc-wiki:lint` query-absorption uses: is this insight already on a wiki page?
 3. If covered → skip silently (or in `conservative`, ask "Already covered by `<page>`. Promote anyway?").
 4. If novel → present `[P]romote / [S]kip / [D]elete archive / [A]bort batch`.
-5. On `P` → run the single-mode flow (steps 1-7 above) for this archive.
+5. On `P` → run the single-promote flow (steps 1-7 above) for this archive.
 6. On `D` → move to `outputs/queries/.deleted/<filename>`. Never `rm` — preserve for audit.
 7. On `A` → stop, summarize what was done so far.
 
 End the run with one line: `<X> promoted, <Y> skipped, <Z> deleted, <W> already-covered`.
 
-#### Autonomy interaction
+**Autonomy interaction:**
 
 | Mode | Per-archive prompt | "Already covered" |
 |---|---|---|
@@ -564,23 +578,39 @@ End the run with one line: `<X> promoted, <Y> skipped, <Z> deleted, <W> already-
 
 `balanced` is the "individual user approval" workflow.
 
-#### Periodic execution
-
-For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/schedule` skill rather than an unattended run:
+**Periodic execution:** For interactive `balanced`/`conservative` use, schedule a *reminder* with the `/schedule` skill rather than an unattended run:
 
 ```
-/schedule "Run /doc-wiki:promote --review --since 7d" "every Monday at 9am"
+/schedule "Run /doc-wiki:query --review --since 7d" "every Monday at 9am"
 ```
 
 For unattended pipelines, set autonomy to `auto` and schedule the command directly — the orchestrator will batch-promote novel archives without prompting.
 
-See also: `/doc-wiki:lint` query-absorption (above) — same coverage rule, different entry point.
+See also: `/doc-wiki:lint` query-absorption (below) — same coverage rule, different entry point.
 
-### /doc-wiki:refresh — Re-fetch and update from original sources
+### /doc-wiki:lint — Health check + auto-heal
 
-Re-fetch previously-ingested sources, diff against stored versions, re-compile changed pages.
+Run structural checks via script, then LLM-driven checks yourself:
 
-**Batch resumption:** use `scripts/checkpoint.ts` with opName `"refresh"` the same way `/doc-wiki:ingest` uses it for folder sources — each source URL becomes a unit, and an interrupted refresh picks up at the next unfinished source on re-invocation. See `/doc-wiki:ingest` above for the pattern.
+```bash
+node {skill_path}/scripts/lint_checks.js --wiki-root <wiki-root>
+```
+
+The script reports: broken links, missing frontmatter (including page-type enum), orphan pages, isolated nodes, code-ref drift, provenance completeness, stale content (>90 days via `--stale-days N`). Then YOU do: factual contradictions, terminology consistency, missing coverage, query absorption.
+
+**Query absorption:** after the structural pass, scan `outputs/queries/*.md` (skipping `outputs/queries/.promoted/` and `outputs/queries/.deleted/`) for archived answers that contain insights not yet captured in any wiki page. For each novel insight, propose (per autonomy mode) either (a) a `/doc-wiki:edit` on the most relevant existing page, or (b) a `/doc-wiki:query --promote` of the archived query. For a focused archive-only triage flow (without the rest of lint), use `/doc-wiki:query --review` — same coverage rule, different entry point.
+
+**Anti-repetition memory:** run `node {skill_path}/scripts/summaries_rebuild.js --wiki-root <root>` — the rebuilder pulls deprecated claims' `failure_reason` fields via `banlist.buildBanlistSection()` and splices them into `wiki/summaries.md` under `## Anti-repetition Memory`. This prevents future ingests from re-exploring abandoned directions. (For the section in isolation, `banlist.js build --wiki-root <root>` still prints it to stdout.)
+
+Read `references/quality.md` for scoring rules and `references/autonomy.md` for how to decide what to auto-fix vs ask the user.
+
+### /doc-wiki:edit — Targeted page changes
+
+1. User identifies the page and what to change
+2. Read the page
+3. Show diff (current vs proposed)
+4. Apply if autonomy mode permits
+5. Log + run post-op hooks
 
 ### /doc-wiki:unarchive — Restore an archived page
 
@@ -690,7 +720,7 @@ Files are read by the AI tool only when the user explicitly asks "what skills/ag
 The Reference appendix is regenerated on:
 
 1. `/doc-wiki:init` — initial appendix written with empty registry (no per-tool config files yet).
-2. `/doc-wiki:onboard` — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
+2. `/doc-wiki:init` Phase 3 (Onboarding Q&A) — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
 3. `/doc-wiki:atlas` Phase 8 (finalize) — refreshed alongside the rest of the wiki.
 4. Any direct `Agent(wiki-claude-md-agent)` invocation.
 
@@ -700,9 +730,9 @@ The total Reference appendix MUST stay under ~30 lines per root file. The "Other
 
 ## Post-Operation Hooks
 
-After any write operation (ingest, fix, promote, refresh), run BOTH hooks if the wiki has >= 3 pages:
+After any write operation (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run BOTH hooks if the wiki has >= 3 pages:
 
-**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:promote`) gets corrected — do not silently fill it in. When generating fresh `## Related Pages` links, never create new inbound links to archived pages. Treat archived pages as link targets ONLY when a pre-existing link already points there (handled by `atlas_archive.rewriteInboundLinks`).
+**Crosslink pass:** Read ALL wiki pages. Find meaningful relationships. Add 2-5 inline links per page (in the body, not just the trailing list). **Refine** the `## Related Pages` section on each page — pages must already have a populated section from when they were written, so the hook adjusts existing entries and adds newly-discovered ones, but never replaces a placeholder. If a page is found with a `<!-- crosslink hook will populate -->` marker (or any other deferred-fill placeholder, or an empty `## Related Pages` body), treat it as a bug in the page-creation step and call it out in the hook's run summary so the upstream writer (`/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:query --promote`) gets corrected — do not silently fill it in. When generating fresh `## Related Pages` links, never create new inbound links to archived pages. Treat archived pages as link targets ONLY when a pre-existing link already points there (handled by `atlas_archive.rewriteInboundLinks`).
 
 **Tag-harmonize pass:** Build tag vocabulary from all frontmatter. Scan each page's body. Add existing tags where missing. Only suggest new tags for concepts on 2+ pages. Enforce content-only tag philosophy (no structural/temporal/metadata tags). Target: 4-8 concept tags per page. Skip any page under `wiki/_archive/` — archived pages have frozen frontmatter and do not participate in tag vocabulary discovery.
 
@@ -730,7 +760,7 @@ The wiki-specific derivation agents (dispatched directly via the Agent tool, not
 | `wiki-claude-md-agent` | Regenerate the `<!-- wiki-managed: reference start/end -->` block in AI-tool root files (`CLAUDE.md`, `AGENTS.md`, etc.) and refresh per-tool config files under `docs/<wiki-folder>/ai-dev/`; dispatched by atlas Phase 8. |
 | `wiki-readme-agent` | Sync repo-root `README.md` quickstart marker block against `wiki/getting-started.md` with LLM salvage; dispatched by atlas Phase 8. |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams for wiki pages. |
-| `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:onboard` and atlas Phase 6. |
+| `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:init` (Phase 3) and atlas Phase 6. |
 
 ## Reference files
 

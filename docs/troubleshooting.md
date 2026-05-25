@@ -78,7 +78,7 @@ Some tests need a real PostgreSQL or MySQL — provision one and set its connect
 **Fix-first diagnostics:**
 
 - **Broken link** — usually a renamed file. `/doc-wiki:lint --fix` repairs ones it can resolve unambiguously; the rest you fix by editing the page.
-- **Code-ref drift** — the code at `path:lines` has changed since the wiki page was written. `/doc-wiki:fix <page>` lets you re-extract.
+- **Code-ref drift** — the code at `path:lines` has changed since the wiki page was written. `/doc-wiki:edit <page> "re-extract from updated source"` lets you re-extract.
 - **Orphan / isolated node** — page has no inbound or outbound links. Either the page was deleted from `wiki/` but lingered in `graph/edges.jsonl`, or it was never crosslinked. `/doc-wiki:lint --fix` removes stale edges; for the latter, run `/doc-wiki:ingest --no-cache` on the same source to re-trigger the crosslink pass.
 
 See [`skills/doc-wiki/references/quality.md`](../skills/doc-wiki/references/quality.md) for the full lint rule list.
@@ -107,7 +107,7 @@ The full policy + outcomes are documented in [`docs/connectors.md`](connectors.m
 
 Anything inside these markers is overwritten on the next regeneration. Anything **outside** them is yours and survives.
 
-**Fix:** Re-add your content **outside** any marker pair (above, below, or in a new section you create). For diff-reviewed targeted edits to auto-managed regions, use `/doc-wiki:fix <page-path> "<issue description>"` instead of editing the file directly.
+**Fix:** Re-add your content **outside** any marker pair (above, below, or in a new section you create). For diff-reviewed targeted edits to auto-managed regions, use `/doc-wiki:edit <page-path> "<change description>"` instead of editing the file directly.
 
 See [`wiki-output.md` § Editing pages by hand](wiki-output.md#editing-pages-by-hand) for the full survives-vs-overwritten matrix.
 
@@ -162,3 +162,23 @@ When filing, please include:
 - Output of `npm test` (passes? regressions?)
 - Sanitized excerpt of `~/.connectors/config.yaml` (redact tokens)
 - Last few entries of `log/events.jsonl` if the failure was during a `/doc-wiki:*` op
+
+## Migration: where did `<old command>` go?
+
+### `/doc-wiki:onboard`
+
+Folded into `/doc-wiki:init`. On a wiki that's already initialized, re-running `/doc-wiki:init` prompts "Wiki already initialized. Re-run onboarding?" — choose yes to re-run the same flow the old `/doc-wiki:onboard` ran.
+
+### `/doc-wiki:refresh`
+
+Folded into `/doc-wiki:ingest --refresh [--source <s> | --all]`. `--source <s>` re-fetches a single previously-ingested source; `--all` re-fetches every source in `log/events.jsonl`.
+
+### `/doc-wiki:promote`
+
+Folded into `/doc-wiki:query`:
+- Single-file promote: `/doc-wiki:query --promote <file|last|N>`. After a synthesis-mode `/doc-wiki:query` answers your question, you're also prompted "Save this answer as a permanent wiki page?" — accepting that prompt runs the same promote flow on the just-written archive.
+- Bulk review: `/doc-wiki:query --review [--since <dur>] [--limit <N>] [--topic <dir>]`.
+
+### `/doc-wiki:fix`
+
+Renamed to `/doc-wiki:edit`. The behavior is identical — the name was changed because the command modifies a page for any reason (not just fixing broken state), and the old name collided semantically with `/doc-wiki:lint`'s auto-heal mode.

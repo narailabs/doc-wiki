@@ -1,5 +1,5 @@
 ---
-description: Documentation wiki skill -- routes /doc-wiki:* commands to TypeScript scripts
+description: Manage the current codebase's doc-wiki — bootstrap with optional atlas (init), full-doc generation (atlas), source ingest from Jira/Confluence/GitHub/Notion/AWS/GCP/databases/files/URLs with `--refresh` for re-fetch (ingest), search + synthesis with promote-to-page and shortest-path modes (query), health check + self-heal (lint), targeted page edit (edit), restore an archived page (unarchive), token/cost metrics (stats). Always invoke when the user mentions "the wiki" or "the docs", or asks to set up doc-wiki, onboard this repo, ingest a URL into docs, refresh docs, look up something in the wiki, find a concept path, save the last query answer as a page, check wiki health, fix/edit a wiki page, restore an archived page, or see wiki cost metrics — even if "wiki" is not said explicitly. Slash commands — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:unarchive`, `:stats`. Skip for unrelated docs work — arbitrary README edits, code comments, or general programming questions.
 alwaysApply: true
 ---
 
@@ -9,14 +9,11 @@ This project has a documentation wiki skill. Before searching the codebase with 
 
 ## Commands
 
-- `/doc-wiki:init` -- Bootstrap wiki scaffold: `node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
-- `/doc-wiki:onboard` -- Interactive onboarding: detect language, ORM, database, external services, configure wiki
-- `/doc-wiki:ingest` -- Fetch, extract, compile sources into wiki pages
-- `/doc-wiki:query` -- Two modes: synthesis (`<question>`) for summary-first search, or path mode (`--from <a> --to <b>`) for shortest-path traversal via `node skills/doc-wiki/scripts/graph_ops.js path --edges <wiki-root>/graph/edges.jsonl`
+- `/doc-wiki:init` -- Bootstrap wiki scaffold (includes ecosystem onboarding in Phase 3): `node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<name>"`
+- `/doc-wiki:ingest` -- Fetch, extract, compile sources into wiki pages; use `--refresh` to re-fetch previously ingested sources
+- `/doc-wiki:query` -- Two modes: synthesis (`<question>`) for summary-first search with `--promote <file>` to save answer as a page, or path mode (`--from <a> --to <b>`) for shortest-path traversal via `node skills/doc-wiki/scripts/graph_ops.js path --edges <wiki-root>/graph/edges.jsonl`
 - `/doc-wiki:lint` -- Health check: `node skills/doc-wiki/scripts/lint_checks.js --wiki-root <wiki-root>`
-- `/doc-wiki:fix` -- Quick corrections with diff preview
-- `/doc-wiki:promote` -- Convert query answer from `outputs/queries/` to permanent wiki page
-- `/doc-wiki:refresh` -- Re-fetch and update from original sources
+- `/doc-wiki:edit` -- Targeted page edit with diff preview
 - `/doc-wiki:stats` -- Token efficiency: `node skills/doc-wiki/scripts/event_logger.js stats --wiki-root <wiki-root> --since 7d`
 
 ## Script Paths
@@ -56,7 +53,7 @@ Install dependencies (Node 20 required): `npm install && npm run build`
 
 ## Post-Operation Hooks
 
-After write operations (ingest, fix, promote, refresh), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+After write operations (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run crosslink and tag-harmonize passes if the wiki has 3+ pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 ## Documentation
 

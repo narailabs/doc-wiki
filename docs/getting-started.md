@@ -11,23 +11,22 @@ If you only want the install + setup + first-query path, [`README.md`](../README
 - [Prerequisites](#0-prerequisites)
 - [Install doc-wiki](#1-install-doc-wiki)
 - [Open your codebase](#2-open-your-codebase)
-- [`/doc-wiki:init`](#3-doc-wikiinit--scaffold-the-wiki)
-- [`/doc-wiki:onboard`](#4-doc-wikionboard--interactive-setup)
-- [`/doc-wiki:ingest`](#5-doc-wikiingest--your-first-source)
-- [Ingest more sources / atlas shortcut](#6-ingest-more-sources)
-- [`/doc-wiki:query`](#7-doc-wikiquery--ask-a-question)
-- [`/doc-wiki:promote`](#8-doc-wikipromote--keep-a-good-answer)
-- [`/doc-wiki:refresh`](#9-doc-wikirefresh--keep-sources-current)
-- [`/doc-wiki:lint` and `/doc-wiki:fix`](#10-doc-wikilint-and-doc-wikifix--health-checks)
-- [`/doc-wiki:stats`](#11-doc-wikistats--token-and-cost-metrics)
-- [The maintenance loop](#12-the-maintenance-loop)
+- [`/doc-wiki:init` — scaffold + onboard](#3-doc-wikiinit--scaffold-and-onboard)
+- [`/doc-wiki:ingest`](#4-doc-wikiingest--your-first-source)
+- [Ingest more sources / atlas shortcut](#5-ingest-more-sources)
+- [`/doc-wiki:query`](#6-doc-wikiquery--ask-a-question)
+- [Promoting a good answer](#7-promoting-a-good-answer)
+- [Keeping sources current](#8-keeping-sources-current)
+- [`/doc-wiki:lint` and `/doc-wiki:edit`](#9-doc-wikilint-and-doc-wikiedit--health-checks)
+- [`/doc-wiki:stats`](#10-doc-wikistats--token-and-cost-metrics)
+- [The maintenance loop](#11-the-maintenance-loop)
 - [Where to go next](#where-to-go-next)
 
 ## 0. Prerequisites
 
 - **Node 20.x.** Run `node --version`. Node 21+ isn't supported because some upstream dependencies (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries. Use `nvm install 20` if needed.
 - **Claude Code, Codex, Gemini, Cursor, or Aider.** All five route into the same orchestrator skill via the wrappers shipped at the repo root.
-- **Optional:** credentials for any external service you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, a database). You can skip these now and add later via `/doc-wiki:onboard` — most of this tutorial works with local files only.
+- **Optional:** credentials for any external service you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, a database). You can skip these now — `/doc-wiki:init` Phase 2 (Onboarding) will prompt for them — and most of this tutorial works with local files only.
 
 ## 1. Install doc-wiki
 
@@ -44,7 +43,7 @@ Or, skip the marketplace and install directly:
 $ claude plugin install narailabs/doc-wiki
 ```
 
-Either way, the ten `/doc-wiki:*` commands are now available. Confirm by typing `/` in a Claude Code session — you should see `doc-wiki:init`, `doc-wiki:onboard`, `doc-wiki:ingest`, and friends in autocomplete.
+Either way, the seven `/doc-wiki:*` commands are now available. Confirm by typing `/` in a Claude Code session — you should see `doc-wiki:init`, `doc-wiki:atlas`, `doc-wiki:ingest`, and friends in autocomplete.
 
 > **Building from source instead?** Only needed if you're contributing to doc-wiki itself. See [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
@@ -54,7 +53,7 @@ The slash commands run in **whatever project Claude Code currently has open** �
 
 For the rest of this walkthrough, assume you're documenting an auth service with a `package.json`, a `README.md`, a `src/` directory, and a Postgres database. Adapt commands to your specifics.
 
-## 3. `/doc-wiki:init` — scaffold the wiki
+## 3. `/doc-wiki:init` — scaffold and onboard
 
 ```text
 /doc-wiki:init
@@ -68,11 +67,13 @@ That's the whole command. Optional flags:
 | `--domain "<domain>"` | `general` | Broad topic, e.g. `backend-services` |
 | `--name "<wiki-name>"` | (project name) | Appears in `wiki.config.yaml` and `wiki/overview.md` |
 
-After it runs, you have:
+`/doc-wiki:init` runs a **four-phase flow**:
+
+**Phase 1 — scaffold.** Creates `wiki.config.yaml` and the directory tree:
 
 ```
 <wiki-root>/
-├── wiki.config.yaml          # config (you'll edit this in the next step)
+├── wiki.config.yaml          # config
 ├── wiki/
 │   ├── index.md              # master catalog (empty)
 │   ├── summaries.md          # enriched summary index (empty)
@@ -86,21 +87,9 @@ After it runs, you have:
 └── .wiki-ignore              # gitignore-style filter for ingestion
 ```
 
-`/doc-wiki:init` is **idempotent** — re-running never overwrites existing files. If you already have a wiki from a previous run, it just creates whatever's missing.
+**Phase 2 — onboarding Q&A.** Six interactive steps that teach doc-wiki about your project:
 
-> **Why `docs/<app-name>-wiki/`?** Obsidian and most other markdown-vault tools name a vault after its containing folder. Putting the wiki at `docs/<app-name>-wiki/` means anyone who opens that folder as a vault gets a vault titled with the app's name rather than a generic `wiki` — recognizable in vault switchers and cross-vault links.
-
-**Look up more:** [`commands.md` § /doc-wiki:init](commands.md#doc-wikiinit--bootstrap-a-wiki), [`wiki-output.md`](wiki-output.md) for what each subdir holds.
-
-## 4. `/doc-wiki:onboard` — interactive setup
-
-This is where doc-wiki learns what it's documenting. Six interactive phases of detection and Q&A:
-
-```text
-/doc-wiki:onboard
-```
-
-### Phase 1 — language and framework
+### Onboarding step 1 — language and framework
 
 Scans for marker files (`pom.xml`, `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`, `*.csproj`, `*.sln`):
 
@@ -111,7 +100,7 @@ Confirm? [Y/n]
 
 Press Enter to accept, or type the correct stack.
 
-### Phase 2 — ORM detection
+### Onboarding step 2 — ORM detection
 
 Dispatches the `wiki-orm-agent` to scan for entity definitions across seven supported profiles: JPA, SQLAlchemy, Django, Prisma, TypeORM, Entity Framework, ActiveRecord.
 
@@ -123,15 +112,15 @@ Confirm? [Y/n]
 
 If you have no ORM, say no — the rest of the flow still works.
 
-### Phase 3 — database
+### Onboarding step 3 — database
 
 Reads `docker-compose.yml`, `.env`, ORM config, and connection strings, **redacting credentials** before showing you what was found.
 
-### Phase 4 — six external-service questions
+### Onboarding step 4 — six external-service questions
 
 Yes/no questions for: Jira, Confluence, GCP, AWS, Notion, GitHub. Your answers populate `consumers.doc-wiki` in the connector config.
 
-### Phase 4b — connector access
+### Onboarding step 4b — connector access
 
 For every "yes" you gave, doc-wiki asks one credential question and writes a starter `~/.connectors/config.yaml`:
 
@@ -152,7 +141,7 @@ You can answer with any credential ref form:
 
 Resolution is **lazy**: `narai-primitives` only fetches the secret when a connector actually runs, and only inside the connector's subprocess. doc-wiki itself never sees the cleartext value.
 
-### Phase 5 — autonomy mode
+### Onboarding step 5 — autonomy mode
 
 Pick one:
 
@@ -165,15 +154,21 @@ Pick one:
 
 Stick with `balanced` for your first wiki. You can change it later by editing `wiki.config.yaml`. See [`autonomy-modes.md`](autonomy-modes.md) for full guidance.
 
-### Phase 6 — hooks and multimodal deps
+### Onboarding step 6 — hooks and multimodal deps
 
-Offers to install platform hooks (skip if unsure), then asks about optional multimodal extraction tools (`faster-whisper` for audio transcription, `yt-dlp` for YouTube). `Skip` is fine if you're only ingesting code and text — doc-wiki warn-and-skips multimodal sources until you install them.
+Offers to install platform hooks (skip if unsure), then asks about optional multimodal extraction tools (`faster-whisper` for audio transcription, `yt-dlp` for YouTube). `Skip` is fine if you're only ingesting code and text.
 
-By the time onboard finishes you have a populated `wiki.config.yaml` and (if any external services were enabled) `~/.connectors/config.yaml`. **Onboard is idempotent** — re-run any time the project changes.
+By the time onboarding finishes you have a populated `wiki.config.yaml` and (if any external services were enabled) `~/.connectors/config.yaml`.
 
-**Look up more:** [`commands.md` § /doc-wiki:onboard](commands.md#doc-wikionboard--interactive-onboarding), [`configuration.md`](configuration.md), [`connectors.md`](connectors.md).
+**Phase 3 — atlas decision.** Offers to kick off `/doc-wiki:atlas` immediately for a comprehensive first-run sweep. Answering no leaves the wiki ready for incremental `/doc-wiki:ingest` runs.
 
-## 5. `/doc-wiki:ingest` — your first source
+On an already-initialized wiki, re-running `/doc-wiki:init` prompts "Wiki already initialized. Re-run onboarding?" — choosing yes skips the scaffold phase and re-runs the onboarding Q&A only.
+
+> **Why `docs/<app-name>-wiki/`?** Obsidian and most other markdown-vault tools name a vault after its containing folder. Putting the wiki at `docs/<app-name>-wiki/` means anyone who opens that folder as a vault gets a vault titled with the app's name rather than a generic `wiki` — recognizable in vault switchers and cross-vault links.
+
+**Look up more:** [`commands.md` § /doc-wiki:init](commands.md#doc-wikiinit--bootstrap-and-onboard-a-wiki), [`wiki-output.md`](wiki-output.md) for what each subdir holds, [`configuration.md`](configuration.md), [`connectors.md`](connectors.md).
+
+## 4. `/doc-wiki:ingest` — your first source
 
 Pick something small. Your `README.md` is a natural starting point:
 
@@ -242,7 +237,7 @@ Two behaviors worth knowing:
 
 **Look up more:** [`commands.md` § /doc-wiki:ingest](commands.md#doc-wikiingest--fetch-extract-compile), [`internals/architecture.md`](internals/architecture.md), [`connectors.md`](connectors.md).
 
-## 6. Ingest more sources
+## 5. Ingest more sources
 
 A wiki with one page isn't a wiki. Run `/doc-wiki:ingest` two or three more times across different kinds of sources to seed coverage:
 
@@ -274,7 +269,7 @@ Use atlas for comprehensive bootstrap or periodic audit; use ingest for incremen
 
 **Look up more:** [`atlas.md`](atlas.md), [`recipes.md` § recipe 2](recipes.md#2-document-an-entire-codebase-in-one-pass).
 
-## 7. `/doc-wiki:query` — ask a question
+## 6. `/doc-wiki:query` — ask a question
 
 The wiki is now queryable:
 
@@ -304,22 +299,24 @@ Useful for "how do these two parts of the system relate?" questions.
 
 **Look up more:** [`commands.md` § /doc-wiki:query](commands.md#doc-wikiquery--summary-first-search-synthesis-and-shortest-path).
 
-## 8. `/doc-wiki:promote` — keep a good answer
+## 7. Promoting a good answer
 
-Some queries produce answers worth keeping permanently. After a query you like:
+Some queries produce answers worth keeping permanently. After a query you like, you'll see a post-answer prompt: "Save this answer as a permanent wiki page?" — accepting it promotes the archive automatically.
+
+You can also promote explicitly:
 
 ```text
-/doc-wiki:promote last query
+/doc-wiki:query --promote last
 ```
 
-doc-wiki resolves `last query` to the most-recent archive, compiles it into a permanent wiki page, places it under `wiki/<topic>/<slug>.md`, updates indexes, and moves the archive to `outputs/queries/.promoted/`.
+doc-wiki resolves `last` to the most-recent archive, compiles it into a permanent wiki page, places it under `wiki/<topic>/<slug>.md`, updates indexes, and moves the archive to `outputs/queries/.promoted/`.
 
 Other target forms work too:
 
 ```text
-/doc-wiki:promote last query --topic auth                     # force the topic directory
-/doc-wiki:promote 2                                           # second-most-recent archive
-/doc-wiki:promote outputs/queries/2026-04-28T10-15.md         # explicit path
+/doc-wiki:query --promote last --topic auth                   # force the topic directory
+/doc-wiki:query --promote 2                                   # second-most-recent archive
+/doc-wiki:query --promote outputs/queries/2026-04-28T10-15.md # explicit path
 ```
 
 This is the **feedback loop** worth internalizing: **query exposes what's missing → promote fills the gap → next query is faster**. Wikis grow by use, not by upfront planning.
@@ -327,28 +324,28 @@ This is the **feedback loop** worth internalizing: **query exposes what's missin
 **Bulk triage** when archives have piled up:
 
 ```text
-/doc-wiki:promote --review --since 7d
+/doc-wiki:query --review --since 7d
 ```
 
 Walks every archive from the last week and asks `[P]romote / [S]kip / [D]elete / [A]bort`. Already-covered insights are auto-skipped under `balanced` autonomy.
 
-**Look up more:** [`commands.md` § /doc-wiki:promote](commands.md#doc-wikipromote--query-answer-to-permanent-page), [`recipes.md` § recipe 3](recipes.md#3-grow-the-wiki-by-feedback-loop).
+**Look up more:** [`commands.md` § /doc-wiki:query promote mode](commands.md#promote-mode), [`recipes.md` § recipe 3](recipes.md#3-grow-the-wiki-by-feedback-loop).
 
-## 9. `/doc-wiki:refresh` — keep sources current
+## 8. Keeping sources current
 
 Upstream sources change. To re-fetch and re-compile changed pages:
 
 ```text
-/doc-wiki:refresh --all
+/doc-wiki:ingest --refresh --all
 ```
 
 Either `--source <one-source>` or `--all` is required. doc-wiki reads `log/events.jsonl` to find every source it has ever ingested, re-fetches them through the same connectors, and re-compiles only the pages whose content hash changed.
 
 Typical cadence: weekly. Pair with `/schedule` for unattended runs.
 
-**Look up more:** [`commands.md` § /doc-wiki:refresh](commands.md#doc-wikirefresh--re-fetch-and-update).
+**Look up more:** [`commands.md` § /doc-wiki:ingest refresh mode](commands.md#refresh-mode).
 
-## 10. `/doc-wiki:lint` and `/doc-wiki:fix` — health checks
+## 9. `/doc-wiki:lint` and `/doc-wiki:edit` — health checks
 
 Run lint after a batch of ingests to catch structural problems:
 
@@ -364,17 +361,17 @@ Auto-heal the safe categories under your configured autonomy mode:
 /doc-wiki:lint --fix
 ```
 
-For a targeted fix on one page:
+For a targeted edit on one page:
 
 ```text
-/doc-wiki:fix wiki/auth/authentication.md "frontmatter is missing the security tag"
+/doc-wiki:edit wiki/auth/authentication.md "frontmatter is missing the security tag"
 ```
 
-doc-wiki reads the page, drafts a fix matching the description, shows a diff, applies on confirm (or auto-applies in `autonomous` / `auto` modes).
+doc-wiki reads the page, drafts the change matching the description, shows a diff, applies on confirm (or auto-applies in `autonomous` / `auto` modes).
 
 **Look up more:** [`commands.md` § /doc-wiki:lint](commands.md#doc-wikilint--health-check-and-auto-heal), [`autonomy-modes.md`](autonomy-modes.md).
 
-## 11. `/doc-wiki:stats` — token and cost metrics
+## 10. `/doc-wiki:stats` — token and cost metrics
 
 Token usage and cost are tracked in `log/events.jsonl`. Aggregate them:
 
@@ -388,7 +385,7 @@ Useful for "is the cache hitting?" or "is one connector dominating cost?" sanity
 
 **Look up more:** [`commands.md` § /doc-wiki:stats](commands.md#doc-wikistats--token-efficiency-and-cost-metrics).
 
-## 12. The maintenance loop
+## 11. The maintenance loop
 
 Once you have a working wiki, the steady-state cadence:
 
@@ -400,9 +397,9 @@ Once you have a working wiki, the steady-state cadence:
 /doc-wiki:query "<question>"
 
 # weekly (cron-friendly via /schedule)
-/doc-wiki:refresh --all
+/doc-wiki:ingest --refresh --all
 /doc-wiki:lint --fix
-/doc-wiki:promote --review --since 7d
+/doc-wiki:query --review --since 7d
 /doc-wiki:stats --since 7d
 ```
 

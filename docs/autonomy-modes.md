@@ -1,6 +1,6 @@
 # Autonomy modes
 
-doc-wiki commands that mutate the wiki — `/doc-wiki:ingest`, `/doc-wiki:lint --fix`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:atlas` — gate their changes through an **autonomy mode**. The mode controls when doc-wiki applies a change automatically, when it shows you a diff and asks first, and when it routes a finding to the human-review audit inbox.
+doc-wiki commands that mutate the wiki — `/doc-wiki:ingest`, `/doc-wiki:lint --fix`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:atlas` — gate their changes through an **autonomy mode**. The mode controls when doc-wiki applies a change automatically, when it shows you a diff and asks first, and when it routes a finding to the human-review audit inbox.
 
 This doc is the operator-facing guide to picking the right mode and tuning it per category. For the full decision flow used by the orchestrator skill, see [`../skills/doc-wiki/references/autonomy.md`](../skills/doc-wiki/references/autonomy.md).
 
@@ -54,7 +54,7 @@ Trade-off: less visibility into what changed. Mitigate by reviewing `log/events.
 
 - CI / scheduled / batch contexts. No user is present to answer prompts, so any "ask user" decision is **skipped** rather than blocked.
 - Unattended `/doc-wiki:atlas` runs (`--yes` flag has the same effect for the phase 3 confirmation only; `auto` mode generalizes to every gate).
-- Pre-merge GitHub Actions that run `/doc-wiki:refresh --all && /doc-wiki:lint --fix` to surface drift.
+- Pre-merge GitHub Actions that run `/doc-wiki:ingest --refresh --all && /doc-wiki:lint --fix` to surface drift.
 
 Trade-off: content suggestions are dropped silently (since there's no one to ask) — review `log/events.jsonl` after the run to see what was skipped vs what was applied.
 
@@ -159,5 +159,5 @@ To change mode for one command only, most commands accept the flags that maximiz
 
 - [`configuration.md` § autonomy](configuration.md#autonomy-section) — the YAML schema.
 - [`commands.md` § /doc-wiki:lint](commands.md#doc-wikilint--health-check-and-auto-heal) — the main consumer of autonomy mode.
-- [`commands.md` § /doc-wiki:promote --review](commands.md#doc-wikipromote--query-answer-to-permanent-page) — another mode-aware command.
+- [`commands.md` § /doc-wiki:query --review](commands.md#review-mode) — another mode-aware command.
 - [`../skills/doc-wiki/references/autonomy.md`](../skills/doc-wiki/references/autonomy.md) — the orchestrator skill's full decision flow.

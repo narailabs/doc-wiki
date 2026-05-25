@@ -6,7 +6,7 @@ And more than documentation, this is a guide for Claude Code and other coding ag
 
 > A documentation wiki generator and maintainer that runs entirely as Claude Code skills, agents, and TypeScript helpers. Point it at a codebase, your Jira/Confluence/Notion/GitHub, and your databases — get a structured, queryable, self-healing wiki you can grow over time.
 
-doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Ten `/doc-wiki:*` slash commands cover the full lifecycle: bootstrap, atlas (full-codebase documentation in one pass), ingest, query, lint, fix, refresh, and cross-link the wiki as your project evolves. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
+doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Seven `/doc-wiki:*` slash commands cover the full lifecycle: init (scaffold + onboard), atlas (full-codebase documentation in one pass), ingest, query, lint, edit, and stats. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
 
 It was built with enterprise level codebases, and support of complex systems, but it also works really for smaller codebases.
 
@@ -28,30 +28,22 @@ It was built with enterprise level codebases, and support of complex systems, bu
 
 - **Node 20.x.** Node 21+ isn't supported because some upstream deps (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries. Check with `node --version`; install via `nvm install 20` if needed.
 - **Claude Code, Codex, Gemini, Cursor, or Aider** to invoke the slash commands. doc-wiki ships wrappers for each — see [Multi-platform wrappers](#multi-platform-wrappers).
-- **Optional:** credentials for any external services you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, or a database). You can skip these now and add them later via `/doc-wiki:onboard`.
+- **Optional:** credentials for any external services you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, or a database). You can skip these now — `/doc-wiki:init` Phase 3 (Onboarding) will walk you through them.
 
 ## Install
 
 <!-- wiki-managed: quickstart start -->
 **From zero to a queryable wiki in ~5 minutes.**
 
-### 1. Scaffold
+### 1. Scaffold and onboard
 
 ```
 /doc-wiki:init
 ```
 
-Creates `wiki.config.yaml` and the wiki directory tree under `docs/<app-name>-wiki/`.
+Four-phase flow: creates `wiki.config.yaml` and directory tree, then walks through onboarding (stack detection, ORM, database, external services, autonomy mode, hooks). On an already-initialized wiki, re-running prompts to re-run onboarding only.
 
-### 2. Onboard
-
-```
-/doc-wiki:onboard
-```
-
-Six-phase setup: detects stack, ORM, database, external services (Jira / Confluence / GitHub / Notion / AWS / GCP), autonomy mode, and installs hooks. Idempotent.
-
-### 3. Ingest or Atlas
+### 2. Ingest or Atlas
 
 ```
 /doc-wiki:ingest README.md                             # single source
@@ -66,7 +58,7 @@ Six-phase setup: detects stack, ORM, database, external services (Jira / Conflue
 /doc-wiki:query "How does the cache work?"
 ```
 
-Returns a cited answer synthesised from wiki pages. Archives to `outputs/queries/`; promote with `/doc-wiki:promote last`.
+Returns a cited answer synthesised from wiki pages. Archives to `outputs/queries/`; promote with `/doc-wiki:query --promote last`.
 
 Full walkthrough → [docs/getting-started.md](docs/getting-started.md)
 <!-- wiki-managed: quickstart end -->
@@ -80,7 +72,7 @@ claude plugin marketplace add narailabs/narai-claude-plugins
 claude plugin install doc-wiki@narai
 ```
 
-After install, the ten `/doc-wiki:*` slash commands are available in every Claude Code session — no per-project clone, no per-project build.
+After install, the seven `/doc-wiki:*` slash commands are available in every Claude Code session — no per-project clone, no per-project build.
 
 ### Direct from GitHub (no marketplace)
 
@@ -101,9 +93,9 @@ The TypeScript scripts compile to sibling `.js` files; the plugin layout under `
 
 ## First run
 
-Open the project you want to document in Claude Code. The four-command happy path takes ~5 minutes; you'll have a queryable wiki by the end.
+Open the project you want to document in Claude Code. The three-command happy path takes ~5 minutes; you'll have a queryable wiki by the end.
 
-### 1. Scaffold
+### 1. Init (scaffold + onboard)
 
 ```text
 /doc-wiki:init
@@ -122,15 +114,7 @@ Creates `wiki.config.yaml` and the wiki directory tree (defaults to `docs/<app-n
 └── .wiki-cache/             # SHA256 dedup cache
 ```
 
-For the full anatomy, see [`docs/wiki-output.md`](docs/wiki-output.md).
-
-### 2. Onboard
-
-```text
-/doc-wiki:onboard
-```
-
-Six interactive phases that detect and configure the project:
+Then runs a four-phase onboarding Q&A that detects and configures the project:
 
 1. **Language / framework** — reads `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, etc.
 2. **ORM** — scans for entity definitions (Prisma, SQLAlchemy, Django, JPA, TypeORM, ActiveRecord, Entity Framework).
@@ -139,9 +123,13 @@ Six interactive phases that detect and configure the project:
 5. **Connector access** — for every "yes" above, asks one credential question and writes a starter `~/.connectors/config.yaml`.
 6. **Autonomy mode** — pick `conservative` / `balanced` / `autonomous` / `auto`. Default `balanced` is right for most cases. See [`docs/autonomy-modes.md`](docs/autonomy-modes.md).
 
-**Onboard is idempotent** — re-run any time the project changes.
+Finally, asks whether to kick off `/doc-wiki:atlas` immediately for a comprehensive first-run sweep.
 
-### 3. Wire up your first connector (optional, takes 2 minutes)
+On an already-initialized wiki, re-running `/doc-wiki:init` prompts "Wiki already initialized. Re-run onboarding?" and only re-runs the onboarding Q&A above.
+
+For the full anatomy, see [`docs/wiki-output.md`](docs/wiki-output.md).
+
+### 2. Wire up your first connector (optional, takes 2 minutes)
 
 If you want to ingest from external services, configure at least one connector. The smallest example uses GitHub via an environment variable.
 
@@ -218,7 +206,7 @@ For the full page anatomy, see [`docs/wiki-output.md`](docs/wiki-output.md).
 /doc-wiki:query "what does this project do?"
 ```
 
-Returns a synthesized answer with inline citations to wiki pages. The full transcript is archived under `wiki/outputs/queries/<timestamp>.md` so you can `/doc-wiki:promote` it into a permanent page later.
+Returns a synthesized answer with inline citations to wiki pages. The full transcript is archived under `wiki/outputs/queries/<timestamp>.md` so you can `/doc-wiki:query --promote last` to turn it into a permanent page later.
 
 After three or four `/doc-wiki:ingest` (or one `/doc-wiki:atlas`), `/doc-wiki:query` becomes the way you look things up — cheaper than re-reading source, more durable than chat history.
 
@@ -247,7 +235,7 @@ Full diagnostics: [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ## What's in the box
 
-- **10 slash commands** — `/doc-wiki:init`, `:onboard`, `:atlas`, `:ingest`, `:query`, `:lint`, `:fix`, `:promote`, `:refresh`, `:stats`. See [`docs/commands.md`](docs/commands.md).
+- **7 slash commands** — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:stats`. See [`docs/commands.md`](docs/commands.md).
 - **3 sub-agents** — `wiki-orm-agent` (entity-to-table mapping), `wiki-mermaid-agent` (deterministic diagram generation), `wiki-claude-md-agent` (`CLAUDE.md` maintenance with managed sections).
 - **7 connectors via `narai-primitives`** — `db` / `github` / `jira` / `confluence` / `notion` / `aws` / `gcp`. All read-only. Credentials resolved inside the connector subprocess via `narai-primitives/credentials` (env var / keychain / file / cloud secret).
 - **4 autonomy modes** — `conservative` / `balanced` / `autonomous` / `auto`, with per-category overrides for fine-grained control.

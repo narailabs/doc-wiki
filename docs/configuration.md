@@ -2,7 +2,7 @@
 
 Two YAML files configure doc-wiki:
 
-- **`wiki.config.yaml`** — lives in the wiki root (created by `/doc-wiki:init`, refined by `/doc-wiki:onboard`). Controls per-wiki behavior: domain, autonomy mode, ORM detection, lint thresholds, custom source agents.
+- **`wiki.config.yaml`** — lives in the wiki root (created by `/doc-wiki:init`; connectors and stack are configured during Phase 3 of that command). Controls per-wiki behavior: domain, autonomy mode, ORM detection, lint thresholds, custom source agents.
 - **`.connectors/config.yaml`** — lives at `~/.connectors/config.yaml` (user-global) and/or `./.connectors/config.yaml` (per-repo overlay). Read by [`narai-primitives`](connectors.md) to know which connectors are enabled and how to authenticate.
 
 This document is the schema reference for both, plus the credential-ref grammar and resolution order.
@@ -28,7 +28,7 @@ This document is the schema reference for both, plus the credential-ref grammar 
 
 ## `wiki.config.yaml`
 
-Created by `/doc-wiki:init`, validated by [`parse_config.ts`](../agents/lib/parse_config.ts), refined by `/doc-wiki:onboard`. The only strictly required field is `wiki.name`; everything else has defaults.
+Created by `/doc-wiki:init` (Phase 3 configures connectors and stack detection), validated by [`parse_config.ts`](../agents/lib/parse_config.ts). The only strictly required field is `wiki.name`; everything else has defaults.
 
 ### `wiki` section
 
@@ -54,7 +54,7 @@ The `ecosystem` block describes the project's stack and the agents available for
 ```yaml
 ecosystem:
   agents:
-    source: {}                # populated by /doc-wiki:onboard with one entry per enabled connector
+    source: {}                # populated by /doc-wiki:init Phase 3 with one entry per enabled connector
     custom:                   # zero or more custom-connector entries
       - name: stripe
         source_schemes: ["stripe://"]
@@ -74,7 +74,7 @@ ecosystem:
   database:
     enabled: false
     driver: sqlite            # postgresql | mysql | sqlite | sqlserver | mongodb | dynamodb
-    environments: {}          # populated by /doc-wiki:onboard
+    environments: {}          # populated by /doc-wiki:init Phase 3
     policy:
       block_ddl: true
       block_privilege: true
@@ -86,7 +86,7 @@ ecosystem:
 
   orm:
     enabled: true
-    profiles: []              # populated by /doc-wiki:onboard (one of: jpa, sqlalchemy, django, prisma, typeorm, ef, activerecord)
+    profiles: []              # populated by /doc-wiki:init Phase 3 (one of: jpa, sqlalchemy, django, prisma, typeorm, ef, activerecord)
     custom_profiles: []       # paths to additional profile YAML files
     cross_validate_against_db: true
 
@@ -400,7 +400,7 @@ export JIRA_EMAIL=you@your-org.com
 export JIRA_API_TOKEN=ATATT3xx...
 ```
 
-A minimal `wiki.config.yaml` (created by `/doc-wiki:init` then refined by `/doc-wiki:onboard`):
+A minimal `wiki.config.yaml` (created and configured by `/doc-wiki:init`):
 
 ```yaml
 wiki:

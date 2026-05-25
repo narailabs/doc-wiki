@@ -7,7 +7,7 @@ This project has a documentation wiki skill that generates and maintains structu
 Public-facing docs live in [`docs/`](docs/). For Codex users:
 
 - [`docs/getting-started.md`](docs/getting-started.md) — install + first ingest
-- [`docs/commands.md`](docs/commands.md) — reference for all 10 `/doc-wiki:*` commands
+- [`docs/commands.md`](docs/commands.md) — reference for all 7 `/doc-wiki:*` commands
 - [`docs/configuration.md`](docs/configuration.md) — `wiki.config.yaml` and `.connectors/config.yaml` schemas
 - [`docs/internals/architecture.md`](docs/internals/architecture.md) — full architecture with Mermaid diagrams
 - [`docs/connectors.md`](docs/connectors.md) — the `narai-primitives` stack
@@ -33,11 +33,9 @@ Create the directory scaffold and initial configuration.
 node skills/doc-wiki/scripts/init_wiki.js --path <wiki-root> --domain "<domain>" --name "<wiki-name>"
 ```
 
-### /doc-wiki:onboard -- Interactive onboarding
+### /doc-wiki:atlas — Full application documentation
 
-Detect the codebase ecosystem (language, ORM, database, external services) and configure wiki infrastructure. This is an interactive flow -- scan for marker files, dispatch detection agents, then ask the user to confirm findings.
-
-ORM detection is dispatched via the Agent tool (`wiki-orm-agent`); database introspection runs through `gather()` from `narai-primitives` when live schema confirmation is needed.
+Generate or regenerate full application documentation in one phased pass. Atlas discovers topics from the codebase, estimates cost, validates existing content, and drives the underlying `/doc-wiki:ingest` pipeline across the discovered facet set (architecture, data-model, environments, api, operations). Use for first-run documentation runs or large refreshes. Direct invocation: `/doc-wiki:atlas`. Also reachable via the post-onboarding prompt at the end of `/doc-wiki:init`.
 
 ### /doc-wiki:ingest -- Fetch, extract, compile
 
@@ -68,6 +66,8 @@ node skills/doc-wiki/scripts/parse_config.js --config <wiki-root>/wiki.config.ya
 
 Then read `wiki/summaries.md` and score page summaries against the question.
 
+After answering, the wiki also prompts the user to save the answer as a permanent wiki page. Explicit promote of an archived answer is also available via `/doc-wiki:query --promote <file|last|N>`; bulk archive triage via `/doc-wiki:query --review`.
+
 ### /doc-wiki:lint -- Health check and auto-heal
 
 Run structural checks, then apply LLM-driven quality analysis.
@@ -77,13 +77,9 @@ node skills/doc-wiki/scripts/lint_checks.js --wiki-root <wiki-root>
 node skills/doc-wiki/scripts/quality_score.js --wiki-root <wiki-root>
 ```
 
-### /doc-wiki:fix -- Quick corrections
+### /doc-wiki:edit -- Targeted page edit
 
 Read the target page, show a diff of current vs proposed changes, and apply if appropriate.
-
-### /doc-wiki:promote -- Query answer to wiki page
-
-Convert an archived query answer from `outputs/queries/` into a permanent wiki page with proper frontmatter and relative markdown links.
 
 ### /doc-wiki:unarchive -- Restore an archived page
 
@@ -104,10 +100,6 @@ node skills/doc-wiki/scripts/graph_ops.js path --from "<concept-a>" --to "<conce
 ```
 
 Supports `--max-hops`, `--via`, `--all-paths`. Read-only — no archive, no synthesis.
-
-### /doc-wiki:refresh -- Re-fetch and update from sources
-
-Re-fetch previously ingested sources, diff against stored versions, re-compile changed pages.
 
 ### /doc-wiki:stats -- Token efficiency and cost metrics
 
@@ -146,7 +138,7 @@ Sub-agents live at `agents/`. External-source fetching is handled by the connect
 
 ## Post-Operation Hooks
 
-After any write operation (ingest, fix, promote, refresh), run crosslink and tag-harmonize passes if the wiki has 3 or more pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
+After any write operation (`/doc-wiki:ingest`, `/doc-wiki:edit`, `/doc-wiki:query --promote`, `/doc-wiki:unarchive`), run crosslink and tag-harmonize passes if the wiki has 3 or more pages. Skip with `--no-crosslink` or `--no-tag-harmonize`.
 
 ## Invocation Pattern
 

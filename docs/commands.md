@@ -2,19 +2,19 @@
 
 Every `/doc-wiki:*` command, what it does, the arguments it accepts, and an example or two. Each section links to the corresponding section of [`SKILL.md`](../skills/doc-wiki/SKILL.md) for the full procedural detail.
 
-The eleven commands group into three lifecycles:
+The eight commands group into three lifecycles:
 
-- **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:onboard`, `/doc-wiki:atlas`, `/doc-wiki:ingest`, `/doc-wiki:refresh`
-- **Search** — find and analyze: `/doc-wiki:query` (synthesis or path mode), `/doc-wiki:stats`
-- **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:fix`, `/doc-wiki:promote`, `/doc-wiki:unarchive`
+- **Lifecycle** — set up and grow the wiki: `/doc-wiki:init`, `/doc-wiki:atlas`, `/doc-wiki:ingest`
+- **Search** — find and analyze: `/doc-wiki:query` (synthesis, path, promote, or review mode), `/doc-wiki:stats`
+- **Maintenance** — keep it healthy: `/doc-wiki:lint`, `/doc-wiki:edit`, `/doc-wiki:unarchive`
 
 ---
 
 ## Lifecycle
 
-### `/doc-wiki:init` — Bootstrap a wiki
+### `/doc-wiki:init` — Bootstrap and onboard a wiki
 
-Create the directory scaffold and initial configuration.
+Create the directory scaffold, initial configuration, and interactively onboard the project. This is the recommended first-run entry point for new wikis — it runs scaffold + onboarding in one pass and optionally chains into `/doc-wiki:atlas`.
 
 **Synopsis:** `/doc-wiki:init [--path <wiki-root>] [--domain <domain>] [--name <wiki-name>]`
 
@@ -26,12 +26,24 @@ Create the directory scaffold and initial configuration.
 | `--domain` | string | `general` | Broad topic for the wiki (e.g. `backend-services`, `infra`) |
 | `--name` | string | (project name) | Wiki name; appears in frontmatter and overview |
 
-**What it does:**
+**What it does (four-phase flow):**
 
+**Phase 1 — State detect.** Checks whether a wiki already exists at the target path. On an already-initialized wiki, prompts "Wiki already initialized. Re-run onboarding?" — choosing yes skips Phase 2 and jumps straight to Phase 3.
+
+**Phase 2 — Scaffold.** (fresh wikis only)
 - Creates `wiki/`, `raw/`, `graph/`, `audit/`, `log/`, `outputs/`, `.wiki-cache/`, and `.wiki-ignore`.
 - Generates `wiki.config.yaml` with safe defaults (autonomy: `balanced`, max_depth: 3, all built-in agents enabled).
 - Writes empty `wiki/index.md`, `wiki/summaries.md`, and `wiki/overview.md` ready for the first ingest.
-- **Idempotent.** Re-running won't overwrite existing files; it only creates what's missing.
+
+**Phase 3 — Onboarding Q&A.** Six interactive phases:
+1. **Detect language and framework** by reading marker files (`pom.xml`, `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`, `*.csproj`, `*.sln`).
+2. **Detect ORM** by dispatching `wiki-orm-agent` against the codebase. Profiles supported: JPA, SQLAlchemy, Django, Prisma, TypeORM, Entity Framework, ActiveRecord.
+3. **Detect databases** by reading Docker Compose, `.env`, ORM config. Credentials are redacted in the confirmation prompt.
+4. **Ask about external services** — six yes/no questions covering Jira, Confluence, GCP, AWS, Notion, GitHub. Answers go into `consumers.doc-wiki` in the connector config.
+5. **Set up connector access** — checks for `~/.connectors/config.yaml`, generates a starter from the example if missing, then asks one credential question per enabled connector.
+6. **Pick autonomy mode** — `conservative`, `balanced`, `autonomous`, or `auto`. See [`references/autonomy.md`](../skills/doc-wiki/references/autonomy.md). Most users start at `balanced`.
+
+**Phase 4 — Atlas decision.** Offers to kick off `/doc-wiki:atlas` immediately for a comprehensive first-run sweep. Answering no leaves the wiki ready for incremental `/doc-wiki:ingest` runs.
 
 **Examples:**
 
@@ -42,40 +54,6 @@ Create the directory scaffold and initial configuration.
 ```
 
 **See also:** [`SKILL.md` § /doc-wiki:init](../skills/doc-wiki/SKILL.md), [`getting-started.md`](getting-started.md), [`init_wiki.ts`](../skills/doc-wiki/scripts/init_wiki.ts).
-
----
-
-### `/doc-wiki:onboard` — Interactive onboarding
-
-Detect the codebase ecosystem and configure wiki + connector access. Run once per project; idempotent (safe to re-run if the project changes).
-
-**Synopsis:** `/doc-wiki:onboard [wiki-root]`
-
-**Args:**
-
-| Arg | Type | Default | Purpose |
-|---|---|---|---|
-| `wiki-root` | path | `./wiki` | Path to the wiki created by `/doc-wiki:init` |
-
-**What it does:**
-
-Six interactive phases:
-
-1. **Detect language and framework** by reading marker files (`pom.xml`, `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`, `*.csproj`, `*.sln`).
-2. **Detect ORM** by dispatching `wiki-orm-agent` against the codebase. Profiles supported: JPA, SQLAlchemy, Django, Prisma, TypeORM, Entity Framework, ActiveRecord.
-3. **Detect databases** by reading Docker Compose, `.env`, ORM config (Django `DATABASES`, Spring `spring.datasource.url`, etc.). Credentials are redacted in the confirmation prompt.
-4. **Ask about external services** — six yes/no questions covering Jira, Confluence, GCP, AWS, Notion, GitHub. Your answers go into `consumers.doc-wiki` in the connector config.
-5. **Set up connector access** — checks for `~/.connectors/config.yaml` and `./.connectors/config.yaml`, generates a starter from the example if missing, then asks one credential question per enabled connector.
-6. **Pick autonomy mode** — `conservative`, `balanced`, `autonomous`, or `auto`. See [`references/autonomy.md`](../skills/doc-wiki/references/autonomy.md). Most users start at `balanced`.
-
-**Examples:**
-
-```text
-/doc-wiki:onboard
-/doc-wiki:onboard ./docs/wiki
-```
-
-**See also:** [`SKILL.md` § /doc-wiki:onboard](../skills/doc-wiki/SKILL.md), [`configuration.md`](configuration.md).
 
 ---
 
@@ -108,7 +86,7 @@ The eight-phase pipeline (full description in [`SKILL.md` § /doc-wiki:atlas](..
 3. Confirm topic list (gated by autonomy mode; `--yes` skips).
 4. Estimate cost; abort pre-write if over `--max-cost`.
 5. Validate existing atlas pages (existing/hybrid wikis only) — structural lint + gitlog drift + semantic LLM check with `(page-hash, source-hash)` cache.
-6. Bootstrap or refresh — dispatch `/doc-wiki:ingest <source> --output <path>` per `(topic, facet)` not cached, plus `/doc-wiki:refresh` for drift-flagged pages.
+6. Bootstrap or refresh — dispatch `/doc-wiki:ingest <source> --output <path>` per `(topic, facet)` not cached, plus `/doc-wiki:ingest --refresh` for drift-flagged pages.
 7. Synthesize the three global pages (`overview.md`, `integrations.md`, `deploy.md`) by aggregating per-topic content.
 8. Finalize — lint, update `wiki/index.md`, run global crosslink + tag-harmonize, log `op: atlas` event, clear checkpoint, write drift + cost reports under `wiki/outputs/atlas/<run-id>/`.
 
@@ -184,25 +162,21 @@ A folder ingest runs the pipeline once per file, with checkpoint support — int
 /doc-wiki:ingest /path/to/design-spec.pdf --no-tag-harmonize
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:ingest](../skills/doc-wiki/SKILL.md), [`connectors.md`](connectors.md), [`internals/architecture.md`](internals/architecture.md#diagram-2-wiki-ingest-pipeline).
-
----
-
-### `/doc-wiki:refresh` — Re-fetch and update
+#### Refresh mode
 
 Re-fetch previously ingested sources, diff against stored versions, re-compile changed pages.
 
-**Synopsis:** `/doc-wiki:refresh [--source <source>] [--all] [--wiki-root <path>]`
+**Synopsis:** `/doc-wiki:ingest --refresh [--source <source>] [--all] [--wiki-root <path>]`
 
 **Args:**
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
+| `--refresh` | flag | (off) | Switch from fresh-ingest mode to refresh mode |
 | `--source` | string | (none) | A single previously ingested source to refresh |
 | `--all` | flag | (off) | Refresh every source recorded in `log/events.jsonl` |
-| `--wiki-root` | path | `./wiki` | Path to the wiki |
 
-Either `--source` or `--all` must be given.
+Either `--source` or `--all` must be given in refresh mode.
 
 **What it does:**
 
@@ -214,11 +188,11 @@ Either `--source` or `--all` must be given.
 **Examples:**
 
 ```text
-/doc-wiki:refresh --source https://your-org.atlassian.net/browse/AUTH-123
-/doc-wiki:refresh --all
+/doc-wiki:ingest --refresh --source https://your-org.atlassian.net/browse/AUTH-123
+/doc-wiki:ingest --refresh --all
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:refresh](../skills/doc-wiki/SKILL.md).
+**See also:** [`SKILL.md` § /doc-wiki:ingest](../skills/doc-wiki/SKILL.md).
 
 ---
 
@@ -254,7 +228,7 @@ What it does:
 4. Follows their inline links up to `max_depth` hops.
 5. Synthesizes an answer from the loaded content.
 6. Surfaces gaps (questions the wiki couldn't answer).
-7. Archives the full transcript under `outputs/queries/<timestamp>.md` for later `/doc-wiki:promote`.
+7. Archives the full transcript under `outputs/queries/<timestamp>.md` and offers a post-answer prompt: "Save this answer as a permanent wiki page?" — accepting runs the promote flow on the just-written archive.
 
 #### Path-mode args
 
@@ -279,6 +253,78 @@ What it does: calls `graph_ops.ts path` with the given args. Edge types include 
 /doc-wiki:query --from auth --to session
 /doc-wiki:query --from auth --to billing --via session --max-hops 4
 /doc-wiki:query --from foo --to bar --all-paths
+```
+
+#### Promote mode
+
+Convert an archived `/doc-wiki:query` answer in `outputs/queries/` into a permanent wiki page.
+
+**Synopsis:** `/doc-wiki:query --promote <target> [--topic <directory>] [--wiki-root <path>]`
+
+**Target resolution** — first match wins:
+
+| Input | Resolution |
+|---|---|
+| `last`, `latest`, `last query`, `latest query` | Most-recent `outputs/queries/*.md` by mtime |
+| Bare positive integer `N` | Nth most-recent (1-indexed) |
+| Path (relative or absolute) | Use as-is |
+| Single token | Filename substring match; ambiguous → list and ask |
+| Empty | List recent + prompt |
+
+**Args:**
+
+| Arg | Type | Default | Purpose |
+|---|---|---|---|
+| `--promote` | flag / value | **required** | Switch to promote mode; optionally accepts the target inline (`--promote last`) |
+| `--topic` | directory | (auto) | Subdirectory under `wiki/` to place the new page |
+
+**What it does:**
+
+1. Resolves the target archive.
+2. Compiles a wiki page — frontmatter, claims, links, summary.
+3. Writes to `wiki/<topic>/<slug>.md`.
+4. Updates `wiki/index.md` and `wiki/summaries.md`.
+5. Moves the source archive to `outputs/queries/.promoted/<filename>`.
+6. Runs post-op hooks (crosslink + tag-harmonize).
+
+**Examples:**
+
+```text
+/doc-wiki:query --promote last
+/doc-wiki:query --promote last --topic auth
+/doc-wiki:query --promote 2
+/doc-wiki:query --promote outputs/queries/2026-04-28T10-15.md
+```
+
+#### Review mode
+
+Bulk triage of accumulated query archives with per-item approval.
+
+**Synopsis:** `/doc-wiki:query --review [--since <duration>] [--limit <N>] [--topic <directory>] [--wiki-root <path>]`
+
+**Args:**
+
+| Arg | Default | Purpose |
+|---|---|---|
+| `--review` | — | Switch to review mode |
+| `--since` | none | Only archives newer than `<duration>` (e.g. `7d`, `24h`) |
+| `--limit` | none | Cap candidates to N |
+| `--topic` | auto | Topic for every promotion in this batch |
+
+**What it does:** For each candidate archive (oldest first), presents `[P]romote / [S]kip / [D]elete / [A]bort batch`. Honors configured autonomy level — `balanced` always prompts; `autonomous`/`auto` auto-promote novel archives and auto-skip already-covered ones.
+
+**Examples:**
+
+```text
+/doc-wiki:query --review
+/doc-wiki:query --review --since 7d
+/doc-wiki:query --review --since 30d --limit 5 --topic ops
+```
+
+#### Periodic execution
+
+```text
+/schedule "Run /doc-wiki:query --review --since 7d" "every Monday at 9am"
 ```
 
 **See also:** [`SKILL.md` § /doc-wiki:query](../skills/doc-wiki/SKILL.md), [`graph_ops.ts`](../skills/doc-wiki/scripts/graph_ops.ts).
@@ -356,132 +402,35 @@ Then runs an LLM-driven quality pass via `quality_score.ts`. With `--fix`, appli
 
 ---
 
-### `/doc-wiki:fix` — Quick targeted correction
+### `/doc-wiki:edit` — Targeted page edit
 
-Apply a focused fix to a single page with a diff preview.
+Apply a focused change to a single page with a diff preview. Use for any modification — fixing broken content, updating stale examples, adding missing frontmatter, etc.
 
-**Synopsis:** `/doc-wiki:fix <page-path> <issue-description>`
+**Synopsis:** `/doc-wiki:edit <page-path> <change-description>`
 
 **Args:**
 
 | Arg | Type | Default | Purpose |
 |---|---|---|---|
 | `<page-path>` | path | **required** | Path to the wiki page (relative to wiki root) |
-| `<issue-description>` | string | **required** | What's wrong, in a sentence or two |
+| `<change-description>` | string | **required** | What to change, in a sentence or two |
 
 **What it does:**
 
 1. Reads the target page.
-2. Asks the LLM to propose a fix matching the description.
+2. Asks the LLM to propose the change matching the description.
 3. Shows a diff (current vs proposed).
 4. Applies the diff if you confirm (or auto-applies in `autonomous` / `auto` modes).
-5. Re-runs lint on the fixed page.
+5. Re-runs lint on the edited page.
 
 **Examples:**
 
 ```text
-/doc-wiki:fix wiki/auth/jwt.md "frontmatter is missing tags"
-/doc-wiki:fix wiki/billing/invoices.md "the SQL example uses the old schema"
+/doc-wiki:edit wiki/auth/jwt.md "frontmatter is missing tags"
+/doc-wiki:edit wiki/billing/invoices.md "the SQL example uses the old schema"
 ```
 
-**See also:** [`SKILL.md` § /doc-wiki:fix](../skills/doc-wiki/SKILL.md).
-
----
-
-### `/doc-wiki:promote` — Query answer to permanent page
-
-Convert an archived `/doc-wiki:query` answer in `outputs/queries/` into a permanent wiki page. Has two modes: single (one archive at a time, with flexible target resolution) and review (bulk triage with per-item approval).
-
-#### Single mode
-
-**Synopsis:** `/doc-wiki:promote <target> [--topic <directory>]`
-
-**Target resolution** — first match wins:
-
-| Input | Resolution |
-|---|---|
-| `last`, `latest`, `last query`, `latest query` | Most-recent `outputs/queries/*.md` by mtime |
-| Bare positive integer `N` | Nth most-recent (1-indexed) |
-| Path (relative or absolute) | Use as-is |
-| Single token | Filename substring match; ambiguous → list and ask |
-| Empty | List recent + prompt |
-
-Archives in `outputs/queries/.promoted/` and `outputs/queries/.deleted/` are excluded from "most-recent" resolution.
-
-The slash form is the canonical, deterministic phrasing. Bare phrasings like `promote last query` (no slash) work best-effort while a doc-wiki conversation is in context.
-
-**Args:**
-
-| Arg | Type | Default | Purpose |
-|---|---|---|---|
-| `<target>` | see above | (empty → list-and-ask) | What to promote |
-| `--topic` | directory | (auto) | Subdirectory under `wiki/` to place the new page |
-
-**What it does:**
-
-1. Resolves the target.
-2. Reads the query archive.
-3. Compiles a wiki page — frontmatter, claims, links, summary.
-4. Writes to `wiki/<topic>/<slug>.md`.
-5. Updates `wiki/index.md` and `wiki/summaries.md`.
-6. Moves the source archive to `outputs/queries/.promoted/<filename>` (preserved for audit; excluded from future suggestions).
-7. Runs post-op hooks (crosslink + tag-harmonize).
-
-**Examples:**
-
-```text
-/doc-wiki:promote last query
-/doc-wiki:promote latest --topic auth
-/doc-wiki:promote 2
-/doc-wiki:promote outputs/queries/2026-04-28T10-15.md
-/doc-wiki:promote outputs/queries/2026-04-28T10-15.md --topic auth
-```
-
-#### Review mode
-
-**Synopsis:** `/doc-wiki:promote --review [--since <duration>] [--limit <N>] [--topic <directory>]`
-
-Bulk archive triage with per-item approval. Use this for periodic cleanup after several `/doc-wiki:query` answers have accumulated.
-
-**Args:**
-
-| Arg | Default | Purpose |
-|---|---|---|
-| `--review` | — | Switch from single to review mode |
-| `--since` | none | Only archives newer than `<duration>` (e.g. `7d`, `24h`) |
-| `--limit` | none | Cap candidates to N |
-| `--topic` | auto | Topic for every promotion in this batch |
-
-**What it does:**
-
-For each candidate archive (oldest first), the orchestrator presents `[P]romote / [S]kip / [D]elete / [A]bort batch`. `P` runs the single-mode flow; `D` moves to `outputs/queries/.deleted/`; `A` stops the batch. The mode honors the configured autonomy level:
-
-| Autonomy | Per-archive prompt | Already-covered handling |
-|---|---|---|
-| `conservative` | Always ask | Ask before promoting anyway |
-| `balanced` (default) | Always ask | Auto-skip |
-| `autonomous` | Auto-promote novel | Auto-skip |
-| `auto` | Auto-promote novel | Auto-skip |
-
-**Examples:**
-
-```text
-/doc-wiki:promote --review
-/doc-wiki:promote --review --since 7d
-/doc-wiki:promote --review --since 30d --limit 5 --topic ops
-```
-
-#### Periodic execution
-
-Use the `/schedule` skill. For interactive review (default `balanced` autonomy), schedule a reminder:
-
-```text
-/schedule "Run /doc-wiki:promote --review --since 7d" "every Monday at 9am"
-```
-
-For unattended pipelines, set autonomy to `auto` and schedule the command directly — novel archives will be batch-promoted with no prompting.
-
-**See also:** [`SKILL.md` § /doc-wiki:promote](../skills/doc-wiki/SKILL.md). The `/doc-wiki:lint` query-absorption pass uses the same coverage rule.
+**See also:** [`SKILL.md` § /doc-wiki:edit](../skills/doc-wiki/SKILL.md).
 
 ---
 
@@ -553,7 +502,6 @@ A few command sequences you'll use often:
 ```text
 # First-time setup
 /doc-wiki:init
-/doc-wiki:onboard
 /doc-wiki:ingest README.md
 
 # Ingest an entire codebase area
@@ -564,13 +512,27 @@ A few command sequences you'll use often:
 # Investigate something via the wiki
 /doc-wiki:query "How is JWT validated?"
 # (the answer is good — keep it)
-/doc-wiki:promote last query --topic auth
+/doc-wiki:query --promote last --topic auth
 
 # Periodic maintenance
 /doc-wiki:lint --fix
-/doc-wiki:promote --review --since 7d   # triage accumulated query archives
-/doc-wiki:refresh --all
+/doc-wiki:query --review --since 7d   # triage accumulated query archives
+/doc-wiki:ingest --refresh --all
 /doc-wiki:stats --since 7d --per-agent
 ```
 
 For full procedural detail beyond this reference, the canonical source is [`SKILL.md`](../skills/doc-wiki/SKILL.md).
+
+---
+
+## Removed commands
+
+The following commands existed in earlier versions and have been consolidated into the eight surviving commands. Their behavior is fully reachable via the new surface; only the entry point changed.
+
+| Removed | New invocation | Why |
+|---|---|---|
+| `/doc-wiki:onboard` | `/doc-wiki:init` (re-runs onboarding on initialized wikis after confirmation) | The two commands shared the first-run flow; merging them eliminates a step. |
+| `/doc-wiki:refresh` | `/doc-wiki:ingest --refresh [--source <s> \| --all]` | Refresh is "re-run ingest on prior sources" — folded into ingest as a mode. |
+| `/doc-wiki:promote <file>` | `/doc-wiki:query --promote <file\|last\|N>` (or accept the post-answer prompt after a synthesis query) | Promote is a follow-up workflow on query archives — folded into query. |
+| `/doc-wiki:promote --review` | `/doc-wiki:query --review` | Same — bulk triage of query archives. |
+| `/doc-wiki:fix <page> "<issue>"` | `/doc-wiki:edit <page> "<change>"` | Renamed because the command modifies a page for any reason, not only to fix broken state. |
