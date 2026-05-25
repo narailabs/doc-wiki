@@ -75,7 +75,7 @@ Reading the diagram: the user invokes a slash command, which calls into the skil
 
 ## Layer 1 — Slash commands
 
-Seven `commands/*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
+Eight `commands/*.md` files. Each is a YAML-frontmatter wrapper that registers the command with its host AI tool and forwards arguments into the orchestrator skill.
 
 | Command | What it does |
 |---|---|
@@ -85,6 +85,7 @@ Seven `commands/*.md` files. Each is a YAML-frontmatter wrapper that registers t
 | [`/doc-wiki:query`](../../commands/query.md) | Summary-first search + synthesis; `--promote` / `--review` saves the answer as a permanent page |
 | [`/doc-wiki:lint`](../../commands/lint.md) | Structural health check and auto-heal |
 | [`/doc-wiki:edit`](../../commands/edit.md) | Targeted correction to a single wiki page |
+| [`/doc-wiki:unarchive`](../../commands/unarchive.md) | Restore an atlas-archived page from `wiki/_archive/` back into the live wiki |
 | [`/doc-wiki:stats`](../../commands/stats.md) | Token efficiency and cost metrics from the event log |
 
 Each wrapper looks roughly like:
