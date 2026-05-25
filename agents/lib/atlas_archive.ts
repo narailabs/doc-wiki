@@ -350,7 +350,16 @@ async function resolveArchivePath(
   const candidateRel = path.isAbsolute(pageOrSlug)
     ? path.relative(wikiRoot, pageOrSlug)
     : pageOrSlug;
-  const candidateRelPosix = candidateRel.replace(/\\/g, "/");
+  const candidateRelRaw = candidateRel.replace(/\\/g, "/");
+  const candidateRelPosix = path.posix.normalize(candidateRelRaw);
+
+  // If the raw input looked like a direct wiki/_archive/ path but normalization
+  // resolved ".." segments that escape the archive root, it is a traversal attempt.
+  if (candidateRelRaw.startsWith("wiki/_archive/") && !candidateRelPosix.startsWith("wiki/_archive/")) {
+    throw new Error(
+      `path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`,
+    );
+  }
 
   if (candidateRelPosix.startsWith("wiki/_archive/")) {
     const absPath = path.resolve(wikiRoot, candidateRelPosix);
