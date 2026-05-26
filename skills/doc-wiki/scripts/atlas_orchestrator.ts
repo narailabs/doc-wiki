@@ -235,7 +235,7 @@ export function detectState(
 
 // ── Per-ingest cost average ────────────────────────────────────────
 
-const DEFAULT_PER_INGEST_AVG_USD = 0.2;
+const DEFAULT_PER_INGEST_AVG_USD = 0.20;
 
 /**
  * Read recent `op: ingest` events from `log/events.jsonl` and return a
@@ -271,8 +271,7 @@ export function getRollingPerIngestAvg(
     } catch {
       continue;
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      continue;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
     const rec = parsed as Record<string, unknown>;
     if (rec["op"] !== "ingest") continue;
     // Cost may live at top level or in details.total_cost_usd.
@@ -308,7 +307,7 @@ const STATIC_GLOBAL_PAGES: readonly string[] = [
   "getting-started",
   "troubleshooting",
 ];
-const GLOBAL_PAGE_AVG_USD = 0.2; // synthesis-only, smaller than ingest
+const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
 
 /**
  * Count of global synthesis pages that will be regenerated unconditionally
@@ -345,20 +344,10 @@ export function estimateCost(
     const cached = _isPlanEntryCached(wikiRoot, entry);
     if (cached) {
       cacheHits++;
-      breakdown.push({
-        topic: entry.topic,
-        facet: entry.facet,
-        expected: false,
-        cached: true,
-      });
+      breakdown.push({ topic: entry.topic, facet: entry.facet, expected: false, cached: true });
     } else {
       expectedIngests++;
-      breakdown.push({
-        topic: entry.topic,
-        facet: entry.facet,
-        expected: true,
-        cached: false,
-      });
+      breakdown.push({ topic: entry.topic, facet: entry.facet, expected: true, cached: false });
     }
   }
 
@@ -457,7 +446,10 @@ export function savePlanSnapshot(
  * old version with no `created_at`) are tolerated; the orchestrator can
  * decide whether to keep going.
  */
-export function loadPlanSnapshot(wikiRoot: string, runId: string): Plan | null {
+export function loadPlanSnapshot(
+  wikiRoot: string,
+  runId: string,
+): Plan | null {
   const target = _planSnapshotPath(wikiRoot, runId);
   if (!fs.existsSync(target)) return null;
   let raw: string;
@@ -472,8 +464,7 @@ export function loadPlanSnapshot(wikiRoot: string, runId: string): Plan | null {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    return null;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const rec = parsed as Record<string, unknown>;
   if (
     !Array.isArray(rec["topics"]) ||
@@ -486,9 +477,8 @@ export function loadPlanSnapshot(wikiRoot: string, runId: string): Plan | null {
     topics: rec["topics"].filter((x): x is string => typeof x === "string"),
     facets: rec["facets"].filter((x): x is string => typeof x === "string"),
     entries: (rec["entries"] as unknown[])
-      .filter(
-        (e): e is Record<string, unknown> =>
-          Boolean(e) && typeof e === "object" && !Array.isArray(e),
+      .filter((e): e is Record<string, unknown> =>
+        Boolean(e) && typeof e === "object" && !Array.isArray(e),
       )
       .map((e) => ({
         topic: typeof e["topic"] === "string" ? e["topic"] : "",
@@ -498,7 +488,8 @@ export function loadPlanSnapshot(wikiRoot: string, runId: string): Plan | null {
           : [],
         output: typeof e["output"] === "string" ? e["output"] : "",
       })),
-    created_at: typeof rec["created_at"] === "string" ? rec["created_at"] : "",
+    created_at:
+      typeof rec["created_at"] === "string" ? rec["created_at"] : "",
   };
 }
 
@@ -619,9 +610,7 @@ export function assembleGapReport(
   const sourceFilesWithNoPage = [...missingSources].sort();
 
   // 4. Gitlog uncovered_files — pass through if provided.
-  const uncoveredFiles = gitlog?.uncovered_files
-    ? [...gitlog.uncovered_files]
-    : [];
+  const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
 
   // 5. Connectors mentioned in atlas pages but missing from integrations.md.
   // Single wiki walk also collects every page's `sources:` frontmatter so
@@ -631,9 +620,7 @@ export function assembleGapReport(
   let integrationsBody = "";
   if (fs.existsSync(integrationsPath)) {
     try {
-      integrationsBody = fs
-        .readFileSync(integrationsPath, "utf-8")
-        .toLowerCase();
+      integrationsBody = fs.readFileSync(integrationsPath, "utf-8").toLowerCase();
     } catch {
       integrationsBody = "";
     }
@@ -680,8 +667,7 @@ export function assembleGapReport(
     walk(wikiContent);
   }
   for (const k of archMentions) {
-    if (!integrationsBody.includes(k))
-      externalServicesWithoutDocumentation.push(k);
+    if (!integrationsBody.includes(k)) externalServicesWithoutDocumentation.push(k);
   }
   externalServicesWithoutDocumentation.sort();
 
@@ -728,10 +714,7 @@ export function assembleGapReport(
 }
 
 /** Render a {@link GapReport} as a Markdown document for `gap-report.md`. */
-export function renderGapReportMarkdown(
-  report: GapReport,
-  runId: string,
-): string {
+export function renderGapReportMarkdown(report: GapReport, runId: string): string {
   const lines: string[] = [];
   lines.push(`# Atlas gap report — ${runId}`);
   lines.push("");
@@ -792,8 +775,7 @@ export function renderGapReportMarkdown(
     lines.push("_(none)_");
   } else {
     lines.push("");
-    for (const s of report.externalServicesWithoutDocumentation)
-      lines.push(`- ${s}`);
+    for (const s of report.externalServicesWithoutDocumentation) lines.push(`- ${s}`);
   }
   lines.push("");
 
@@ -905,9 +887,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     try {
       plan = JSON.parse(planRaw) as Plan;
     } catch (e) {
-      process.stderr.write(
-        `--plan is not valid JSON: ${(e as Error).message}\n`,
-      );
+      process.stderr.write(`--plan is not valid JSON: ${(e as Error).message}\n`);
       return 2;
     }
     const avgRaw = parsed.values["perIngestAvgUsd"];
@@ -935,9 +915,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     try {
       plan = JSON.parse(planRaw) as Plan;
     } catch (e) {
-      process.stderr.write(
-        `--plan is not valid JSON: ${(e as Error).message}\n`,
-      );
+      process.stderr.write(`--plan is not valid JSON: ${(e as Error).message}\n`);
       return 2;
     }
     savePlanSnapshot(wikiRoot, runId, plan);
@@ -978,9 +956,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     try {
       plan = JSON.parse(planRaw) as Plan;
     } catch (e) {
-      process.stderr.write(
-        `--plan is not valid JSON: ${(e as Error).message}\n`,
-      );
+      process.stderr.write(`--plan is not valid JSON: ${(e as Error).message}\n`);
       return 2;
     }
     let gitlog: GitlogClassification | undefined;
@@ -989,9 +965,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       try {
         gitlog = JSON.parse(gitlogRaw) as GitlogClassification;
       } catch (e) {
-        process.stderr.write(
-          `--gitlog is not valid JSON: ${(e as Error).message}\n`,
-        );
+        process.stderr.write(`--gitlog is not valid JSON: ${(e as Error).message}\n`);
         return 2;
       }
     }
@@ -1015,9 +989,7 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       );
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, md);
-      process.stdout.write(
-        JSON.stringify({ ...report, written: target }) + "\n",
-      );
+      process.stdout.write(JSON.stringify({ ...report, written: target }) + "\n");
     } else {
       process.stdout.write(JSON.stringify(report) + "\n");
     }

@@ -12,7 +12,3 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
-## 2026-05-23 - Fast-path parsing degradation via regex
-
-**Learning:** When trying to fast-reject lines before `JSON.parse` in large append-only logs (`events.jsonl`), using regular expressions (`line.match(/^{"ts":"[^"\\]+","op":"([^"\\]+)"/)`) to validate fields actually introduces significant garbage collection and memory allocation overhead. This degrades the performance of the "happy path" (lines that *do* match).
-**Action:** Use a simpler, ultra-fast substring check like `line.includes('"op":"atlas"')` which avoids memory allocation and is significantly faster and less fragile than a regex.
