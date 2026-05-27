@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-06-15 - Fast-path log parsing for Troubleshooting
+
+**Learning:** For `events.jsonl` synthesis (`assembleTroubleshootingInputs`), we read lines backwards to find errors. Even with a limit, on a large happy-path repository, it might traverse many lines doing unconditional `JSON.parse()`. Since error events mandate either an "error" key or "failed"/"error" status, a fast-path string check avoids JSON parsing overhead for happy-path logs.
+**Action:** Use `.includes('"error"') || .includes('"failed"')` check to pre-filter lines that cannot possibly match the required criteria before paying the cost of JSON parsing.

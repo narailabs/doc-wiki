@@ -642,6 +642,10 @@ export function assembleTroubleshootingInputs(wikiRoot) {
             const line = lines[i];
             if (!line)
                 continue;
+            // Fast-path: `_isErrorEvent` only returns true if there's an "error" key or "failed"/"error" status
+            if (!line.includes('"error"') && !line.includes('"failed"')) {
+                continue;
+            }
             let parsed;
             try {
                 parsed = JSON.parse(line);
