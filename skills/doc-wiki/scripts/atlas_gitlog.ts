@@ -91,7 +91,7 @@ export function getLastAtlasTimestamp(wikiRoot: string): string | null {
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-    if (!line.includes('"atlas"')) continue;
+    if (!line.includes('"op":"atlas"')) continue;
 
     let parsed: unknown;
     try {

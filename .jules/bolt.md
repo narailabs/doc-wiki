@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-28 - Precise fast-path string matching
+
+**Learning:** When using `String.includes()` as a fast-path filter for append-only JSON logs (like checking for `!line.includes('"atlas"')`), inner JSON fields might inadvertently contain the match substring (e.g., inside the text or details of an unrelated event). This causes false positives, falling through to the slow path and paying the full `JSON.parse` overhead unnecessarily.
+**Action:** Use highly specific `String.includes()` checks that match the exact key-value serialization structure (e.g., `line.includes('"op":"atlas"')`) to filter relevant lines and prevent false positives before calling `JSON.parse()`.
