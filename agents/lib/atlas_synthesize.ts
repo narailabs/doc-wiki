@@ -714,6 +714,12 @@ export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle
     ) {
       const line = lines[i];
       if (!line) continue;
+
+      // Fast-path: avoid JSON.parse on lines that cannot possibly be error events
+      if (!line.includes('"error"') && !line.includes('"failed"') && !line.includes('"status"')) {
+        continue;
+      }
+
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);
