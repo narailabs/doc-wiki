@@ -13,7 +13,7 @@
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
 
-## 2026-05-23 - Fast-path false positives with `.includes()`
+## 2026-05-23 - Fast-path false positives with `.includes()` and formatting tolerance
 
-**Learning:** When using `.includes()` as a fast-path filter before `JSON.parse()`, using loose substrings (e.g., `line.includes("atlas")` or `line.includes(dateStr)`) can cause false positives if those strings appear elsewhere in the JSON body (e.g., inside error messages, URLs, or text fields). This forces the code to fall back to the slow `JSON.parse()` or full regex evaluation unnecessarily, negating the fast-path optimization.
-**Action:** Make `.includes()` checks as strict as possible by including JSON structural characters, relying on the predictable output of `JSON.stringify()`. For example, change `line.includes('"atlas"')` to `line.includes('"op":"atlas"')`, and `line.includes(dateStr)` to `line.includes('"ts":"' + dateStr)`.
+**Learning:** When using fast-path filters before `JSON.parse()`, loose substrings (e.g., `line.includes("atlas")`) can cause false positives. However, strict literal matches (e.g., `line.includes('"op":"atlas"')`) break down on historical logs formatted with spaces (e.g., `json.dumps` output like `"op": "atlas"`).
+**Action:** Use a format-tolerant regex like `/"op":\s?"atlas"/` for fast-path checking instead of strict literal `.includes()`. Compile regexes outside of processing loops.

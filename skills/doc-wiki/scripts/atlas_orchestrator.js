@@ -136,7 +136,7 @@ export function getLastAtlasRunId(wikiRoot) {
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-        if (!line.includes('"op":"atlas"'))
+        if (!/"op":\s?"atlas"/.test(line))
             continue;
         let parsed;
         try {
@@ -215,7 +215,7 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
-        if (!line.includes('"op":"ingest"'))
+        if (!/"op":\s?"ingest"/.test(line))
             continue;
         let parsed;
         try {

@@ -33,12 +33,13 @@ function readEvents(wikiRoot, dateStr) {
     }
     const events = [];
     const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
+    const dateRegex = new RegExp(`"ts":\\s?"${dateStr}`);
     for (const rawLine of raw.split("\n")) {
         const line = rawLine.trim();
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot match our date
-        if (!line.includes(`"ts":"${dateStr}`))
+        if (!dateRegex.test(line))
             continue;
         const match = line.match(/^{"ts":"([^"\\]+)"/);
         if (match && match[1] && !match[1].startsWith(dateStr))
