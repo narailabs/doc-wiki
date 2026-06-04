@@ -1,23 +1,22 @@
 # doc-wiki benchmark — results
 
-_Generated: 2026-06-04T01:05:42.531Z. 114 runs in dataset._
+_Generated: 2026-06-04T23:59:47.025Z. 110 runs in dataset._
 
 ## Headline
 
 | Repo | Baseline | With doc-wiki | Δ | Baseline $/run | With-docwiki $/run | Atlas $ |
 |---|---|---|---|---|---|---|
-| cal-com | 94.1% (16/17) | 100.0% (20/20) | 5.9 pp | $0.00 | $0.00 | $2.20 |
-| calcom/cal.com | — (0/0) | 100.0% (1/1) | — | — | $0.00 | $0.00 |
+| cal-com | 94.1% (16/17) | 100.0% (20/20) | 5.9 pp | $0.00 | $0.00 | $17.35 |
 | django | 94.4% (17/18) | 100.0% (18/18) | 5.6 pp | $0.00 | $0.00 | $0.00 |
 | mastodon | 94.7% (18/19) | 100.0% (18/18) | 5.3 pp | $0.00 | $0.00 | $0.45 |
-| **aggregate** | 94.4% (51/54) | 100.0% (57/57) | 5.6 pp | $0.00 | $0.00 | $2.65 |
+| **aggregate** | 94.4% (51/54) | 100.0% (56/56) | 5.6 pp | $0.00 | $0.00 | $17.80 |
 
 ## Per-run cost summary
 
 - Total Claude spend (baseline runs): $0.00 across 54 runs
-- Total Claude spend (with-doc-wiki runs): $0.00 across 57 runs
-- Total atlas spend (one per repo): $2.65
-- **Grand total: $2.65**
+- Total Claude spend (with-doc-wiki runs): $0.00 across 56 runs
+- Total atlas spend (one per repo): $17.80
+- **Grand total: $17.80**
 
 ## Per-cell results (with multi-run variance where N>1)
 
@@ -32,7 +31,6 @@ _Generated: 2026-06-04T01:05:42.531Z. 114 runs in dataset._
 | cal-com/28610 | 2/2 | 1318 (806–1830) | 3/3 | 822 (645–1296) | 0 pp | $1.45 |
 | cal-com/28616 | 3/3 | 153 (118–179) | 3/3 | 192 (192–298) | 0 pp | $3.40 |
 | cal-com/28764 | 1/1 | 210 (210–210) | 1/1 | 234 (234–234) | 0 pp | $0.00 |
-| calcom/cal.com/cal-com#27988 | — | — | 1/1 | 1003 (1003–1003) | — | $0.00 |
 | django/36912 | 3/3 | 277 (97–480) | 3/3 | 158 (102–184) | 0 pp | $0.00 |
 | django/36961 | 1/1 | 300 (300–300) | 1/1 | 270 (270–270) | 0 pp | $0.00 |
 | django/36966 | 1/1 | 375 (375–375) | 1/1 | 454 (454–454) | 0 pp | $0.00 |

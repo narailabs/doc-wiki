@@ -5,9 +5,10 @@
 // success rates, writes results/RESULTS.md (human-readable) and
 // results/raw.csv (machine-readable).
 
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { load as yamlLoad } from "js-yaml";
 
 interface RunResultMin {
   repo: string;
@@ -25,6 +26,54 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const BENCH_DIR = resolve(HERE, "..");
 const RUNS_DIR = join(BENCH_DIR, "runs");
 const RESULTS_DIR = join(BENCH_DIR, "results");
+const MANIFEST_PATH = join(BENCH_DIR, "repos.yaml");
+
+// Load (repo, issue) pairs declared in repos.yaml. Results outside this set
+// are dropped from scoring with a stderr warning — stale or smoke-test result
+// directories under runs/ (gitignored) would otherwise silently pollute the
+// aggregate. Returns null when the manifest can't be read, in which case
+// every result is accepted (legacy behavior).
+function loadManifestKeys(): Set<string> | null {
+  if (!existsSync(MANIFEST_PATH)) return null;
+  try {
+    const manifest = yamlLoad(readFileSync(MANIFEST_PATH, "utf-8")) as {
+      repos?: { id: string; issues?: { id: string }[] }[];
+    };
+    const keys = new Set<string>();
+    for (const r of manifest.repos ?? []) {
+      for (const i of r.issues ?? []) {
+        keys.add(`${r.id}/${i.id}`);
+      }
+    }
+    return keys;
+  } catch (e) {
+    console.warn(`could not parse repos.yaml: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+function filterToManifest(results: RunResultMin[], keys: Set<string> | null): RunResultMin[] {
+  if (!keys) return results;
+  const kept: RunResultMin[] = [];
+  const skipped = new Map<string, number>();
+  for (const r of results) {
+    const k = `${r.repo}/${r.issue}`;
+    if (keys.has(k)) {
+      kept.push(r);
+    } else {
+      skipped.set(k, (skipped.get(k) ?? 0) + 1);
+    }
+  }
+  if (skipped.size > 0) {
+    const detail = [...skipped.entries()]
+      .map(([k, n]) => `${k} (${n})`)
+      .join(", ");
+    console.warn(
+      `skipped ${[...skipped.values()].reduce((a, b) => a + b, 0)} result(s) outside repos.yaml manifest: ${detail}`,
+    );
+  }
+  return kept;
+}
 
 function walkResults(): RunResultMin[] {
   const out: RunResultMin[] = [];
@@ -152,8 +201,11 @@ function summarize(results: RunResultMin[]): RepoSummary[] {
       s.withN += 1;
       if (testSuccess) s.withSuccess += 1;
       s.withCost += claudeCost;
+      // Sum atlas cost across runs — run.ts records cost_usd on every
+      // with-doc-wiki invocation, so the repo-level total is the sum, not the
+      // max. (Code review pointed out the old Math.max under-reported spend.)
       if (r.atlas && typeof r.atlas.cost_usd === "number" && !isNaN(r.atlas.cost_usd)) {
-        s.atlasCost = Math.max(s.atlasCost, r.atlas.cost_usd);
+        s.atlasCost += r.atlas.cost_usd;
       }
     }
   }
@@ -302,15 +354,15 @@ function writeCsv(results: RunResultMin[]): void {
     r.repo,
     r.issue,
     r.condition,
-    r.model,
-    r.test.success ? "1" : "0",
-    r.duration_s.toFixed(1),
-    String(r.claude.turns),
-    String(r.claude.tokens_in),
-    String(r.claude.tokens_out),
-    r.claude.cost_usd.toFixed(4),
-    r.atlas ? r.atlas.cost_usd.toFixed(4) : "",
-    r.atlas ? r.atlas.duration_s.toFixed(1) : "",
+    r.model ?? "",
+    r.test && r.test.success ? "1" : "0",
+    typeof r.duration_s === "number" ? r.duration_s.toFixed(1) : "",
+    r.claude ? String(r.claude.turns ?? "") : "",
+    r.claude ? String(r.claude.tokens_in ?? "") : "",
+    r.claude ? String(r.claude.tokens_out ?? "") : "",
+    r.claude && typeof r.claude.cost_usd === "number" ? r.claude.cost_usd.toFixed(4) : "",
+    r.atlas && typeof r.atlas.cost_usd === "number" ? r.atlas.cost_usd.toFixed(4) : "",
+    r.atlas && typeof r.atlas.duration_s === "number" ? r.atlas.duration_s.toFixed(1) : "",
     r.error ?? "",
   ]);
   const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
@@ -327,7 +379,8 @@ function csvCell(s: string): string {
 }
 
 function main(): void {
-  const results = walkResults();
+  const manifestKeys = loadManifestKeys();
+  const results = filterToManifest(walkResults(), manifestKeys);
   if (results.length === 0) {
     console.log("no run results found under benchmark/runs/ — run benchmark/harness/run.ts first");
     return;
