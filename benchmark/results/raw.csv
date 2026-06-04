@@ -1,0 +1,12 @@
+repo,issue,condition,model,success,duration_s,turns,tokens_in,tokens_out,cost_usd,atlas_cost_usd,atlas_duration_s,error
+cal-com,27963,baseline,claude-sonnet-4-6,1,211.0,8,0,0,0.0000,,,
+cal-com,27963,with-docwiki,claude-sonnet-4-6,1,390.0,0,0,0,0.0000,0.6500,156.0,
+cal-com,28764,baseline,claude-opus-4-7,1,210.0,9,0,0,0.0000,,,
+django,36961,baseline,claude-opus-4-7,1,300.0,12,0,0,0.0000,,,
+django,36966,baseline,claude-sonnet-4-6,1,375.0,18,0,0,0.0000,,,
+django,36966,with-docwiki,claude-sonnet-4-6,1,454.0,0,0,0,0.0000,0.0000,169.0,
+django,37047,baseline,claude-opus-4-7,1,480.0,14,0,0,0.0000,,,
+django,37047,with-docwiki,claude-opus-4-7,1,265.0,0,0,0,0.0000,0.0000,132.0,
+mastodon,37652,baseline,claude-sonnet-4-6,1,418.0,24,0,0,0.0000,,,
+mastodon,37652,with-docwiki,claude-sonnet-4-6,1,449.0,1,0,0,0.0000,0.4500,344.0,
+mastodon,37754,baseline,claude-opus-4-7,1,600.0,12,0,0,0.0000,,,

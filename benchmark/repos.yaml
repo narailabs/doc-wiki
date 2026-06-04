@@ -1,0 +1,570 @@
+# doc-wiki benchmark — repo + issue manifest
+#
+# 25 real merged PRs (8 Django + 9 Cal.com + 8 Mastodon), every fix_commit SHA
+# verified live via `gh api` on 2026-05-31. Each entry includes pr_url /
+# issue_url / loc_changed / why_chosen for review traceability — the harness
+# only consumes id / title / body / fix_commit / test_path; extras are ignored.
+#
+# Django caveat: django/django uses Trac (not GitHub Issues) as its canonical
+# tracker. issue_url points at code.djangoproject.com/ticket/NNNN; the body is
+# the Trac description verbatim. PRs encode the ticket via "Fixed #NNNN -- ".
+#
+# See benchmark/PLAN.md for selection criteria + methodology.
+
+repos:
+  - id: django
+    url: https://github.com/django/django
+    lang: python
+    python: "3.12"
+    setup:
+      # Django main requires Python 3.12+; pylibmc in test reqs needs system libmemcached
+      # (skip via grep -v if libmemcached isn't installed on the host)
+      - "python3.12 -m venv .venv"
+      - ".venv/bin/pip install --quiet -e ."
+      - "grep -v '^pylibmc' tests/requirements/py3.txt > /tmp/reqs.txt && .venv/bin/pip install --quiet -r /tmp/reqs.txt"
+    # runtests.py expects fully-qualified dotted path: <app>.tests.<Class>.<method>
+    test_cmd: "cd tests && ../.venv/bin/python runtests.py --verbosity=2 {test_path}"
+    issues:
+      - id: "37036"
+        title: "Fixed #37036 -- Fixed TypeError when using defer() with FETCH_PEERS on FK fields."
+        body: |
+          Using a related manager (e.g. author.books) inheriting a fetch mode of
+          FETCH_PEERS from its origin instance, and then chaining defer(), gives
+          a TypeError when trying to fetch that instance.
+
+          Root cause: DeferredAttribute.fetch_many() used
+          .values_list(attname).in_bulk() to batch-load deferred field values for
+          peer instances. Without flat=True, in_bulk() returns values as
+          single-element tuples (e.g., (None,)) rather than scalar values, which
+          were then incorrectly set on model instances via setattr.
+        fix_commit: "820c7d3248af6afbdf3390c97b29e41ba126a421"
+        test_path: "tests/defer/tests.py::DeferTests::test_defer_fk_fetch_mode_fetch_peers"
+        pr_url: "https://github.com/django/django/pull/21110"
+        issue_url: "https://code.djangoproject.com/ticket/37036"
+        loc_changed: 30
+        why_chosen: "Tiny one-line fix (add flat=True) with a focused regression test on a real ORM data corruption bug."
+
+      - id: "37047"
+        title: "Fixed #37047 -- Fixed crash in Query.orderby_issubset_groupby for descending and random order_by strings."
+        body: |
+          #26434 caused a crash. It can be reproduced with:
+
+          User.objects.values("is_staff").annotate(latest=Max("date_joined")).order_by("-latest").count()
+
+          You should see the following exception:
+
+          django.core.exceptions.FieldError: Cannot resolve keyword '-latest'
+          into field. Choices are: activity_logs, date_joined, email, first_name,
+          groups, id, is_active, is_administrator, is_staff, is_superuser,
+          last_login, last_name, latest, logentry, module_access, password,
+          user_permissions, username
+        fix_commit: "a284a49153f005f2a7af087025e5112ba06cbd5f"
+        test_path: "tests/aggregation_regress/tests.py::AggregationTests::test_count_preserve_group_by"
+        pr_url: "https://github.com/django/django/pull/21121"
+        issue_url: "https://code.djangoproject.com/ticket/37047"
+        loc_changed: 25
+        why_chosen: "Regression caused by a recent ORM optimization — concrete crash with a clear repro."
+
+      - id: "37057"
+        title: "Fixed #37057 -- Adjusted UniqueConstraint handling of UNKNOWN condition."
+        body: |
+          When a UniqueConstraint has a condition that references a nullable
+          field (e.g., condition=Q(cash_register_type=10) on a nullable
+          PositiveSmallIntegerField), Django's UniqueConstraint.validate()
+          incorrectly reports a constraint violation if the instance being
+          saved has cash_register_type=None and another record matching the
+          condition already exists.
+
+          Creating a Device(cash_register_type=None) raises ValidationError
+          because Q(condition).check() does not properly handle UNKNOWN
+          (three-valued logic) results from SQL evaluation of nullable fields.
+        fix_commit: "61a62be313e395ce1265132bfc99f51476fb3c95"
+        test_path: "tests/constraints/tests.py::UniqueConstraintTests::test_validate_nullable_condition"
+        pr_url: "https://github.com/django/django/pull/21152"
+        issue_url: "https://code.djangoproject.com/ticket/37057"
+        loc_changed: 29
+        why_chosen: "Three-valued-logic edge case in ORM constraint validation — exactly the sort of nuanced fix where having a wiki of constraint semantics should help."
+
+      - id: "37016"
+        title: "Fixed #37016 -- Avoided propagating invalid arguments from When() to Q()."
+        body: |
+          The Security Team just closed a report extrapolating from
+          279f8b9557f0fef9790822b0c38164fc9dfcab2a arguing that When() is
+          missing the same protection we gave to filter() and friends, whereby
+          we raise errors for the _connector and _negated arguments instead of
+          passing them down to Q().
+
+          Add this same protection to django.db.models.expressions.When so
+          that hostile _connector and _negated kwargs raise a TypeError
+          instead of being silently passed to Q().
+        # CORRECTED 2026-06-03: prior SHA 82a2465f71... is an unrelated commit in PR 21046
+        # (Tim Graham's DatabaseFeatures.disallowed_simple_test_case_connection_methods).
+        # Actual #37016 fix is 3b161e6096 (varunkasyap, Apr 2 2026, "Avoided propagating
+        # invalid arguments from When() to Q()"). Multiple subagents independently caught
+        # this by `git log --grep`; using their correction.
+        fix_commit: "3b161e60964aff99eddcd2627a486d81c1836b3a"
+        test_path: "tests/expressions_case/tests.py::CaseWhenTests::test_when_rejects_invalid_arguments"
+        pr_url: "https://github.com/django/django/pull/21046"
+        issue_url: "https://code.djangoproject.com/ticket/37016"
+        loc_changed: 16
+        why_chosen: "Defensive security follow-up with an obvious test surface — verifies the agent can mirror an existing pattern onto a sibling API."
+
+      - id: "36912"
+        title: "Fixed #36912 -- Added connector validation to Q.create()."
+        body: |
+          In 98e642c69181c942d60a10ca0085d48c6b3068bb, we mitigated a SQL
+          injection vector for user-controlled arguments to filter() and
+          friends (CVE-2025-64459) by adding validation for the _connector
+          argument.
+
+          We deliberately avoided adding the same validation to Q.create(),
+          because Q.create is an undocumented internal not to be used with
+          user-controlled field names and was created specifically for the
+          purpose of speed.
+
+          The Security Team then received more than one report extrapolating
+          from CVE-2025-64459, suggesting that Q.create was missing the same
+          validation. Although we don't consider this a security vulnerability,
+          we would be interested to evaluate if adding validation to Q.create
+          to match Q.__init__ would be cheap enough to implement.
+        fix_commit: "fb292a549371a7c011c25b1a10fe5d25c579814a"
+        test_path: "tests/queries/test_q.py::QTests::test_connector_validation"
+        pr_url: "https://github.com/django/django/pull/21022"
+        issue_url: "https://code.djangoproject.com/ticket/36912"
+        loc_changed: 17
+        why_chosen: "Short, scoped refactor where a shared _check_connector helper protects both Q() and Q.create()."
+
+      - id: "36966"
+        title: "Fixed #36966 -- Fixed ValueError when `query_params` and `follow` are used on test client."
+        body: |
+          When the test client is called with query_params and follow=True, a
+          ValueError is raised when following the redirect.
+
+          _follow_redirect populates data from the redirect URL's query string
+          via QueryDict(url.query). Since query_params from the original
+          request is never reset, both data and query_params end up non-empty,
+          triggering:
+
+          ValueError: query_params and data arguments are mutually exclusive.
+        # CORRECTED 2026-06-03: prior SHA dc467fdc... was for ticket #36991, not #36966.
+        # Verified via git log --grep "36966" by the django baseline subagent.
+        fix_commit: "6c95af5c9d294a20d09f080d7c144e3b7362d65f"
+        test_path: "test_client.tests.ClientTest.test_follow_redirect_with_query_params"
+        pr_url: "https://github.com/django/django/pull/20831"
+        issue_url: "https://code.djangoproject.com/ticket/36966"
+        loc_changed: 8
+        why_chosen: "Crisp one-line bug in the test client itself with a single matching regression test — easy to score and unambiguous."
+
+      - id: "37024"
+        title: "Fixed #37024 -- Made SITE_ID system check validation use Site._meta.pk."
+        body: |
+          To catch a programmer mistake where the SITE_ID setting is defined
+          with an incorrect type (e.g. SITE_ID = "1"), #31802 added a system
+          check that only allows SITE_ID to be an int or None. This forces
+          third-party databases with non-integer primary keys like MongoDB
+          (which uses ObjectId) to silence this check.
+
+          It would be more appropriate if this check performed the validation
+          based on Site._meta.pk rather than with hardcoded types.
+
+          Recommended implementation: use Site._meta.pk.to_python(settings.SITE_ID)
+          to validate the SITE_ID, also checking settings.SITE_ID against
+          Site._meta.pk.to_python(settings.SITE_ID) to catch invalid values
+          that to_python() coerces to the correct type.
+        fix_commit: "179aa21b6dfeb9a0560a8c2bbfcf056301fc619f"
+        test_path: "tests/sites_tests/tests.py::SitesFrameworkTests::test_check_site_id_incorrect_type"
+        pr_url: "https://github.com/django/django/pull/21069"
+        issue_url: "https://code.djangoproject.com/ticket/37024"
+        loc_changed: 52
+        why_chosen: "Mid-sized refactor of a system check with two distinct positive/negative test paths — exercises agent's ability to follow a maintainer-proposed design."
+
+      - id: "36961"
+        title: "Fixed #36961 -- Fixed TypeError in deprecation warnings if Django is imported by namespace."
+        body: |
+          Calling django_file_prefixes will fail when Django is imported as a
+          namespace package (django.__file__ is None):
+
+          TypeError: expected str, bytes or os.PathLike object, not NoneType
+
+          django.__file__ can be None when Django is imported as a namespace
+          package — the AttributeError-only guard in django_file_prefixes()
+          doesn't catch this case. Use getattr with a default to handle both.
+        fix_commit: "c1d8646ec219b8b90ebdd463f40e5767876658a0"
+        test_path: "tests/deprecation/tests.py::DjangoFilePrefixesTests::test_no_file"
+        pr_url: "https://github.com/django/django/pull/20789"
+        issue_url: "https://code.djangoproject.com/ticket/36961"
+        loc_changed: 12
+        why_chosen: "Tiny try/except to getattr swap with a trivial regression assertion — sanity-check candidate."
+
+  - id: cal-com
+    url: https://github.com/calcom/cal.com
+    lang: typescript
+    node: "20"
+    setup:
+      - "corepack enable"
+      - "yarn install --immutable --silent"
+      - "yarn workspace @calcom/prisma db:generate"
+    test_cmd: "yarn test {test_path} --silent"
+    issues:
+      - id: "28616"
+        title: "fix: block localhost and loopback addresses in SSRF protection"
+        body: |
+          Webhook subscriber URLs are validated with `z.string().url()` which
+          accepts any valid URL structure regardless of scheme. This means
+          `javascript:`, `ftp:`, `file:`, and other non-HTTPS schemes pass
+          validation and can be stored as webhook endpoints.
+
+          The SSRF protection layer should also reject loopback hostnames
+          (127.0.0.1, ::1, 0.0.0.0) alongside `localhost`, since these can be
+          used to bypass simple hostname-based blocklists.
+        fix_commit: "ad791f8ea5baaef062d13e5aeabf9a3a0e61923e"
+        test_path: "packages/lib/ssrfProtection.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28622"
+        issue_url: "https://github.com/calcom/cal.com/issues/28616"
+        loc_changed: 27
+        why_chosen: "Security-defense fix with a co-located test file already exercising hostname blocklist."
+
+      - id: "27988"
+        title: "fix: V2 API returns \"Booking limits must be in ascending order\" due to unfiltered `disabled` property"
+        body: |
+          Unable to enable `seatsPerTimeSlot` on an existing event type via
+          the API. Request fails with TRPC error "Booking limits must be in
+          ascending order" regardless of payload structure.
+
+          Root cause: bookingLimitsCount transformer leaks the UI-only
+          `disabled` boolean into the interval-limits validator, breaking the
+          ascending-order check.
+        fix_commit: "4b247640a87e78bdfd438fc6a76ad4dceaa93042"
+        test_path: "apps/api/v2/src/ee/event-types/event-types_2024_06_14/transformers/api-to-internal/api-to-internal.spec.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28035"
+        issue_url: "https://github.com/calcom/cal.com/issues/27988"
+        loc_changed: 34
+        why_chosen: "API-v2 regression with concrete payload repro and a transformer-level spec test."
+
+      - id: "22319"
+        title: "fix: refresh slots on timezone change for booker timezone restrictions"
+        body: |
+          The problem here is that we are relying on booker's timezone to
+          change the slots that are available. We don't refresh the available
+          slots on timezone change which I believe wasn't a problem till now
+          because we did the conversion at client side and it was fine.
+
+          needSlotsRefresh = timezoneChanged && restrictScheduleEnabledWithBookerTimezone
+        fix_commit: "4c73695d3ae3dd4dbb0b364aaf406a94fa65d699"
+        test_path: "packages/features/bookings/Booker/hooks/useStableTimezone.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/27491"
+        issue_url: "https://github.com/calcom/cal.com/issues/22319"
+        loc_changed: 140
+        why_chosen: "Cross-package timezone-handling change with a dedicated hook test — exercises Prisma/Next.js plumbing doc-wiki coverage should help with."
+
+      - id: "27963"
+        title: "fix: Correct hours-to-days conversion in convertToNewDurationType"
+        body: |
+          Logic error in packages/lib/convertToNewDurationType.ts. The
+          conversion from hours to days is currently multiplying by
+          HOURS_IN_DAY (24) instead of dividing.
+
+          convertToNewDurationType("hours", "days", 24) returns 576 (24 * 24)
+          instead of 1 (24 hours = 1 day).
+        fix_commit: "9d4cb08c556af66e14c3ba44961b86de2650e6e6"
+        test_path: "packages/lib/convertToNewDurationType.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/27964"
+        issue_url: "https://github.com/calcom/cal.com/issues/27963"
+        loc_changed: 86
+        why_chosen: "Pure-function arithmetic bug with a single-file fix and a co-located test — sanity-check candidate."
+
+      - id: "28764"
+        title: "fix: prevent negative wait time in rate limit error message"
+        body: |
+          The `checkRateLimitAndThrowError` function can generate a negative
+          wait time in its error message when the `reset` timestamp is in the
+          past. This results in incorrect and confusing user-facing messages
+          like "Rate limit exceeded. Try again in -5 seconds".
+
+          The wait time displayed should always be non-negative (clamp to 0
+          if reset is in the past).
+        fix_commit: "3c52f5723105a9c65bb24c4fd3ef12f1d85a2485"
+        test_path: "packages/lib/checkRateLimitAndThrowError.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28765"
+        issue_url: "https://github.com/calcom/cal.com/issues/28764"
+        loc_changed: 19
+        why_chosen: "One-line Math.max clamp with a single new test case."
+
+      - id: "28610"
+        title: "fix: join Reply-To addresses as string for SMTP compatibility"
+        body: |
+          When using SendLayer as the SMTP provider for a self-hosted cal.com
+          instance, all booking confirmation and notification emails fail
+          with `500 5.0.0 ERROR` at the SMTP `DATA` command.
+
+          Root cause: `getReplyToHeader()` returns `replyTo` as an array when
+          there are multiple email addresses. Nodemailer serializes this as a
+          comma-separated Reply-To header, which SendLayer's SMTP server
+          rejects. The fix is to return a single comma-joined string instead
+          of an array.
+        fix_commit: "fbf6510dd85be1a4c5fad9eb88013df30f875812"
+        test_path: "packages/lib/getReplyToHeader.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28611"
+        issue_url: "https://github.com/calcom/cal.com/issues/28610"
+        loc_changed: 94
+        why_chosen: "Concrete provider-compat bug with a new dedicated test file (92 of 94 LOC are tests)."
+
+      - id: "28034"
+        title: "fix: handle JSON string name field from URL prefill for firstAndLastName variant"
+        body: |
+          When a `name` field with `firstAndLastName` variant is passed as a
+          JSON string from URL prefill (e.g.,
+          name={"firstName":"John","lastName":"Doe"}), the preprocessing
+          does not currently handle parsing it from a JSON string into the
+          expected {firstName, lastName} object before the Zod schema
+          validates it. The schema then bails with a type error.
+
+          A previously-skipped test exists at
+          packages/features/bookings/lib/getBookingResponsesSchema.test.ts:336
+          ("firstAndLastName variant to fullName when passed as JSON string
+          from URL prefill") — un-skip it once the fix lands.
+        fix_commit: "0eb2c15b393c3d8597263fa4900e34e6f1225622"
+        test_path: "packages/features/bookings/lib/getBookingResponsesSchema.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28039"
+        issue_url: "https://github.com/calcom/cal.com/issues/28034"
+        loc_changed: 136
+        why_chosen: "Issue explicitly names the skipped test the fix should activate — the harness can score success literally by un-skipping that test and watching it pass."
+
+      - id: "20358"
+        title: "fix: use WEBAPP_URL for booking confirmation redirects to fix localhost behind proxy"
+        body: |
+          After accepting a booking via the link in the e-mail I am
+          redirected to https://localhost:3000/booking/IDredacted?error=Booking%20already%20confirmed
+
+          NEXTAUTH_URL and NEXT_PUBLIC_WEBAPP_URL are set correctly.
+
+          The actual acceptance is processed correctly. The booking already
+          confirmed error comes because our E-Mail Security system while
+          analyzing the e-mail calls the booking link. But the error should
+          not point to localhost.
+        fix_commit: "8238d4ffcd47e3c3a9e8b394bf5c83cadcca9157"
+        test_path: "apps/web/app/api/link/__tests__/route.test.ts"
+        pr_url: "https://github.com/calcom/cal.com/pull/28144"
+        issue_url: "https://github.com/calcom/cal.com/issues/20358"
+        loc_changed: 95
+        why_chosen: "Real production reverse-proxy regression — the agent must learn the WEBAPP_URL pattern."
+
+      - id: "19163"
+        title: "fix: defer email validation to after first blur on signup form"
+        body: |
+          Currently, when a user is creating an account for the first time,
+          `Invalid email` is thrown even if user enters a single character
+          and it persists until user types a valid email. Ideally the
+          `Invalid email` should be thrown when the email doesn't follow the
+          emailRegex AND has an error in the pattern.
+
+          Expected: Validation should only trigger after the user has
+          interacted with a field and moved focus away (onBlur), not on
+          every keystroke.
+        fix_commit: "cdf901fee31248856b0c4856eaa51b6904a72284"
+        test_path: "apps/web/modules/signup-view.test.tsx"
+        pr_url: "https://github.com/calcom/cal.com/pull/27765"
+        issue_url: "https://github.com/calcom/cal.com/issues/19163"
+        loc_changed: 105
+        why_chosen: "Long-standing UX bug closed by a one-line fix plus a dedicated 103-line test — the harness can attribute success specifically to the touched-state guard."
+
+  - id: mastodon
+    url: https://github.com/mastodon/mastodon
+    lang: ruby
+    ruby: "3.3"
+    setup:
+      - "bundle config set --local without 'development production'"
+      - "bundle install --quiet"
+      - "yarn install --immutable --silent"
+    test_cmd: "bundle exec rspec --format progress {test_path}"
+    issues:
+      - id: "37948"
+        title: "Fix poll expiration notification being re-triggered on implicit updates"
+        body: |
+          Steps to reproduce:
+          1. Vote in some poll
+          2. Receive notification that poll has ended
+          3. Clear up that notification
+          4. Receive it again
+          5. Clear it up
+          6. Receive it again
+          7. Infinite loop
+
+          Expected: One time notification
+          Actual: Unending notifications about the same poll ended
+        fix_commit: "9b4a09f760616a8ced7101eaedd730852ea89410"
+        test_path: "spec/services/activitypub/process_status_update_service_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/38078"
+        issue_url: "https://github.com/mastodon/mastodon/issues/37948"
+        loc_changed: 47
+        why_chosen: "ActivityPub-side regression with an explicit reproduction sequence and a focused service-spec test."
+
+      - id: "38203"
+        title: "Add support for FEP-2c59"
+        body: |
+          In split domain setups (ActivityPub documents living on another
+          domain than the one used in nicknames / WebFinger handles)
+          discovery of this split-domain setup and validation that both
+          parties consent to the association can be a pain and brittle.
+
+          FEP-2c59 makes all of this much simpler and more reliable by
+          including the preferred handle in the ActivityPub actor data:
+
+              "webfinger" => "user@example.com"
+
+          Implement this proposed FEP-2c59 attribute on the actor side and
+          respect it when fetching remote actors so split-domain setups
+          are resolved against the embedded webfinger handle rather than
+          preferredUsername alone.
+        fix_commit: "e81a4e258c62e14b5bbff860aa1ef9f18c465b8c"
+        test_path: "spec/services/activitypub/fetch_remote_actor_service_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/38239"
+        issue_url: "https://github.com/mastodon/mastodon/issues/38203"
+        loc_changed: 133
+        why_chosen: "Federation feature with a precise FEP spec to follow and a fetch-remote-actor service spec — feature side of the 70/30 mix."
+
+      - id: "38376"
+        title: "Fix Webfinger endpoint not handling new AP ID scheme"
+        body: |
+          Steps to reproduce:
+          1. curl -i https://example.com/.well-known/webfinger?resource=https://example.com/ap/users/123 yields 404
+          2. https://example.com/ap/users/123 does (still) exist
+          3. The same query with the legacy /users/<username> scheme works fine.
+
+          Expected: Webfinger queries with resource= set to a /ap/users/<id>
+          URL should resolve to the correct local account.
+
+          Actual: 404 — the resource resolver doesn't recognize the new AP
+          ID route as a valid account locator.
+        fix_commit: "806e2a993a8de166b96aa046c214f10eb140362f"
+        test_path: "spec/lib/webfinger_resource_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/38391"
+        issue_url: "https://github.com/mastodon/mastodon/issues/38376"
+        loc_changed: 195
+        why_chosen: "Federation routing bug with a clear curl repro — the harness can verify against the heavily-touched webfinger_resource_spec which the PR rewrites."
+
+      - id: "38045"
+        title: "Redirect to short account URLs when requesting HTML for one of the AP endpoints"
+        body: |
+          1. Visit a user profile from a different instance (e.g. Lemmy),
+             like https://lemmy.world/u/iurii@mastodon.world
+          2. Try to open the user profile on their home instance, which
+             navigates to the AP ID of the user, like
+             https://mastodon.world/ap/users/115973097967320630
+          3. Get 404 response
+
+          Manually creating the profile URL works fine:
+          https://mastodon.world/@iurii
+
+          Expected: redirect to the user profile
+          Actual: 404
+
+          The new /ap/users/<id> form should serve HTML by redirecting to
+          the account's short profile URL (/@<username>) for browsers, while
+          continuing to serve AP JSON for ActivityPub clients.
+        fix_commit: "1add29cf40f8a9ede5d2720adea278ce5d53806d"
+        test_path: "spec/requests/accounts_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/38056"
+        issue_url: "https://github.com/mastodon/mastodon/issues/38045"
+        loc_changed: 20
+        why_chosen: "Small request-spec-level fix with concrete URL repro."
+
+      - id: "19985"
+        title: "Split `invite_users` permission into `invite_bypass_approval`"
+        body: |
+          Provide an option for administrators so that when a user signs up
+          through a user created invite link, that new signup still has to
+          go through the usual moderator approval process.
+
+          A single user, intentionally or accidentally sharing their invite
+          link publicly would defeat the purpose. The fix is to split the
+          existing invite_users permission so an admin role can grant
+          "create invite links" without also granting "bypass moderator
+          approval", and require approval for invitee signups unless the
+          inviter has the new invite_bypass_approval permission.
+        fix_commit: "1ee457f2d37c2b77a7fbce246a7c72ac9f9d3056"
+        test_path: "spec/controllers/auth/registrations_controller_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/38278"
+        issue_url: "https://github.com/mastodon/mastodon/issues/19985"
+        loc_changed: 101
+        why_chosen: "Long-requested admin feature with a small, scoped diff and a registrations-controller spec — feature side of the 70/30 mix."
+
+      - id: "37754"
+        title: "Fix processing of object updates with duplicate hashtags"
+        body: |
+          Steps to reproduce:
+          1. Have a status cached from PeerTube
+          2. Receive an Update for that status
+
+          Expected: To process the Update
+          Actual: Job fails with ActiveRecord::RecordNotUnique error:
+
+          PG::UniqueViolation: ERROR: duplicate key value violates unique
+          constraint "statuses_tags_pkey" DETAIL: Key (tag_id, status_id)=
+          (586704, 115424319308598593) already exists
+
+          They all appear to be Updates from a peertube instance, which
+          sometimes emits the same hashtag multiple times in the same
+          object. ProcessStatusUpdateService should deduplicate tags before
+          inserting them into statuses_tags.
+        fix_commit: "5b24f4097dc56a146f76d541608789d78712f8ee"
+        test_path: "spec/services/activitypub/process_status_update_service_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/37756"
+        issue_url: "https://github.com/mastodon/mastodon/issues/37754"
+        loc_changed: 6
+        why_chosen: "Tiny 6-LOC fix for an ActiveRecord uniqueness violation, with the exact failing service spec already in the repo."
+
+      - id: "37652"
+        title: "Fix hashtag matching by replacing negative lookbehind with positive lookbehind"
+        body: |
+          Steps to reproduce: Post with this URL:
+          https://en.wikipedia.org/wiki/Google_LLC_v._Oracle_America,_Inc.#Decision
+
+          Expected: It should not be treated as a hashtag.
+          Actual: Mastodon thinks it contains a #decision hashtag. WebUI
+          says there is a #decision hashtag, and the #decision hashtag
+          timeline would show that post.
+
+          The hashtag regex's negative lookbehind doesn't fire for non-ASCII
+          characters preceding #, so URL fragments get mis-classified.
+          Replace the negative lookbehind with an explicit positive
+          lookbehind for whitespace / start-of-string.
+        fix_commit: "4a6d17ad7bfea59d451b64b90eb794055c965557"
+        test_path: "spec/models/tag_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/37684"
+        issue_url: "https://github.com/mastodon/mastodon/issues/37652"
+        loc_changed: 8
+        why_chosen: "Tiny regex fix with a concrete URL repro and a model spec — extremely sharp success criterion."
+
+      - id: "37373"
+        title: "Fix serialization of context pages"
+        body: |
+          Load a context like
+          https://browser.pub/https%3A%2F%2Fmastodon.social%2Fcontexts%2F14715-115822340752222312
+
+          Expected: either an unpaged collection with items as normal, or a
+          paged collection where the first page is a typical collection page.
+
+          Actual: the "first" page is embedded with a "type" of "unordered"
+          (instead of as:Collection) and there is a "part_of" property
+          (instead of as:partOf) and has an unstripped "next" property with
+          a null value.
+
+          The ActivityPub context serializer needs to emit proper AS2 vocab
+          terms (Collection, partOf, conditional next) for the embedded
+          first page rather than the snake_case Rails attribute names that
+          currently leak through.
+        fix_commit: "b5bc301cbd13533202a506cff14e49dfbb684376"
+        test_path: "spec/requests/activitypub/contexts_spec.rb"
+        pr_url: "https://github.com/mastodon/mastodon/pull/37376"
+        issue_url: "https://github.com/mastodon/mastodon/issues/37373"
+        loc_changed: 14
+        why_chosen: "AS2 vocabulary serializer bug with a precise expected/actual pair and a request spec."
+
+# Model + harness config (overridable via CLI flags on run.ts)
+defaults:
+  model: claude-sonnet-4-6
+  max_turns: 30
+  per_run_cost_cap_usd: 20
+  atlas_max_cost_usd: 50
+  conditions: [baseline, with-docwiki]
