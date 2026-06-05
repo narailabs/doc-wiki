@@ -132,17 +132,37 @@ Select TICKET_SAMPLE_SIZE real, closed internal tickets from the last 6 months. 
 - there's a regression test added in the fix PR
 - ticket is in this codebase, not a downstream service
 
-For each ticket, run the doc-wiki benchmark dispatch pattern (see benchmark/dispatch.md in the doc-wiki repo) but as a single-process flow:
+**Use the two-workspace pattern from benchmark/PLAN.md**, not a single-tree restore. The wiki + CLAUDE.md references from Phase 2 must be absent for the baseline run and present for the with-doc-wiki run — that isolation requires separate clones, not in-place restore. (In-place restore either fails on the uncommitted wiki/CLAUDE.md changes, or `checkout -f` wipes the very wiki context the with-doc-wiki run is supposed to measure.)
 
-For each ticket:
-- Get the fix commit SHA
-- Checkout fix_commit^1 (parent — pre-fix state)
-- Apply the test patch from the fix commit: `git checkout <fix_commit> -- <test_file_path>`
-- Run baseline: `claude -p "Fix this ticket: <title>\n<body>"` in the cloned tree (no doc-wiki context)
-- Run the test that the fix added; record pass/fail, duration, tokens, cost
-- Restore tree to fix_commit^1
-- Run with-doc-wiki: same prompt, but doc-wiki is now ready and CLAUDE.md references the wiki
-- Run the test again; record results
+For each ticket, do this:
+
+```sh
+# 1. baseline workspace — no wiki anywhere
+BASE=/tmp/case-study/<ticket_id>-baseline
+rm -rf "$BASE" && mkdir -p "$BASE" && cd "$BASE"
+git clone --depth 100 <internal-repo-url> .
+git checkout <fix_commit>^1
+git checkout <fix_commit> -- <test_file_path>          # apply only the test patch
+git reset HEAD <test_file_path> 2>/dev/null || true
+# install deps, then:
+claude -p "Fix this ticket: <title>\n<body>"
+# run the regression test the fix PR added; record pass/fail + duration + tokens + cost
+
+# 2. with-doc-wiki workspace — wiki built from scratch
+WDW=/tmp/case-study/<ticket_id>-with-docwiki
+rm -rf "$WDW" && mkdir -p "$WDW" && cd "$WDW"
+git clone --depth 100 <internal-repo-url> .
+git checkout <fix_commit>^1
+git checkout <fix_commit> -- <test_file_path>
+git reset HEAD <test_file_path> 2>/dev/null || true
+/doc-wiki:init
+/doc-wiki:atlas --max-cost 30 --scope <directory-containing-the-bug>
+# install deps, then:
+claude -p "Fix this ticket: <title>\n<body>"
+# run the same test; record same fields
+```
+
+Atlas runs per (ticket, with-doc-wiki) workspace — yes, this stacks atlas spend, but matches benchmark/PLAN.md's canonical methodology (each condition is a fresh clone; the with-doc-wiki branch builds the wiki from scratch). If you want to amortize, you can build atlas once on a shared workspace and `cp -r` the `docs/*-wiki/` dir + CLAUDE.md references into each with-doc-wiki clone — but document it as a methodology deviation.
 
 Save results to `./case-study-output/04-ticket-bench.csv` with columns:
 ticket_id, condition (baseline|with-docwiki), success (bool), duration_s, tokens_in, tokens_out, cost_usd, fix_path, test_path, notes
