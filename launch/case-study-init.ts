@@ -22,11 +22,32 @@ import {
   appendFileSync,
   readdirSync,
   statSync,
+  createReadStream,
+  createWriteStream,
 } from "node:fs";
 import { join, basename, resolve, dirname } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+
+// When invoked as `curl ... | npx tsx -`, stdin is the pipe and stdin.isTTY is
+// false — every interactive prompt silently falls back to its default. Open
+// /dev/tty directly so the prompts still appear when the user can answer.
+// Returns null when no terminal is available (Windows, sandboxed CI, etc.).
+function openControllingTty(): { input: NodeJS.ReadableStream; output: NodeJS.WritableStream } | null {
+  if (stdin.isTTY && stdout.isTTY) {
+    return { input: stdin, output: stdout };
+  }
+  if (process.env.CI) return null;
+  try {
+    if (!existsSync("/dev/tty")) return null;
+    const input = createReadStream("/dev/tty");
+    const output = createWriteStream("/dev/tty");
+    return { input, output };
+  } catch {
+    return null;
+  }
+}
 
 interface Parameters {
   PROJECT_NAME: string;
@@ -251,8 +272,9 @@ async function collect(cwd: string): Promise<Parameters> {
     connectors: detectConnectorsConfigured(),
   };
 
-  const interactive = stdin.isTTY && stdout.isTTY && !process.env.CI;
-  const rl = interactive ? createInterface({ input: stdin, output: stdout }) : null;
+  const tty = openControllingTty();
+  const rl = tty ? createInterface({ input: tty.input, output: tty.output }) : null;
+  const interactive = rl !== null;
 
   if (interactive) {
     console.log("\nDetected:");
@@ -265,6 +287,10 @@ async function collect(cwd: string): Promise<Parameters> {
     console.log(`  DB: ${auto.db}`);
     console.log(`  Connectors configured: ${auto.connectors || "none"}`);
     console.log("");
+  } else {
+    console.log(
+      "(non-interactive — using defaults / env vars. To force prompts, run from a TTY or set env vars per the README.)",
+    );
   }
 
   const PROJECT_NAME = await maybePrompt("PROJECT_NAME", "Project name (short generic label):", auto.name, rl);
@@ -370,8 +396,7 @@ Time budget: 30-60 minutes. Use Bash + Read; do not invoke doc-wiki yet.
 If doc-wiki is not installed: \`claude plugin install narailabs/doc-wiki\`.
 
 Run:
-  /doc-wiki:init
-  /doc-wiki:onboard
+  /doc-wiki:init      # init now subsumes the old onboard step (stack/ORM/DB/services detection)
   /doc-wiki:atlas --dry-run
 
 Read the dry-run output. If cost estimate exceeds $50, narrow with --scope <directory>. Then:

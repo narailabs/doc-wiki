@@ -59,8 +59,7 @@ If doc-wiki is not installed, install it:
     claude plugin install narailabs/doc-wiki
 
 Then run:
-    /doc-wiki:init
-    /doc-wiki:onboard
+    /doc-wiki:init      # init now subsumes the old onboard step (stack/ORM/DB/services detection)
     /doc-wiki:atlas --dry-run
 
 Read the dry-run output. Confirm the topic discovery, facet plan, and cost estimate look reasonable. If cost estimate exceeds $50, narrow the scope with --scope <directory>.
