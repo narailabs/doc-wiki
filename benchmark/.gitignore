@@ -1,0 +1,3 @@
+# Per-run artifacts can be large (transcripts, diffs, clones). Regenerate locally.
+runs/
+*.tsbuildinfo

@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>doc-wiki demo</title>
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --panel: #131820;
+      --border: #1f2733;
+      --text: #d7e0eb;
+      --text-dim: #6a7585;
+      --accent: #58c4dc;
+      --success: #62d471;
+      --failure: #e36667;
+      --warmth: #f1a85c;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    #demo {
+      position: relative;
+      background: radial-gradient(
+        ellipse at 50% 40%,
+        #0e141c 0%,
+        var(--bg) 70%
+      );
+      overflow: hidden;
+    }
+    .scene-content {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      padding: 110px 140px;
+    }
+    .mono {
+      font-family: "JetBrains Mono", monospace;
+    }
+    .dim {
+      color: var(--text-dim);
+    }
+    .accent {
+      color: var(--accent);
+    }
+    .warmth {
+      color: var(--warmth);
+    }
+    .success {
+      color: var(--success);
+    }
+    .failure {
+      color: var(--failure);
+    }
+
+    /* ─── Scene 1: title ─── */
+    #scene1 .scene-content {
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 40px;
+    }
+    #scene1 .title {
+      font-size: 130px;
+      font-weight: 700;
+      letter-spacing: -2px;
+      line-height: 1.05;
+      max-width: 1500px;
+    }
+    #scene1 .sub {
+      font-size: 56px;
+      font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: -0.5px;
+    }
+    #scene1 .cursor {
+      display: inline-block;
+      width: 14px;
+      height: 56px;
+      background: var(--accent);
+      margin-left: 12px;
+      vertical-align: -10px;
+    }
+
+    /* ─── Scene 2: baseline failure ─── */
+    #scene2 .scene-content {
+      flex-direction: column;
+      gap: 32px;
+    }
+    #scene2 .row {
+      display: grid;
+      grid-template-columns: 540px 1fr;
+      gap: 40px;
+      flex: 1;
+    }
+    .ticket-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 40px 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+    }
+    .ticket-card .badge {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 22px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+    .ticket-card .ticket-title {
+      font-size: 40px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .ticket-card .ticket-body {
+      font-size: 24px;
+      line-height: 1.55;
+      color: var(--text-dim);
+    }
+    .term {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px 36px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 24px;
+      line-height: 1.55;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .term .line {
+      white-space: pre;
+    }
+    .term .line.thought {
+      color: var(--text-dim);
+    }
+    .term .line.added {
+      color: var(--success);
+    }
+    .term .line.removed {
+      color: var(--failure);
+    }
+    .term .line.warmth {
+      color: var(--warmth);
+    }
+    .term .line .prompt {
+      color: var(--accent);
+    }
+    #scene2 .verdict-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 60px;
+    }
+    .verdict {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 40px;
+      font-weight: 600;
+    }
+    .verdict .mark {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 700;
+    }
+    .verdict.fail .mark {
+      background: rgba(227, 102, 103, 0.15);
+      color: var(--failure);
+      border: 2px solid var(--failure);
+    }
+    .verdict.pass .mark {
+      background: rgba(98, 212, 113, 0.15);
+      color: var(--success);
+      border: 2px solid var(--success);
+    }
+    .stat-block {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .stat-block .stat-value {
+      font-size: 110px;
+      font-weight: 800;
+      letter-spacing: -3px;
+      line-height: 1;
+    }
+    .stat-block.fail .stat-value { color: var(--failure); }
+    .stat-block.pass .stat-value { color: var(--success); }
+    .stat-block .stat-label {
+      font-size: 24px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── Scene 3: atlas ─── */
+    #scene3 .scene-content {
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      gap: 60px;
+      padding-top: 100px;
+    }
+    #scene3 .cmd {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 56px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    #scene3 .cmd .prompt {
+      color: var(--accent);
+    }
+    #scene3 .flow {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 60px;
+      align-items: stretch;
+      width: 100%;
+      max-width: 1500px;
+    }
+    .source-stack,
+    .wiki-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .src-pill {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 16px 26px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 22px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .src-pill .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .wiki-page {
+      background: var(--panel);
+      border-left: 4px solid var(--accent);
+      padding: 16px 24px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 20px;
+      color: var(--text);
+    }
+    #scene3 .arrow {
+      display: flex;
+      align-items: center;
+      font-size: 100px;
+      color: var(--accent);
+      font-weight: 300;
+    }
+    #scene3 .cost {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 26px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+    #scene3 .cost .v { color: var(--text); font-weight: 600; }
+
+    /* ─── Scene 4: with-doc-wiki ─── */
+    #scene4 .scene-content {
+      flex-direction: column;
+      gap: 32px;
+    }
+    #scene4 .row {
+      display: grid;
+      grid-template-columns: 540px 1fr;
+      gap: 40px;
+      flex: 1;
+    }
+    #scene4 .ticket-card { opacity: 0.6; }
+    #scene4 .same-prompt-pill {
+      align-self: flex-start;
+      background: rgba(88, 196, 220, 0.1);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 18px;
+      letter-spacing: 1px;
+      margin-bottom: 18px;
+      display: inline-block;
+    }
+    #scene4 .verdict-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 60px;
+    }
+
+    /* ─── Scene 5: headline ─── */
+    #scene5 .scene-content {
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 50px;
+      text-align: center;
+    }
+    #scene5 .top-label {
+      font-size: 28px;
+      color: var(--text-dim);
+      letter-spacing: 6px;
+      text-transform: uppercase;
+    }
+    #scene5 .chart {
+      display: grid;
+      grid-template-columns: 260px 260px;
+      column-gap: 80px;
+      align-items: end;
+      width: 720px;
+      height: 340px;
+    }
+    .bar-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      height: 100%;
+      justify-content: flex-end;
+    }
+    .bar {
+      width: 100%;
+      transform-origin: bottom center;
+      transform: scaleY(0);
+      border-radius: 10px 10px 2px 2px;
+    }
+    .bar.baseline {
+      background: var(--failure);
+      height: 36px;
+    }
+    .bar.docwiki {
+      background: var(--success);
+      height: 280px;
+    }
+    .bar-label-top {
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+    }
+    .bar-label-bot {
+      font-size: 22px;
+      color: var(--text-dim);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .baseline .bar-label-top { color: var(--failure); }
+    .docwiki .bar-label-top { color: var(--success); }
+    #scene5 .wordmark {
+      font-size: 88px;
+      font-weight: 800;
+      letter-spacing: -2.5px;
+    }
+    #scene5 .wordmark .dot {
+      color: var(--accent);
+    }
+    #scene5 .meta {
+      display: flex;
+      gap: 32px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 26px;
+      color: var(--text-dim);
+    }
+    #scene5 .meta .url { color: var(--text); }
+    #scene5 .meta .sep { opacity: 0.4; }
+
+    /* ─── Transition overlays ─── */
+    .veil {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="demo" data-composition-id="demo" data-start="0" data-duration="60" data-width="1920" data-height="1080">
+    <!-- Scene 1: title (0-3s) -->
+    <div id="scene1" class="clip" data-start="0" data-duration="3" data-track-index="0">
+      <div class="scene-content">
+        <div class="title">Claude Code on a real ticket.</div>
+        <div class="sub">Watch.<span class="cursor"></span></div>
+      </div>
+    </div>
+
+    <!-- Scene 2: baseline failure (3-15s) -->
+    <div id="scene2" class="clip" data-start="3" data-duration="12" data-track-index="0">
+      <div class="scene-content">
+        <div class="row">
+          <div class="ticket-card" id="s2-card">
+            <div class="badge">AUTH-1247 · JIRA</div>
+            <div class="ticket-title">Session timeout fails silently</div>
+            <div class="ticket-body">
+              Users report being logged out mid-session with no error message
+              and no auth event in the audit log. Reproducible under load.
+              Started after the v4.8 release.
+            </div>
+          </div>
+          <div class="term" id="s2-term">
+            <div class="line thought" data-i="0"><span class="prompt">$</span> claude -p "fix AUTH-1247"</div>
+            <div class="line thought" data-i="1">  → searching codebase for "session"…</div>
+            <div class="line thought" data-i="2">  → 47 matches in src/auth, src/middleware</div>
+            <div class="line removed" data-i="3">-   if (session.expires_at &lt; Date.now())</div>
+            <div class="line added" data-i="4">+   if (session.expires_at &lt;= Date.now() + GRACE_MS)</div>
+            <div class="line thought" data-i="5">  → running pytest tests/auth/…</div>
+            <div class="line failure" data-i="6">  ✗ test_session_timeout_audit_log FAILED</div>
+            <div class="line warmth" data-i="7">  (the fix didn't write the audit-log entry the test expects)</div>
+          </div>
+        </div>
+        <div class="verdict-row">
+          <div class="verdict fail" id="s2-verdict"><span class="mark">✗</span>baseline · no wiki</div>
+          <div class="stat-block fail" id="s2-stat">
+            <div class="stat-value">10%</div>
+            <div class="stat-label">AUTONOMOUS TICKET-FIX RATE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 3: atlas (15-30s) -->
+    <div id="scene3" class="clip" data-start="15" data-duration="15" data-track-index="0">
+      <div class="scene-content">
+        <div class="cmd"><span class="prompt">$</span> /doc-wiki:atlas</div>
+        <div class="flow">
+          <div class="source-stack" id="s3-srcs">
+            <div class="src-pill"><span class="dot"></span>src/auth/*.py</div>
+            <div class="src-pill"><span class="dot"></span>jira: AUTH-892, AUTH-1102</div>
+            <div class="src-pill"><span class="dot"></span>confluence: session-design</div>
+            <div class="src-pill"><span class="dot"></span>schema: postgres.sessions</div>
+            <div class="src-pill"><span class="dot"></span>github: PR #4421 (reverted)</div>
+            <div class="src-pill"><span class="dot"></span>aws: CloudWatch session-svc</div>
+          </div>
+          <div class="arrow">→</div>
+          <div class="wiki-stack" id="s3-pages">
+            <div class="wiki-page">wiki/auth/session-management.md</div>
+            <div class="wiki-page">wiki/auth/audit-log-policy.md</div>
+            <div class="wiki-page">wiki/data-model/sessions.md</div>
+            <div class="wiki-page">wiki/integrations/jira-AUTH-892.md</div>
+            <div class="wiki-page">wiki/decisions/reverted-PR-4421.md</div>
+            <div class="wiki-page">wiki/operations/session-svc-cloudwatch.md</div>
+          </div>
+        </div>
+        <div class="cost" id="s3-cost">
+          atlas spend: <span class="v" id="s3-cost-v">$0.00</span> · 6 sources →
+          <span class="v" id="s3-pages-v">0</span> wiki pages
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 4: with-doc-wiki retry (30-50s) -->
+    <div id="scene4" class="clip" data-start="30" data-duration="20" data-track-index="0">
+      <div class="scene-content">
+        <div class="same-prompt-pill" id="s4-pill">SAME PROMPT · SAME MODEL · WIKI IN CONTEXT</div>
+        <div class="row">
+          <div class="ticket-card">
+            <div class="badge">AUTH-1247 · JIRA</div>
+            <div class="ticket-title">Session timeout fails silently</div>
+            <div class="ticket-body">
+              Users report being logged out mid-session with no error message
+              and no auth event in the audit log.
+            </div>
+          </div>
+          <div class="term" id="s4-term">
+            <div class="line thought" data-i="0"><span class="prompt">$</span> claude -p "fix AUTH-1247"</div>
+            <div class="line accent" data-i="1">  → reading wiki/auth/session-management.md</div>
+            <div class="line accent" data-i="2">  → reading wiki/decisions/reverted-PR-4421.md</div>
+            <div class="line accent" data-i="3">  → reading wiki/auth/audit-log-policy.md</div>
+            <div class="line thought" data-i="4">  → grace-period fix tried in PR #4421 broke audit log</div>
+            <div class="line added" data-i="5">+   if (session.expires_at &lt;= Date.now() + GRACE_MS)</div>
+            <div class="line added" data-i="6">+     audit.emit('session.timeout', { sid, user_id, ... })</div>
+            <div class="line thought" data-i="7">  → running pytest tests/auth/…</div>
+            <div class="line success" data-i="8">  ✓ 4 passed in 0.83s</div>
+          </div>
+        </div>
+        <div class="verdict-row">
+          <div class="verdict pass" id="s4-verdict"><span class="mark">✓</span>with doc-wiki</div>
+          <div class="stat-block pass" id="s4-stat">
+            <div class="stat-value">80%</div>
+            <div class="stat-label">AUTONOMOUS TICKET-FIX RATE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 5: headline (50-60s) -->
+    <div id="scene5" class="clip" data-start="50" data-duration="10" data-track-index="0">
+      <div class="scene-content">
+        <div class="top-label" id="s5-top">AUTHOR'S ENTERPRISE CODEBASE · 50 REAL JIRA TICKETS</div>
+        <div class="chart">
+          <div class="bar-wrap baseline">
+            <div class="bar-label-top" id="s5-baseline-num">10%</div>
+            <div class="bar baseline" id="s5-bar-baseline"></div>
+            <div class="bar-label-bot">baseline</div>
+          </div>
+          <div class="bar-wrap docwiki">
+            <div class="bar-label-top" id="s5-doc-num">80%</div>
+            <div class="bar docwiki" id="s5-bar-docwiki"></div>
+            <div class="bar-label-bot">with doc-wiki</div>
+          </div>
+        </div>
+        <div class="wordmark" id="s5-wordmark">doc<span class="dot">·</span>wiki</div>
+        <div class="meta" id="s5-meta">
+          <span class="url">github.com/narailabs/doc-wiki</span>
+          <span class="sep">·</span>
+          <span>Apache 2.0 forever</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene transition veils (track 1 — overlays) -->
+    <div id="trans1" class="clip" data-start="2.8" data-duration="0.4" data-track-index="1">
+      <div class="veil" id="veil1"></div>
+    </div>
+    <div id="trans2" class="clip" data-start="14.8" data-duration="0.4" data-track-index="1">
+      <div class="veil" id="veil2"></div>
+    </div>
+    <div id="trans3" class="clip" data-start="29.8" data-duration="0.4" data-track-index="1">
+      <div class="veil" id="veil3"></div>
+    </div>
+    <div id="trans4" class="clip" data-start="49.8" data-duration="0.4" data-track-index="1">
+      <div class="veil" id="veil4"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+
+    // ─── Scene 1 (0-3s) ────────────────────────────────────────────────
+    tl.from("#scene1 .title", { y: 50, opacity: 0, duration: 0.8, ease: "expo.out" }, 0.3);
+    tl.from("#scene1 .sub", { y: 30, opacity: 0, duration: 0.6, ease: "power3.out" }, 0.9);
+    tl.from("#scene1 .cursor", { scaleY: 0, transformOrigin: "bottom", duration: 0.3, ease: "power2.out" }, 1.4);
+
+    // ─── Transition 1 (2.8-3.2) ────────────────────────────────────────
+    tl.set("#veil1", { opacity: 0 }, 2.8);
+    tl.to("#veil1", { opacity: 1, duration: 0.18, ease: "power1.in" }, 2.8);
+    tl.to("#veil1", { opacity: 0, duration: 0.22, ease: "power2.out" }, 2.98);
+
+    // ─── Scene 2 (3-15s) ───────────────────────────────────────────────
+    tl.from("#s2-card", { x: -60, opacity: 0, duration: 0.7, ease: "power3.out" }, 3.3);
+    tl.from("#s2-term", { x: 60, opacity: 0, duration: 0.7, ease: "power3.out" }, 3.5);
+    tl.from("#s2-term .line", {
+      opacity: 0,
+      y: 8,
+      duration: 0.35,
+      stagger: 0.42,
+      ease: "power2.out",
+    }, 4.6);
+    tl.from("#s2-verdict", { x: -30, opacity: 0, duration: 0.5, ease: "power3.out" }, 11.5);
+    tl.from("#s2-stat .stat-value", { scale: 0.7, opacity: 0, duration: 0.5, ease: "back.out(2.0)" }, 11.8);
+    tl.from("#s2-stat .stat-label", { y: 14, opacity: 0, duration: 0.4, ease: "power3.out" }, 12.1);
+
+    // ─── Transition 2 (14.8-15.2) ──────────────────────────────────────
+    tl.set("#veil2", { opacity: 0 }, 14.8);
+    tl.to("#veil2", { opacity: 1, duration: 0.18, ease: "power1.in" }, 14.8);
+    tl.to("#veil2", { opacity: 0, duration: 0.22, ease: "power2.out" }, 14.98);
+
+    // ─── Scene 3 (15-30s) ──────────────────────────────────────────────
+    tl.from("#scene3 .cmd", { y: 30, opacity: 0, duration: 0.6, ease: "expo.out" }, 15.3);
+    tl.from("#s3-srcs .src-pill", {
+      x: -30,
+      opacity: 0,
+      duration: 0.4,
+      stagger: 0.22,
+      ease: "power3.out",
+    }, 16.2);
+    tl.from("#scene3 .arrow", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(2.0)" }, 17.0);
+    tl.from("#s3-pages .wiki-page", {
+      x: 30,
+      opacity: 0,
+      duration: 0.4,
+      stagger: 0.32,
+      ease: "power3.out",
+    }, 17.6);
+    tl.from("#scene3 .cost", { opacity: 0, duration: 0.4, ease: "power2.out" }, 20.0);
+    // animated cost counter via proxy object
+    const costProxy = { v: 0, pages: 0 };
+    tl.to(costProxy, {
+      v: 5.71,
+      pages: 6,
+      duration: 4.5,
+      ease: "power2.out",
+      onUpdate() {
+        const v = document.getElementById("s3-cost-v");
+        const p = document.getElementById("s3-pages-v");
+        if (v) v.textContent = "$" + costProxy.v.toFixed(2);
+        if (p) p.textContent = Math.round(costProxy.pages);
+      },
+    }, 20.4);
+
+    // ─── Transition 3 (29.8-30.2) ──────────────────────────────────────
+    tl.set("#veil3", { opacity: 0 }, 29.8);
+    tl.to("#veil3", { opacity: 1, duration: 0.18, ease: "power1.in" }, 29.8);
+    tl.to("#veil3", { opacity: 0, duration: 0.22, ease: "power2.out" }, 29.98);
+
+    // ─── Scene 4 (30-50s) ──────────────────────────────────────────────
+    tl.from("#s4-pill", { y: -20, opacity: 0, duration: 0.5, ease: "power3.out" }, 30.3);
+    tl.from("#scene4 .ticket-card", { x: -60, opacity: 0, duration: 0.7, ease: "power3.out" }, 30.6);
+    tl.from("#s4-term", { x: 60, opacity: 0, duration: 0.7, ease: "power3.out" }, 30.8);
+    tl.from("#s4-term .line", {
+      opacity: 0,
+      y: 8,
+      duration: 0.35,
+      stagger: 0.6,
+      ease: "power2.out",
+    }, 32.0);
+    tl.from("#s4-verdict", { x: -30, opacity: 0, duration: 0.5, ease: "power3.out" }, 46.0);
+    tl.from("#s4-stat .stat-value", { scale: 0.7, opacity: 0, duration: 0.5, ease: "back.out(2.0)" }, 46.3);
+    tl.from("#s4-stat .stat-label", { y: 14, opacity: 0, duration: 0.4, ease: "power3.out" }, 46.6);
+
+    // ─── Transition 4 (49.8-50.2) ──────────────────────────────────────
+    tl.set("#veil4", { opacity: 0 }, 49.8);
+    tl.to("#veil4", { opacity: 1, duration: 0.18, ease: "power1.in" }, 49.8);
+    tl.to("#veil4", { opacity: 0, duration: 0.22, ease: "power2.out" }, 49.98);
+
+    // ─── Scene 5 (50-60s) ──────────────────────────────────────────────
+    tl.from("#s5-top", { y: 20, opacity: 0, duration: 0.5, ease: "power3.out" }, 50.3);
+    tl.from(".bar-label-bot", { opacity: 0, y: 10, duration: 0.4, stagger: 0.12, ease: "power2.out" }, 50.6);
+    tl.to("#s5-bar-baseline", { scaleY: 1, duration: 0.5, ease: "expo.out" }, 51.0);
+    tl.to("#s5-bar-docwiki", { scaleY: 1, duration: 0.9, ease: "expo.out" }, 51.4);
+    tl.from("#s5-baseline-num", { opacity: 0, y: 12, duration: 0.4, ease: "power3.out" }, 51.4);
+    tl.from("#s5-doc-num", { opacity: 0, y: 18, scale: 0.85, duration: 0.5, ease: "back.out(1.7)" }, 52.0);
+    tl.from("#s5-wordmark", { y: 20, opacity: 0, duration: 0.6, ease: "expo.out" }, 53.0);
+    tl.from("#s5-meta", { opacity: 0, duration: 0.5, ease: "power2.out" }, 53.6);
+    // final scene only: gentle fade out of meta
+    tl.to("#s5-wordmark, #s5-meta, #s5-top", { opacity: 0.0, duration: 0.6, ease: "power1.in" }, 59.3);
+
+    window.__timelines["demo"] = tl;
+  </script>
+</body>
+</html>
