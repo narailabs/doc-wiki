@@ -93,9 +93,9 @@ Save the per-page index to `./case-study-output/02-pages-index.csv`.
 
 Time budget: 1–3 hours for atlas itself depending on codebase size; +30 min for indexing.
 
-## PHASE 3 — Comparison against existing internal tool
+## PHASE 3 — Comparison + anecdotes
 
-Skip this phase if INTERNAL_TOOL_NAME == "none".
+### 3a — Comparison against existing internal tool (skip if INTERNAL_TOOL_NAME == "none")
 
 Read the existing internal tool's:
 - README / docs
@@ -115,14 +115,19 @@ Compare against the doc-wiki atlas output along these axes. For each axis, give 
 
 Save to `./case-study-output/03-comparison.json` with one entry per axis.
 
-Then collect 3 specific anecdotes — moments where doc-wiki captured something the existing tool missed (or vice versa). Format each as:
-- axis (which of the 8 above)
+### 3b — Anecdotes (ALWAYS run, framing depends on INTERNAL_TOOL_NAME)
+
+Collect 3 specific anecdotes and save to `./case-study-output/03-anecdotes.json`. Format each as:
+- axis (which of the 8 above; "n/a" if no existing tool)
 - doc_wiki_artifact_path (the wiki page where it shows up)
-- existing_tool_artifact_path (or "missing" if absent)
+- existing_tool_artifact_path (see framing below)
 - one-paragraph description of why this matters
 - impact_estimate (a sentence on what a developer would do differently because of it)
 
-Save anecdotes to `./case-study-output/03-anecdotes.json`.
+Framing depends on INTERNAL_TOOL_NAME:
+
+- **If INTERNAL_TOOL_NAME != "none":** moments where doc-wiki captured something the existing tool missed (or vice versa). `existing_tool_artifact_path` is the comparable artifact in the other tool, or `"missing"` if absent.
+- **If INTERNAL_TOOL_NAME == "none":** moments where doc-wiki surfaced knowledge the team didn't have written down — tribal knowledge in someone's head, an outdated ADR, a Confluence page nobody linked, a Slack thread the team relied on. `existing_tool_artifact_path` is `"n/a"`. Do not fabricate a comparison tool.
 
 Time budget: 1–2 hours.
 
@@ -230,9 +235,9 @@ This is what you'd send to a conference CFP or a deep-dive blog.
 Full detail with real names:
 - Lead with: "I built a tool. It already works. Here's the proposal to roll it out across the org."
 - Real service names, real ticket IDs, real numbers, real screenshots
-- Direct comparison table: existing tool vs doc-wiki across the 8 axes from Phase 3
+- Direct comparison table: existing tool vs doc-wiki across the 8 axes from Phase 3 (omit this row if INTERNAL_TOOL_NAME == "none")
 - The 3 specific anecdotes from Phase 3, with names
-- Migration plan: which services first, what success looks like, what happens to the existing tool
+- Migration plan: which services first, what success looks like, what happens to the existing tool (or, if INTERNAL_TOOL_NAME == "none", the migration plan covers rollout from no-tool to doc-wiki)
 - Cost: atlas spend at scale, ongoing maintenance, headcount
 - Ask: 4-week pilot on [specific area], with a decision gate at the end
 

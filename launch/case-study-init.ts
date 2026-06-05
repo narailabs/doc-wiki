@@ -449,9 +449,9 @@ Per-page index → ./case-study-output/02-pages-index.csv (path,title,type,sourc
 
 Time budget: 1-3 hours.
 
-## PHASE 3 — Comparison against existing internal tool
+## PHASE 3 — Comparison + anecdotes
 
-Skip if INTERNAL_TOOL_NAME == "none".
+### 3a — Comparison against existing internal tool (skip if INTERNAL_TOOL_NAME == "none")
 
 For each of these 8 axes, give a 1-paragraph judgment + one specific example:
 1. Code coverage
@@ -465,7 +465,12 @@ For each of these 8 axes, give a 1-paragraph judgment + one specific example:
 
 Save to ./case-study-output/03-comparison.json.
 
-Then 3 specific anecdotes where doc-wiki caught something the existing tool missed (or vice versa). Save to ./case-study-output/03-anecdotes.json, each with: { axis, doc_wiki_artifact_path, existing_tool_artifact_path, description, impact_estimate }.
+### 3b — Anecdotes (ALWAYS run, framing depends on INTERNAL_TOOL_NAME)
+
+Collect 3 specific anecdotes and save to ./case-study-output/03-anecdotes.json, each with: { axis, doc_wiki_artifact_path, existing_tool_artifact_path, description, impact_estimate }. Framing:
+
+- **If INTERNAL_TOOL_NAME != "none":** anecdotes where doc-wiki caught something the existing tool missed (or vice versa). \`existing_tool_artifact_path\` is the comparable artifact in the other tool.
+- **If INTERNAL_TOOL_NAME == "none":** anecdotes where doc-wiki surfaced knowledge the team didn't have written down (tribal knowledge in a head, an outdated ADR, a Confluence page nobody linked). \`existing_tool_artifact_path\` is the empty string or "n/a" — there is no other tool. Do not fabricate a comparison.
 
 Time budget: 1-2 hours.
 
@@ -555,8 +560,9 @@ When in doubt, replace.
 - [ ] 01-inventory.json
 - [ ] 02-atlas.json
 - [ ] 02-pages-index.csv
-- [ ] 03-comparison.json (if INTERNAL_TOOL_NAME != "none")
-- [ ] 03-anecdotes.json
+${p.INTERNAL_TOOL_NAME === "none"
+    ? "- [~] 03-comparison.json SKIPPED (INTERNAL_TOOL_NAME=none)\n"
+    : "- [ ] 03-comparison.json\n"}- [ ] 03-anecdotes.json
 - [ ] 04-ticket-bench.csv
 - [ ] 04-summary.json
 - [ ] portfolio.md
