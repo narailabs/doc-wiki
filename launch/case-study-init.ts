@@ -471,6 +471,7 @@ For each ticket × condition, create a fresh workspace:
     BASELINE_DIR=/tmp/case-study/<ticket_id>-baseline
     rm -rf "$BASELINE_DIR" && mkdir -p "$BASELINE_DIR" && cd "$BASELINE_DIR"
     git clone --depth 100 <internal-repo-url> .
+    git fetch --depth 500 origin <fix_commit> 2>/dev/null || git fetch --unshallow
     git checkout <fix_commit>^1
     git checkout <fix_commit> -- <test_file_path>      # apply test patch
     git reset HEAD <test_file_path> 2>/dev/null || true
