@@ -18,7 +18,6 @@ All TypeScript scripts at `skills/doc-wiki/scripts/` (compile to `.js` siblings 
 - `init_wiki.ts` -- Bootstrap wiki scaffold
 - `parse_config.ts` -- Read/write `wiki.config.yaml`
 - `cache_manager.ts` -- Content-hash cache for dedup
-- `security_check.ts` -- URL validation and safety
 - `extract_binary.ts` -- Binary file extraction
 - `lint_checks.ts` -- Structural lint checks
 - `quality_score.ts` -- Page quality scoring (0.0-1.0)

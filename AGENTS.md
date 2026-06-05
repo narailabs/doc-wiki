@@ -45,8 +45,9 @@ Ingest a source (file, URL, folder, pasted text) into the wiki.
 # Check cache first
 node skills/doc-wiki/scripts/cache_manager.js check --path <source-path> --cache-dir <wiki-root>/.wiki-cache/
 
-# Security check for URLs
-node skills/doc-wiki/scripts/security_check.js --url <url>
+# Security primitives (URL validation, path containment, label sanitization)
+# now live in narai-primitives/toolkit — `validateUrl`, `checkPathContainment`,
+# `sanitizeLabel` — imported by ingest scripts, no standalone CLI.
 
 # Extract binary files
 node skills/doc-wiki/scripts/extract_binary.js --input <file> --output <raw-dir>/extracted/
@@ -116,7 +117,6 @@ All TypeScript scripts live at: `skills/doc-wiki/scripts/` and compile to siblin
 | `init_wiki.ts` | Bootstrap wiki scaffold |
 | `parse_config.ts` | Read/write `wiki.config.yaml` |
 | `cache_manager.ts` | Content-hash cache for dedup |
-| `security_check.ts` | URL validation and safety |
 | `extract_binary.ts` | Binary file extraction |
 | `lint_checks.ts` | Structural lint checks |
 | `quality_score.ts` | Page quality scoring (0.0-1.0) |

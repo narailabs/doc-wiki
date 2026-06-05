@@ -1,18 +1,22 @@
 # doc-wiki
 
 <p align="center">
-  <a href="media/demo.mp4"><img src="media/demo-hero.gif" alt="doc-wiki demo — ticket-fix accuracy 10% baseline vs 80% with doc-wiki" width="720"/></a>
+  <a href="media/demo.mp4"><img src="media/demo-hero.gif" alt="doc-wiki demo — autonomous ticket-fix accuracy from ~10% to ~50% with doc-wiki" width="720"/></a>
 </p>
 <p align="center">
-  <em>60-second walkthrough: <a href="media/demo.mp4">media/demo.mp4</a> · raw benchmark numbers: <a href="benchmark/"><code>benchmark/</code></a></em>
-</p>
-
-<p align="center">
-  <strong>Claude Code that works on messy enterprise codebases.</strong>
+  <em>60-second demo: <a href="media/demo.mp4">media/demo.mp4</a> · 2-minute product overview: <a href="media/product-explainer.mp4">media/product-explainer.mp4</a> · reproducible benchmark: <a href="benchmark/"><code>benchmark/</code></a></em>
 </p>
 
 <p align="center">
-  doc-wiki feeds Claude Code an ecosystem-aware wiki of your code + Jira/Confluence/GitHub/Notion/AWS/GCP + ORM/DB schemas — so the agent sees the whole picture before touching the diff. On the author's enterprise codebase, autonomous ticket-fix accuracy went from <strong>~10% to ~80%</strong>. A reproducible benchmark — Django, Cal.com, Mastodon — lives at <a href="benchmark/"><code>benchmark/</code></a>.
+  <strong>The LLM Wiki layer for enterprise coding agents.</strong>
+</p>
+
+<p align="center">
+  Your coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider — reads an ecosystem-aware wiki of your code + Jira / Confluence / GitHub / Notion / AWS / GCP + ORM / DB schemas before it touches the diff. On the author's enterprise codebase, autonomous fix-rate climbed from <strong>~10% to ~50%</strong>, with the remaining tickets shipping noticeably faster.
+</p>
+
+<p align="center">
+  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. The cross-OSS benchmark at <a href="benchmark/"><code>benchmark/</code></a> (Django, Cal.com, Mastodon) is the reproducible number — run it on your own repo to see yours.</em></sub>
 </p>
 
 <p align="center">
@@ -20,19 +24,19 @@
   <a href="docs/getting-started.md">5-min walkthrough</a> · <a href="benchmark/">reproducible benchmark</a> · Apache-2.0 forever
 </p>
 
-doc-wiki is **a tool you run inside Claude Code** (or Codex / Gemini / Cursor / Aider — see [multi-platform wrappers](#multi-platform-wrappers)). Seven `/doc-wiki:*` slash commands cover the full lifecycle: init (scaffold + onboard), atlas (full-codebase documentation in one pass), ingest, query, lint, edit, and stats. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
+doc-wiki is **a tool you run inside your coding agent** — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, and Aider all read the same wiki via their standard project-convention files (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, etc. — see [multi-platform wrappers](#multi-platform-wrappers)). Seven `/doc-wiki:*` slash commands cover the full lifecycle: init (scaffold + onboard), atlas (full-codebase documentation in one pass), ingest, query, lint, edit, and stats. External services are reached through a single planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them.
 
 ---
 
 ## Why this exists
 
-Claude Code is shockingly good on clean, small, well-documented codebases. On the messy real-world codebases most people actually work in — eight years of accumulated patterns, a database schema that drifted from the ORM models three refactors ago, half the answers buried in old Jira tickets — it falls off a cliff. The model can't see what isn't in its context window, and dumping the whole repo is impossible (and useless even when it fits).
+Claude Code is shockingly good on clean, small, well-documented codebases. On real-world enterprise codebases — eight years of accumulated patterns, a database schema that drifted from the ORM models three refactors ago, half the answers buried in old Jira tickets, decision rationale stuck in GitHub PR discussions from a year ago — it falls off a cliff. The model can't see what isn't in its context window, and dumping the whole repo is impossible (and useless even when it fits).
 
-Andrej Karpathy named the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern in April 2026: a maintained, compounding artifact of distilled knowledge that an LLM reads instead of re-deriving everything from raw sources every time. doc-wiki is that pattern pointed at messy enterprise code — and extended to ingest Jira, Confluence, GitHub, Notion, AWS, GCP, and your ORM/DB schemas, so the wiki carries the whole ecosystem your codebase actually depends on, not just the code.
+Andrej Karpathy named the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern in April 2026: a maintained, compounding artifact of distilled knowledge that an LLM reads instead of re-deriving everything from raw sources every time. doc-wiki applies that pattern to enterprise code — and extends it to ingest Jira, Confluence, GitHub, Notion, AWS, GCP, and your ORM/DB schemas, so the wiki carries the whole ecosystem your codebase actually depends on, not just the code.
 
-The output is a structured wiki under `docs/<app>-wiki/`. Claude Code reads it (via `CLAUDE.md` references) before touching code. `/doc-wiki:atlas` documents an entire codebase in one phased pass; `/doc-wiki:ingest` keeps it current as the project evolves; `/doc-wiki:query` returns cited answers synthesised from wiki pages. Seven `/doc-wiki:*` slash commands cover the lifecycle; external services route through one planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them. Everything runs inside your existing Claude Code session. No SaaS, no daemon, no telemetry.
+The output is a structured wiki under `docs/<app>-wiki/`. Your coding agent reads it (via `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, or whichever convention your agent uses) before touching code. `/doc-wiki:atlas` documents an entire codebase in one phased pass; `/doc-wiki:ingest` keeps it current as the project evolves; `/doc-wiki:query` returns cited answers synthesised from wiki pages. Seven `/doc-wiki:*` slash commands cover the lifecycle; external services route through one planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them. Everything runs inside your existing agent session. No SaaS, no daemon, no telemetry.
 
-It works in Claude Code, Codex, Gemini, Cursor, and Aider (see [multi-platform wrappers](#multi-platform-wrappers)). Built for enterprise codebases and complex systems; fine on smaller projects too. Manifesto: [`docs/manifesto.md`](docs/manifesto.md) _(coming soon — what "AI-readable wiki for messy code" means and why the standard should stay Apache 2.0)_.
+Works across **seven coding agents** — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, and Aider (see [multi-platform wrappers](#multi-platform-wrappers)). Built for enterprise codebases of any complexity; fine on smaller projects too. Manifesto: [`docs/manifesto.md`](docs/manifesto.md) _(what "LLM Wiki for enterprise code" means and why the standard should stay Apache 2.0)_.
 
 ## Reproducible benchmark
 
@@ -100,7 +104,7 @@ doc-wiki is Apache-2.0 licensed and will stay that way. No relicensing, no rug-p
 ## Prerequisites
 
 - **Node 20.x.** Node 21+ isn't supported because some upstream deps (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries. Check with `node --version`; install via `nvm install 20` if needed.
-- **Claude Code, Codex, Gemini, Cursor, or Aider** to invoke the slash commands. doc-wiki ships wrappers for each — see [Multi-platform wrappers](#multi-platform-wrappers).
+- **Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider** to invoke the slash commands. doc-wiki ships wrappers for each — see [Multi-platform wrappers](#multi-platform-wrappers).
 - **Optional:** credentials for any external services you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, or a database). You can skip these now — `/doc-wiki:init` Phase 3 (Onboarding) will walk you through them.
 
 ## Install
@@ -324,7 +328,7 @@ Documentation under [`docs/`](docs/) is organized by audience:
 | Doc | When to read |
 |---|---|
 | [`docs/getting-started.md`](docs/getting-started.md) | Step-by-step tutorial — install through maintenance loop |
-| [`docs/manifesto.md`](docs/manifesto.md) | What "AI-readable wiki for messy code" means and why it's the wedge |
+| [`docs/manifesto.md`](docs/manifesto.md) | What "LLM Wiki for enterprise code" means and why it's the wedge |
 | [`docs/doc-wiki-starter.md`](docs/doc-wiki-starter.md) | 65-line drop-in CLAUDE.md taste of the pattern (zero install) |
 | [`docs/recipes.md`](docs/recipes.md) | Common end-to-end command sequences for typical jobs |
 | [`docs/wiki-output.md`](docs/wiki-output.md) | What your wiki looks like after first ingest |
@@ -359,16 +363,17 @@ Documentation under [`docs/`](docs/) is organized by audience:
 
 ## Multi-platform wrappers
 
-doc-wiki is primarily a Claude Code project, but the same skill is exposed in other AI coding tools via these wrappers:
+doc-wiki is primarily a Claude Code project, but the same skill is exposed in every major coding agent via project-convention files:
 
-| File | Tool |
+| File | Tool(s) |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Codex / OpenAI agents |
-| [`GEMINI.md`](GEMINI.md) | Gemini / Google AI |
+| [`CLAUDE.md`](CLAUDE.md) | Claude Code |
+| [`AGENTS.md`](AGENTS.md) | Codex (OpenAI), OpenCode (sst/opencode), Antigravity (CLI fallback) |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI, Antigravity (IDE + CLI primary) |
 | [`.cursor/rules/doc-wiki.mdc`](.cursor/rules/doc-wiki.mdc) | Cursor IDE |
 | [`.aider/conventions.md`](.aider/conventions.md) | Aider |
 
-All four route into the same orchestrator skill. Slash commands work the same; only the prompt UI differs.
+All five files route into the same orchestrator skill. Slash commands work the same; only the prompt UI differs. **Seven coding agents covered.**
 
 ## License
 
