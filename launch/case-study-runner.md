@@ -21,7 +21,7 @@ PROJECT_DESCRIPTION: <one sentence on what the codebase does, e.g. "a B2B SaaS b
 INTERNAL_TOOL_NAME: <the name of the existing internal documentation tool you built, or "none" if not applicable>
 INTERNAL_TOOL_LOCATION: <repo path or URL where the existing tool lives, or "none">
 EXTERNAL_CONNECTORS_ENABLED: <comma-separated list of {jira, confluence, github, notion, aws, gcp, db} you have configured>
-PRIVATE: <true | false — if true, all outputs use placeholder names; if false, real names are kept in the internal adoption pitch only>
+PRIVATE: <true | false — gates whether the internal pitch (5.3) is generated. true: produce 5.3 with real names (NDA-only artifact) plus sanitized 5.1/5.2/5.4. false: skip 5.3 entirely; only sanitized 5.1/5.2/5.4 are produced. Public outputs are ALWAYS sanitized regardless of this flag.>
 TICKET_SAMPLE_SIZE: <how many real internal tickets to run the benchmark on; recommended 5–10>
 
 ## PHASE 1 — Codebase inventory (no doc-wiki yet)
