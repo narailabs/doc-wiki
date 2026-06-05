@@ -1,7 +1,10 @@
 # doc-wiki
 
 <p align="center">
-  <em>Demo video in production — see <a href="benchmark/">benchmark/</a> for the reproducible numbers.</em>
+  <a href="media/demo.mp4"><img src="media/demo-hero.gif" alt="doc-wiki demo — ticket-fix accuracy 10% baseline vs 80% with doc-wiki" width="720"/></a>
+</p>
+<p align="center">
+  <em>60-second walkthrough: <a href="media/demo.mp4">media/demo.mp4</a> · raw benchmark numbers: <a href="benchmark/"><code>benchmark/</code></a></em>
 </p>
 
 <p align="center">
