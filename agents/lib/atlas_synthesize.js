@@ -652,10 +652,6 @@ export function assembleTroubleshootingInputs(wikiRoot) {
             const line = lines[i];
             if (!line)
                 continue;
-            // Fast-path: skip JSON parse overhead if this line cannot be an error event
-            if (!line.includes('"error"') && !line.includes('"failed"')) {
-                continue;
-            }
             let parsed;
             try {
                 parsed = JSON.parse(line);
