@@ -19,6 +19,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+// ── Regex Helpers ───────────────────────────────────────────────────
+const TS_EXTRACT_RE = /^{"ts":"([^"\\]+)"/;
+const RELATIVE_SINCE_EXTRACT_RE = /^(\d+)([dhm])$/;
+const RELATIVE_SINCE_TEST_RE = /^\d+[dhm]$/;
+const ABSOLUTE_SINCE_TEST_RE = /^\d{4}-\d{2}-\d{2}/;
 // ── Timestamp helpers ───────────────────────────────────────────────
 /**
  * Produce a Python-compatible `datetime.now(timezone.utc).isoformat()`
@@ -156,7 +161,7 @@ function _readEvents(wikiRoot, since = null) {
             // leading whitespace. The character class excludes both `"` and `\` so
             // any ts containing a JSON escape (like `\+` for `+`) misses the regex
             // and safely falls through to the slow path for proper decoding.
-            const m = line.match(/^{"ts":"([^"\\]+)"/);
+            const m = line.match(TS_EXTRACT_RE);
             if (m) {
                 const entryMs = parsePythonIsoformat(m[1]);
                 // G-EVENTS-TS-STRICT: when --since is active, drop events whose
@@ -195,7 +200,7 @@ function _readEvents(wikiRoot, since = null) {
  * it does not match the `N[dhm]` shape, matching the Python helper.
  */
 export function parseRelativeSince(sinceStr) {
-    const match = sinceStr.match(/^(\d+)([dhm])$/);
+    const match = sinceStr.match(RELATIVE_SINCE_EXTRACT_RE);
     if (!match) {
         return sinceStr;
     }
@@ -549,8 +554,8 @@ export function main(argv = process.argv.slice(2)) {
         // else exits non-zero with a clear error so the caller knows their
         // filter was ignored rather than silently returning all events.
         if (args.since !== null && args.since !== undefined) {
-            const isRelative = /^\d+[dhm]$/.test(args.since);
-            const isAbsolute = /^\d{4}-\d{2}-\d{2}/.test(args.since);
+            const isRelative = RELATIVE_SINCE_TEST_RE.test(args.since);
+            const isAbsolute = ABSOLUTE_SINCE_TEST_RE.test(args.since);
             if (!isRelative && !isAbsolute) {
                 process.stderr.write(`[event_logger] error: --since value ${JSON.stringify(args.since)} is not a valid relative duration (e.g. 7d, 24h, 15m) or absolute ISO timestamp (YYYY-MM-DD...)\n`);
                 return 2;
