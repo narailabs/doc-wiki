@@ -333,9 +333,14 @@ async function collect(cwd: string): Promise<Parameters> {
     auto.connectors,
     rl,
   );
+  // Reworded to match what the flag actually controls. Public outputs (5.1, 5.2,
+  // 5.4) are sanitized unconditionally — this flag only gates whether the
+  // internal-pitch.md (5.3) gets generated. Phrasing "sanitize public outputs?"
+  // misled users into thinking PRIVATE=true would prevent named artifacts; in
+  // reality PRIVATE=true PRODUCES the NDA-only named artifact.
   const PRIVATE_RAW = await maybePrompt(
     "PRIVATE",
-    "Sanitize public outputs? (true/false, yes/no, y/n, 1/0):",
+    "Generate internal-pitch.md (NDA-only, contains real service/team/ticket names — public outputs are always sanitized regardless)? (true/false, yes/no, y/n, 1/0):",
     "true",
     rl,
   );
@@ -475,6 +480,7 @@ For each ticket × condition, create a fresh workspace:
     WDW_DIR=/tmp/case-study/<ticket_id>-with-docwiki
     rm -rf "$WDW_DIR" && mkdir -p "$WDW_DIR" && cd "$WDW_DIR"
     git clone --depth 100 <internal-repo-url> .
+    git fetch --depth 500 origin <fix_commit> 2>/dev/null || git fetch --unshallow
     git checkout <fix_commit>^1
     git checkout <fix_commit> -- <test_file_path>
     git reset HEAD <test_file_path> 2>/dev/null || true

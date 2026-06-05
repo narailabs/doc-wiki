@@ -152,6 +152,9 @@ For each ticket, do this:
 BASE=/tmp/case-study/<ticket_id>-baseline
 rm -rf "$BASE" && mkdir -p "$BASE" && cd "$BASE"
 git clone --depth 100 <internal-repo-url> .
+# Ensure <fix_commit> + parent are present even if behind shallow depth
+# (active internal repos with 6-month-old tickets routinely exceed 100):
+git fetch --depth 500 origin <fix_commit> 2>/dev/null || git fetch --unshallow
 git checkout <fix_commit>^1
 git checkout <fix_commit> -- <test_file_path>          # apply only the test patch
 git reset HEAD <test_file_path> 2>/dev/null || true
@@ -163,6 +166,7 @@ claude -p "Fix this ticket: <title>\n<body>"
 WDW=/tmp/case-study/<ticket_id>-with-docwiki
 rm -rf "$WDW" && mkdir -p "$WDW" && cd "$WDW"
 git clone --depth 100 <internal-repo-url> .
+git fetch --depth 500 origin <fix_commit> 2>/dev/null || git fetch --unshallow
 git checkout <fix_commit>^1
 git checkout <fix_commit> -- <test_file_path>
 git reset HEAD <test_file_path> 2>/dev/null || true
