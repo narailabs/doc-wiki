@@ -197,7 +197,9 @@ Time budget: ~1 hour per ticket if Claude is fast; allow 5–15 hours for a 5–
 
 From the 4 phases above, produce four documents.
 
-### 5.1 — Sanitized portfolio piece — `./case-study-output/portfolio.md` (~600 words)
+**Phase 5 output paths are absolute under `$REPO_ROOT/case-study-output/`** — same reason Phase 4 used `$REPO_ROOT` (after the per-ticket loop the session is in /tmp/case-study/<last-ticket>-with-docwiki, so any bare `./case-study-output/...` path resolves to the temp clone). `cd "$REPO_ROOT"` before authoring each file, or write the absolute path explicitly.
+
+### 5.1 — Sanitized portfolio piece — `$REPO_ROOT/case-study-output/portfolio.md` (~600 words)
 
 Use generic placeholders throughout (PRIVATE=true always):
 - Replace company name with `<COMPANY_TYPE>` where COMPANY_TYPE is one of: "a B2B SaaS", "a fintech", "a healthcare platform", "an e-commerce platform", "an enterprise software vendor"
@@ -209,7 +211,7 @@ Use generic placeholders throughout (PRIVATE=true always):
 
 This is the file you can publish on your personal website, dev.to, or LinkedIn without legal risk.
 
-### 5.2 — Public case study — `./case-study-output/case-study-public.md` (~1500 words)
+### 5.2 — Public case study — `$REPO_ROOT/case-study-output/case-study-public.md` (~1500 words)
 
 Same as portfolio but longer and more methodology-heavy:
 - The codebase shape (no names, just numbers and shape)
@@ -223,7 +225,7 @@ Same as portfolio but longer and more methodology-heavy:
 
 This is what you'd send to a conference CFP or a deep-dive blog.
 
-### 5.3 — Internal adoption pitch — `./case-study-output/internal-pitch.md` (~800 words, NOT for external sharing)
+### 5.3 — Internal adoption pitch — `$REPO_ROOT/case-study-output/internal-pitch.md` (~800 words, NOT for external sharing)
 
 Full detail with real names:
 - Lead with: "I built a tool. It already works. Here's the proposal to roll it out across the org."
@@ -236,7 +238,7 @@ Full detail with real names:
 
 This document NEVER leaves your work account. Keep it on the internal wiki / Notion / etc.
 
-### 5.4 — Social variants — `./case-study-output/social/`
+### 5.4 — Social variants — `$REPO_ROOT/case-study-output/social/`
 
 Produce four ready-to-post files, all sanitized:
 - `linkedin.md` — ~300 words, professional tone, "I built X, here's what we learned"

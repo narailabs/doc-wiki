@@ -240,12 +240,26 @@ function detectDb(cwd: string): string {
   return found.size ? [...found].join(", ") : "none-detected";
 }
 
-function detectConnectorsConfigured(): string {
-  const path = join(homedir(), ".connectors", "config.yaml");
-  if (!exists(path)) return "";
-  const t = readFileSync(path, "utf-8");
+function detectConnectorsConfigured(cwd: string): string {
+  // doc-wiki / narai-primitives resolves connector config from BOTH locations:
+  // user-global at ~/.connectors/config.yaml AND per-repo overlay at
+  // ./.connectors/config.yaml. The overlay is what enterprise teams use to
+  // pin per-project Jira/Confluence/DB endpoints; missing it here would
+  // record EXTERNAL_CONNECTORS_ENABLED=none even when those connectors are
+  // wired up for this repo.
   const ids = ["jira", "confluence", "github", "notion", "aws", "gcp", "db"];
-  return ids.filter((id) => new RegExp(`^\\s*${id}\\s*:`, "m").test(t)).join(",");
+  const enabled = new Set<string>();
+  for (const path of [
+    join(homedir(), ".connectors", "config.yaml"),
+    join(cwd, ".connectors", "config.yaml"),
+  ]) {
+    if (!exists(path)) continue;
+    const t = readFileSync(path, "utf-8");
+    for (const id of ids) {
+      if (new RegExp(`^\\s*${id}\\s*:`, "m").test(t)) enabled.add(id);
+    }
+  }
+  return [...enabled].join(",");
 }
 
 // Safe-by-default flag normalization. PRIVATE gates whether public outputs
@@ -282,7 +296,7 @@ async function collect(cwd: string): Promise<Parameters> {
     fw: detectFrameworks(cwd),
     orm: detectOrm(cwd),
     db: detectDb(cwd),
-    connectors: detectConnectorsConfigured(),
+    connectors: detectConnectorsConfigured(cwd),
   };
 
   const tty = openControllingTty();
@@ -502,20 +516,20 @@ Time budget: ~1 hour per ticket × ${p.TICKET_SAMPLE_SIZE} tickets.
 
 ## PHASE 5 — Generate deliverables
 
-Produce four documents from the 4 phases above.
+Produce four documents from the 4 phases above. **All deliverable paths are absolute under \`$REPO_ROOT/case-study-output/\`** — the same reason the Phase 4 CSV/summary use \`$REPO_ROOT\` (after the per-ticket loop, the session is in /tmp/case-study/<last-ticket>-with-docwiki, so relative paths would land there). \`cd "$REPO_ROOT"\` before authoring, or write each path with the explicit \`$REPO_ROOT\` prefix.
 
-### 5.1 portfolio.md (~600 words, sanitized)
+### 5.1 \`$REPO_ROOT/case-study-output/portfolio.md\` (~600 words, sanitized)
 Public-shareable. Replace company name with "${p.PRIVATE === "true" ? "<COMPANY_TYPE>" : ""}". Lead with the benchmark headline + methodology + the OSS verification pointer (https://github.com/narailabs/doc-wiki/tree/main/benchmark). Include one anonymized anecdote. Close with the OSS repo link.
 
-### 5.2 case-study-public.md (~1500 words, sanitized)
+### 5.2 \`$REPO_ROOT/case-study-output/case-study-public.md\` (~1500 words, sanitized)
 Same shape as portfolio but methodology-heavy. Includes 2 anecdotes, a sanitized Mermaid architecture diagram, and a reproducibility pointer to benchmark/PUBLISH.md.
 
-### 5.3 internal-pitch.md (~800 words, NOT for external sharing)
+### 5.3 \`$REPO_ROOT/case-study-output/internal-pitch.md\` (~800 words, NOT for external sharing)
 ${p.PRIVATE === "true"
     ? `Real names, real numbers, full detail. Migration plan (which services first, decision-gate at end of 4-week pilot), cost projection at scale, the ask (sanctioned 4-week pilot). Keep this on your internal wiki only.`
     : `SKIPPED — PRIVATE=false explicitly opts out of generating any artifact with real names. Only the sanitized public outputs (5.1, 5.2, 5.4) are produced. If you change your mind, re-run with PRIVATE=true.`}
 
-### 5.4 social/ — four ready-to-post files, all sanitized
+### 5.4 \`$REPO_ROOT/case-study-output/social/\` — four ready-to-post files, all sanitized
 - linkedin.md (~300 words)
 - x-thread.md (5-7 tweets)
 - reddit-experienced-devs.md (~800 words, candid)
