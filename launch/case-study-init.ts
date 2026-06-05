@@ -248,6 +248,19 @@ function detectConnectorsConfigured(): string {
   return ids.filter((id) => new RegExp(`^\\s*${id}\\s*:`, "m").test(t)).join(",");
 }
 
+// Safe-by-default flag normalization. PRIVATE gates whether public outputs
+// (portfolio, public case study, social) sanitize company / service names —
+// silently mis-parsing it could leak real internal names. Accept the common
+// truthy/falsy strings and explicitly reject anything else.
+function normalizePrivate(v: string): "true" | "false" {
+  const s = v.trim().toLowerCase();
+  if (["true", "yes", "y", "1", "on"].includes(s)) return "true";
+  if (["false", "no", "n", "0", "off"].includes(s)) return "false";
+  throw new Error(
+    `PRIVATE must be true/false (or yes/no, y/n, 1/0). Got "${v}". Default is "true" for safety; explicit "false" required to allow real names in public outputs.`,
+  );
+}
+
 async function maybePrompt(
   key: string,
   question: string,
@@ -320,12 +333,13 @@ async function collect(cwd: string): Promise<Parameters> {
     auto.connectors,
     rl,
   );
-  const PRIVATE = (await maybePrompt(
+  const PRIVATE_RAW = await maybePrompt(
     "PRIVATE",
-    "Sanitize public outputs? (true/false):",
+    "Sanitize public outputs? (true/false, yes/no, y/n, 1/0):",
     "true",
     rl,
-  )) as "true" | "false";
+  );
+  const PRIVATE = normalizePrivate(PRIVATE_RAW);
   const TICKET_SAMPLE_SIZE = await maybePrompt(
     "TICKET_SAMPLE_SIZE",
     "How many internal tickets to benchmark (5-10 recommended):",
@@ -441,14 +455,31 @@ Select ${p.TICKET_SAMPLE_SIZE} real closed internal tickets from the last 6 mont
 - A regression test was added in the fix PR
 - Ticket is in this codebase, not a downstream service
 
-For each ticket, run baseline + with-doc-wiki using the dispatch pattern in benchmark/dispatch.md (single-process flavor):
-- Checkout fix_commit^1
-- Apply test patch: \`git checkout <fix_commit> -- <test_file_path>\`
-- Baseline: \`claude -p "Fix this ticket: <title>\\n<body>"\` (no doc-wiki context)
-- Run the named test; record success/duration/tokens/cost
-- Restore to fix_commit^1
-- With-doc-wiki: same prompt, doc-wiki present + CLAUDE.md updated
-- Run named test; record same
+IMPORTANT — use the **two-workspace pattern** from benchmark/PLAN.md, not a single-tree restore. The wiki / CLAUDE.md references generated in Phase 2 must NOT be present during the baseline runs and MUST be present during the with-doc-wiki runs, so isolation comes from separate clones, not from in-place restore (which either fails on the uncommitted wiki or wipes it).
+
+For each ticket × condition, create a fresh workspace:
+
+  for each ticket:
+    BASELINE_DIR=/tmp/case-study/<ticket_id>-baseline
+    rm -rf "$BASELINE_DIR" && mkdir -p "$BASELINE_DIR" && cd "$BASELINE_DIR"
+    git clone --depth 100 <internal-repo-url> .
+    git checkout <fix_commit>^1
+    git checkout <fix_commit> -- <test_file_path>      # apply test patch
+    git reset HEAD <test_file_path> 2>/dev/null || true
+    # install deps, run claude -p "Fix this ticket: <title>\\n<body>"
+    # run the named test; record success/duration/tokens/cost
+
+    WDW_DIR=/tmp/case-study/<ticket_id>-with-docwiki
+    rm -rf "$WDW_DIR" && mkdir -p "$WDW_DIR" && cd "$WDW_DIR"
+    git clone --depth 100 <internal-repo-url> .
+    git checkout <fix_commit>^1
+    git checkout <fix_commit> -- <test_file_path>
+    git reset HEAD <test_file_path> 2>/dev/null || true
+    /doc-wiki:init && /doc-wiki:atlas --max-cost 30 --scope <relevant-dir>
+    # install deps, run claude -p with the same prompt
+    # run the named test; record same fields
+
+The atlas runs once per (ticket, with-doc-wiki) workspace — yes, this means atlas spend stacks. That matches the canonical benchmark/PLAN.md methodology (each condition is a fresh clone; the with-doc-wiki branch builds the wiki from scratch).
 
 Save run-level → ./case-study-output/04-ticket-bench.csv with columns:
 ticket_id, condition, success, duration_s, tokens_in, tokens_out, cost_usd, fix_path, test_path, notes
