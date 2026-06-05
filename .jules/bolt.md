@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-06-05 - Hoisting regexes for performance
+
+**Learning:** Re-evaluating inline regex literals inside loops or frequently-called functions creates unnecessary overhead. While JS engines often optimize inline literals, explicitly hoisting them ensures zero-reallocation overhead. Furthermore, ensuring that stateless regexes (without global `g` or sticky `y` flags) are hoisted guarantees thread safety and optimal parsing speed for large log files.
+**Action:** Always extract stateless regular expressions (especially extraction filters like `/^{"ts":"([^"\\]+)"/`) to top-level constants when scanning large append-only log files.
