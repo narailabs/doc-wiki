@@ -407,7 +407,10 @@ Time budget: 30-60 minutes. Use Bash + Read; do not invoke doc-wiki yet.
 
 ## PHASE 2 — Build the doc-wiki
 
-If doc-wiki is not installed: \`claude plugin install narailabs/doc-wiki\`.
+If doc-wiki is not installed, add the NarAI marketplace once and install (bare \`claude plugin install narailabs/doc-wiki\` doesn't work — the repo ships \`.claude-plugin/plugin.json\`, not a marketplace catalog):
+
+  claude plugin marketplace add narailabs/narai-claude-plugins
+  claude plugin install doc-wiki@narai
 
 Run:
   /doc-wiki:init      # init now subsumes the old onboard step (stack/ORM/DB/services detection)
