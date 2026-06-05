@@ -499,7 +499,9 @@ Public-shareable. Replace company name with "${p.PRIVATE === "true" ? "<COMPANY_
 Same shape as portfolio but methodology-heavy. Includes 2 anecdotes, a sanitized Mermaid architecture diagram, and a reproducibility pointer to benchmark/PUBLISH.md.
 
 ### 5.3 internal-pitch.md (~800 words, NOT for external sharing)
-Real names, real numbers, full detail. Migration plan (which services first, decision-gate at end of 4-week pilot), cost projection at scale, the ask (sanctioned 4-week pilot). Keep this on your internal wiki only.
+${p.PRIVATE === "true"
+    ? `Real names, real numbers, full detail. Migration plan (which services first, decision-gate at end of 4-week pilot), cost projection at scale, the ask (sanctioned 4-week pilot). Keep this on your internal wiki only.`
+    : `SKIPPED — PRIVATE=false explicitly opts out of generating any artifact with real names. Only the sanitized public outputs (5.1, 5.2, 5.4) are produced. If you change your mind, re-run with PRIVATE=true.`}
 
 ### 5.4 social/ — four ready-to-post files, all sanitized
 - linkedin.md (~300 words)
@@ -507,11 +509,11 @@ Real names, real numbers, full detail. Migration plan (which services first, dec
 - reddit-experienced-devs.md (~800 words, candid)
 - devto-deepdive.md (~2000 words)
 
-## Sanitization rules (apply to 5.1, 5.2, 5.4)
+## Sanitization rules (apply to 5.1, 5.2, 5.4 — UNCONDITIONALLY, regardless of PRIVATE)
 
-PRIVATE is set to "${p.PRIVATE}".
-${p.PRIVATE === "true"
-    ? `- No company name, no team names, no employee names other than yours
+The public outputs (portfolio, public case study, social variants) are ALWAYS sanitized. The PRIVATE flag only controls whether the internal pitch (5.3) gets generated; it does not relax sanitization on the public outputs.
+
+- No company name, no team names, no employee names other than yours
 - No specific customer names
 - Internal ticket IDs paraphrased into general patterns
 - Service names replaced with SERVICE_A, SERVICE_B, ...
@@ -519,9 +521,8 @@ ${p.PRIVATE === "true"
 - Architecture diagrams: replace service/db names with placeholders
 - Numbers kept (LOC, ages, percentages)
 - Tech stack kept (Django, Postgres, etc.)
-When in doubt, replace. The internal pitch (5.3) gets full detail; the public ones get patterns.`
-    : `- Real names allowed throughout (PRIVATE=false).
-- Note that this means even the "public" outputs reveal the company; only publish if you have explicit sign-off.`}
+
+When in doubt, replace.
 
 ## Output checklist
 
@@ -533,10 +534,11 @@ When in doubt, replace. The internal pitch (5.3) gets full detail; the public on
 - [ ] 04-ticket-bench.csv
 - [ ] 04-summary.json
 - [ ] portfolio.md
-- [ ] case-study-public.md
-- [ ] internal-pitch.md
+${p.PRIVATE === "true" ? "- [ ] internal-pitch.md\n" : "- [~] internal-pitch.md SKIPPED (PRIVATE=false)\n"}- [ ] case-study-public.md
 - [ ] social/{linkedin,x-thread,reddit-experienced-devs,devto-deepdive}.md
-${p.PRIVATE === "true" ? "- [ ] grep all public outputs for company/team/customer names — none should appear\n" : ""}
+- [ ] grep all public outputs for company/team/customer names — none should appear
+
+
 ## Final summary to stdout
 
 After all 5 phases + checklist, print: total wall time, total atlas + Claude spend, headline numbers (baseline/with-doc-wiki/delta), the 3 anecdotes (one line each), where each deliverable is located, one sentence on what surprised you the most.

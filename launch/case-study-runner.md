@@ -231,7 +231,9 @@ Produce four ready-to-post files, all sanitized:
 
 Each one cites the OSS doc-wiki repo + the public benchmark for verifiability. None mention the company name.
 
-## Sanitization rules (apply to 5.1, 5.2, 5.4)
+## Sanitization rules (apply to 5.1, 5.2, 5.4 — UNCONDITIONALLY)
+
+The public outputs are ALWAYS sanitized. The PRIVATE flag only gates whether the internal pitch (5.3) gets generated at all; it does not relax sanitization on 5.1/5.2/5.4.
 
 - No company name
 - No team names
@@ -244,7 +246,7 @@ Each one cites the OSS doc-wiki repo + the public benchmark for verifiability. N
 - Numbers are kept (LOC, ages, percentages) — these don't identify the company
 - Tech stack is kept (Django, Postgres, etc.) — these are too common to identify
 
-When in doubt, replace. The internal pitch (5.3) gets the full detail; the public ones get patterns.
+When in doubt, replace. The internal pitch (5.3) is the ONLY file allowed real names — and only when PRIVATE=true; otherwise 5.3 is skipped entirely.
 
 ## Output checklist
 
