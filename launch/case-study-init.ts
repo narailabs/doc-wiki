@@ -481,10 +481,12 @@ For each ticket × condition, create a fresh workspace:
 
 The atlas runs once per (ticket, with-doc-wiki) workspace — yes, this means atlas spend stacks. That matches the canonical benchmark/PLAN.md methodology (each condition is a fresh clone; the with-doc-wiki branch builds the wiki from scratch).
 
-Save run-level → ./case-study-output/04-ticket-bench.csv with columns:
+Save run-level → \`$REPO_ROOT/case-study-output/04-ticket-bench.csv\` with columns:
 ticket_id, condition, success, duration_s, tokens_in, tokens_out, cost_usd, fix_path, test_path, notes
 
-Save summary → ./case-study-output/04-summary.json with: baseline_pass_rate, with_docwiki_pass_rate, delta_pp, median durations, total costs.
+Save summary → \`$REPO_ROOT/case-study-output/04-summary.json\` with: baseline_pass_rate, with_docwiki_pass_rate, delta_pp, median durations, total costs.
+
+(Capture \`REPO_ROOT="$PWD"\` BEFORE entering the per-ticket loop. The two-workspace blocks \`cd\` into /tmp clones, so relative \`./case-study-output/...\` paths would otherwise resolve to the wrong directory.)
 
 Time budget: ~1 hour per ticket × ${p.TICKET_SAMPLE_SIZE} tickets.
 

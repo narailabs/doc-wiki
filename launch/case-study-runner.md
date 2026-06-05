@@ -134,6 +134,15 @@ Select TICKET_SAMPLE_SIZE real, closed internal tickets from the last 6 months. 
 
 **Use the two-workspace pattern from benchmark/PLAN.md**, not a single-tree restore. The wiki + CLAUDE.md references from Phase 2 must be absent for the baseline run and present for the with-doc-wiki run — that isolation requires separate clones, not in-place restore. (In-place restore either fails on the uncommitted wiki/CLAUDE.md changes, or `checkout -f` wipes the very wiki context the with-doc-wiki run is supposed to measure.)
 
+**Before the loop**, capture the starting repo path so subsequent output writes don't get redirected into a temp workspace:
+
+```sh
+REPO_ROOT="$PWD"
+mkdir -p "$REPO_ROOT/case-study-output"
+```
+
+All `./case-study-output/...` references below must be resolved against `$REPO_ROOT/case-study-output/` (use the absolute path explicitly). After each per-ticket clone-and-bench block, the `cd` has moved the session into the temp workspace; *do not* write outputs with a relative path at that point — write them as `"$REPO_ROOT/case-study-output/..."`.
+
 For each ticket, do this:
 
 ```sh
@@ -164,10 +173,10 @@ claude -p "Fix this ticket: <title>\n<body>"
 
 Atlas runs per (ticket, with-doc-wiki) workspace — yes, this stacks atlas spend, but matches benchmark/PLAN.md's canonical methodology (each condition is a fresh clone; the with-doc-wiki branch builds the wiki from scratch). If you want to amortize, you can build atlas once on a shared workspace and `cp -r` the `docs/*-wiki/` dir + CLAUDE.md references into each with-doc-wiki clone — but document it as a methodology deviation.
 
-Save results to `./case-study-output/04-ticket-bench.csv` with columns:
+Save results to `$REPO_ROOT/case-study-output/04-ticket-bench.csv` with columns:
 ticket_id, condition (baseline|with-docwiki), success (bool), duration_s, tokens_in, tokens_out, cost_usd, fix_path, test_path, notes
 
-Compute the headline numbers and save to `./case-study-output/04-summary.json`:
+Compute the headline numbers and save to `$REPO_ROOT/case-study-output/04-summary.json`:
 - baseline_pass_rate (% of tickets passing in baseline)
 - with_docwiki_pass_rate
 - delta_pp (percentage points)
@@ -256,12 +265,12 @@ After all 5 phases complete, verify:
 - [ ] `./case-study-output/02-pages-index.csv` exists
 - [ ] `./case-study-output/03-comparison.json` exists (if INTERNAL_TOOL_NAME != "none")
 - [ ] `./case-study-output/03-anecdotes.json` exists
-- [ ] `./case-study-output/04-ticket-bench.csv` exists
-- [ ] `./case-study-output/04-summary.json` exists
-- [ ] `./case-study-output/portfolio.md` exists
-- [ ] `./case-study-output/case-study-public.md` exists
-- [ ] `./case-study-output/internal-pitch.md` exists
-- [ ] `./case-study-output/social/{linkedin,x-thread,reddit-experienced-devs,devto-deepdive}.md` exist
+- [ ] `$REPO_ROOT/case-study-output/04-ticket-bench.csv` exists
+- [ ] `$REPO_ROOT/case-study-output/04-summary.json` exists
+- [ ] `$REPO_ROOT/case-study-output/portfolio.md` exists
+- [ ] `$REPO_ROOT/case-study-output/case-study-public.md` exists
+- [ ] If PRIVATE=true: `$REPO_ROOT/case-study-output/internal-pitch.md` exists; if PRIVATE=false: that file is intentionally absent
+- [ ] `$REPO_ROOT/case-study-output/social/{linkedin,x-thread,reddit-experienced-devs,devto-deepdive}.md` exist
 - [ ] grep through all public outputs for company name, team names, customer names — none should appear
 
 Add `./case-study-output/` to the codebase's `.gitignore` so the artifacts don't accidentally land in a commit to the work repo.
