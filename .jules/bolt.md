@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-23 - Hoisting Regex for Log Filtering
+
+**Learning:** When pre-filtering large, append-only json log streams (like `events.jsonl`) using regex checks (e.g., `/^{"ts":"([^"\\]+)"/`), instantiating `new RegExp()` or using literal regex definitions inside loops adds significant overhead that can diminish the performance benefits of bypassing `JSON.parse()`.
+**Action:** Hoist the regex literals outside of the reading loop (e.g., as a global constant `const TS_RE = ...;`) to ensure compilation happens only once, maximizing the speed of the `.exec()` fast-path check. However, be careful not to mistake substring check `.includes()` (which is significantly faster than regex) as something to replace with regex `.test()`; only hoist literal regex definitions to regex variables for `.exec()` or `.test()` calls.
