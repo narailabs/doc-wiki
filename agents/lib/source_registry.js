@@ -21,8 +21,11 @@
  *   node source_registry.js list
  *   node source_registry.js lookup --source "jira://AUTH-1"
  */
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as yaml from "js-yaml";
 const BUILTIN_PATTERNS = [
     {
         id: "jira",
@@ -262,6 +265,67 @@ function customConfigToManifest(cfg) {
         agent_dir: "",
         origin: "custom",
     };
+}
+// ── Connector config ──────────────────────────────────────────────────
+/**
+ * Read the set of CONFIGURED connector ids from a `.connectors/config.yaml`.
+ *
+ * Schema: top-level `connectors:` map; a child key is "configured" when its
+ * value is a map with `enabled: true` (or, lenient: when the key is present
+ * with a truthy/empty map and not `enabled: false`).
+ *
+ * Default search path: `<cwd>/.connectors/config.yaml` then
+ * `~/.connectors/config.yaml` (first that exists).
+ *
+ * Returns an empty Set when no config exists or it's malformed.
+ */
+export function loadConfiguredConnectorIds(configPath) {
+    const resolved = resolveConnectorConfigPath(configPath);
+    if (resolved === null)
+        return new Set();
+    let raw;
+    try {
+        raw = fs.readFileSync(resolved, "utf-8");
+    }
+    catch {
+        return new Set();
+    }
+    let parsed;
+    try {
+        parsed = yaml.load(raw);
+    }
+    catch {
+        return new Set();
+    }
+    if (parsed === null ||
+        typeof parsed !== "object" ||
+        !("connectors" in parsed)) {
+        return new Set();
+    }
+    const connectors = parsed["connectors"];
+    if (connectors === null || typeof connectors !== "object")
+        return new Set();
+    const ids = new Set();
+    for (const [id, val] of Object.entries(connectors)) {
+        // Exclude only when explicitly disabled (enabled === false).
+        if (val !== null && typeof val === "object" && val["enabled"] === false) {
+            continue;
+        }
+        ids.add(id);
+    }
+    return ids;
+}
+function resolveConnectorConfigPath(configPath) {
+    if (configPath !== undefined) {
+        return configPath;
+    }
+    const localPath = path.join(process.cwd(), ".connectors", "config.yaml");
+    if (fs.existsSync(localPath))
+        return localPath;
+    const homePath = path.join(os.homedir(), ".connectors", "config.yaml");
+    if (fs.existsSync(homePath))
+        return homePath;
+    return null;
 }
 // ── CLI ───────────────────────────────────────────────────────────────
 function cliMain(argv) {

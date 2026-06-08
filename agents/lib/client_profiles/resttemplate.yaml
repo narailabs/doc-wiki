@@ -1,0 +1,16 @@
+name: resttemplate
+language: java
+description: "Spring RestTemplate synchronous HTTP client"
+detection:
+  file_patterns: ["**/*.java", "**/*.kt"]
+  markers:
+    - { pattern: "org.springframework.web.client.RestTemplate", type: import }
+    - { pattern: "RestTemplate", type: type_ref }
+client_extraction:
+  patterns:
+    - regex: "restTemplate\\.(getForObject|getForEntity|postForObject|postForEntity|put|delete|patchForObject|headForHeaders|optionsForAllow)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2
+    - regex: "restTemplate\\.exchange\\s*\\(\\s*[\"']([^\"']+)[\"'][^)]*HttpMethod\\.(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)"
+      url_group: 1
+      method_group: 2

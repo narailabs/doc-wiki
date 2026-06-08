@@ -94,6 +94,15 @@ ecosystem:
     enabled: false            # opt-in: when true, /doc-wiki:atlas Phase 1b inventory walks REST endpoints
     custom_profiles: []       # zero or more inline RestProfile entries; same shape as agents/lib/rest_profiles/*.yaml
 
+  cross_service:
+    enabled: false            # opt-in; off by default. Enables service discovery +
+                              # client/queue/external detection + the 6 cross-service pages.
+                              # Implies REST endpoint detection (the call graph needs endpoints).
+  clients:
+    custom_profiles: []       # in-house HTTP-client frameworks (same shape as rest.custom_profiles)
+  queues:
+    custom_profiles: []       # in-house message-queue frameworks
+
   claude_md:
     enabled: true
     submodule_support: true
@@ -116,6 +125,27 @@ The `ecosystem.agents.custom` block is how you register a custom local connector
 The `ecosystem.database` block configures `wiki-orm-agent`'s cross-validation flow against a live DB. The actual connection lives under `connectors.db` in `.connectors/config.yaml`; this block just enables the cross-validation behavior and defines a wiki-side audit log.
 
 The `ecosystem.rest` block controls REST-endpoint detection during `/doc-wiki:atlas` Phase 1b. It is **off by default** so the inventory step stays fast on repos that aren't HTTP services. Set `enabled: true` to opt in. The flag is read automatically by `atlas_inventory.js generate`, so the orchestrator doesn't have to know whether to pass `--enable-rest` — see [`atlas.md` § Phase 1b](atlas.md#phase-1b--inventory-the-repo). Override at the CLI with `--enable-rest` when needed regardless of config.
+
+The `ecosystem.cross_service` block enables cross-service architecture documentation. It is **off by default**. Setting `enabled: true` (or passing `--cross-service` at the CLI) activates three extra steps during `/doc-wiki:atlas`:
+
+1. **Phase 1b service discovery** — beyond the standard per-topic inventory, atlas also discovers every service, library, and frontend under the repo root (git submodules + manifest directories). Each is analysed for `http_clients`, `queue_endpoints`, `external_sources` (datasources, cloud-SDK calls, `narai-gather()` callsites), `library_deps`, and `auth_issuer`, detected via the client and queue profile families (`agents/lib/client_profiles/`, `agents/lib/queue_profiles/`). Results are emitted as a `services[]` array in `code-inventory.json`. Because the call graph requires endpoint data, enabling `cross_service` implies `rest.enabled: true` for that run.
+2. **Phase 7 graph build** — after the standard global-page synthesis, atlas runs `node agents/lib/cross_service_edges.js build --wiki-root <w> --run-id <id>`, which emits `outputs/atlas/<id>/service-graph.json`.
+3. **Phase 7 page render** — `node agents/lib/cross_service_pages.js render --wiki-root <w> --run-id <id>` writes six deterministic pages (no LLM synthesis — pure graph renders):
+
+   | Page | Purpose |
+   |---|---|
+   | `wiki/service-map.md` | Visual service-topology diagram |
+   | `wiki/service-dependencies.md` | Per-service dependency tables; External Dependencies section cross-links `integrations.md` (does not duplicate it) |
+   | `wiki/client-registry.md` | All detected HTTP-client callsites by service |
+   | `wiki/queue-registry.md` | All detected queue producers/consumers by service |
+   | `wiki/database-traces.md` | Datasource access paths traced back to originating services |
+   | `wiki/shared-libraries.md` | Libraries consumed by more than one service |
+
+Detection is **static-analysis only** — no live DB or network calls are made. External dependencies are cross-referenced against connectors configured in `.connectors/config.yaml`; those already documented in `integrations.md` appear as links rather than duplicated prose.
+
+The `ecosystem.clients.custom_profiles` and `ecosystem.queues.custom_profiles` lists accept inline profile objects (same shape as `rest.custom_profiles`) so atlas can detect in-house HTTP-client and message-queue frameworks without modifying doc-wiki. This is the right place to teach atlas about an internal RPC library or a bespoke event bus.
+
+The typical use case is a monorepo whose git submodules or top-level subdirectories are independent services. Point `--repo-root` at the repository root; atlas discovers each service automatically and emits the six cross-service pages in addition to the standard per-topic wiki.
 
 The `ecosystem.archive` block controls `/doc-wiki:atlas` Phase 5b — the archive sweep that moves atlas-managed pages whose local source paths no longer exist into `wiki/_archive/`. When `enabled: false`, Phase 5b is a no-op (logs that archiving is disabled and skips). The block is written with defaults by `init_wiki.ts` and validated by `parse_config.ts`.
 

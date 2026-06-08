@@ -1,0 +1,19 @@
+name: restsharp
+language: csharp
+description: "C# RestSharp HTTP client"
+detection:
+  file_patterns: ["**/*.cs"]
+  markers:
+    - { pattern: "using RestSharp", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "new RestClient\\(\\s*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "new RestRequest\\(\\s*[$@]*[\"']([^\"'{]+)[\"']\\s*,\\s*Method\\.(Get|Post|Put|Delete|Patch)"
+      url_group: 1
+      method_group: 2
+    - regex: "new RestRequest\\(\\s*[$@]*[\"']([^\"'{]+)[\"']\\s*\\)"
+      url_group: 1
+      method_group: 0
+      default_method: "GET"

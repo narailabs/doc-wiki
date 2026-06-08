@@ -98,8 +98,9 @@ export function matchesPattern(fullPath, patterns) {
 export function walkCodebase(root, patterns, opts = {}) {
     const initialStack = resolveInitialMatcherStack(root, opts);
     const out = {};
+    const fileCap = opts.maxFiles ?? MAX_FILES;
     const stack = [{ dir: root, active: initialStack }];
-    while (stack.length > 0 && Object.keys(out).length < MAX_FILES) {
+    while (stack.length > 0 && Object.keys(out).length < fileCap) {
         const frame = stack.pop();
         if (frame === undefined)
             break;

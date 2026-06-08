@@ -1,0 +1,19 @@
+name: reqwest
+language: rust
+description: "Rust reqwest HTTP client"
+detection:
+  file_patterns: ["**/*.rs"]
+  markers:
+    - { pattern: "use reqwest", type: import }
+    - { pattern: "reqwest::", type: path_ref }
+client_extraction:
+  patterns:
+    - regex: "reqwest::(get)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2
+    - regex: "(?:client|self\\.client|\\w+client)\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2
+    - regex: "\\.request\\(\\s*Method::(GET|POST|PUT|DELETE|PATCH|HEAD)\\s*,\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2

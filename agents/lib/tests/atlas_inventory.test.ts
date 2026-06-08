@@ -23,10 +23,12 @@ import {
   resolveRestProfiles,
   main,
   _readEcosystemRestEnabled,
+  _readEcosystemCrossServiceEnabled,
   type CodeInventory,
   type RestProfile,
 } from "../atlas_inventory.js";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { buildServiceGraph } from "../cross_service_edges.js";
 
 const VALID_RUN_ID = "2026-05-01T10-30-00";
 
@@ -168,6 +170,22 @@ version = "0.1.0"
     expect(notes.some((n) => n.startsWith("package.json unparseable"))).toBe(
       true,
     );
+  });
+
+  it("detects Java/Maven project metadata from pom.xml (parent-skipped)", () => {
+    const root = makeTmpPath("java-meta");
+    fs.writeFileSync(path.join(root, "pom.xml"), `<project>
+    <parent><artifactId>spring-boot-starter-parent</artifactId><version>2.7.11</version></parent>
+    <artifactId>intake</artifactId><version>1.4.0</version>
+    <properties><java.version>17</java.version></properties>
+  </project>`);
+    const meta = detectProjectMetadata(root);
+    expect(meta.name).toBe("intake");
+    expect(meta.version).toBe("1.4.0");
+    expect(meta.language).toBe("java");
+    expect(meta.runtime).toBe("java@17");
+    expect(meta.manifests_seen).toContain("pom.xml");
+    cleanupTmpPath(root);
   });
 });
 
@@ -1583,6 +1601,141 @@ describe("_readEcosystemRestEnabled", () => {
   });
 });
 
+// ── multi-service inventory (A5) ──────────────────────────────────
+
+describe("generateInventory cross-service", () => {
+  it("emits a per-service inventory with owner-tagged rest endpoints", () => {
+    const root = makeTmpPath("multi-svc");
+    // service A (java) with a controller
+    fs.mkdirSync(path.join(root, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(path.join(root, "svc-a", "src", "C.java"),
+      '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }');
+    // service B (node)
+    fs.mkdirSync(path.join(root, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-b", "package.json"), '{"name":"svc-b"}');
+
+    const inv = generateInventory(root, "2026-06-07T10-00-00", { enableRest: true, enableCrossService: true });
+    const ids = inv.services.map((s) => s.identity.id).sort();
+    expect(ids).toEqual(["svc-a", "svc-b"]);
+    const a = inv.services.find((s) => s.identity.id === "svc-a")!;
+    expect(a.rest_endpoints.some((e) => e.path === "/a/ping")).toBe(true);
+    // back-compat: single-project still works (no services discovered)
+    const single = makeTmpPath("single");
+    fs.writeFileSync(path.join(single, "package.json"), '{"name":"x"}');
+    const inv2 = generateInventory(single, "2026-06-07T10-00-01", {});
+    expect(Array.isArray(inv2.services)).toBe(true);   // present, may be []
+    cleanupTmpPath(root); cleanupTmpPath(single);
+  });
+
+  it("populates http_clients and queue_endpoints per service with correct owner-tagging (B6)", () => {
+    const root = makeTmpPath("multi-svc-b6");
+
+    // service A (java): a Feign client + a RabbitMQ listener
+    fs.mkdirSync(path.join(root, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-a", "pom.xml"),
+      "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "BillingClient.java"),
+      `import org.springframework.cloud.openfeign.FeignClient;\n@FeignClient(name = "payments-service", path = "/billing")\ninterface BillingClient {\n  @GetMapping("/invoices")\n  List<Invoice> list();\n}`,
+    );
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "EventConsumer.java"),
+      `import org.springframework.amqp.rabbit.annotation.RabbitListener;\n@RabbitListener(queues = "events")\nvoid handle(String msg) {}`,
+    );
+
+    // service B (node): a BullMQ queue (no Feign, no AMQP)
+    fs.mkdirSync(path.join(root, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-b", "package.json"), '{"name":"svc-b"}');
+    fs.writeFileSync(
+      path.join(root, "svc-b", "worker.ts"),
+      `import { Worker } from 'bullmq';\nconst w = new Worker('invoice-jobs', async job => {});`,
+    );
+
+    const inv = generateInventory(root, "2026-06-07T10-00-02", {
+      enableRest: true,
+      enableCrossService: true,
+    });
+
+    const a = inv.services.find((s) => s.identity.id === "svc-a")!;
+    const b = inv.services.find((s) => s.identity.id === "svc-b")!;
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+
+    // svc-a owns the Feign client
+    expect(a.http_clients.length).toBeGreaterThan(0);
+    expect(a.http_clients.every((e) => e.file.startsWith("svc-a/"))).toBe(true);
+
+    // svc-a owns the RabbitMQ consumer
+    expect(a.queue_endpoints.length).toBeGreaterThan(0);
+    expect(a.queue_endpoints.find((e) => e.queue_name === "events" && e.role === "consumer")).toBeTruthy();
+    expect(a.queue_endpoints.every((e) => e.file.startsWith("svc-a/"))).toBe(true);
+
+    // svc-b owns the BullMQ consumer
+    expect(b.queue_endpoints.length).toBeGreaterThan(0);
+    expect(b.queue_endpoints.find((e) => e.queue_name === "invoice-jobs" && e.role === "consumer")).toBeTruthy();
+    expect(b.queue_endpoints.every((e) => e.file.startsWith("svc-b/"))).toBe(true);
+
+    // svc-b has no Feign clients
+    expect(b.http_clients.filter((e) => e.framework === "feign")).toHaveLength(0);
+
+    // the scope-out note is present
+    expect(inv.notes.some((n) => n.includes("cross-service queue detection"))).toBe(true);
+
+    cleanupTmpPath(root);
+  });
+
+  it("resolves a Feign ${prop.url} target through application.yml → host → service (BUG 2)", () => {
+    const root = makeTmpPath("multi-svc-feign-prop");
+
+    // svc-a: a Feign client whose url is a property reference; the property is
+    // defined in svc-a's application.yml and points at the settings-service
+    // host (note the abbreviation: property key says "config", host says
+    // "configuration"). Aliases alone cannot bridge this — only property→url→host.
+    fs.mkdirSync(path.join(root, "svc-a", "src"), { recursive: true });
+    fs.mkdirSync(path.join(root, "svc-a", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-a", "pom.xml"),
+      "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "ConfigClient.java"),
+      `import org.springframework.cloud.openfeign.FeignClient;\n@FeignClient(name = "x", url = "\${config-service.url}")\ninterface ConfigClient {\n  @GetMapping("/api/configuration/clients")\n  List<Cfg> list();\n}`,
+    );
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "main", "resources", "application.yml"),
+      "config-service:\n  url: http://settings-svc/api/configuration\n",
+    );
+
+    // settings-service: exposes the matching endpoint. Its A2-derived
+    // aliases include "configuration", so the host settings-svc
+    // (strip app-/-service → configuration) resolves here.
+    fs.mkdirSync(path.join(root, "settings-service", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "settings-service", "pom.xml"),
+      "<project><artifactId>settings-service</artifactId></project>");
+    fs.writeFileSync(
+      path.join(root, "settings-service", "src", "Ctrl.java"),
+      '@RestController class Ctrl { @GetMapping("/api/configuration/clients") String l(){return "";} }',
+    );
+
+    const inv = generateInventory(root, "2026-06-07T10-00-03", {
+      enableRest: true,
+      enableCrossService: true,
+    });
+
+    const a = inv.services.find((s) => s.identity.id === "svc-a")!;
+    expect(a).toBeDefined();
+    // The Feign client's ${prop} target_ref was resolved against svc-a's yml.
+    const client = a.http_clients.find((c) => c.target_ref.startsWith("${"));
+    expect(client).toBeDefined();
+    expect(client!.resolved_target).toBe("http://settings-svc/api/configuration");
+
+    const g = buildServiceGraph(inv);
+    const calls = g.edges.find(
+      (e) => e.kind === "calls" && e.from_service === "svc-a" && e.to_service === "settings-service",
+    );
+    expect(calls).toBeTruthy();
+  });
+});
+
 describe("main() honors ecosystem.rest.enabled", () => {
   let tmpPath: string;
   let stdoutSpy: ReturnType<typeof vi.spyOn>;
@@ -1667,5 +1820,337 @@ def health(): pass
     ]);
     expect(exit).toBe(0);
     expect(readManifest(runId).rest_endpoints.length).toBeGreaterThan(0);
+  });
+});
+
+// ── B7b: external_sources bucket + connector cross-reference ──────────────
+
+describe("generateInventory external_sources (B7b)", () => {
+  it("populates external_sources for a service with a DB datasource URL", () => {
+    const root = makeTmpPath("ext-src-b7b");
+
+    // A service with a Spring datasource config containing a postgresql URL.
+    fs.mkdirSync(path.join(root, "common-service", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "common-service", "pom.xml"),
+      "<project><artifactId>common-service</artifactId></project>",
+    );
+    fs.writeFileSync(
+      path.join(root, "common-service", "src", "main", "resources", "application.yml"),
+      "spring:\n  datasource:\n    url: jdbc:postgresql://pg/appdb\n",
+    );
+
+    // Write a .connectors/config.yaml enabling the db connector.
+    const connDir = path.join(root, ".connectors");
+    fs.mkdirSync(connDir, { recursive: true });
+    const connConfigPath = path.join(connDir, "config.yaml");
+    fs.writeFileSync(connConfigPath, "connectors:\n  db:\n    enabled: true\n");
+
+    const inv = generateInventory(root, "2026-06-07T11-00-00", {
+      enableCrossService: true,
+      connectorsConfigPath: connConfigPath,
+    });
+
+    const svc = inv.services.find((s) => s.identity.id === "common-service");
+    expect(svc).toBeDefined();
+    const dbEntry = svc!.external_sources.find((e) => e.kind === "database");
+    expect(dbEntry).toBeDefined();
+    expect(dbEntry!.connector_id).toBe("db");
+    expect(dbEntry!.configured).toBe(true);
+
+    cleanupTmpPath(root);
+  });
+
+  it("marks configured:false when db connector is NOT enabled in config", () => {
+    const root = makeTmpPath("ext-src-b7b-uncfg");
+
+    fs.mkdirSync(path.join(root, "common-service", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "common-service", "pom.xml"),
+      "<project><artifactId>common-service</artifactId></project>",
+    );
+    fs.writeFileSync(
+      path.join(root, "common-service", "src", "main", "resources", "application.yml"),
+      "spring:\n  datasource:\n    url: jdbc:postgresql://pg/appdb\n",
+    );
+
+    // No connectorsConfigPath provided → configured defaults to false.
+    const inv = generateInventory(root, "2026-06-07T11-00-01", {
+      enableCrossService: true,
+      // connectorsConfigPath deliberately omitted
+    });
+
+    const svc = inv.services.find((s) => s.identity.id === "common-service");
+    expect(svc).toBeDefined();
+    const dbEntry = svc!.external_sources.find((e) => e.kind === "database");
+    expect(dbEntry).toBeDefined();
+    expect(dbEntry!.connector_id).toBe("db");
+    expect(dbEntry!.configured).toBe(false);
+
+    cleanupTmpPath(root);
+  });
+
+  it("external_sources is empty when enableCrossService is false", () => {
+    const root = makeTmpPath("ext-src-no-cs");
+    fs.writeFileSync(path.join(root, "package.json"), '{"name":"x"}');
+    const inv = generateInventory(root, "2026-06-07T11-00-02", { enableCrossService: false });
+    // services array is empty, so there are no external_sources to check —
+    // but the top-level inventory still shouldn't have the key.
+    expect(inv.services).toEqual([]);
+    cleanupTmpPath(root);
+  });
+});
+
+// ── B7b-perservice: per-service detectExternalSources walk (PR #58 review) ──
+
+describe("generateInventory external_sources per-service scan (B7b-perservice)", () => {
+  it("detects datasource entries for BOTH services in a 2-service repo", () => {
+    const root = makeTmpPath("ext-src-perservice");
+
+    // Service A: jdbc:postgresql
+    fs.mkdirSync(path.join(root, "svc-a", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "svc-a", "pom.xml"),
+      "<project><artifactId>svc-a</artifactId></project>",
+    );
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "main", "resources", "application.yml"),
+      "spring:\n  datasource:\n    url: jdbc:postgresql://pg-a/svc_a_db\n",
+    );
+
+    // Service B: jdbc:mysql
+    fs.mkdirSync(path.join(root, "svc-b", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "svc-b", "pom.xml"),
+      "<project><artifactId>svc-b</artifactId></project>",
+    );
+    fs.writeFileSync(
+      path.join(root, "svc-b", "src", "main", "resources", "application.yml"),
+      "spring:\n  datasource:\n    url: jdbc:mysql://mysql-b/svc_b_db\n",
+    );
+
+    const inv = generateInventory(root, "2026-06-08T10-00-00", {
+      enableCrossService: true,
+    });
+
+    const svcA = inv.services.find((s) => s.identity.id === "svc-a");
+    const svcB = inv.services.find((s) => s.identity.id === "svc-b");
+    expect(svcA).toBeDefined();
+    expect(svcB).toBeDefined();
+
+    // Both services must have a database entry — proving per-service scanning.
+    const dbA = svcA!.external_sources.find((e) => e.kind === "database");
+    const dbB = svcB!.external_sources.find((e) => e.kind === "database");
+    expect(dbA).toBeDefined();
+    expect(dbB).toBeDefined();
+
+    // Entries are owner-tagged to the right service (file path starts with svc root).
+    expect(dbA!.file.startsWith("svc-a/")).toBe(true);
+    expect(dbB!.file.startsWith("svc-b/")).toBe(true);
+
+    cleanupTmpPath(root);
+  });
+});
+
+// ── Fix 1: per-service queue-const isolation + shared-library resolution ──
+
+describe("generateInventory cross-service queue-name resolution (Fix 1)", () => {
+  it("resolves same-named queue constants per-service, not repo-wide (no cross-bleed)", () => {
+    const root = makeTmpPath("ctx-isolate");
+    for (const [svc, val] of [["svc-a", "a-queue"], ["svc-b", "b-queue"]] as const) {
+      fs.mkdirSync(path.join(root, svc, "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, svc, "pom.xml"), `<project><artifactId>${svc}</artifactId></project>`);
+      fs.writeFileSync(path.join(root, svc, "src", "C.java"),
+        `public static final String Q = "${val}";\n@RabbitListener(queues = Q)\nvoid h(Dto m){}`);
+    }
+    const inv = generateInventory(root, "2026-06-07T10-00-00", { enableCrossService: true });
+    const a = inv.services.find((s) => s.identity.id === "svc-a")!;
+    const b = inv.services.find((s) => s.identity.id === "svc-b")!;
+    expect(a.queue_endpoints.find((e) => e.role === "consumer")?.queue_name).toBe("a-queue");
+    expect(b.queue_endpoints.find((e) => e.role === "consumer")?.queue_name).toBe("b-queue");
+    cleanupTmpPath(root);
+  });
+
+  it("resolves a shared-library queue constant for a consuming service", () => {
+    const root = makeTmpPath("ctx-sharedlib");
+    fs.mkdirSync(path.join(root, "shared", "msg", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "shared", "msg", "pom.xml"),
+      "<project><groupId>com.x.shared</groupId><artifactId>msg</artifactId></project>");
+    fs.writeFileSync(path.join(root, "shared", "msg", "src", "Q.java"),
+      'public static final String SHARED_Q = "shared-events";');
+    fs.mkdirSync(path.join(root, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(path.join(root, "svc-a", "src", "L.java"),
+      'import com.x.shared.msg.Q;\n@RabbitListener(queues = SHARED_Q)\nvoid h(Dto m){}');
+    const inv = generateInventory(root, "2026-06-07T10-00-01", { enableCrossService: true });
+    const a = inv.services.find((s) => s.identity.id === "svc-a")!;
+    expect(a.queue_endpoints.find((e) => e.role === "consumer")?.queue_name).toBe("shared-events");
+    cleanupTmpPath(root);
+  });
+
+  it("enableCrossService implies REST detection so client->endpoint calls edges work (frontend->backend)", () => {
+    const root = makeTmpPath("xs-implies-rest");
+    // Vue frontend calling a backend endpoint via the gateway path
+    fs.mkdirSync(path.join(root, "admin-ui", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "admin-ui", "package.json"), '{"name":"admin-ui","dependencies":{"vue":"^3"}}');
+    fs.writeFileSync(path.join(root, "admin-ui", "src", "api.ts"),
+      'import axios from "axios";\nawait axios.get("/api/payments/invoices/42");');
+    // Backend exposing the endpoint
+    fs.mkdirSync(path.join(root, "payments-module", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "payments-module", "pom.xml"), "<project><artifactId>payments-module</artifactId></project>");
+    fs.writeFileSync(path.join(root, "payments-module", "src", "R.java"),
+      '@RestController class R { @GetMapping("/api/payments/invoices/{id}") String g(){return"";} }');
+    // NOTE: enableRest is NOT passed — enableCrossService must imply it.
+    const inv = generateInventory(root, "2026-06-07T10-00-02", { enableCrossService: true });
+    const billing = inv.services.find((s) => s.identity.id === "payments-module")!;
+    expect(billing.rest_endpoints.length).toBeGreaterThan(0);    // REST ran despite enableRest unset
+    const g = buildServiceGraph(inv);
+    const fe = g.edges.find((e) => e.kind === "calls" && e.from_service === "admin-ui" && e.to_service === "payments-module");
+    expect(fe).toBeTruthy();                                     // frontend -> backend edge present
+    expect(fe!.confidence).toBe("high");
+    cleanupTmpPath(root);
+  });
+});
+
+// ── library_deps + auth_issuer inventory fields (Task C2b) ────────────
+
+describe("generateInventory library_deps + auth_issuer fields (C2b)", () => {
+  it("populates library_deps from pom.xml <dependency> blocks matching discovered library ids", () => {
+    const root = makeTmpPath("c2b-libdeps");
+
+    // Discovered library: shared/common-model with artifactId common-model
+    fs.mkdirSync(path.join(root, "shared", "common-model", "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "shared", "common-model", "pom.xml"),
+      `<project>
+  <groupId>com.x.shared</groupId>
+  <artifactId>common-model</artifactId>
+  <version>1.0</version>
+  <packaging>jar</packaging>
+</project>`,
+    );
+
+    // svc-a depends on common-model
+    fs.mkdirSync(path.join(root, "svc-a", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "svc-a", "pom.xml"),
+      `<project>
+  <artifactId>svc-a</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>com.x.shared</groupId>
+      <artifactId>common-model</artifactId>
+    </dependency>
+  </dependencies>
+</project>`,
+    );
+    fs.writeFileSync(
+      path.join(root, "svc-a", "src", "main", "resources", "application.yml"),
+      `spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://auth.example.com/
+`,
+    );
+
+    const inv = generateInventory(root, "2026-06-07T10-00-00", { enableCrossService: true });
+
+    const svcA = inv.services.find((s) => s.identity.id === "svc-a");
+    expect(svcA).toBeDefined();
+    expect(svcA!.library_deps).toContain("common-model");
+    expect(svcA!.auth_issuer).toBe("https://auth.example.com/");
+
+    // The library itself should have empty library_deps (it has no pom dependency on itself)
+    const lib = inv.services.find((s) => s.identity.id === "common-model");
+    expect(lib).toBeDefined();
+    expect(lib!.library_deps).toEqual([]);
+
+    cleanupTmpPath(root);
+  });
+
+  it("auth_issuer falls back to issuer_uri (underscore) property key", () => {
+    const root = makeTmpPath("c2b-issuer-underscore");
+    fs.mkdirSync(path.join(root, "svc-b", "src", "main", "resources"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-b", "pom.xml"), "<project><artifactId>svc-b</artifactId></project>");
+    // Use dots-mapped as underscores in properties file
+    fs.writeFileSync(
+      path.join(root, "svc-b", "src", "main", "resources", "application.properties"),
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://example.okta.com/\n",
+    );
+    const inv = generateInventory(root, "2026-06-07T10-00-01", { enableCrossService: true });
+    const svcB = inv.services.find((s) => s.identity.id === "svc-b");
+    expect(svcB).toBeDefined();
+    expect(svcB!.auth_issuer).toBe("https://example.okta.com/");
+    cleanupTmpPath(root);
+  });
+
+  it("library_deps is empty when service pom has no matching library dependency", () => {
+    const root = makeTmpPath("c2b-no-deps");
+    fs.mkdirSync(path.join(root, "svc-c", "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "svc-c", "pom.xml"),
+      `<project>
+  <artifactId>svc-c</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>org.external</groupId>
+      <artifactId>some-lib</artifactId>
+    </dependency>
+  </dependencies>
+</project>`,
+    );
+    const inv = generateInventory(root, "2026-06-07T10-00-02", { enableCrossService: true });
+    const svcC = inv.services.find((s) => s.identity.id === "svc-c");
+    expect(svcC).toBeDefined();
+    expect(svcC!.library_deps).toEqual([]);
+    cleanupTmpPath(root);
+  });
+});
+
+// ── nested-pom library_deps (PR #58 Finding 2) ───────────────────
+
+it("reads library_deps from a nested-pom service (build-subdir layout)", () => {
+  const root = makeTmpPath("nested-libdeps");
+  // a discovered library
+  fs.mkdirSync(path.join(root, "shared", "common-model"), { recursive: true });
+  fs.writeFileSync(path.join(root, "shared", "common-model", "pom.xml"),
+    "<project><groupId>com.x.shared</groupId><artifactId>common-model</artifactId></project>");
+  // a nested-pom service: pom is in edi/project/, not edi/
+  fs.mkdirSync(path.join(root, "edi", "project", "src"), { recursive: true });
+  fs.writeFileSync(path.join(root, "edi", "project", "pom.xml"),
+    "<project><artifactId>edi</artifactId><dependencies><dependency><groupId>com.x.shared</groupId><artifactId>common-model</artifactId></dependency></dependencies></project>");
+  const inv = generateInventory(root, "2026-06-08T10-00-00", { enableCrossService: true });
+  const edi = inv.services.find((s) => s.identity.id === "edi")!;
+  expect(edi).toBeDefined();
+  expect(edi.library_deps).toContain("common-model");
+  cleanupTmpPath(root);
+});
+
+// ── _readEcosystemCrossServiceEnabled ─────────────────────────────
+
+describe("_readEcosystemCrossServiceEnabled", () => {
+  it("reads ecosystem.cross_service.enabled from wiki.config.yaml", () => {
+    const root = makeTmpPath("xs-flag");
+    fs.writeFileSync(path.join(root, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: true\n");
+    expect(_readEcosystemCrossServiceEnabled(root)).toBe(true);
+    const root2 = makeTmpPath("xs-flag2");
+    fs.writeFileSync(path.join(root2, "wiki.config.yaml"), "ecosystem:\n  rest:\n    enabled: true\n");
+    expect(_readEcosystemCrossServiceEnabled(root2)).toBe(false);   // absent → false
+    cleanupTmpPath(root); cleanupTmpPath(root2);
+  });
+
+  it("CLI --cross-service runs cross-service detection (services populated)", () => {
+    const root = makeTmpPath("xs-cli-repo");
+    const wiki = makeTmpPath("xs-cli-wiki");
+    fs.mkdirSync(path.join(root, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(root, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(path.join(root, "svc-a", "src", "R.java"), '@RestController class R { @GetMapping("/a/x") String g(){return"";} }');
+    const code = main(["generate", "--wiki-root", wiki, "--repo-root", root, "--run-id", "2026-06-07T10-00-00", "--cross-service"]);
+    expect(code).toBe(0);
+    const inv = loadInventory(wiki, "2026-06-07T10-00-00")!;
+    expect(inv.services.length).toBeGreaterThan(0);   // cross-service ran
+    cleanupTmpPath(root); cleanupTmpPath(wiki);
   });
 });

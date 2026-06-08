@@ -1,0 +1,16 @@
+name: requests
+language: python
+description: "Python requests HTTP client"
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - { pattern: "import requests", type: import }
+    - { pattern: "from requests", type: import }
+client_extraction:
+  patterns:
+    - regex: "(?:requests|session|self\\._?session|s)\\.(get|post|put|delete|patch|head|options)\\s*\\(\\s*[frbu]*[\"']([^\"'{]+)[\"']"
+      method_group: 1
+      url_group: 2
+    - regex: "requests\\.request\\(\\s*[\"'](GET|POST|PUT|DELETE|PATCH|HEAD)[\"']\\s*,\\s*[frbu]*[\"']([^\"'{]+)[\"']"
+      method_group: 1
+      url_group: 2

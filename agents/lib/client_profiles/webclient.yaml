@@ -1,0 +1,17 @@
+name: webclient
+language: java
+description: "Spring WebFlux WebClient reactive HTTP client"
+detection:
+  file_patterns: ["**/*.java", "**/*.kt"]
+  markers:
+    - { pattern: "org.springframework.web.reactive.function.client.WebClient", type: import }
+    - { pattern: "WebClient", type: type_ref }
+client_extraction:
+  file_anchor:
+    url_regex: "\\.baseUrl\\(\\s*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "\\.(get|post|put|delete|patch|head|options)\\(\\)[\\s\\S]{0,80}?\\.uri\\(\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2
+      multiline: true
