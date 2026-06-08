@@ -21,7 +21,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 // ── Helpers ─────────────────────────────────────────────────────────
-const TS_RE = /^{"ts":"([^"\\]+)"/;
 /**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
  * `ts` string starts with `dateStr`. Unparseable JSON lines are silently
@@ -41,7 +40,7 @@ function readEvents(wikiRoot, dateStr) {
         // Fast-path: skip JSON parse overhead if this line cannot match our date
         if (!line.includes(dateStr))
             continue;
-        const match = TS_RE.exec(line);
+        const match = line.match(/^{"ts":"([^"\\]+)"/);
         if (match && match[1] && !match[1].startsWith(dateStr))
             continue;
         let entry;
