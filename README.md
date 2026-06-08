@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  Your coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider — reads an ecosystem-aware wiki of your code + Jira / Confluence / GitHub / Notion / AWS / GCP + ORM / DB schemas before it touches the diff. On the author's enterprise codebase, autonomous fix-rate climbed from <strong>~10% to ~50%</strong>, with the remaining tickets shipping noticeably faster.
+  Your coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider — reads an ecosystem-aware wiki of your code (single repo, monolith, or root-of-microservices in submodules) + Jira / Confluence / GitHub / Notion / AWS / GCP + ORM / DB schemas before it touches the diff. On the author's enterprise codebase, autonomous fix-rate climbed from <strong>~10% to ~50%</strong>, with the remaining tickets shipping noticeably faster.
 </p>
 
 <p align="center">
@@ -36,7 +36,25 @@ Andrej Karpathy named the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555
 
 The output is a structured wiki under `docs/<app>-wiki/`. Your coding agent reads it (via `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, or whichever convention your agent uses) before touching code. `/doc-wiki:atlas` documents an entire codebase in one phased pass; `/doc-wiki:ingest` keeps it current as the project evolves; `/doc-wiki:query` returns cited answers synthesised from wiki pages. Seven `/doc-wiki:*` slash commands cover the lifecycle; external services route through one planner — `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — so you configure credentials once and every command can use them. Everything runs inside your existing agent session. No SaaS, no daemon, no telemetry.
 
-Works across **seven coding agents** — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, and Aider (see [multi-platform wrappers](#multi-platform-wrappers)). Built for enterprise codebases of any complexity; fine on smaller projects too. Manifesto: [`docs/manifesto.md`](docs/manifesto.md) _(what "LLM Wiki for enterprise code" means and why the standard should stay Apache 2.0)_.
+Works across **seven coding agents** — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, and Aider (see [multi-platform wrappers](#multi-platform-wrappers)). Single-repo monolith, root-of-microservices, or polyglot multi-team — same workflow. See [Setup patterns](#setup-patterns) for each. Manifesto: [`docs/manifesto.md`](docs/manifesto.md) _(what "LLM Wiki for enterprise code" means and why the standard should stay Apache 2.0)_.
+
+## Setup patterns
+
+doc-wiki documents the codebase from wherever you run `/doc-wiki:atlas`. Three patterns cover most of what people actually do:
+
+- **Single repo / monolith.** `cd <repo> && /doc-wiki:atlas`. The wiki lands under `docs/<app>-wiki/` and gets committed to the same repo. Works out of the box.
+- **Microservices.** Create a root repository, add each service repo as a `git submodule`, and run `/doc-wiki:atlas` from the root. The wiki indexes every service, sees cross-service dependencies (HTTP clients, queue producers/consumers, shared schemas), and documents *how the services relate to each other* — not just what each one does internally. Commit the wiki to the root repo. **This is one of doc-wiki's biggest strengths: cross-repo architectural context that no single-service indexer can produce.**
+
+  ```sh
+  mkdir my-org-wiki && cd my-org-wiki && git init
+  git submodule add <repo-url-1> services/svc-a
+  git submodule add <repo-url-2> services/svc-b
+  # ...add the rest of the service repos as submodules
+  /doc-wiki:init && /doc-wiki:atlas
+  git add docs/ wiki.config.yaml && git commit -m "atlas v1"
+  ```
+
+- **Polyglot / multi-team.** Same as the microservices pattern, with language and team ownership picked up automatically by `/doc-wiki:atlas`'s code-inventory step.
 
 ## Reproducible benchmark
 
