@@ -1,0 +1,23 @@
+name: feign
+language: java
+description: "Spring Cloud OpenFeign declarative HTTP clients"
+detection:
+  file_patterns: ["**/*.java", "**/*.kt"]
+  markers:
+    - { pattern: "org.springframework.cloud.openfeign", type: import }
+    - { pattern: "@FeignClient", type: annotation }
+client_extraction:
+  file_anchor:
+    service_regex: "@FeignClient\\s*\\(\\s*(?:(?:name|value)\\s*=\\s*)?[\"']([^\"']+)[\"']"
+    service_group: 1
+    prefix_regex: "path\\s*=\\s*[\"']([^\"']+)[\"']"
+    prefix_group: 1
+    url_regex: "url\\s*=\\s*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "@(Get|Post|Put|Delete|Patch|Options|Head)Mapping\\s*\\(\\s*(?:(?:value|path)\\s*=\\s*)?[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2
+    - regex: "@RequestMapping\\s*\\([^)]*method\\s*=\\s*RequestMethod\\.(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)[^)]*?(?:value|path)\\s*=\\s*[\"']([^\"']+)[\"']"
+      method_group: 1
+      url_group: 2

@@ -37,6 +37,13 @@ import {
 export interface WalkOptions {
   respectGitignore?: boolean;
   gitignoreRoot?: string;
+  /**
+   * Override the {@link MAX_FILES} budget for this walk. Used by the
+   * cross-service inventory, which walks each service root separately so a
+   * large monorepo's global file count can't starve later services of their
+   * walk budget. Omit to use the default {@link MAX_FILES} cap.
+   */
+  maxFiles?: number;
 }
 
 /**
@@ -150,8 +157,9 @@ export function walkCodebase(
   }
 
   const out: Record<string, string> = {};
+  const fileCap = opts.maxFiles ?? MAX_FILES;
   const stack: Frame[] = [{ dir: root, active: initialStack }];
-  while (stack.length > 0 && Object.keys(out).length < MAX_FILES) {
+  while (stack.length > 0 && Object.keys(out).length < fileCap) {
     const frame = stack.pop();
     if (frame === undefined) break;
     let entries: fs.Dirent[];

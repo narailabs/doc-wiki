@@ -72,6 +72,46 @@ describe("TestExtractJPA", () => {
     const hasManyToMany = relTypes.includes("many_to_many");
     expect(hasOneToMany || hasManyToMany).toBe(true);
   });
+
+  // @Table attribute-order independence: schema first (regression guard)
+  it("table_pattern is order-independent: name-first yields correct table+schema", () => {
+    // User.java uses @Table(name = "users", schema = "public") — name first
+    const entities = extractEntities(jpaFiles(), jpaProfile());
+    const user = entities.find((e) => e.class_name === "User");
+    expect(user).toBeDefined();
+    expect(user!.table_name).toBe("users");
+    expect(user!.schema_name).toBe("public");
+  });
+
+  it("table_pattern is order-independent: schema-first yields correct table+schema", () => {
+    // Invoice.java uses @Table(schema = "app", name = "invoice") — schema first
+    const entities = extractEntities(jpaFiles(), jpaProfile());
+    const invoice = entities.find((e) => e.class_name === "Invoice");
+    expect(invoice).toBeDefined();
+    expect(invoice!.table_name).toBe("invoice");
+    expect(invoice!.schema_name).toBe("app");
+  });
+
+  it("table_pattern handles jakarta.persistence (Spring Boot 3.x)", () => {
+    // Invoice.java imports jakarta.persistence — detection markers must still fire
+    const content = jpaFiles();
+    const hasJakarta = Object.values(content).some((src) =>
+      src.includes("jakarta.persistence"),
+    );
+    expect(hasJakarta).toBe(true);
+    const entities = extractEntities(content, jpaProfile());
+    // Invoice entity should be detected regardless of import namespace
+    expect(entities.map((e) => e.class_name)).toContain("Invoice");
+  });
+
+  it("table_pattern handles @Table(name=...) with no schema", () => {
+    // Order.java uses @Table(name = "orders") with no schema attribute
+    const entities = extractEntities(jpaFiles(), jpaProfile());
+    const order = entities.find((e) => e.class_name === "Order");
+    expect(order).toBeDefined();
+    expect(order!.table_name).toBe("orders");
+    expect(order!.schema_name).toBe("");
+  });
 });
 
 // ======================================================================

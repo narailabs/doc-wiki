@@ -1,0 +1,22 @@
+name: ky
+language: typescript
+description: "ky HTTP client — tiny fetch wrapper"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from \"ky\"", type: import }
+    - { pattern: "from 'ky'", type: import }
+    - { pattern: "require('ky')", type: import }
+    - { pattern: "require(\"ky\")", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "prefixUrl\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+    url_group: 1
+  patterns:
+    - regex: "\\bky\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 1
+      url_group: 2
+    - regex: "\\bky\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 0
+      url_group: 1
+      default_method: "GET"

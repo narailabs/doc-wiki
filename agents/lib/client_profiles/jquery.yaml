@@ -1,0 +1,24 @@
+name: jquery
+language: typescript
+description: "jQuery $.ajax / $.get / $.post / $.getJSON HTTP helpers"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "\"jquery\"", type: import }
+    - { pattern: "'jquery'", type: import }
+    - { pattern: "$.ajax", type: usage }
+    - { pattern: "$.get", type: usage }
+    - { pattern: "$.post", type: usage }
+client_extraction:
+  patterns:
+    - regex: "\\$\\.(get|post)\\s*\\(\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 1
+      url_group: 2
+    - regex: "\\$\\.getJSON\\s*\\(\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 0
+      url_group: 1
+      default_method: "GET"
+    - regex: "\\$\\.ajax\\s*\\(\\s*\\{[^}]*url\\s*:\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 0
+      url_group: 1
+      default_method: "GET"

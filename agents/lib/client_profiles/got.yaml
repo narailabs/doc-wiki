@@ -1,0 +1,25 @@
+name: got
+language: typescript
+description: "got and superagent HTTP clients for Node.js"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from \"got\"", type: import }
+    - { pattern: "require('got')", type: import }
+    - { pattern: "from \"superagent\"", type: import }
+    - { pattern: "require('superagent')", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "prefixUrl\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+    url_group: 1
+  patterns:
+    - regex: "got\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 1
+      url_group: 2
+    - regex: "\\bgot\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 0
+      url_group: 1
+      default_method: "GET"
+    - regex: "(?:superagent|request)\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 1
+      url_group: 2

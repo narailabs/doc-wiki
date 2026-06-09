@@ -1,0 +1,30 @@
+name: bullmq
+language: typescript
+description: "BullMQ — new Queue('name') producer + new Worker('name', ...) consumer"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from 'bullmq'", type: import }
+    - { pattern: "require('bullmq')", type: import }
+    - { pattern: "from \"bullmq\"", type: import }
+    - { pattern: "require(\"bullmq\")", type: import }
+queue_extraction:
+  patterns:
+    # producer — literal: new Queue('name', options)
+    - regex: "new Queue\\(\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: producer
+      name_group: 1
+    # producer — symbol: new Queue(QUEUE_CONST, options)
+    - regex: "new Queue\\(\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true
+    # consumer — literal: new Worker('name', processor, options)
+    - regex: "new Worker\\(\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: new Worker(QUEUE_CONST, processor, options)
+    - regex: "new Worker\\(\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true

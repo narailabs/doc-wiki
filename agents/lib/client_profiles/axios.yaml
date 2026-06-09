@@ -1,0 +1,21 @@
+name: axios
+language: typescript
+description: "axios HTTP client for Node.js and browsers"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from \"axios\"", type: import }
+    - { pattern: "from 'axios'", type: import }
+    - { pattern: "require('axios')", type: import }
+    - { pattern: "require(\"axios\")", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "axios\\.create\\s*\\(\\s*\\{[^}]*baseURL\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+    url_group: 1
+  patterns:
+    - regex: "(?:axios|\\b\\w+)\\.(get|post|put|delete|patch|head|options)\\s*\\(\\s*[`'\"]([^`'\"$]+)[`'\"]"
+      method_group: 1
+      url_group: 2
+    - regex: "method\\s*:\\s*[`'\"](get|post|put|delete|patch)[`'\"][^}]*url\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+      method_group: 1
+      url_group: 2

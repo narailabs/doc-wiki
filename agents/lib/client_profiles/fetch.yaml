@@ -1,0 +1,19 @@
+name: fetch
+language: typescript
+description: "Native fetch / undici / node-fetch HTTP client"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "fetch(", type: builtin }
+    - { pattern: "from \"undici\"", type: import }
+    - { pattern: "require('undici')", type: import }
+    - { pattern: "from 'node-fetch'", type: import }
+client_extraction:
+  patterns:
+    - regex: "fetch\\(\\s*[`'\"]([^`'\"$]+)[`'\"]\\s*,\\s*\\{[^}]*method\\s*:\\s*[`'\"](GET|POST|PUT|DELETE|PATCH|HEAD)[`'\"]"
+      url_group: 1
+      method_group: 2
+    - regex: "fetch\\(\\s*[`'\"]([^`'\"$]+)[`'\"]\\s*[,)]"
+      url_group: 1
+      method_group: 0
+      default_method: "GET"

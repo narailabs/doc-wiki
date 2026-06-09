@@ -1,0 +1,13 @@
+name: xhr
+language: typescript
+description: "XMLHttpRequest — browser built-in HTTP client"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "XMLHttpRequest", type: usage }
+    - { pattern: ".open(", type: usage }
+client_extraction:
+  patterns:
+    - regex: "\\.open\\s*\\(\\s*['\"]([A-Z]+)['\"]\\s*,\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 1
+      url_group: 2

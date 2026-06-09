@@ -16,7 +16,7 @@ detection:
 
 entity_extraction:
   class_pattern: "(?:@Entity[\\s\\S]*?)class\\s+(\\w+)"
-  table_pattern: "@Table\\s*\\(\\s*name\\s*=\\s*\"(\\w+)\"(?:.*?schema\\s*=\\s*\"(\\w+)\")?"
+  table_pattern: "@Table\\s*\\(\\s*(?:(?:name\\s*=\\s*\"(?<table_name>\\w+)\"(?:.*?schema\\s*=\\s*\"(?<schema_name>\\w+)\")?)|(?:schema\\s*=\\s*\"(?<schema_name2>\\w+)\".*?name\\s*=\\s*\"(?<table_name2>\\w+)\"))"
   column_pattern: "@Column\\s*\\(\\s*name\\s*=\\s*\"(\\w+)\""
 
 relationship_detection:

@@ -21,8 +21,11 @@
  *   node source_registry.js list
  *   node source_registry.js lookup --source "jira://AUTH-1"
  */
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as yaml from "js-yaml";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -349,6 +352,71 @@ function customConfigToManifest(cfg: CustomAgentConfig): AgentManifest {
     agent_dir: "",
     origin: "custom",
   };
+}
+
+// ── Connector config ──────────────────────────────────────────────────
+
+/**
+ * Read the set of CONFIGURED connector ids from a `.connectors/config.yaml`.
+ *
+ * Schema: top-level `connectors:` map; a child key is "configured" when its
+ * value is a map with `enabled: true` (or, lenient: when the key is present
+ * with a truthy/empty map and not `enabled: false`).
+ *
+ * Default search path: `<cwd>/.connectors/config.yaml` then
+ * `~/.connectors/config.yaml` (first that exists).
+ *
+ * Returns an empty Set when no config exists or it's malformed.
+ */
+export function loadConfiguredConnectorIds(configPath?: string): Set<string> {
+  const resolved = resolveConnectorConfigPath(configPath);
+  if (resolved === null) return new Set();
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(resolved, "utf-8");
+  } catch {
+    return new Set();
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch {
+    return new Set();
+  }
+
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    !("connectors" in (parsed as object))
+  ) {
+    return new Set();
+  }
+
+  const connectors = (parsed as Record<string, unknown>)["connectors"];
+  if (connectors === null || typeof connectors !== "object") return new Set();
+
+  const ids = new Set<string>();
+  for (const [id, val] of Object.entries(connectors as Record<string, unknown>)) {
+    // Exclude only when explicitly disabled (enabled === false).
+    if (val !== null && typeof val === "object" && (val as Record<string, unknown>)["enabled"] === false) {
+      continue;
+    }
+    ids.add(id);
+  }
+  return ids;
+}
+
+function resolveConnectorConfigPath(configPath?: string): string | null {
+  if (configPath !== undefined) {
+    return configPath;
+  }
+  const localPath = path.join(process.cwd(), ".connectors", "config.yaml");
+  if (fs.existsSync(localPath)) return localPath;
+  const homePath = path.join(os.homedir(), ".connectors", "config.yaml");
+  if (fs.existsSync(homePath)) return homePath;
+  return null;
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────

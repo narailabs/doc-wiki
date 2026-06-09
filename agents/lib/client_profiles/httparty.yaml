@@ -1,0 +1,13 @@
+name: httparty
+language: ruby
+description: "Ruby HTTParty HTTP client"
+detection:
+  file_patterns: ["**/*.rb"]
+  markers:
+    - { pattern: "require 'httparty'", type: import }
+    - { pattern: "include HTTParty", type: mixin }
+client_extraction:
+  patterns:
+    - regex: "HTTParty\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[\"']([^\"'#]+)[\"']"
+      method_group: 1
+      url_group: 2

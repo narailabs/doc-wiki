@@ -20,6 +20,8 @@ import {
   getRollingPerIngestAvg,
   assembleGapReport,
   renderGapReportMarkdown,
+  STATIC_GLOBAL_PAGES,
+  CROSS_SERVICE_GLOBAL_PAGES,
   main,
 } from "../atlas_orchestrator.js";
 import {
@@ -253,10 +255,14 @@ describe("estimateCost", () => {
     expect(est.expected_ingests).toBe(4);
     expect(est.cache_hits).toBe(0);
     expect(est.topic_cost_usd).toBe(0.80); // 4 * 0.20
-    // 7 globals (overview + integrations + deploy + commands + configuration +
-    // getting-started + troubleshooting) × $0.20 each.
+    // 7 base globals (cross-service disabled by default) × $0.20 each.
     expect(est.global_cost_usd).toBe(1.40);
     expect(est.total_estimated_usd).toBe(2.20);
+
+    // With cross-service enabled: 13 globals × $0.20 each.
+    const estCs = estimateCost(wikiRoot, plan, /* avg */ 0.20, /* crossServiceEnabled */ true);
+    expect(estCs.global_cost_usd).toBe(2.60);
+    expect(estCs.total_estimated_usd).toBe(3.40);
     expect(est.breakdown).toHaveLength(4);
     for (const b of est.breakdown) {
       expect(b.expected).toBe(true);
@@ -334,11 +340,17 @@ describe("plan snapshot round-trip", () => {
 // ── getRollingPerIngestAvg ─────────────────────────────────────────
 
 describe("expectedGlobalCount", () => {
-  it("returns the static count regardless of facets argument", () => {
+  it("returns 7 base pages when cross-service is disabled (default)", () => {
     expect(expectedGlobalCount()).toBe(7);
     expect(expectedGlobalCount([])).toBe(7);
     expect(expectedGlobalCount(["architecture", "data-model"])).toBe(7);
     expect(expectedGlobalCount(["architecture"])).toBe(7);
+  });
+
+  it("returns 13 pages when cross-service is enabled", () => {
+    expect(expectedGlobalCount(undefined, true)).toBe(13);
+    expect(expectedGlobalCount([], true)).toBe(13);
+    expect(expectedGlobalCount(["architecture"], true)).toBe(13);
   });
 });
 
@@ -674,7 +686,7 @@ describe("assembleGapReport", () => {
 });
 
 describe("renderGapReportMarkdown", () => {
-  it("emits all seven sections with placeholder text when empty", () => {
+  it("emits all sections with placeholder text when empty", () => {
     const md = renderGapReportMarkdown(
       {
         topicsWithoutPages: [],
@@ -684,6 +696,8 @@ describe("renderGapReportMarkdown", () => {
         externalServicesWithoutDocumentation: [],
         endpointsWithoutDocumentation: [],
         clientsWithoutDocumentation: [],
+        crossServiceClientsDetected: 0,
+        crossServiceQueuesDetected: 0,
       },
       "2026-04-30T12-00-00",
     );
@@ -696,6 +710,8 @@ describe("renderGapReportMarkdown", () => {
     expect(md).toContain("## REST endpoints without documentation");
     expect(md).toContain("## Code clients without documentation");
     expect(md.match(/_\(none\)_/g)?.length).toBe(7);
+    // Cross-service coverage line is always rendered.
+    expect(md).toContain("Cross-service: 0 HTTP clients, 0 queue endpoints detected");
   });
 
   it("formats facets-without-coverage as a markdown table", () => {
@@ -738,6 +754,91 @@ describe("renderGapReportMarkdown", () => {
     );
     expect(md).toContain("- GET /api/users (src/routes/users.ts:42)");
     expect(md).toContain("- gather() at src/orchestrator.ts:18");
+  });
+});
+
+// ── F2: estimate-cost CLI reads ecosystem.cross_service.enabled from config ──
+
+describe("main() estimate-cost — crossServiceEnabled from config (PR #58 review)", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+  let stdoutChunks: string[];
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  const PLAN_ONE_ENTRY = JSON.stringify({
+    topics: ["auth"],
+    facets: ["architecture"],
+    entries: [
+      { topic: "auth", facet: "architecture", sources: [], output: "wiki/auth/architecture.md" },
+    ],
+    created_at: new Date().toISOString(),
+  });
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-ec-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    stdoutChunks = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdoutChunks.push(chunk.toString());
+      return true;
+    });
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  function writeWikiConfig(crossServiceEnabled: boolean): void {
+    const config = {
+      wiki: { name: "Test Wiki", domain: "testing" },
+      autonomy: { mode: "balanced" },
+      ecosystem: { cross_service: { enabled: crossServiceEnabled } },
+    };
+    fs.writeFileSync(path.join(wikiRoot, "wiki.config.yaml"), yaml.dump(config));
+  }
+
+  it("F2-enabled: estimate-cost includes 6 cross-service pages when config has enabled:true → 13 globals", () => {
+    writeWikiConfig(true);
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    // 13 globals × $0.20 = $2.60
+    expect(out.global_cost_usd).toBeCloseTo(2.60, 5);
+  });
+
+  it("F2-disabled: estimate-cost excludes cross-service pages when config has enabled:false → 7 globals", () => {
+    writeWikiConfig(false);
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    // 7 globals × $0.20 = $1.40
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
+  });
+
+  it("F2-absent: estimate-cost defaults to false (7 globals) when cross_service key is absent from config", () => {
+    // makeInitializedWiki writes a config without ecosystem.cross_service
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
   });
 });
 
@@ -888,6 +989,193 @@ describe("countAtlasPages archive exclusion", () => {
     }
     writeEvent(wikiRoot, { op: "atlas", atlas_run_id: "r1" });
     expect(detectState(wikiRoot)).toBe("fresh");
+  });
+});
+
+// ── STATIC_GLOBAL_PAGES / CROSS_SERVICE_GLOBAL_PAGES — slugs ──────────
+
+describe("STATIC_GLOBAL_PAGES and CROSS_SERVICE_GLOBAL_PAGES slugs", () => {
+  const CROSS_SERVICE_SLUGS = [
+    "service-map",
+    "service-dependencies",
+    "client-registry",
+    "queue-registry",
+    "database-traces",
+    "shared-libraries",
+  ] as const;
+
+  const ORIGINAL_SLUGS = [
+    "overview",
+    "integrations",
+    "deploy",
+    "commands",
+    "configuration",
+    "getting-started",
+    "troubleshooting",
+  ] as const;
+
+  it("STATIC_GLOBAL_PAGES includes all 7 base slugs", () => {
+    for (const slug of ORIGINAL_SLUGS) {
+      expect(STATIC_GLOBAL_PAGES).toContain(slug);
+    }
+  });
+
+  it("STATIC_GLOBAL_PAGES has exactly 7 entries (cross-service slugs moved out)", () => {
+    expect(STATIC_GLOBAL_PAGES.length).toBe(7);
+  });
+
+  it("CROSS_SERVICE_GLOBAL_PAGES includes all 6 cross-service slugs", () => {
+    for (const slug of CROSS_SERVICE_SLUGS) {
+      expect(CROSS_SERVICE_GLOBAL_PAGES).toContain(slug);
+    }
+  });
+
+  it("CROSS_SERVICE_GLOBAL_PAGES has exactly 6 entries", () => {
+    expect(CROSS_SERVICE_GLOBAL_PAGES.length).toBe(6);
+  });
+
+  it("combined STATIC + CROSS_SERVICE still covers all 13 slugs", () => {
+    const all = [...STATIC_GLOBAL_PAGES, ...CROSS_SERVICE_GLOBAL_PAGES];
+    for (const slug of [...ORIGINAL_SLUGS, ...CROSS_SERVICE_SLUGS]) {
+      expect(all).toContain(slug);
+    }
+    expect(all.length).toBe(13);
+  });
+});
+
+// ── assembleGapReport cross-service buckets ────────────────────────
+
+describe("assembleGapReport cross-service buckets", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-cs-gap-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    for (const f of ["index.md", "summaries.md", "overview.md"]) {
+      const p = path.join(wikiRoot, "wiki", f);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    }
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  const EMPTY_PLAN = {
+    topics: [],
+    facets: [],
+    entries: [],
+    created_at: new Date().toISOString(),
+  };
+
+  it("yields crossServiceClientsDetected:0 and crossServiceQueuesDetected:0 when no inventory", () => {
+    const report = assembleGapReport(wikiRoot, EMPTY_PLAN);
+    expect(report.crossServiceClientsDetected).toBe(0);
+    expect(report.crossServiceQueuesDetected).toBe(0);
+  });
+
+  it("yields 0 when inventory has no services", () => {
+    const inventory = {
+      atlas_run_id: "r1",
+      generated_at: "2026-06-07T00:00:00Z",
+      repo_root: "/x",
+      project_metadata: { name: "x", version: "0", language: "typescript", runtime: "node", manifests_seen: [] },
+      orm_entities: [],
+      rest_endpoints: [],
+      code_clients: [],
+      services: [],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const report = assembleGapReport(wikiRoot, EMPTY_PLAN, undefined, inventory);
+    expect(report.crossServiceClientsDetected).toBe(0);
+    expect(report.crossServiceQueuesDetected).toBe(0);
+  });
+
+  it("sums http_clients and queue_endpoints across services", () => {
+    const inventory = {
+      atlas_run_id: "r1",
+      generated_at: "2026-06-07T00:00:00Z",
+      repo_root: "/x",
+      project_metadata: { name: "x", version: "0", language: "typescript", runtime: "node", manifests_seen: [] },
+      orm_entities: [],
+      rest_endpoints: [],
+      code_clients: [],
+      services: [
+        {
+          identity: { id: "svc-a", name: "svc-a", root: "services/svc-a", kind: "service" as const },
+          project_metadata: { name: "svc-a", version: "0", language: "java", runtime: "java", manifests_seen: [] },
+          orm_entities: [],
+          rest_endpoints: [],
+          http_clients: [
+            { framework: "feign", method: "GET", target_ref: "svc-b", path: "/api/items", file: "services/svc-a/src/Client.java", line: 10 },
+          ],
+          queue_endpoints: [],
+          external_sources: [],
+          library_deps: [],
+          auth_issuer: "",
+        },
+        {
+          identity: { id: "svc-b", name: "svc-b", root: "services/svc-b", kind: "service" as const },
+          project_metadata: { name: "svc-b", version: "0", language: "java", runtime: "java", manifests_seen: [] },
+          orm_entities: [],
+          rest_endpoints: [],
+          http_clients: [],
+          queue_endpoints: [
+            { framework: "spring_kafka", role: "producer" as const, queue_name: "orders", file: "services/svc-b/src/Producer.java", line: 5 },
+          ],
+          external_sources: [],
+          library_deps: [],
+          auth_issuer: "",
+        },
+      ],
+      stats: { files_walked: 0, files_skipped_for_size: 0, duration_ms: 0 },
+      notes: [],
+    };
+    const report = assembleGapReport(wikiRoot, EMPTY_PLAN, undefined, inventory);
+    expect(report.crossServiceClientsDetected).toBe(1);
+    expect(report.crossServiceQueuesDetected).toBe(1);
+  });
+});
+
+// ── renderGapReportMarkdown cross-service line ─────────────────────
+
+describe("renderGapReportMarkdown cross-service line", () => {
+  it("renders cross-service counts when both are zero", () => {
+    const md = renderGapReportMarkdown(
+      {
+        topicsWithoutPages: [],
+        facetsWithoutCoverage: [],
+        sourceFilesWithNoPage: [],
+        uncoveredFiles: [],
+        externalServicesWithoutDocumentation: [],
+        endpointsWithoutDocumentation: [],
+        clientsWithoutDocumentation: [],
+        crossServiceClientsDetected: 0,
+        crossServiceQueuesDetected: 0,
+      },
+      "r1",
+    );
+    expect(md).toContain("Cross-service: 0 HTTP clients, 0 queue endpoints detected");
+  });
+
+  it("renders correct counts when both are non-zero", () => {
+    const md = renderGapReportMarkdown(
+      {
+        topicsWithoutPages: [],
+        facetsWithoutCoverage: [],
+        sourceFilesWithNoPage: [],
+        uncoveredFiles: [],
+        externalServicesWithoutDocumentation: [],
+        endpointsWithoutDocumentation: [],
+        clientsWithoutDocumentation: [],
+        crossServiceClientsDetected: 3,
+        crossServiceQueuesDetected: 7,
+      },
+      "r1",
+    );
+    expect(md).toContain("Cross-service: 3 HTTP clients, 7 queue endpoints detected");
   });
 });
 

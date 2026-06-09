@@ -1,0 +1,34 @@
+name: kafkajs
+language: typescript
+description: "KafkaJS producer.send({ topic }) + consumer.subscribe({ topic })"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from 'kafkajs'", type: import }
+    - { pattern: "require('kafkajs')", type: import }
+    - { pattern: "from \"kafkajs\"", type: import }
+    - { pattern: "require(\"kafkajs\")", type: import }
+queue_extraction:
+  patterns:
+    # consumer — literal: consumer.subscribe({ topic: 'name', ... })
+    - regex: "\\.subscribe\\(\\s*\\{[\\s\\S]{0,120}?topic\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: consumer
+      name_group: 1
+      multiline: true
+    # consumer — symbol: consumer.subscribe({ topic: TOPIC_CONST, ... })
+    - regex: "\\.subscribe\\(\\s*\\{[\\s\\S]{0,120}?topic\\s*:\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+      multiline: true
+    # producer — literal: producer.send({ topic: 'name', messages: [...] })
+    - regex: "\\.send\\(\\s*\\{[\\s\\S]{0,120}?topic\\s*:\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: producer
+      name_group: 1
+      multiline: true
+    # producer — symbol: producer.send({ topic: TOPIC_CONST, ... })
+    - regex: "\\.send\\(\\s*\\{[\\s\\S]{0,120}?topic\\s*:\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true
+      multiline: true

@@ -1,0 +1,13 @@
+name: angular_httpclient
+language: typescript
+description: "Angular HttpClient — @angular/common/http"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx"]
+  markers:
+    - { pattern: "@angular/common/http", type: import }
+    - { pattern: "HttpClient", type: import }
+client_extraction:
+  patterns:
+    - regex: "(?:this\\.http|\\b\\w*[Hh]ttpClient)\\.(get|post|put|delete|patch|head|options)\\s*(?:<[^>]*>)?\\s*\\(\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 1
+      url_group: 2

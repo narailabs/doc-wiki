@@ -1,0 +1,34 @@
+name: amqplib
+language: typescript
+description: "amqplib (Node) — channel.consume / channel.sendToQueue / channel.publish"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs"]
+  markers:
+    - { pattern: "from 'amqplib'", type: import }
+    - { pattern: "require('amqplib')", type: import }
+    - { pattern: "from \"amqplib\"", type: import }
+    - { pattern: "require(\"amqplib\")", type: import }
+queue_extraction:
+  patterns:
+    # consumer — literal: channel.consume('queue', handler)
+    - regex: "\\.consume\\(\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: channel.consume(QUEUE_CONST, handler)
+    - regex: "\\.consume\\(\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+    # producer — literal: channel.sendToQueue('queue', buffer)
+    - regex: "\\.sendToQueue\\(\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: producer
+      name_group: 1
+    # producer — symbol: channel.sendToQueue(QUEUE_CONST, buffer)
+    - regex: "\\.sendToQueue\\(\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true
+    # producer — literal: channel.publish('exchange', 'routingKey', buffer) — routingKey is name
+    - regex: "\\.publish\\(\\s*[`'\"]([^`'\"]*)[`'\"]\\s*,\\s*[`'\"]([^`'\"]+)[`'\"]"
+      role: producer
+      name_group: 2

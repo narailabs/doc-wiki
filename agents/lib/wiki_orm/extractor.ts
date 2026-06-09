@@ -162,9 +162,19 @@ export function extractEntities(
         tableRe.lastIndex = 0;
         const tableMatch = tableRe.exec(windowText);
         if (tableMatch) {
-          entity.table_name = tableMatch[1] ?? "";
-          if (tableMatch.length > 2 && tableMatch[2]) {
-            entity.schema_name = tableMatch[2];
+          // Named capture groups take precedence over positional groups.
+          // Profiles may use an alternation with two group-name variants
+          // (e.g. `table_name` / `table_name2`) so both attribute orders
+          // work without duplicate-group-name issues (Node 20 disallows
+          // duplicate named groups across alternation branches).
+          const g = tableMatch.groups ?? {};
+          entity.table_name =
+            (g["table_name"] ?? g["table_name2"] ?? tableMatch[1]) ?? "";
+          const schemaCaptured =
+            g["schema_name"] ?? g["schema_name2"] ??
+            (tableMatch.length > 2 ? tableMatch[2] : undefined);
+          if (schemaCaptured) {
+            entity.schema_name = schemaCaptured;
           }
         }
       }

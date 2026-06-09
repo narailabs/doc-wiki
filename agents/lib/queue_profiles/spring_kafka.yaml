@@ -1,0 +1,29 @@
+name: spring_kafka
+language: java
+description: "Spring Kafka @KafkaListener consumers + KafkaTemplate producers"
+detection:
+  file_patterns: ["**/*.java", "**/*.kt"]
+  markers:
+    - { pattern: "org.springframework.kafka", type: import }
+    - { pattern: "@KafkaListener", type: annotation }
+    - { pattern: "kafkaTemplate", type: call }
+queue_extraction:
+  patterns:
+    # consumer — literal: @KafkaListener(topics = "name")
+    - regex: "@KafkaListener\\s*\\([^)]*topics\\s*=\\s*[\"']([^\"']+)[\"']"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: @KafkaListener(topics = TOPIC_CONST)
+    - regex: "@KafkaListener\\s*\\([^)]*topics\\s*=\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+    # producer — literal: kafkaTemplate.send("topic", ...)
+    - regex: "kafkaTemplate\\.send\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      role: producer
+      name_group: 1
+    # producer — symbol: kafkaTemplate.send(TOPIC_CONST, ...)
+    - regex: "kafkaTemplate\\.send\\s*\\(\\s*([A-Z][A-Za-z0-9_.]*)\\s*,"
+      role: producer
+      name_group: 1
+      resolve: true

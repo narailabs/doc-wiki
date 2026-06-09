@@ -1,0 +1,16 @@
+name: httpx
+language: python
+description: "Python httpx async/sync HTTP client"
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - { pattern: "import httpx", type: import }
+    - { pattern: "from httpx", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "(?:Async)?Client\\([^)]*base_url\\s*=\\s*[frbu]*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "(?:httpx|client|self\\._?client)\\.(get|post|put|delete|patch|head|options)\\s*\\(\\s*[frbu]*[\"']([^\"'{]+)[\"']"
+      method_group: 1
+      url_group: 2

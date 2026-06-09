@@ -1,0 +1,16 @@
+name: dotnet_httpclient
+language: csharp
+description: ".NET HttpClient async HTTP methods"
+detection:
+  file_patterns: ["**/*.cs"]
+  markers:
+    - { pattern: "using System.Net.Http", type: import }
+    - { pattern: "HttpClient", type: type_ref }
+client_extraction:
+  file_anchor:
+    url_regex: "BaseAddress\\s*=\\s*new Uri\\(\\s*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "\\.(Get|Post|Put|Delete|Patch)Async\\s*\\(\\s*[$@]*[\"']([^\"'{]+)[\"']"
+      method_group: 1
+      url_group: 2

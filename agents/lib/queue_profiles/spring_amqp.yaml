@@ -1,0 +1,66 @@
+name: spring_amqp
+language: java
+description: "Spring AMQP (RabbitMQ) @RabbitListener consumers + RabbitTemplate producers"
+detection:
+  file_patterns: ["**/*.java", "**/*.kt"]
+  markers:
+    - { pattern: "org.springframework.amqp", type: import }
+    - { pattern: "@RabbitListener", type: annotation }
+    - { pattern: "convertAndSend", type: call }
+    - { pattern: "sendAndReceive", type: call }
+queue_extraction:
+  patterns:
+    # consumer — literal: @RabbitListener(queues = "name") — single or multi-line.
+    # [\\s\\S]{0,200}? spans newlines so queues= on a different line is captured.
+    - regex: "@RabbitListener\\s*\\([\\s\\S]{0,200}?queues\\s*=\\s*[\"']([^\"']+)[\"']"
+      role: consumer
+      name_group: 1
+      multiline: true
+    # consumer — symbol: @RabbitListener(queues = QUEUE_CONST) — single or multi-line.
+    - regex: "@RabbitListener\\s*\\([\\s\\S]{0,200}?queues\\s*=\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+      multiline: true
+    # producer — 3-arg literal routing key: convertAndSend(exchange, "routing.key", payload)
+    # 3-arg overload only (requires a following 3rd argument, i.e. a trailing comma after the 2nd arg).
+    # Captures the 2nd arg (routing key) when it is a non-empty quoted string.
+    # Won't match empty routing key ("") because [^"']+ requires ≥1 char.
+    # Won't match the 2-arg form convertAndSend(routingKey, message) because the 2nd arg
+    # there is the message (no trailing comma); that form falls through to the 1st-arg patterns.
+    - regex: "convert(?:AndSend|SendAndReceive)\\s*\\(\\s*[^,]+,\\s*[\"']([^\"']+)[\"']\\s*,"
+      role: producer
+      name_group: 1
+    # producer — 3-arg symbol routing key: convertAndSend(EXCHANGE, ROUTING_KEY, payload)
+    # 3-arg overload only (requires a following 3rd argument, i.e. a trailing comma after the 2nd arg).
+    # Captures the 2nd arg when it is an UPPER_SNAKE symbol.
+    # The 2-arg form convertAndSend(QUEUE, MESSAGE) is excluded because there is no comma
+    # after the 2nd arg; it falls through to the 1st-arg symbol pattern below.
+    - regex: "convert(?:AndSend|SendAndReceive)\\s*\\(\\s*[^,]+,\\s*([A-Z][A-Za-z0-9_.]+)\\s*,"
+      role: producer
+      name_group: 1
+      resolve: true
+    # producer — literal: convertAndSend("name", ...) / convertSendAndReceive("name", ...)
+    - regex: "convert(?:AndSend|SendAndReceive)\\s*\\(\\s*[\"']([^\"']+)[\"']"
+      role: producer
+      name_group: 1
+    # producer — symbol: convertAndSend(QUEUE_CONST, ...)
+    - regex: "convert(?:AndSend|SendAndReceive)\\s*\\(\\s*([A-Z][A-Za-z0-9_.]*)\\s*,"
+      role: producer
+      name_group: 1
+      resolve: true
+    # producer — custom multi-line helper: sendAndReceiveMessagePublisher.sendAndReceive(payload, QUEUE, replyQueue, Type.class)
+    # The REQUEST queue is the 2nd arg. This wrapper (common-processor's
+    # SendAndReceiveMessagePublisher) is used across the orchestrators with the
+    # queue constant on a separate line — needs whole-file (multiline) scanning.
+    # symbol 2nd-arg form: sendAndReceive(payload, QUEUE_CONST, ...)
+    - regex: "\\.sendAndReceive\\s*\\(\\s*[^,()]+?\\s*,\\s*([A-Z][A-Za-z0-9_.]*)\\s*[,)]"
+      role: producer
+      name_group: 1
+      resolve: true
+      multiline: true
+    # literal 2nd-arg form: sendAndReceive(payload, "queue", ...)
+    - regex: "\\.sendAndReceive\\s*\\(\\s*[^,()]+?\\s*,\\s*[\"']([^\"']+)[\"']\\s*[,)]"
+      role: producer
+      name_group: 1
+      multiline: true

@@ -1,0 +1,19 @@
+name: guzzle
+language: php
+description: "PHP Guzzle HTTP client"
+detection:
+  file_patterns: ["**/*.php"]
+  markers:
+    - { pattern: "use GuzzleHttp\\Client", type: import }
+    - { pattern: "GuzzleHttp", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "base_uri['\"]?\\s*=>\\s*['\"]([^'\"]+)['\"]"
+    url_group: 1
+  patterns:
+    - regex: "->request\\(\\s*['\"](GET|POST|PUT|DELETE|PATCH|HEAD)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      url_group: 2
+    - regex: "->(get|post|put|delete|patch|head)\\s*\\(\\s*['\"]([^'\"]+)['\"]"
+      method_group: 1
+      url_group: 2
