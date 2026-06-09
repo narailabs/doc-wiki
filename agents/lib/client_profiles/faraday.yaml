@@ -1,0 +1,16 @@
+name: faraday
+language: ruby
+description: "Ruby Faraday HTTP client"
+detection:
+  file_patterns: ["**/*.rb"]
+  markers:
+    - { pattern: "require 'faraday'", type: import }
+    - { pattern: "require \"faraday\"", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "Faraday\\.new\\([^)]*url:\\s*[\"']([^\"']+)[\"']"
+    url_group: 1
+  patterns:
+    - regex: "(?:Faraday|conn|client|@conn)\\.(get|post|put|delete|patch|head)\\s*\\(\\s*[\"']([^\"'#]+)[\"']"
+      method_group: 1
+      url_group: 2

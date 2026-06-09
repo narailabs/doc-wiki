@@ -1,0 +1,28 @@
+name: confluent_kafka
+language: python
+description: "Python confluent-kafka — producer.produce / consumer.subscribe"
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - { pattern: "from confluent_kafka", type: import }
+    - { pattern: "import confluent_kafka", type: import }
+queue_extraction:
+  patterns:
+    # consumer — literal: consumer.subscribe(['topic'])
+    - regex: "\\.subscribe\\(\\s*\\[\\s*[\"']([^\"']+)[\"']"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: consumer.subscribe([TOPIC_CONST])
+    - regex: "\\.subscribe\\(\\s*\\[\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+    # producer — literal: producer.produce('topic', ...)
+    - regex: "\\.produce\\(\\s*[\"']([^\"']+)[\"']"
+      role: producer
+      name_group: 1
+    # producer — symbol: producer.produce(TOPIC_CONST, ...)
+    - regex: "\\.produce\\(\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true

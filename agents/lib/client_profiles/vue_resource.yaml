@@ -1,0 +1,13 @@
+name: vue_resource
+language: typescript
+description: "vue-resource — legacy Vue HTTP plugin (this.$http / Vue.http)"
+detection:
+  file_patterns: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.vue"]
+  markers:
+    - { pattern: "vue-resource", type: import }
+    - { pattern: "$http", type: usage }
+client_extraction:
+  patterns:
+    - regex: "(?:this\\.\\$http|Vue\\.http|\\$http)\\.(get|post|put|delete|patch)\\s*\\(\\s*['\"]([^'\"$]+)['\"]"
+      method_group: 1
+      url_group: 2

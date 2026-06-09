@@ -1,0 +1,39 @@
+name: segmentio_kafka
+language: go
+description: "segmentio/kafka-go — kafka.NewReader / kafka.NewWriter with Topic field"
+detection:
+  file_patterns: ["**/*.go"]
+  markers:
+    - { pattern: "segmentio/kafka-go", type: import }
+    - { pattern: "kafka.NewReader", type: call }
+    - { pattern: "kafka.NewWriter", type: call }
+queue_extraction:
+  patterns:
+    # consumer — inline call: kafka.NewReader(kafka.ReaderConfig{..., Topic: "name", ...})
+    # [^)]* matches everything inside the call argument list on the same line before the closing paren.
+    - regex: "NewReader\\([^)]*Topic:\\s*[`\"]([^`\"]+)[`\"]"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: NewReader(...Topic: CONST...)
+    - regex: "NewReader\\([^)]*Topic:\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+    # producer — inline call: kafka.NewWriter(kafka.WriterConfig{..., Topic: "name", ...})
+    - regex: "NewWriter\\([^)]*Topic:\\s*[`\"]([^`\"]+)[`\"]"
+      role: producer
+      name_group: 1
+    # producer — symbol: NewWriter(...Topic: CONST...)
+    - regex: "NewWriter\\([^)]*Topic:\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true
+    # producer — assignment variant: cfg.Topic = "name"
+    - regex: "\\.Topic\\s*=\\s*[`\"]([^`\"]+)[`\"]"
+      role: producer
+      name_group: 1
+    # producer — symbol assignment: cfg.Topic = CONST
+    - regex: "\\.Topic\\s*=\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true

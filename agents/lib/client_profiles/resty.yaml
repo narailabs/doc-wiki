@@ -1,0 +1,15 @@
+name: resty
+language: go
+description: "Go resty HTTP client"
+detection:
+  file_patterns: ["**/*.go"]
+  markers:
+    - { pattern: "go-resty/resty", type: import }
+client_extraction:
+  file_anchor:
+    url_regex: "SetBaseURL\\s*\\(\\s*[\"'`]([^\"'`]+)[\"'`]"
+    url_group: 1
+  patterns:
+    - regex: "\\.(Get|Post|Put|Delete|Patch|Head|Options)\\s*\\(\\s*[\"'`]([^\"'`]+)[\"'`]\\s*\\)"
+      method_group: 1
+      url_group: 2

@@ -37,6 +37,7 @@ import { computeHash, checkCache } from "./cache_manager.js";
 import {
   loadInventory,
   type CodeInventory,
+  _readEcosystemCrossServiceEnabled,
 } from "../../../agents/lib/atlas_inventory.js";
 import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 
@@ -292,13 +293,13 @@ export function getRollingPerIngestAvg(
 // ── Cost estimation ────────────────────────────────────────────────
 
 /**
- * Names of every global synthesis page Phase 7 regenerates. Three were
- * added in the audience-aware coverage tranche (commands, configuration,
- * getting-started, troubleshooting) on top of the original three
- * (overview, integrations, deploy). Every entry costs `GLOBAL_PAGE_AVG_USD`
- * once per atlas run.
+ * Names of the 7 base global synthesis pages Phase 7 always regenerates.
+ * Three were added in the audience-aware coverage tranche (commands,
+ * configuration, getting-started, troubleshooting) on top of the original
+ * three (overview, integrations, deploy).
+ * Every entry costs `GLOBAL_PAGE_AVG_USD` once per atlas run.
  */
-const STATIC_GLOBAL_PAGES: readonly string[] = [
+export const STATIC_GLOBAL_PAGES: readonly string[] = [
   "overview",
   "integrations",
   "deploy",
@@ -307,18 +308,33 @@ const STATIC_GLOBAL_PAGES: readonly string[] = [
   "getting-started",
   "troubleshooting",
 ];
+
+/**
+ * Names of the 6 cross-service global pages added only when
+ * `ecosystem.cross_service.enabled` is true. Kept separate so that cost
+ * estimation is accurate for normal atlas runs where cross-service detection
+ * is disabled and these pages are never generated.
+ */
+export const CROSS_SERVICE_GLOBAL_PAGES: readonly string[] = [
+  "service-map",
+  "service-dependencies",
+  "client-registry",
+  "queue-registry",
+  "database-traces",
+  "shared-libraries",
+];
+
 const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
 
 /**
- * Count of global synthesis pages that will be regenerated unconditionally
- * in Phase 7 for a given plan. The `facets` argument is reserved for
- * future per-facet-driven globals (e.g., a `data-model-overview` page only
- * when the `data-model` facet is in scope). Today every global is
- * unconditional, so the count is fixed regardless of facets.
+ * Count of global synthesis pages that will be regenerated in Phase 7.
+ * The `facets` argument is reserved for future per-facet-driven globals.
+ * Pass `crossServiceEnabled = true` when `ecosystem.cross_service.enabled`
+ * is set so that the 6 cross-service pages are included in the count.
  */
-export function expectedGlobalCount(facets?: readonly string[]): number {
+export function expectedGlobalCount(facets?: readonly string[], crossServiceEnabled = false): number {
   void facets;
-  return STATIC_GLOBAL_PAGES.length;
+  return STATIC_GLOBAL_PAGES.length + (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0);
 }
 
 /**
@@ -334,6 +350,7 @@ export function estimateCost(
   wikiRoot: string,
   plan: Plan,
   perIngestAvgUsd?: number,
+  crossServiceEnabled = false,
 ): CostEstimate {
   const avg = perIngestAvgUsd ?? getRollingPerIngestAvg(wikiRoot);
   let cacheHits = 0;
@@ -352,7 +369,7 @@ export function estimateCost(
   }
 
   const topicCost = expectedIngests * avg;
-  const globalCost = expectedGlobalCount(plan.facets) * GLOBAL_PAGE_AVG_USD;
+  const globalCost = expectedGlobalCount(plan.facets, crossServiceEnabled) * GLOBAL_PAGE_AVG_USD;
   return {
     expected_ingests: expectedIngests,
     cache_hits: cacheHits,
@@ -535,6 +552,18 @@ export interface GapReport {
    * page's frontmatter `sources:`. Empty when no manifest was provided.
    */
   clientsWithoutDocumentation: string[];
+  /**
+   * Total HTTP client callsites detected across all services in the
+   * inventory. 0 when no inventory is provided or `services` is empty.
+   * Coverage signal for the cross-service-detection tranche.
+   */
+  crossServiceClientsDetected: number;
+  /**
+   * Total queue endpoint entries detected across all services in the
+   * inventory. 0 when no inventory is provided or `services` is empty.
+   * Coverage signal for the cross-service-detection tranche.
+   */
+  crossServiceQueuesDetected: number;
 }
 
 /** Builtin connector ids minus `db` — matches the integration-keyword set
@@ -702,6 +731,17 @@ export function assembleGapReport(
     clientsWithoutDocumentation.sort();
   }
 
+  // 7. Cross-service detection totals — sum http_clients and queue_endpoints
+  // across all services. Guard for absent/empty services array → 0.
+  let crossServiceClientsDetected = 0;
+  let crossServiceQueuesDetected = 0;
+  if (inventory?.services && inventory.services.length > 0) {
+    for (const svc of inventory.services) {
+      crossServiceClientsDetected += svc.http_clients.length;
+      crossServiceQueuesDetected += svc.queue_endpoints.length;
+    }
+  }
+
   return {
     topicsWithoutPages,
     facetsWithoutCoverage,
@@ -710,6 +750,8 @@ export function assembleGapReport(
     externalServicesWithoutDocumentation,
     endpointsWithoutDocumentation,
     clientsWithoutDocumentation,
+    crossServiceClientsDetected,
+    crossServiceQueuesDetected,
   };
 }
 
@@ -797,6 +839,13 @@ export function renderGapReportMarkdown(report: GapReport, runId: string): strin
     lines.push("");
     for (const c of report.clientsWithoutDocumentation) lines.push(`- ${c}`);
   }
+  lines.push("");
+
+  lines.push("## Cross-Service Detection");
+  lines.push("");
+  lines.push(
+    `- Cross-service: ${report.crossServiceClientsDetected} HTTP clients, ${report.crossServiceQueuesDetected} queue endpoints detected`,
+  );
   lines.push("");
 
   return lines.join("\n");
@@ -895,7 +944,8 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       typeof avgRaw === "string" && avgRaw.length > 0
         ? Number.parseFloat(avgRaw)
         : undefined;
-    const estimate = estimateCost(wikiRoot, plan, avg);
+    const crossServiceEnabled = _readEcosystemCrossServiceEnabled(wikiRoot);
+    const estimate = estimateCost(wikiRoot, plan, avg, crossServiceEnabled);
     process.stdout.write(JSON.stringify(estimate) + "\n");
     return 0;
   }

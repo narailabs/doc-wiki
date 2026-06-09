@@ -2,6 +2,9 @@
  * Tests for source_registry.ts — the static-pattern source-to-connector registry.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 import {
   type AgentManifest,
@@ -14,6 +17,7 @@ import {
   clearRegistry,
   initRegistry,
   registeredAgentIds,
+  loadConfiguredConnectorIds,
 } from "../source_registry.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -279,5 +283,60 @@ describe("registeredAgentIds", () => {
     initRegistry();
     const ids = registeredAgentIds();
     expect(ids).toEqual(new Set(["jira", "confluence", "github", "notion", "gcp", "aws", "db"]));
+  });
+});
+
+// ── loadConfiguredConnectorIds ────────────────────────────────────────
+
+describe("loadConfiguredConnectorIds", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("connectors-config-test-");
+    fs.mkdirSync(path.join(tmpDir, ".connectors"), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("returns configured IDs: enabled:true included, enabled:false excluded, empty-map included", () => {
+    const configPath = path.join(tmpDir, ".connectors", "config.yaml");
+    fs.writeFileSync(
+      configPath,
+      "connectors:\n  db:\n    enabled: true\n  jira:\n    enabled: false\n  github: {}\n",
+    );
+    const ids = loadConfiguredConnectorIds(configPath);
+    expect(ids).toEqual(new Set(["db", "github"]));
+  });
+
+  it("returns empty Set when file does not exist", () => {
+    const ids = loadConfiguredConnectorIds(path.join(tmpDir, ".connectors", "nonexistent.yaml"));
+    expect(ids.size).toBe(0);
+  });
+
+  it("returns empty Set when connectors block is absent", () => {
+    const configPath = path.join(tmpDir, ".connectors", "config.yaml");
+    fs.writeFileSync(configPath, "environments:\n  default: dev\n");
+    const ids = loadConfiguredConnectorIds(configPath);
+    expect(ids.size).toBe(0);
+  });
+
+  it("includes connectors with extra keys when enabled is true", () => {
+    const configPath = path.join(tmpDir, ".connectors", "config.yaml");
+    fs.writeFileSync(
+      configPath,
+      "connectors:\n  aws:\n    enabled: true\n    region: env:AWS_REGION\n  gcp:\n    enabled: true\n    project_id: env:GCP_PROJECT_ID\n",
+    );
+    const ids = loadConfiguredConnectorIds(configPath);
+    expect(ids.has("aws")).toBe(true);
+    expect(ids.has("gcp")).toBe(true);
+  });
+
+  it("excludes all when every connector has enabled:false", () => {
+    const configPath = path.join(tmpDir, ".connectors", "config.yaml");
+    fs.writeFileSync(configPath, "connectors:\n  jira:\n    enabled: false\n  notion:\n    enabled: false\n");
+    const ids = loadConfiguredConnectorIds(configPath);
+    expect(ids.size).toBe(0);
   });
 });

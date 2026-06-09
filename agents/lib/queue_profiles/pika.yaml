@@ -1,0 +1,27 @@
+name: pika
+language: python
+description: "Python pika RabbitMQ — channel.basic_consume / channel.basic_publish"
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - { pattern: "import pika", type: import }
+queue_extraction:
+  patterns:
+    # consumer — literal: channel.basic_consume(queue='name', ...)
+    - regex: "basic_consume\\([^)]*queue\\s*=\\s*[\"']([^\"']+)[\"']"
+      role: consumer
+      name_group: 1
+    # consumer — symbol: channel.basic_consume(queue=QUEUE_CONST, ...)
+    - regex: "basic_consume\\([^)]*queue\\s*=\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: consumer
+      name_group: 1
+      resolve: true
+    # producer — literal: channel.basic_publish(..., routing_key='name', ...)
+    - regex: "basic_publish\\([^)]*routing_key\\s*=\\s*[\"']([^\"']+)[\"']"
+      role: producer
+      name_group: 1
+    # producer — symbol: channel.basic_publish(..., routing_key=QUEUE_CONST, ...)
+    - regex: "basic_publish\\([^)]*routing_key\\s*=\\s*([A-Z][A-Za-z0-9_.]*)"
+      role: producer
+      name_group: 1
+      resolve: true

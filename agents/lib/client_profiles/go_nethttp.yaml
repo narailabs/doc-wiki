@@ -1,0 +1,15 @@
+name: go_nethttp
+language: go
+description: "Go net/http standard library HTTP client"
+detection:
+  file_patterns: ["**/*.go"]
+  markers:
+    - { pattern: "net/http", type: import }
+client_extraction:
+  patterns:
+    - regex: "http\\.(Get|Post|Head|PostForm)\\s*\\(\\s*[\"`]([^\"`]+)[\"`]"
+      method_group: 1
+      url_group: 2
+    - regex: "http\\.NewRequest(?:WithContext)?\\s*\\(\\s*(?:[^,]+,\\s*)?[\"'`](GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[\"'`]\\s*,\\s*[\"'`]([^\"'`]+)[\"'`]"
+      method_group: 1
+      url_group: 2
