@@ -3,8 +3,7 @@ github: vitest-dev/vitest
 clone_url: https://github.com/vitest-dev/vitest.git
 language: typescript
 ticket_source: github
-install:
-  - "corepack enable"
+install: # corepack is enabled in the image (root); the non-root session user can't run `corepack enable`.
   - "pnpm install --frozen-lockfile"
   - "pnpm run build"
 # vitest's test/<dir> entries are standalone workspace packages; running files from the

@@ -7,6 +7,11 @@ ENV DISABLE_AUTOUPDATER=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends git iptables dnsutils ca-certificates bash sudo \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    # Enable corepack now (as root): the pnpm/yarn shims live in the root-owned global
+    # prefix, so the non-root session user cannot run `corepack enable` itself. Per-run
+    # installs just call `pnpm`; corepack auto-provisions the packageManager-pinned version
+    # into COREPACK_HOME (node-writable) on first use, before the egress firewall comes up.
+    && corepack enable \
     && mkdir -p /claude-cfg /out /work \
     # Claude Code refuses --dangerously-skip-permissions as root; run as the image's
     # non-root user (Anthropic devcontainer pattern). The firewall still needs root —
