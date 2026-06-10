@@ -10,6 +10,8 @@ const GRADE_SH = fileURLToPath(new URL("./docker/grade.sh", import.meta.url));
 export function decideGrade(exitCode) {
     if (exitCode === 0)
         return { outcome: "passed", detail: "tests-passed" };
+    if (exitCode === 5)
+        return { outcome: "passed", detail: "tests-passed-on-retry" };
     if (exitCode === 10)
         return { outcome: "failed", detail: "apply-failed" };
     if (exitCode === 20)
@@ -34,7 +36,7 @@ export async function gradeRunLocal(spec) {
     });
     return decideGrade(r.code);
 }
-/** Calibrate every un-calibrated ticket; failures get `excluded` set. Mutates + rewrites the tickets file. */
+/** Calibrate every un-calibrated ticket; failures get `excluded` set. Mutates + rewrites the tickets file after every ticket (each costs a clone+install+2 test runs — a crash loses at most one). */
 export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
     const file = JSON.parse(readFileSync(ticketsPath, "utf8"));
     const installPrefix = cfg.install.length > 0 ? `${cfg.install.join(" && ")} && ` : "";
@@ -46,8 +48,9 @@ export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
             testFiles: t.test_files, testCommand: installPrefix + cfg.test_command, retries: 0, runner: opts.runner,
         };
         try {
-            // paths must exist at both commits (rename = ill-defined overlay)
-            const stable = await pathsStable(opts.runner, bareDir, t.base_commit, t.fix_commit, t.test_files);
+            // paths_stable: every test_file exists at fix_commit (renamed/deleted test files excluded).
+            // Missing-at-base is fine — the canonical fix PR ADDS a regression test; calibrate-base overlays it from fix.
+            const stable = await testsExistAtFix(opts.runner, bareDir, t.fix_commit, t.test_files);
             const failsOnBase = stable && (await gradeRunLocal({ ...common, mode: "calibrate-base" })).outcome === "passed";
             const passesOnFix = stable && failsOnBase && (await gradeRunLocal({ ...common, mode: "calibrate-fix" })).outcome === "passed";
             t.calibration = { paths_stable: stable, tests_fail_on_base: failsOnBase, tests_pass_on_fix: passesOnFix };
@@ -62,16 +65,16 @@ export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
         }
         if (t.excluded !== undefined)
             process.stderr.write(`issue #${t.issue}: ${t.excluded}\n`);
+        writeFileSync(ticketsPath, `${JSON.stringify(file, null, 2)}\n`);
     }
     writeFileSync(ticketsPath, `${JSON.stringify(file, null, 2)}\n`);
 }
-async function pathsStable(runner, bareDir, base, fix, files) {
+/** Every test_file must exist at the FIX commit; missing there = renamed away/deleted → ill-defined overlay. */
+async function testsExistAtFix(runner, bareDir, fix, files) {
     for (const f of files) {
-        for (const commit of [base, fix]) {
-            const r = await runner("git", ["-C", bareDir, "cat-file", "-e", `${commit}:${f}`]);
-            if (r.code !== 0)
-                return false;
-        }
+        const r = await runner("git", ["-C", bareDir, "cat-file", "-e", `${fix}:${f}`]);
+        if (r.code !== 0)
+            return false;
     }
     return true;
 }
@@ -87,27 +90,29 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
             continue;
         const [issueStr, arm] = key.split(":");
         const t = byIssue.get(Number(issueStr));
-        if (t === undefined)
+        if (t === undefined) {
+            process.stderr.write(`${key}: ran run has no ticket in ${ticketsPath} — skipped\n`);
             continue;
+        }
         const outDir = resolve(runsRoot, cfg.id, String(t.issue), String(arm));
         try {
-            let exitCode;
+            let graded;
             if (opts.local) {
-                const g = await gradeRunLocal({
+                // Use the result directly — round-tripping through exit codes would lose the retry distinction.
+                graded = await gradeRunLocal({
                     bareDir, outDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
                     testFiles: t.test_files, testCommand: installPrefix + cfg.test_command,
                     retries: cfg.test_retries, runner: opts.runner,
                 });
-                exitCode = g.outcome === "passed" ? 0 : g.detail === "apply-failed" ? 10 : 20;
             }
             else {
                 const r = await opts.runner("docker", gradeRunArgs({
                     image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
                     testFiles: t.test_files, testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
                 }));
-                exitCode = r.code;
+                graded = decideGrade(r.code);
             }
-            const grade = { ...decideGrade(exitCode), graded_at: new Date().toISOString() };
+            const grade = { ...graded, graded_at: new Date().toISOString() };
             writeFileSync(join(outDir, "grade.json"), `${JSON.stringify(grade, null, 2)}\n`);
             rec.status = grade.outcome;
             rec.detail = grade.detail;
