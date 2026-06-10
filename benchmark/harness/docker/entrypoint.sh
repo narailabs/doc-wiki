@@ -53,5 +53,5 @@ if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
   esc=$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | sed 's/[&/\]/\\&/g')
   grep -rlF "$CLAUDE_CODE_OAUTH_TOKEN" /out/transcript 2>/dev/null | while IFS= read -r f; do
     sed -i "s/$esc/[redacted-token]/g" "$f"
-  done
+  done || true # grep exits 1 when nothing leaked — the happy path must not abort the entrypoint
 fi
