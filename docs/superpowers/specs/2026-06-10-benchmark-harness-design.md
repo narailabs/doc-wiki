@@ -18,7 +18,8 @@ Deliverables: a `benchmark/` directory (harness + per-repo configs + mined ticke
 | Isolation | Docker container per run, `--dangerously-skip-permissions` inside | Unattended runs execute agent-written code; containers make that safe and the methodology reproducible. |
 | Model | Pinned `claude-sonnet-4-6` (full ID, not the `sonnet` alias) | Alias drift would break comparability; Sonnet gives rate-limit headroom for ~120+ runs. |
 | Orchestration | Deterministic TypeScript harness (Approach A) | The only LLM in the loop is the session under test. A Claude-orchestrated benchmark would conflate instrument and subject. |
-| Pilot | 1 repo × ~20 tickets end-to-end before scaling to 3 | Prove the methodology cheaply first. Pilot repo selection in progress (candidate-screening research running; design is repo-parameterized). |
+| Pilot | **vitest-dev/vitest**, 1 repo × ~20 tickets end-to-end before scaling to 3 | Prove the methodology cheaply first. Selected by an 8-candidate screening + adversarial verification pass (2026-06-10): ~470 verified eligible tickets, GitHub-native issue linkage, zero service dependencies, 1–5 min targeted grading, ~150–180k LOC (best atlas cost fit), no SWE-bench contamination. |
+| Full 3-repo mix | django/django (Python), vitest-dev/vitest (Node/TS), calcom/cal.com (full-stack); mastodon/mastodon alternate | 965 / 470 / 258 verified eligible tickets respectively. The launch plan's original candidates Flask (~12 eligible), Express (~6), FastAPI (~18), Plane (~1–3) all fall below the 20-ticket floor and are excluded. |
 
 ## Verified platform facts (with doc sources)
 
@@ -56,16 +57,19 @@ TypeScript, Node 20, Vitest — same conventions as the rest of the repo (`npm r
 ### Per-repo config (`repos/<repo>.yaml`)
 
 ```yaml
-id: flask
-github: pallets/flask
-clone_url: https://github.com/pallets/flask.git
-language: python
-install: ["pip install -e .[dev]"]          # run inside container at build/run time
-test_command: "python -m pytest {test_files} -x -q"
-test_patterns: ["tests/**", "**/test_*.py", "**/*_test.py"]  # what counts as a test file — REQUIRED, per repo
+id: vitest
+github: vitest-dev/vitest
+clone_url: https://github.com/vitest-dev/vitest.git
+language: typescript
+ticket_source: github                        # github (linked-PR mining) | trac-commits (django: "Fixed #NNNNN" subjects)
+install: ["corepack enable", "pnpm install", "pnpm run build"]   # build is mandatory before tests; cacheable layer
+test_command: "pnpm vitest run {test_files}"
+test_patterns: ["test/**", "**/*.test.ts", "**/__tests__/**"]    # what counts as a test file — REQUIRED, per repo
+test_retries: 1                              # re-run failing grade once (flaky e2e/watch suites); both outcomes logged
+ticket_after: "2025-06-01"                   # recency floor (training-data contamination control)
 wiki_commit: <sha>                           # pinned commit the wiki was built at (see selection rule below)
-toolchain: ["python:3.12"]                   # extra container layers
-services: []                                 # e.g. postgres — empty preferred
+toolchain: ["node:22"]
+services: []                                 # e.g. postgres+mailhog for cal.com integration tickets — empty preferred
 ```
 
 `test_patterns` is the single definition of "test file" for that repo, used identically by mining (criterion 1) and grading (overlay step) — there is no global heuristic. `wiki_commit` selection rule: **the parent of the oldest eligible ticket's `base_commit`** (or the latest release tag preceding it, if one exists within 30 days). Mining hard-fails any ticket whose `base_commit` is not strictly newer than `wiki_commit`.
@@ -95,9 +99,12 @@ Eligible ticket = closed issue where the merged linked fix PR:
 2. changed **< 400 lines** total (no giant refactors),
 3. is linked from an issue with a real natural-language body (length threshold; not a bare title),
 4. was not authored by a bot,
-5. has `base_commit` **newer than `wiki_commit`** (see contamination control).
+5. has `base_commit` **newer than `wiki_commit`** (see contamination control),
+6. was merged after the repo's `ticket_after` recency floor (training-data contamination control — see below).
 
-Mining walks closed issues/merged PRs via the GitHub API (authenticated `gh`), resumable across API rate limits. Output is committed so the exact ticket set is part of the public methodology.
+Mining is adapter-based per `ticket_source`: the default `github` adapter walks closed issues/merged PRs via the authenticated `gh` API; a `trac-commits` adapter (needed for django/django, whose GitHub issues are disabled) mines the enforced `Fixed #NNNNN` commit-subject convention and joins against Trac ticket bodies. Both are resumable across API rate limits. Output is committed so the exact ticket set is part of the public methodology.
+
+Repo-specific mining notes from the screening pass: cal.com's bug label is the emoji string `🐛 bug` (a plain `label:bug` query returns zero), the repo has been renamed `calcom/cal.diy` (API redirects), and tickets whose only coverage is `*.integration-test.ts` (~1 in 8) are filtered out unless the repo config declares the required `services`.
 
 ## Contamination control
 
@@ -107,6 +114,7 @@ Two further leak vectors are closed explicitly:
 
 - **Issue-body leak:** issue bodies sometimes name the fix ("fixed in #5310") or link commits. Mining stores both `body` (verbatim, for auditability) and `body_sanitized` — the body with PR/issue cross-references numbered ≥ the issue itself, commit SHAs, and "fixed by/in" phrases stripped, each replacement logged. Sessions receive `body_sanitized`.
 - **Online-lookup leak:** the agent session could otherwise `gh`/`curl` the real fix PR. During the agent session the container's egress is firewalled to an allowlist of Anthropic API endpoints only (the approach used by Anthropic's reference devcontainer); repo `install` runs *before* the session with normal egress. The firewall is part of the published image, so reproducers inherit it.
+- **Training-data leak:** if the model memorized a repo's fixes (e.g. via SWE-bench inclusion — django is heavily represented; flask is a SWE-bench constituent), both arms saturate and the wiki effect is erased or distorted. Mitigation: each repo sets a `ticket_after` recency floor so tickets postdate the pinned model's training data wherever possible; ticket merge dates are published in `tickets/<repo>.json` and the residual risk is discussed per-repo in `METHODOLOGY.md`. This consideration also drove repo selection (vitest and cal.com have no SWE-bench history).
 
 Both arms run **byte-identical session configs**; the only delta is whether the generated `docs/<name>-wiki/` (plus its `CLAUDE.md` pointer) is present in the checkout:
 
@@ -168,7 +176,11 @@ In a fresh container (no agent residue):
 
 No LLM judge, no multi-model matrix (Sonnet only; optional Opus spot-check later), no parallel containers (sequential is the honest default under subscription rate limits), no Windows support, no hosted/CI execution of live runs.
 
+## Repo screening results (2026-06-10)
+
+An 8-candidate screening with adversarial verification produced: **pilot = vitest-dev/vitest** (score 9.1); full mix = **django/django** (8.6, Python slot — Trac mining, post-cutoff tickets only, atlas scoped to subsystems), **vitest** (Node/TS slot), **calcom/cal.com** (8.0, full-stack slot — graded strictly at historical commits; the 2026-04 "Cal.diy" refactor deleted historical test files from main). **mastodon/mastodon** (7.4) is the verified alternate for the full-stack slot (needs Postgres+Redis sidecars and per-commit Ruby pinning). Excluded below the 20-ticket floor: fastapi (~18), flask (~12), express (~6), plane (~1–3). Verified per-repo operational details (install quirks like django's `libmemcached-dev`, vitest's build-before-test, cal.com's yarn/Node drift) live in the screening record and flow into each `repos/<repo>.yaml` during implementation.
+
 ## Open items
 
-1. **Pilot repo** — candidate screening (Flask, Express, Django, Cal.com, Plane, Mastodon, FastAPI, Vitest) is running as a research workflow; its ranked shortlist picks the pilot and the final 3-repo mix. The design is repo-parameterized, so this blocks only the first `repos/<repo>.yaml`, not implementation.
-2. **`--max-turns` value and container timeout** — set during pilot calibration; record whatever is chosen in `METHODOLOGY.md`.
+1. **`--max-turns` value and container timeout** — set during pilot calibration; record whatever is chosen in `METHODOLOGY.md`.
+2. **`ticket_after` exact dates** — set per repo from the pinned model's documented training cutoff at implementation time.
