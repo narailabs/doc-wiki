@@ -117,3 +117,23 @@ describe("runnable-test gates", () => {
     if (r.ok) expect(r.run_files).toEqual(r.test_files);
   });
 });
+
+describe("vitest pilot run_patterns shape", () => {
+  it("requires a workspace level: root-level test files are not runnable", () => {
+    const cfg = {
+      test_patterns: ["test/**"],
+      run_patterns: ["test/*/**/*.test.ts", "test/*/**/*.spec.ts"],
+      ticket_after: "2025-06-01",
+    };
+    const root = checkEligibility({ ...BASE, files: [
+      { path: "test/foo.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, cfg);
+    expect(root).toEqual({ ok: false, reason: "no-runnable-tests" });
+    const ws = checkEligibility({ ...BASE, files: [
+      { path: "test/e2e/test/feature.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, cfg);
+    expect(ws.ok).toBe(true);
+  });
+});

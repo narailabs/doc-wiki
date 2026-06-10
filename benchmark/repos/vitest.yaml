@@ -19,9 +19,11 @@ test_patterns:
   - "**/*.test.ts"
   - "**/*.spec.ts"
   - "**/__tests__/**"
-run_patterns: # runnable entry points only — configs/fixtures/utils under test/ are overlaid but never executed directly
-  - "test/**/*.test.ts"
-  - "test/**/*.spec.ts"
+run_patterns: # runnable entry points only — configs/fixtures/utils under test/ are overlaid but never executed directly.
+  # Requires at least one workspace level (test/<dir>/...): the test_command cd's into the
+  # workspace, so a hypothetical root-level test/foo.test.ts must not be eligible.
+  - "test/*/**/*.test.ts"
+  - "test/*/**/*.spec.ts"
 exclude_test_paths: # suites needing Playwright browsers — not installed in the grade container
   - "test/browser/**"
   - "test/ui/**"
