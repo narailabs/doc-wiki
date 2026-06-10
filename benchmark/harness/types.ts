@@ -82,8 +82,10 @@ export interface SessionResult {
 
 export type GradeOutcome = "passed" | "failed";
 
+export type GradeDetail = "apply-failed" | "tests-failed" | "tests-passed" | "tests-passed-on-retry";
+
 export interface GradeRecord {
   outcome: GradeOutcome;
-  detail: string; // "apply-failed" | "tests-failed" | "tests-passed" | "tests-passed-on-retry"
+  detail: GradeDetail; // "apply-failed" | "tests-failed" | "tests-passed" | "tests-passed-on-retry"
   graded_at: string;
 }

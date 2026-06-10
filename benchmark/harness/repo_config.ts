@@ -30,7 +30,23 @@ export function loadRepoConfig(path: string): RepoConfig {
     throw new Error(`${path}: test_patterns must be a non-empty list`);
   }
   if (!Array.isArray(cfg.install)) throw new Error(`${path}: install must be a list`);
+  if (!cfg.install.every((e) => typeof e === "string")) {
+    throw new Error(`${path}: every install entry must be a string`);
+  }
   if (!Array.isArray(cfg.toolchain)) throw new Error(`${path}: toolchain must be a list`);
+  if (!cfg.toolchain.every((e) => typeof e === "string")) {
+    throw new Error(`${path}: every toolchain entry must be a string`);
+  }
+
+  const ticketAfter = isoDate(cfg.ticket_after);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ticketAfter)) {
+    throw new Error(`${path}: ticket_after must be YYYY-MM-DD, got "${ticketAfter}"`);
+  }
+
+  const retries = cfg.test_retries === undefined ? 0 : Number(cfg.test_retries);
+  if (!Number.isInteger(retries) || retries < 0) {
+    throw new Error(`${path}: test_retries must be a non-negative integer`);
+  }
 
   return {
     id: String(cfg.id),
@@ -41,8 +57,8 @@ export function loadRepoConfig(path: string): RepoConfig {
     install: cfg.install.map(String),
     test_command: cfg.test_command,
     test_patterns: cfg.test_patterns.map(String),
-    test_retries: cfg.test_retries === undefined ? 0 : Number(cfg.test_retries),
-    ticket_after: isoDate(cfg.ticket_after),
+    test_retries: retries,
+    ticket_after: ticketAfter,
     wiki_commit: cfg.wiki_commit === undefined ? "" : String(cfg.wiki_commit),
     toolchain: cfg.toolchain.map(String),
     services: Array.isArray(cfg.services) ? cfg.services.map(String) : [],

@@ -46,4 +46,17 @@ describe("loadRepoConfig", () => {
   it("rejects unknown ticket_source", () => {
     expect(() => loadRepoConfig(writeCfg(VALID.replace("github\n", "linear\n")))).toThrow(/ticket_source/);
   });
+
+  it("rejects a ticket_after that is not YYYY-MM-DD", () => {
+    expect(() => loadRepoConfig(writeCfg(VALID.replace("2025-06-01", "not-a-date")))).toThrow(/ticket_after/);
+  });
+
+  it("rejects install entries that are not strings", () => {
+    const yaml = VALID.replace('install: ["npm ci"]', 'install:\n  - run: "npm ci"');
+    expect(() => loadRepoConfig(writeCfg(yaml))).toThrow(/install/);
+  });
+
+  it("rejects a non-integer test_retries", () => {
+    expect(() => loadRepoConfig(writeCfg(VALID + 'test_retries: "abc"\n'))).toThrow(/test_retries/);
+  });
 });
