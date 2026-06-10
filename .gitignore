@@ -28,3 +28,7 @@ drafts.md
 
 # WIP video composition working dirs (renders publish to media/)
 media/content-series/
+
+# Benchmark run outputs and wiki cache (generated, not committed)
+benchmark/runs/
+benchmark/wiki-cache/

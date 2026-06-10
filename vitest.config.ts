@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: false,
     environment: "node",
-    include: ["agents/**/*.test.ts", "skills/**/*.test.ts"],
+    include: ["agents/**/*.test.ts", "skills/**/*.test.ts", "benchmark/**/*.test.ts"],
     exclude: ["node_modules/**", ".worktrees/**", "wiki-workspace/**", "**/tests/fixtures/**"],
     passWithNoTests: true,
     coverage: {
