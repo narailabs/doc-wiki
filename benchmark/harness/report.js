@@ -16,6 +16,7 @@ export function renderResults(repo, tickets, state) {
     const lines = [`## ${repo}`, ""];
     let cost = 0;
     lines.push("| arm | passed/graded (rate) |", "|---|---|");
+    const gradedByArm = [];
     for (const arm of ARMS) {
         let passed = 0;
         let graded = 0;
@@ -29,8 +30,12 @@ export function renderResults(repo, tickets, state) {
                     passed += 1;
             }
         }
+        gradedByArm.push(graded);
         const rate = graded === 0 ? 0 : Math.round((passed / graded) * 100);
         lines.push(`| ${arm} | ${passed}/${graded} (${rate}%) |`);
+    }
+    if (new Set(gradedByArm).size > 1) {
+        lines.push("", "> Note: arms have unequal graded counts — rates are not directly comparable until grading completes.");
     }
     lines.push("", `Total session cost: $${cost.toFixed(2)}`, "");
     lines.push("| ticket | merged | baseline | wiki |", "|---|---|---|---|");

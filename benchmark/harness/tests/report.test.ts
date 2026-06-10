@@ -53,3 +53,17 @@ describe("renderResults", () => {
     expect(tableRow?.split("|").length).toBeLessThanOrEqual(7); // | #3 title | date | baseline | wiki |
   });
 });
+
+describe("renderResults legibility", () => {
+  it("flags unequal graded counts between arms", () => {
+    const md = renderResults("demo", tickets, state); // baseline graded 2, wiki graded 1
+    expect(md).toContain("unequal graded counts");
+    const even: BenchState = {
+      schema_version: 1, repo: "demo",
+      runs: {
+        "1:baseline": { status: "passed" }, "1:wiki": { status: "failed", detail: "tests-failed" },
+      },
+    };
+    expect(renderResults("demo", [tickets[0]!], even)).not.toContain("unequal graded counts");
+  });
+});
