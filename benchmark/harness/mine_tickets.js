@@ -83,6 +83,7 @@ export async function mineGithub(cfg, opts) {
             fix_commit: pr.mergeCommit.oid,
             test_files: verdict.test_files,
             src_files: verdict.src_files,
+            run_files: verdict.run_files,
             changed_lines: verdict.changed_lines,
             merge_parents: commit.parents.length,
             merged_at: pr.mergedAt,

@@ -80,3 +80,14 @@ describe("docker argv builders", () => {
     expect(args).toContain("/o ut/dir:/out");
   });
 });
+
+describe("gradeRunArgs run files", () => {
+  it("emits BENCH_RUN_FILES (defaulting to testFiles when absent)", () => {
+    const base = {
+      image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+      testFiles: ["test/a.test.ts", "test/helper.ts"], testCommand: "t {test_files}", retries: 0,
+    };
+    expect(gradeRunArgs({ ...base, runFiles: ["test/a.test.ts"] })).toContain("BENCH_RUN_FILES=test/a.test.ts");
+    expect(gradeRunArgs(base)).toContain("BENCH_RUN_FILES=test/a.test.ts test/helper.ts");
+  });
+});

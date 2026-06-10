@@ -7,15 +7,29 @@ install:
   - "corepack enable"
   - "pnpm install --frozen-lockfile"
   - "pnpm run build"
-test_command: "pnpm vitest run {test_files}"
+# vitest's test/<dir> entries are standalone workspace packages; running files from the
+# repo root resolves the wrong config (verified: 1/13 fails at root, 13/13 passes in-workspace).
+test_command: |
+  for ws in $(printf '%s\n' {test_files} | cut -d/ -f1-2 | sort -u); do
+    files=$(printf '%s\n' {test_files} | grep "^$ws/" | sed "s|^$ws/||" | tr '\n' ' ')
+    (cd "$ws" && pnpm vitest run $files) || exit 1
+  done
 test_patterns:
   - "test/**"
   - "**/*.test.ts"
   - "**/*.spec.ts"
   - "**/__tests__/**"
+run_patterns: # runnable entry points only — configs/fixtures/utils under test/ are overlaid but never executed directly.
+  # Requires at least one workspace level (test/<dir>/...): the test_command cd's into the
+  # workspace, so a hypothetical root-level test/foo.test.ts must not be eligible.
+  - "test/*/**/*.test.ts"
+  - "test/*/**/*.spec.ts"
+exclude_test_paths: # suites needing Playwright browsers — not installed in the grade container
+  - "test/browser/**"
+  - "test/ui/**"
 test_retries: 1
 ticket_after: "2025-06-01"
-wiki_commit: ""
+wiki_commit: "32bb9037caae50cb8d0b02f9dd472d655d88ad65" # parent of the octopus merge-base of all 30 mined base_commits (2026-04-27)
 toolchain:
   - "node:22"
 services: []

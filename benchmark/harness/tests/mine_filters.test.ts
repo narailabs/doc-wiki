@@ -73,3 +73,67 @@ describe("checkEligibility boundaries", () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe("runnable-test gates", () => {
+  const RUN_CFG = {
+    test_patterns: ["test/**", "**/*.test.ts"],
+    run_patterns: ["test/**/*.test.ts"],
+    exclude_test_paths: ["test/browser/**"],
+    ticket_after: "2025-06-01",
+  };
+
+  it("separates runnable tests from support files and returns run_files", () => {
+    const r = checkEligibility({ ...BASE, files: [
+      { path: "test/e2e/fixtures/x/vitest.config.ts", additions: 5, deletions: 0 },
+      { path: "test/e2e/test/feature.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, RUN_CFG);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.run_files).toEqual(["test/e2e/test/feature.test.ts"]);
+      expect(r.test_files).toContain("test/e2e/fixtures/x/vitest.config.ts");
+    }
+  });
+
+  it("rejects tickets whose test-side changes have no runnable entry point", () => {
+    const r = checkEligibility({ ...BASE, files: [
+      { path: "test/test-utils/index.ts", additions: 5, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, RUN_CFG);
+    expect(r).toEqual({ ok: false, reason: "no-runnable-tests" });
+  });
+
+  it("rejects tickets whose runnable tests live under excluded paths", () => {
+    const r = checkEligibility({ ...BASE, files: [
+      { path: "test/browser/specs/locator.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, RUN_CFG);
+    expect(r).toEqual({ ok: false, reason: "excluded-test-paths" });
+  });
+
+  it("defaults run_patterns to test_patterns (legacy behavior preserved)", () => {
+    const r = checkEligibility(BASE, CFG);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.run_files).toEqual(r.test_files);
+  });
+});
+
+describe("vitest pilot run_patterns shape", () => {
+  it("requires a workspace level: root-level test files are not runnable", () => {
+    const cfg = {
+      test_patterns: ["test/**"],
+      run_patterns: ["test/*/**/*.test.ts", "test/*/**/*.spec.ts"],
+      ticket_after: "2025-06-01",
+    };
+    const root = checkEligibility({ ...BASE, files: [
+      { path: "test/foo.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, cfg);
+    expect(root).toEqual({ ok: false, reason: "no-runnable-tests" });
+    const ws = checkEligibility({ ...BASE, files: [
+      { path: "test/e2e/test/feature.test.ts", additions: 10, deletions: 0 },
+      { path: "src/x.ts", additions: 20, deletions: 0 },
+    ]}, cfg);
+    expect(ws.ok).toBe(true);
+  });
+});
