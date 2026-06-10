@@ -152,7 +152,7 @@ In a fresh container (no agent residue):
 2. Overlay **only the test files** from the real fix PR (`git checkout <fix_commit> -- <test_files>`).
 3. Run `test_command` scoped to those test files. All pass → **passed**; any fail → **failed**.
 
-**Calibration (pre-registered validity filter):** before any agent runs, every mined ticket is calibrated — its fix-PR tests must *fail* on the clean `base_commit` and *pass* on `fix_commit`, and every `test_files` path must exist at the same path in both commits (fix PRs that renamed/moved test files are excluded — the overlay would be ill-defined). Tickets failing calibration are excluded up front and the exclusion logged in `tickets/<repo>.json`. This proves each grading test actually discriminates the fix.
+**Calibration (pre-registered validity filter):** before any agent runs, every mined ticket is calibrated — its fix-PR tests must *fail* on the clean `base_commit` (overlaid from `fix_commit`, which handles the canonical newly-added regression test) and *pass* on `fix_commit`, and every `test_files` path must exist at `fix_commit` (fix PRs that renamed/deleted test files are excluded — the overlay would be ill-defined). Tickets failing calibration are excluded up front and the exclusion logged in `tickets/<repo>.json`. This proves each grading test actually discriminates the fix.
 
 ## Reporting (`report.ts`)
 
