@@ -18,8 +18,10 @@ export interface RepoConfig {
   language: string;
   ticket_source: "github" | "trac-commits";
   install: string[];
-  test_command: string; // must contain "{test_files}"
+  test_command: string; // must contain "{test_files}" (substituted with the RUNNABLE files)
   test_patterns: string[];
+  run_patterns: string[]; // runnable-test subset of test_patterns; defaults to test_patterns
+  exclude_test_paths: string[]; // tickets whose runnable tests touch these paths are excluded at mining
   test_retries: number;
   ticket_after: string; // ISO date floor (training-data contamination control)
   wiki_commit: string; // "" until the wiki is built
@@ -43,8 +45,9 @@ export interface TicketRecord {
   fix_pr_url: string;
   base_commit: string; // fix PR parent — what the agent gets
   fix_commit: string; // fix PR merge commit
-  test_files: string[];
+  test_files: string[]; // all test-side files from the fix PR — overlaid at grade time
   src_files: string[];
+  run_files?: string[]; // runnable subset of test_files handed to the test command; absent in legacy records (fall back to test_files)
   changed_lines: number;
   merge_parents?: number; // parents of the merge commit; >1 = true merge, base_commit may predate the PR
   merged_at: string; // ISO timestamp, published for contamination audit

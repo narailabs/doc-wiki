@@ -25,6 +25,8 @@ export interface GradeLocalSpec {
   baseCommit: string;
   fixCommit: string;
   testFiles: string[];
+  /** Runnable subset substituted into {test_files}; defaults to testFiles (legacy records). */
+  runFiles?: string[];
   testCommand: string;
   retries: number;
   mode?: "grade" | "calibrate-base" | "calibrate-fix";
@@ -42,6 +44,7 @@ export async function gradeRunLocal(spec: GradeLocalSpec): Promise<Omit<GradeRec
       BENCH_BASE_COMMIT: spec.baseCommit,
       BENCH_FIX_COMMIT: spec.fixCommit,
       BENCH_TEST_FILES: spec.testFiles.join(" "),
+      BENCH_RUN_FILES: (spec.runFiles ?? spec.testFiles).join(" "),
       BENCH_TEST_COMMAND: spec.testCommand,
       BENCH_RETRIES: String(spec.retries),
       BENCH_GRADE_MODE: spec.mode ?? "grade",
@@ -58,7 +61,8 @@ export async function calibrateAll(cfg: RepoConfig, ticketsPath: string, bareDir
     if (t.calibration !== undefined || t.excluded !== undefined) continue;
     const common = {
       bareDir, outDir: bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
-      testFiles: t.test_files, testCommand: installPrefix + cfg.test_command, retries: 0, runner: opts.runner,
+      testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
+      testCommand: installPrefix + cfg.test_command, retries: 0, runner: opts.runner,
     };
     try {
       // paths_stable: every test_file exists at fix_commit (renamed/deleted test files excluded).
@@ -121,13 +125,15 @@ export async function gradeAll(cfg: RepoConfig, ticketsPath: string, runsRoot: s
         // Use the result directly — round-tripping through exit codes would lose the retry distinction.
         graded = await gradeRunLocal({
           bareDir, outDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
-          testFiles: t.test_files, testCommand: installPrefix + cfg.test_command,
+          testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
+          testCommand: installPrefix + cfg.test_command,
           retries: cfg.test_retries, runner: opts.runner,
         });
       } else {
         const r = await opts.runner("docker", gradeRunArgs({
           image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
-          testFiles: t.test_files, testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
+          testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
+          testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
         }));
         graded = decideGrade(r.code);
       }

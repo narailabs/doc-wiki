@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Grade one run. env: BENCH_BASE_COMMIT, BENCH_FIX_COMMIT, BENCH_TEST_FILES, BENCH_TEST_COMMAND, BENCH_RETRIES
+#   BENCH_TEST_FILES = ALL test-side files from the fix PR (overlaid onto the workdir);
+#   BENCH_RUN_FILES  = runnable subset substituted into {test_files} (defaults to BENCH_TEST_FILES).
 # Local mode (tests/e2e): BENCH_BARE_DIR + BENCH_OUT_DIR override /bare and /out.
 # Modes via BENCH_GRADE_MODE: grade (default) | calibrate-base | calibrate-fix
 # exit: 0 tests-passed | 5 tests-passed-on-retry | 10 apply-failed | 20 tests-failed | 64 setup error
@@ -15,7 +17,7 @@ cd "$work" || exit 64
 
 # NOTE: word-splitting is load-bearing (multi-file lists); test paths must not contain spaces.
 run_tests() {
-  local cmd="${BENCH_TEST_COMMAND//\{test_files\}/$BENCH_TEST_FILES}"
+  local cmd="${BENCH_TEST_COMMAND//\{test_files\}/${BENCH_RUN_FILES:-$BENCH_TEST_FILES}}"
   bash -ec "$cmd"
 }
 

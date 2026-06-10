@@ -60,3 +60,18 @@ describe("loadRepoConfig", () => {
     expect(() => loadRepoConfig(writeCfg(VALID + 'test_retries: "abc"\n'))).toThrow(/test_retries/);
   });
 });
+
+describe("runnable-test config fields", () => {
+  it("defaults run_patterns to test_patterns and exclude_test_paths to []", () => {
+    const cfg = loadRepoConfig(writeCfg(VALID));
+    expect(cfg.run_patterns).toEqual(cfg.test_patterns);
+    expect(cfg.exclude_test_paths).toEqual([]);
+  });
+
+  it("accepts explicit lists and rejects non-string entries", () => {
+    const cfg = loadRepoConfig(writeCfg(`${VALID}run_patterns: ["**/*.test.ts"]\nexclude_test_paths: ["test/browser/**"]\n`));
+    expect(cfg.run_patterns).toEqual(["**/*.test.ts"]);
+    expect(cfg.exclude_test_paths).toEqual(["test/browser/**"]);
+    expect(() => loadRepoConfig(writeCfg(`${VALID}run_patterns: [{a: 1}]\n`))).toThrow(/run_patterns/);
+  });
+});

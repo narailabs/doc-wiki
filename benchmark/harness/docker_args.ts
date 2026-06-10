@@ -38,6 +38,8 @@ export interface GradeSpec {
   baseCommit: string;
   fixCommit: string;
   testFiles: string[];
+  /** Runnable subset substituted into {test_files}; defaults to testFiles. */
+  runFiles?: string[];
   testCommand: string;
   retries: number;
 }
@@ -50,6 +52,7 @@ export function gradeRunArgs(g: GradeSpec): string[] {
     "-e", `BENCH_BASE_COMMIT=${g.baseCommit}`,
     "-e", `BENCH_FIX_COMMIT=${g.fixCommit}`,
     "-e", `BENCH_TEST_FILES=${g.testFiles.join(" ")}`,
+    "-e", `BENCH_RUN_FILES=${(g.runFiles ?? g.testFiles).join(" ")}`,
     "-e", `BENCH_TEST_COMMAND=${g.testCommand}`,
     "-e", `BENCH_RETRIES=${g.retries}`,
     g.image, "grade",

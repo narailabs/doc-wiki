@@ -34,11 +34,15 @@ export interface EligibilityInput {
 
 export interface EligibilityConfig {
   test_patterns: readonly string[];
+  /** Which test-side files are RUNNABLE (handed to the test command). Defaults to test_patterns. */
+  run_patterns?: readonly string[];
+  /** Tickets whose runnable tests touch these paths are excluded (e.g. browser-mode suites needing Playwright). */
+  exclude_test_paths?: readonly string[];
   ticket_after: string; // ISO date
 }
 
 export type Eligibility =
-  | { ok: true; test_files: string[]; src_files: string[]; changed_lines: number }
+  | { ok: true; test_files: string[]; src_files: string[]; run_files: string[]; changed_lines: number }
   | { ok: false; reason: string };
 
 export function checkEligibility(input: EligibilityInput, cfg: EligibilityConfig): Eligibility {
@@ -52,5 +56,14 @@ export function checkEligibility(input: EligibilityInput, cfg: EligibilityConfig
   const { test, src } = splitFiles(input.files, cfg.test_patterns);
   if (test.length === 0) return { ok: false, reason: "no-test-changes" };
   if (src.length === 0) return { ok: false, reason: "no-source-changes" };
-  return { ok: true, test_files: test, src_files: src, changed_lines: changed };
+  // Runnable subset: support files under test/ (configs, fixtures, utils) are overlaid at
+  // grade time but must not be handed to the test runner as entry points.
+  const runMatcher = ignore().add([...(cfg.run_patterns ?? cfg.test_patterns)]);
+  const run = test.filter((p) => runMatcher.ignores(p));
+  if (run.length === 0) return { ok: false, reason: "no-runnable-tests" };
+  if (cfg.exclude_test_paths !== undefined && cfg.exclude_test_paths.length > 0) {
+    const excluded = ignore().add([...cfg.exclude_test_paths]);
+    if (run.some((p) => excluded.ignores(p))) return { ok: false, reason: "excluded-test-paths" };
+  }
+  return { ok: true, test_files: test, src_files: src, run_files: run, changed_lines: changed };
 }

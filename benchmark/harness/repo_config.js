@@ -46,6 +46,17 @@ export function loadRepoConfig(path) {
     if (!Number.isInteger(retries) || retries < 0) {
         throw new Error(`${path}: test_retries must be a non-negative integer`);
     }
+    const optionalPatternList = (key) => {
+        const v = cfg[key];
+        if (v === undefined)
+            return undefined;
+        if (!Array.isArray(v) || !v.every((e) => typeof e === "string")) {
+            throw new Error(`${path}: ${key} must be a list of strings`);
+        }
+        return v.map(String);
+    };
+    const runPatterns = optionalPatternList("run_patterns");
+    const excludeTestPaths = optionalPatternList("exclude_test_paths");
     return {
         id: String(cfg.id),
         github: String(cfg.github),
@@ -55,6 +66,8 @@ export function loadRepoConfig(path) {
         install: cfg.install.map(String),
         test_command: cfg.test_command,
         test_patterns: cfg.test_patterns.map(String),
+        run_patterns: runPatterns ?? cfg.test_patterns.map(String),
+        exclude_test_paths: excludeTestPaths ?? [],
         test_retries: retries,
         ticket_after: ticketAfter,
         wiki_commit: cfg.wiki_commit === undefined ? "" : String(cfg.wiki_commit),

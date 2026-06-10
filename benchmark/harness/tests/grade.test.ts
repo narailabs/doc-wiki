@@ -158,3 +158,39 @@ describe("calibrateAll (real git, no docker)", () => {
     });
   }, 20_000);
 });
+
+describe("run_files vs test_files separation", () => {
+  it("executes only the runnable subset while support files are still overlaid", async () => {
+    const src = mkdtempSync(join(tmpdir(), "benchrun-src-"));
+    const git = (...a: string[]): string => execFileSync("git", a, { cwd: src, encoding: "utf8" }).trim();
+    git("init", "-q", "-b", "main");
+    git("config", "user.email", "t@t"); git("config", "user.name", "t");
+    writeFileSync(join(src, "calc.js"), "module.exports = (a, b) => a - b;\n");
+    git("add", "-A"); git("commit", "-qm", "base");
+    const base = git("rev-parse", "HEAD");
+    writeFileSync(join(src, "calc.js"), "module.exports = (a, b) => a + b;\n");
+    mkdirSync(join(src, "test"), { recursive: true });
+    // Support file: crashes if ever executed as a test entry point; required by the real test.
+    writeFileSync(join(src, "test", "helper.js"),
+      "if (require.main === module) process.exit(1);\nmodule.exports = { expectFive: (v) => { if (v !== 5) process.exit(1); } };\n");
+    writeFileSync(join(src, "test", "calc.test.js"),
+      "const { expectFive } = require('./helper.js');\nconst c = require('../calc.js');\nexpectFive(c(2, 3));\n");
+    git("add", "-A"); git("commit", "-qm", "fix");
+    const fix = git("rev-parse", "HEAD");
+    const bare = `${mkdtempSync(join(tmpdir(), "benchrun-bare-"))}/repo.git`;
+    execFileSync("git", ["clone", "-q", "--bare", src, bare]);
+
+    const outDir = mkdtempSync(join(tmpdir(), "benchrun-out-"));
+    const goodDiff = execFileSync("git", ["diff", "--binary", base, fix, "--", "calc.js"], { cwd: bare, encoding: "utf8" });
+    writeFileSync(join(outDir, "diff.patch"), goodDiff);
+    const both = { bareDir: bare, outDir, baseCommit: base, fixCommit: fix, testCommand: String.raw`for f in {test_files}; do node "$f" || exit 1; done`, retries: 0 };
+
+    // With run_files scoped to the real test: passes (helper overlaid but not executed).
+    const scoped = await gradeRunLocal({ ...both, testFiles: ["test/calc.test.js", "test/helper.js"], runFiles: ["test/calc.test.js"] });
+    expect(scoped).toEqual({ outcome: "passed", detail: "tests-passed" });
+
+    // Legacy fallback (no runFiles): the helper is executed as an entry point and fails the run.
+    const legacy = await gradeRunLocal({ ...both, testFiles: ["test/calc.test.js", "test/helper.js"] });
+    expect(legacy).toEqual({ outcome: "failed", detail: "tests-failed" });
+  });
+});

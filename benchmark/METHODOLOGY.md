@@ -4,7 +4,7 @@
 
 **Design:** paired two-arm runs per ticket (baseline / wiki) — identical container, model (`claude-sonnet-4-6`, pinned full ID), prompt, and flags; the only delta is the presence of the pre-built wiki + `CLAUDE.md` in the checkout (committed before the session so the agent's diff contains only its own work). Grading: the real fix PR's tests, overlaid onto the agent's diff (SWE-bench style). Pass = all overlaid tests pass; a pass that needed the configured single retry is recorded distinctly (`tests-passed-on-retry`).
 
-**Ticket eligibility:** closed issue with a merged linked fix PR touching both test and non-test source, <400 changed lines, natural-language body ≥200 chars, human author, merged after the repo's `ticket_after` floor. The committed `tickets/<repo>.json` is the exact set, including every exclusion and its reason.
+**Ticket eligibility:** closed issue with a merged linked fix PR touching both test and non-test source, <400 changed lines, natural-language body ≥200 chars, human author, merged after the repo's `ticket_after` floor. The fix PR must include at least one *runnable* test entry point (per-repo `run_patterns`) — test-side support files (configs, fixtures, utils) are overlaid at grade time but never executed directly. Tickets whose runnable tests need toolchains absent from the grade container (per-repo `exclude_test_paths`, e.g. vitest's Playwright-backed `test/browser/**` and `test/ui/**` suites) are excluded up front. The committed `tickets/<repo>.json` is the exact set, including every exclusion and its reason.
 
 **Contamination controls:**
 1. *Fix leak:* the wiki is built at `wiki_commit`, verified (`git merge-base --is-ancestor`) to predate every ticket's base commit.

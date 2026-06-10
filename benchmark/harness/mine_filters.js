@@ -27,5 +27,16 @@ export function checkEligibility(input, cfg) {
         return { ok: false, reason: "no-test-changes" };
     if (src.length === 0)
         return { ok: false, reason: "no-source-changes" };
-    return { ok: true, test_files: test, src_files: src, changed_lines: changed };
+    // Runnable subset: support files under test/ (configs, fixtures, utils) are overlaid at
+    // grade time but must not be handed to the test runner as entry points.
+    const runMatcher = ignore().add([...(cfg.run_patterns ?? cfg.test_patterns)]);
+    const run = test.filter((p) => runMatcher.ignores(p));
+    if (run.length === 0)
+        return { ok: false, reason: "no-runnable-tests" };
+    if (cfg.exclude_test_paths !== undefined && cfg.exclude_test_paths.length > 0) {
+        const excluded = ignore().add([...cfg.exclude_test_paths]);
+        if (run.some((p) => excluded.ignores(p)))
+            return { ok: false, reason: "excluded-test-paths" };
+    }
+    return { ok: true, test_files: test, src_files: src, run_files: run, changed_lines: changed };
 }
