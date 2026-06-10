@@ -5,6 +5,11 @@
 # mounts:     /bare (ro bare clone), /out (rw artifacts), /wiki (ro overlay, wiki arm only)
 set -uo pipefail
 
+# The bind-mounted /bare is owned by the host user, not the container's node user;
+# git's dubious-ownership guard would otherwise refuse to clone it. The container is
+# ephemeral and single-purpose, so trusting all paths is safe.
+git config --global --add safe.directory '*'
+
 mode="${1:?usage: entrypoint.sh session|grade|wiki-build}"
 if [ "$mode" = "grade" ]; then
   exec /usr/local/bin/grade.sh
