@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. The cross-OSS benchmark at <a href="benchmark/"><code>benchmark/</code></a> (Django, Cal.com, Mastodon) is the reproducible number — run it on your own repo to see yours.</em></sub>
+  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. A hardened cross-OSS benchmark (V2) is being rebuilt at <a href="benchmark/"><code>benchmark/</code></a> — once it lands, run it on your own repo to see yours.</em></sub>
 </p>
 
 <p align="center">

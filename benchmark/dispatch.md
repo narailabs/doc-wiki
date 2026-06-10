@@ -4,7 +4,7 @@
 
 The benchmark runs **inside a Claude Code session** using the user's subscription. Each `(repo, issue, condition)` tuple becomes a single isolated subagent dispatched via Claude Code's Agent tool. The subagent IS the "Claude" being measured: it clones the repo, installs deps, optionally runs `/doc-wiki:atlas`, attempts the fix, runs the test, and writes a result JSON.
 
-The original `harness/run.ts` script — which shells out to `claude -p` as a subprocess — is preserved for users who want CLI-mode runs, but **the session-agent mode below is the canonical path**.
+The original `harness/run.ts` script — which shelled out to `claude -p` as a subprocess — was removed with the V1 withdrawal (see banner).
 
 ## Why session-agent over `claude -p`
 

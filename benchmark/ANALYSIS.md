@@ -4,7 +4,7 @@
 
 > Honest reading of the 14-run benchmark (7 real OSS issues × 2 conditions). Run via session-agent dispatch on 2026-06-03 against `claude-sonnet-4-6`. Methodology: SWE-bench-style test patch applied at parent commit; subagent edits source only.
 
-## Headline (final dataset — 113 runs, 25 issues, N=1–3)
+## V1 headline — withdrawn, see banner (113 runs, 25 issues, N=1–3)
 
 | | Baseline | With doc-wiki | Δ |
 |---|---|---|---|
