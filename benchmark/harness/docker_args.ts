@@ -7,7 +7,7 @@ export interface SessionSpec {
   model: string;
   maxTurns: number;
   install: string[];
-  timeoutSec: number;
+  timeoutSec: number; // consumed host-side by the run orchestrator (container wall-clock kill); not part of argv
 }
 
 /** docker run argv for one agent session. The OAuth token is passed by NAME only (-e VAR) so it never appears in argv/process listings. */

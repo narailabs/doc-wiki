@@ -1,7 +1,7 @@
 # Benchmark session/grade container. Build: docker build -t docwiki-bench-<repo> --build-arg TOOLCHAIN=node:22 benchmark/harness/docker/
 ARG TOOLCHAIN=node:22
 FROM ${TOOLCHAIN}
-ARG CLAUDE_CODE_VERSION=latest
+ARG CLAUDE_CODE_VERSION=2.1.170
 ENV DISABLE_AUTOUPDATER=1 \
     CLAUDE_CONFIG_DIR=/claude-cfg
 RUN apt-get update && apt-get install -y --no-install-recommends git iptables dnsutils ca-certificates bash \

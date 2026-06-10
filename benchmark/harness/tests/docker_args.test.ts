@@ -48,4 +48,27 @@ describe("docker argv builders", () => {
       "build", "-t", "docwiki-bench-vitest", "--build-arg", "TOOLCHAIN=node:22", "benchmark/harness/docker",
     ]);
   });
+
+  it("session args include --stop-timeout 10 as adjacent elements", () => {
+    const args = sessionRunArgs(SPEC);
+    const i = args.indexOf("--stop-timeout");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("10");
+  });
+
+  it("grade args never pass the OAuth token (grading needs no token)", () => {
+    const args = gradeRunArgs({
+      image: SPEC.image, outDir: SPEC.outDir, bareDir: SPEC.bareDir,
+      baseCommit: "bbbb0000", fixCommit: "aaaa9999",
+      testFiles: ["test/a.test.ts"], testCommand: "npx vitest run {test_files}", retries: 1,
+    });
+    expect(args).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
+    expect(args.join(" ")).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
+  });
+
+  it("paths with spaces survive as single array elements", () => {
+    const args = sessionRunArgs({ ...SPEC, bareDir: "/a b/c.git", outDir: "/o ut/dir" });
+    expect(args).toContain("/a b/c.git:/bare:ro");
+    expect(args).toContain("/o ut/dir:/out");
+  });
 });

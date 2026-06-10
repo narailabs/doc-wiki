@@ -20,8 +20,11 @@ git config user.email bench@localhost && git config user.name bench
 bash -ec "$BENCH_INSTALL"
 
 # Wiki arm: overlay the pre-built wiki + CLAUDE.md pointer at the repo root.
+# Committed immediately so the agent's delta is measured against the overlay commit.
 if [ -d /wiki ]; then
   cp -R /wiki/. /work/
+  git add -A
+  git commit -qm "bench: wiki overlay (excluded from agent diff)"
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
@@ -37,10 +40,18 @@ claude -p "$(cat /out/prompt.txt)" \
 echo "$?" >/out/exit_code
 set -e
 
-# Capture the agent's full working-tree delta (incl. new files), minus any wiki overlay noise.
+# Capture the agent's full working-tree delta (incl. new files). The wiki overlay
+# was committed pre-session, so diff.patch contains only the agent's work.
 git add -A
 git diff --cached --binary >/out/diff.patch
 
-# Publish the transcript for auditability.
+# Publish the transcript for auditability — strip credential files and redact the token.
 mkdir -p /out/transcript
 cp -R "$CLAUDE_CONFIG_DIR"/. /out/transcript/ 2>/dev/null || true
+find /out/transcript -type f \( -name ".credentials.json" -o -name "*credential*" \) -delete 2>/dev/null || true
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  esc=$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | sed 's/[&/\]/\\&/g')
+  grep -rlF "$CLAUDE_CODE_OAUTH_TOKEN" /out/transcript 2>/dev/null | while IFS= read -r f; do
+    sed -i "s/$esc/[redacted-token]/g" "$f"
+  done
+fi
