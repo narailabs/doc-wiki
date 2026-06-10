@@ -2,13 +2,21 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 const TERMINAL = new Set(["passed", "failed"]);
 const TRANSIENT = new Set(["running", "error", "rate-limited"]);
+/** Arms that must not be (re-)scheduled: terminal, plus `ran` (session done, grade pending — re-running would burn a paid session and overwrite artifacts). */
+const SCHEDULING_DONE = new Set(["passed", "failed", "ran"]);
 const ARMS = ["baseline", "wiki"];
 export const runKey = (issue, arm) => `${issue}:${arm}`;
 /** Load (or initialize) state; transient statuses revert to pending so resume re-queues them. `ran` survives — it resumes as grade-only. */
 export function loadState(file, repo) {
     if (!existsSync(file))
         return { schema_version: 1, repo, runs: {} };
-    const state = JSON.parse(readFileSync(file, "utf8"));
+    let state;
+    try {
+        state = JSON.parse(readFileSync(file, "utf8"));
+    }
+    catch (e) {
+        throw new Error(`corrupt checkpoint ${file}: ${e}`);
+    }
     if (state.repo !== repo) {
         throw new Error(`checkpoint ${file} belongs to repo "${state.repo}", not "${repo}"`);
     }
@@ -25,17 +33,23 @@ export function saveState(file, state) {
     writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`);
     renameSync(tmp, file);
 }
+/**
+ * Guarded status write. Refuses to overwrite terminal and `ran` records.
+ * NOTE: the grading pass transitions ran→passed/failed by assigning
+ * `rec.status` directly on the loaded state object, not via setRun.
+ */
 export function setRun(state, issue, arm, rec) {
     const key = runKey(issue, arm);
     const prev = state.runs[key];
-    if (prev !== undefined && TERMINAL.has(prev.status)) {
-        throw new Error(`refusing to overwrite terminal run ${key} (${prev.status})`);
+    if (prev !== undefined && (TERMINAL.has(prev.status) || prev.status === "ran")) {
+        throw new Error(`refusing to overwrite terminal/ran run ${key} (${prev.status})`);
     }
     state.runs[key] = rec;
 }
 /**
- * Pair scheduler. Partial pairs (one arm terminal, the other not) come first;
- * then up to `batch` fresh pairs. Terminal runs are never rescheduled.
+ * Pair scheduler. Partial pairs (one arm done, the other not) come first;
+ * then up to `batch` fresh pairs. Terminal and `ran` arms are never
+ * rescheduled — `ran` resumes as grade-only, not a new session.
  */
 export function nextPairs(state, issues, batch) {
     const partial = [];
@@ -43,7 +57,7 @@ export function nextPairs(state, issues, batch) {
     for (const issue of issues) {
         const missing = ARMS.filter((a) => {
             const r = state.runs[runKey(issue, a)];
-            return r === undefined || !TERMINAL.has(r.status);
+            return r === undefined || !SCHEDULING_DONE.has(r.status);
         });
         if (missing.length === 0)
             continue;

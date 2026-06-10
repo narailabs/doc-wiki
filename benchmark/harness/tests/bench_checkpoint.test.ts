@@ -56,4 +56,33 @@ describe("checkpoint state machine", () => {
     setRun(s, 3, "wiki", { status: "failed" });
     expect(nextPairs(s, [3], 5)).toEqual([]);
   });
+
+  it("ran survives loadState unchanged", () => {
+    const dir = mkdtempSync(join(tmpdir(), "benchst-"));
+    const file = join(dir, "state.json");
+    const s = fresh();
+    setRun(s, 1, "baseline", { status: "ran" });
+    saveState(file, s);
+    const loaded = loadState(file, "demo");
+    expect(loaded.runs[runKey(1, "baseline")]?.status).toBe("ran");
+  });
+
+  it("treats a (ran, pending) pair as partial and never re-schedules ran arms", () => {
+    const s = fresh();
+    setRun(s, 5, "baseline", { status: "ran" });
+    const work = nextPairs(s, [3, 5], 1);
+    expect(work[0]).toEqual({ issue: 5, arms: ["wiki"] });
+    expect(work.slice(1)).toEqual([{ issue: 3, arms: ["baseline", "wiki"] }]);
+    // fully-ran ticket: nothing to schedule
+    const t = fresh();
+    setRun(t, 9, "baseline", { status: "ran" });
+    setRun(t, 9, "wiki", { status: "ran" });
+    expect(nextPairs(t, [9], 5)).toEqual([]);
+  });
+
+  it("never overwrites a ran run", () => {
+    const s = fresh();
+    setRun(s, 1, "wiki", { status: "ran" });
+    expect(() => setRun(s, 1, "wiki", { status: "running" })).toThrow(/terminal|ran/);
+  });
 });
