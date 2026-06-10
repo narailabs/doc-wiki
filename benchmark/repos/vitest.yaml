@@ -1,0 +1,20 @@
+id: vitest
+github: vitest-dev/vitest
+clone_url: https://github.com/vitest-dev/vitest.git
+language: typescript
+ticket_source: github
+install:
+  - "corepack enable"
+  - "pnpm install --frozen-lockfile"
+  - "pnpm run build"
+test_command: "pnpm vitest run {test_files}"
+test_patterns:
+  - "test/**"
+  - "**/*.test.ts"
+  - "**/__tests__/**"
+test_retries: 1
+ticket_after: "2025-06-01"
+wiki_commit: ""
+toolchain:
+  - "node:22"
+services: []
