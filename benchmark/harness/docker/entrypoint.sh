@@ -18,10 +18,12 @@ if [ "$mode" = "wiki-build" ]; then
   claude -p "/doc-wiki:init --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --max-turns 300 --output-format json --dangerously-skip-permissions >/out/init.json 2>/out/init.err
   claude -p "/doc-wiki:atlas --cross-service --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --max-turns 300 --output-format json --dangerously-skip-permissions >/out/atlas.json 2>/out/atlas.err
   # Copy exactly what doc-wiki generated/modified (new untracked paths + tracked edits), nothing else.
+  # Extract into /out/overlay so the diagnostic envelopes above never leak into the wiki arm's workspace.
+  mkdir -p /out/overlay
   { git ls-files --others --exclude-standard -z; git diff --name-only -z; } \
     | sort -zu \
     | tar --null -cf - -T - \
-    | tar -C /out -xf -
+    | tar -C /out/overlay -xf -
   exit 0
 fi
 

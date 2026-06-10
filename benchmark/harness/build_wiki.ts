@@ -27,7 +27,8 @@ export async function checkWikiIsAncestor(runner: Runner, bareDir: string, wikiC
 export interface WikiBuildSpec {
   image: string;
   bareDir: string;
-  overlayDir: string;
+  /** Host dir mounted at /out. The entrypoint extracts the overlay into <outDir>/overlay and writes diagnostics (init/atlas json+err) at the root — keeping them out of the wiki arm's workspace. */
+  outDir: string;
   pluginDir: string;
   wikiCommit: string;
   model: string;
@@ -37,7 +38,7 @@ export function wikiSessionArgs(s: WikiBuildSpec): string[] {
   return [
     "run", "--rm",
     "-v", `${s.bareDir}:/bare:ro`,
-    "-v", `${s.overlayDir}:/out`,
+    "-v", `${s.outDir}:/out`,
     "-v", `${s.pluginDir}:/plugin:ro`,
     "-e", "CLAUDE_CODE_OAUTH_TOKEN",
     "-e", `BENCH_BASE_COMMIT=${s.wikiCommit}`,
@@ -64,7 +65,8 @@ export async function main(argv: readonly string[]): Promise<number> {
   validateWikiCommit(cfg.wiki_commit);
 
   const bareDir = String(values.bareDir ?? resolve("benchmark", "wiki-cache", `${repo}.git`));
-  const overlayDir = resolve("benchmark", "wiki-cache", repo, "overlay");
+  // Mount the repo's wiki-cache dir; the overlay lands at <outDir>/overlay (run_ticket's wikiDir).
+  const outDir = resolve("benchmark", "wiki-cache", repo);
 
   // Contamination guard runs against the mined tickets when they exist.
   const ticketsPath = join("benchmark", "tickets", `${repo}.json`);
@@ -76,12 +78,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write(`warning: ${ticketsPath} not found — ancestor guard skipped (mine first for full validation)\n`);
   }
 
-  mkdirSync(overlayDir, { recursive: true });
+  mkdirSync(outDir, { recursive: true });
 
   const args = wikiSessionArgs({
     image: String(values.image ?? `docwiki-bench-${repo}`),
     bareDir,
-    overlayDir,
+    outDir,
     pluginDir: resolve(String(values.pluginDir ?? ".")),
     wikiCommit: cfg.wiki_commit,
     model: String(values.model ?? "claude-sonnet-4-6"),

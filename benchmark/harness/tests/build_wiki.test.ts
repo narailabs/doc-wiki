@@ -30,7 +30,7 @@ describe("checkWikiIsAncestor", () => {
 describe("wikiSessionArgs", () => {
   it("mounts the plugin and overlay dirs and disables the firewall stage", () => {
     const args = wikiSessionArgs({
-      image: "docwiki-bench-vitest", bareDir: "/b", overlayDir: "/o", pluginDir: "/p",
+      image: "docwiki-bench-vitest", bareDir: "/b", outDir: "/o", pluginDir: "/p",
       wikiCommit: "cccc", model: "claude-sonnet-4-6",
     });
     expect(args).toContain("/p:/plugin:ro");
