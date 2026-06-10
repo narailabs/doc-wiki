@@ -51,7 +51,7 @@ The thing that made the pattern contagious is that it solved a problem everyone 
 
 ## doc-wiki — the enterprise execution
 
-`doc-wiki` is that pattern pointed at messy enterprise code. Two extensions matter:
+`doc-wiki` is that pattern pointed at complex enterprise code — and it scales down fine to simple side-project repos, plus the root-of-microservices case where each service is a submodule and the wiki documents how the services relate to each other. Two extensions matter:
 
 1. **The wiki covers the ecosystem, not just the code.** Code alone isn't enough — the Jira tickets explaining *why* something was done that way, the Confluence page recording the postmortem of last quarter's outage, the actual database schema with the columns the ORM forgot about, the runbook for the deploy pipeline. doc-wiki ingests all of it through one planner (`gather()` from `narai-primitives`) into one structured wiki.
 
@@ -84,9 +84,9 @@ Five-minute walkthrough at [docs/getting-started.md](https://github.com/narailab
 
 Three things, in order of effort:
 
-1. **Try it on your messy codebase.** Tell me what worked / didn't. GitHub issues are the right surface.
+1. **Try it on your real-world codebase** — complex enterprise monolith, microservices root, or simple side project. Tell me what worked / didn't. GitHub issues are the right surface.
 2. **Re-run the benchmark.** Swap the three repos in `repos.yaml` for whatever codebase you want to argue about. Publish your numbers if you disagree with mine.
-3. **Name the category.** "AI-readable wiki for messy code" is a working phrase. The dbt-style move (analytics engineering) is what compounds; the pattern names itself eventually.
+3. **Name the category.** "LLM Wiki for enterprise code" is a working phrase. The dbt-style move (analytics engineering) is what compounds; the pattern names itself eventually.
 
 Apache 2.0. Forever. Explicit no-relicense commitment in [`docs/governance.md`](https://github.com/narailabs/doc-wiki/blob/main/docs/governance.md). Built solo, no funding.
 

@@ -20,6 +20,7 @@ If you only want the install + setup + first-query path, [`README.md`](../README
 - [`/doc-wiki:lint` and `/doc-wiki:edit`](#9-doc-wikilint-and-doc-wikiedit--health-checks)
 - [`/doc-wiki:stats`](#10-doc-wikistats--token-and-cost-metrics)
 - [The maintenance loop](#11-the-maintenance-loop)
+- [Microservices setup](#12-microservices-setup)
 - [Where to go next](#where-to-go-next)
 
 ## 0. Prerequisites
@@ -406,6 +407,99 @@ Once you have a working wiki, the steady-state cadence:
 That's the whole loop. The wiki gets richer the more you use it: each query exposes a coverage gap, each promote fills one, each refresh keeps it from going stale, each lint catches drift before it compounds.
 
 For unattended scheduled execution, see [`recipes.md` § recipe 4](recipes.md#4-weekly-maintenance) and consider switching `autonomy.mode` to `auto` in `wiki.config.yaml` so prompts are skipped when no user is present.
+
+## 12. Microservices setup
+
+Everything above assumes a single repo. If your system is split across three or more service repositories, the pattern changes: you create a **root repo** that pulls each service in as a `git submodule` and run doc-wiki from there. The wiki then spans every service and documents how they relate to each other — HTTP clients calling each other, queue producers and consumers, shared schemas, common configuration. This is one of doc-wiki's biggest leverage points: a single-service indexer cannot see across repo boundaries, but `/doc-wiki:atlas` running at the root can.
+
+### When to use this pattern
+
+- You have 3+ service repositories that compose into one logical system.
+- You want a single wiki that covers all of them and surfaces cross-service architecture.
+- You want every coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, Aider — to load context for the whole system when it opens the root.
+
+If you only have one repo, stick with the single-repo flow above. If you have two cooperating services, either pattern works; pick submodules if you anticipate growing.
+
+### Prerequisites
+
+Everything from [§0 Prerequisites](#0-prerequisites) still applies. In addition:
+
+- **Git submodule access for each service repo** — whatever auth your `git clone` uses (SSH key, HTTPS token, GitHub CLI session) needs to reach each service URL.
+- **Optional but recommended: GitHub credentials.** If you want the wiki to also pull in PR descriptions, issue threads, or release notes for cross-service decisions, enable the GitHub connector during onboarding. Same for Jira if cross-service tickets live there.
+
+### Step-by-step
+
+```sh
+# 1. Create the root repo.
+$ mkdir my-org-wiki && cd my-org-wiki
+$ git init
+
+# 2. Add each service repo as a submodule. Adjust URLs and target paths.
+$ git submodule add git@github.com:my-org/auth-service.git services/auth
+$ git submodule add git@github.com:my-org/billing-service.git services/billing
+$ git submodule add git@github.com:my-org/notifications-service.git services/notifications
+# ...add the rest of your service repos the same way
+
+$ git submodule update --init --recursive
+```
+
+At this point the root repo contains a `.gitmodules` file plus a directory per service. Each `services/<name>/` is a fully checked-out copy of that repo at a pinned commit.
+
+```text
+# 3. Scaffold the wiki from the root.
+/doc-wiki:init
+```
+
+`/doc-wiki:init` runs exactly the same four-phase flow as in §3, but the language/ORM/database detection now sees every service at once. If your services are polyglot (one Node, one Go, one Python) the onboarding step records that mix; atlas will use it later.
+
+```text
+# 4. Run atlas from the root, with cross-service detection enabled.
+/doc-wiki:atlas --cross-service --dry-run    # see the plan + cost estimate
+/doc-wiki:atlas --cross-service              # commit
+```
+
+Cross-service detection is **off by default**. The `--cross-service` flag enables it for this run; to make it permanent, set `ecosystem.cross_service.enabled: true` in `wiki.config.yaml` and drop the flag (see [`configuration.md`](configuration.md) for the full block).
+
+Running atlas from the root is what makes the pattern pay off:
+
+- It walks each `services/<name>/` as its own topic and emits per-service architecture, data-model, api, and operations pages.
+- It also runs the global synthesis phase across **all** services together. That phase is where cross-service edges appear: REST profile detection (the 18 profiles listed in the README) picks up HTTP clients in service A pointing at endpoints in service B; the ORM mapper notes shared table names; configuration scans find queue topics produced by one service and consumed by another.
+- The result is a single wiki that documents both the inside of each service and the seams between them.
+
+```sh
+# 5. Commit the wiki to the root repo.
+$ git add docs/ .gitmodules    # the wiki (incl. wiki.config.yaml) lives under docs/<root-name>-wiki/
+$ git commit -m "doc-wiki atlas v1"
+```
+
+The wiki lives in the root, **not** inside each submodule. That keeps the cross-service documentation in one place and avoids polluting service repos with derived artifacts.
+
+### What you get
+
+A wiki rooted at `docs/<root-name>-wiki/` containing:
+
+- **Per-service pages** under `wiki/<service>/` — architecture, data-model, api, environments, operations facets for each service, with inline links from one service's page to another when atlas detects a relationship.
+- **Cross-service global pages** synthesised in atlas Phase 7 — `overview.md` describes the system as a whole; `integrations.md` enumerates external dependencies and the inter-service surface; `deploy.md` covers root-level Dockerfile/compose/CI configuration when present.
+- **A typed service graph** at `outputs/atlas/<run-id>/service-graph.json` recording each cross-service relationship with evidence, rendered into six deterministic pages: `wiki/service-map.md` (the service-topology diagram), `service-dependencies.md`, `client-registry.md`, `queue-registry.md`, `database-traces.md`, and `shared-libraries.md`.
+
+### What this enables for coding agents
+
+When a coding agent opens the **root** repo, it loads `CLAUDE.md` (or `AGENTS.md` / `GEMINI.md` / etc.) which points at the wiki. From that one entry point the agent can:
+
+- See the entire service topology before touching any one service.
+- Trace a request end-to-end across service boundaries without you having to paste from three repos.
+- Answer cross-service questions like "what calls `POST /charges`?" or "which services consume the `invoice.created` event?" without `grep`-ing across submodules.
+- Use `/doc-wiki:query` for cited answers that pull from multiple service pages in one shot.
+
+The same wiki works for any of the seven supported agents. The submodule structure also means you can `cd services/auth/` and open just that service in isolation when you want a single-service focus — the per-service wiki pages are still readable from the root path.
+
+### Caveats and tips
+
+- **Submodule updates.** Pull each service to its latest commit with `git submodule update --remote`. After a sweep, re-run `/doc-wiki:ingest --refresh --all` from the root to pick up changed sources and re-compile only the pages whose content hash moved. Note `--refresh` only covers ingested sources — the service graph and registry pages are atlas outputs, so when inter-service calls, queues, or dependencies change, re-run `/doc-wiki:atlas --cross-service` to rebuild `service-graph.json` and the service-map/registry pages.
+- **A service gets renamed or removed.** Drop or rename the submodule (`git submodule deinit -f services/<old>` then `git rm services/<old>`), then re-run `/doc-wiki:atlas`. Pages whose source paths no longer exist are detected as orphaned and moved to `wiki/_archive/`; you can restore one with `/doc-wiki:unarchive <slug>` if the rename was a mistake.
+- **Targeting a single service.** `/doc-wiki:ingest services/auth/` runs against just that submodule and is fine for incremental updates. For atlas, use `/doc-wiki:atlas --scope auth` to limit a re-run to one topic without rebuilding the whole wiki.
+- **Where to run from.** Always run the slash commands from the root repo — that's the directory whose `wiki.config.yaml` defines the wiki. Running from inside `services/<name>/` will look for that service's own config and either fail to find one or scaffold a second, narrower wiki.
+- **Submodule auth in CI.** If you schedule `/doc-wiki:ingest --refresh --all` for unattended runs, make sure the CI environment can fetch every submodule — a missing SSH key on one repo silently produces a wiki with stale content for that service.
 
 ## Where to go next
 

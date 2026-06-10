@@ -5,7 +5,7 @@
 ## Title
 
 ```
-Open-sourced an "LLM Wiki for messy enterprise codebases" — works on Claude Code, would love feedback on adapting to Codex/Cursor/Aider
+Open-sourced an "LLM Wiki for complex enterprise codebases" — works on Claude Code, would love feedback on adapting to Codex/Cursor/Aider
 ```
 
 ## Body

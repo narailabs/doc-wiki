@@ -1,6 +1,6 @@
-# AI-readable wikis for messy code
+# The LLM Wiki for enterprise code
 
-> A manifesto for what coding agents need to work on real codebases, and why doc-wiki is what it is.
+> A manifesto for what coding agents need to work on real codebases — complex enterprise systems and simple side projects alike — and why doc-wiki is what it is.
 
 ## The 10× gap nobody is fixing
 
@@ -26,11 +26,11 @@ Two extensions matter.
 
 The output: a structured wiki under `docs/<app>-wiki/`. Frontmatter on every page. Typed edges (`supports`, `contradicts`, `extends`, `supersedes`) in `graph/edges.jsonl`. A `summaries.md` index loaded first by `/doc-wiki:query`. References injected into your `CLAUDE.md`. Claude Code reads it before touching code. No SaaS, no daemon, no telemetry — everything runs inside your existing Claude Code session in your terminal.
 
-## What "messy code" looks like and what the wiki carries
+## What complex enterprise code looks like and what the wiki carries
 
-Here's the test I use for whether a codebase needs doc-wiki: ask three new engineers to fix the same ticket independently, with no human in the loop. If they produce three different, equally-defensible diffs and at least one breaks in subtle ways, your codebase needs doc-wiki. If they all produce the same diff in five minutes, it doesn't.
+Here's the test I use for whether a codebase needs doc-wiki: ask three new engineers to fix the same ticket independently, with no human in the loop. If they produce three different, equally-defensible diffs and at least one breaks in subtle ways, your codebase needs doc-wiki. If they all produce the same diff in five minutes, it doesn't — though doc-wiki still works fine on those simpler codebases; it just has less to do.
 
-For "messy codebase" cases, doc-wiki pages tend to cover:
+For complex enterprise codebase cases — and the cross-service case where the root repo holds microservices in submodules and the wiki documents how the services relate to each other — doc-wiki pages tend to cover:
 
 - **Architecture facets** — module boundaries that are tribal knowledge, not enforced by the build system. Why service X owns endpoint Y. The unwritten rules about which patterns are "the new way" vs "the legacy way."
 - **Data model** — which ORM model maps to which physical table. Where the schema drifted. Which fields are nullable in theory but never in practice. ORM cross-validation with the live DB through `wiki_db`'s read-only policy gate.
@@ -39,7 +39,7 @@ For "messy codebase" cases, doc-wiki pages tend to cover:
 - **Operations** — runbook pages for the deploy pipeline, observability stack, alerting rules. The kind of thing that's currently a 47-page Confluence document nobody reads end-to-end.
 - **History** — promoted query answers, postmortems, decisions made and reversed. The `supersedes` edge type matters here. Past attempts at obvious-looking fixes are linked to the page describing why they failed. Claude reads them, doesn't repeat them.
 
-A wiki shaped like this isn't "documentation" in the sense your engineering org failed to maintain in 2019. It's working memory for the agent, structured the way the agent reads.
+A wiki shaped like this isn't "documentation" in the sense your engineering org failed to maintain in 2019. It's working memory for the agent, structured the way the agent reads. It scales down too: a 200-line side project gets a leaner wiki with the same structure, and the same `/doc-wiki:atlas` workflow applies.
 
 ## How accurate, actually
 
@@ -47,7 +47,7 @@ The hero claim on the README — 10% to 80% autonomous ticket-fix accuracy on my
 
 The OSS half ships as a reproducible benchmark in [`benchmark/`](../benchmark/) of this repo. Three repos (Django, Cal.com, Mastodon), real closed issues from the last 18 months, with the specific test the fix PR added or modified as the success criterion. SWE-bench-style methodology — binary pass/fail, no LLM-judge, no partial credit. The harness is in TypeScript, the issue manifest is in YAML, the per-run JSON is committed. Re-run it yourself; swap the issue list; argue with the numbers. That's the contract.
 
-The personal-codebase half is exactly that — anecdotal, on a codebase I can't open-source. I label it as such everywhere. The reason the personal number is so much higher than the OSS benchmark is straightforward: open-source codebases are already cleaner and more documented than median enterprise code, so the baseline is higher and the doc-wiki delta is smaller. The personal codebase is the messier case where doc-wiki has the most to do. Your codebase is closer to mine than to Django's.
+The personal-codebase half is exactly that — anecdotal, on a codebase I can't open-source. I label it as such everywhere. The reason the personal number is so much higher than the OSS benchmark is straightforward: open-source codebases are already cleaner and more documented than median enterprise code, so the baseline is higher and the doc-wiki delta is smaller. The personal codebase is the more complex case where doc-wiki has the most to do. Your enterprise codebase is closer to mine than to Django's.
 
 The reproducibility literature is honest about agent-benchmark variance — [Paul Simmering](https://simmering.dev/blog/agent-benchmarks/) shows 60% → 25% degradation across re-runs and 51% → 26% lab-to-production gaps on freelance coding. doc-wiki's benchmark will run ≥3× per cell and report median + spread. If you can't reproduce a number within the published variance, I want to hear about it.
 
@@ -71,7 +71,7 @@ Three things, in order of effort.
 
 **Two.** Re-run the benchmark on a repo of your choice. Swap the three repos in `repos.yaml` for whatever codebase you want to argue about. If the numbers come out differently than mine, publish them. The Apache-2.0 license includes the right to disagree with my methodology.
 
-**Three.** If this matches a pattern you've been wanting from your tools, name it. "AI-readable wiki for messy code" is a working phrase. "Context engineering for enterprise codebases" is another. dbt invented "analytics engineering" and a job category emerged from it. If the LLM Wiki pattern grows into something a job title gets named after, it'll be because the people doing the work named it.
+**Three.** If this matches a pattern you've been wanting from your tools, name it. "LLM Wiki for enterprise code" is a working phrase. "Context engineering for enterprise codebases" is another. dbt invented "analytics engineering" and a job category emerged from it. If the LLM Wiki pattern grows into something a job title gets named after, it'll be because the people doing the work named it.
 
 The plugin is ready. The benchmark is ready to reproduce. The license is set in stone. The pattern is contagious. Now we find out whether it's the standard.
 

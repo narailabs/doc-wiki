@@ -55,7 +55,9 @@ Apache 2.0 forever — explicit no-relicense commitment in docs/
 governance.md. Runs entirely inside your Claude Code session. No
 SaaS, no daemon, no telemetry, no sign-up. The whole thing is the
 Karpathy LLM Wiki pattern (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-pointed at messy enterprise code instead of personal notes.
+pointed at complex enterprise code instead of personal notes — and it
+works just as well on a small repo or on a root-of-microservices
+submodule layout where the wiki documents how the services relate.
 
 Manifesto: https://github.com/narailabs/doc-wiki/blob/main/docs/manifesto.md
 Benchmark: https://github.com/narailabs/doc-wiki/tree/main/benchmark

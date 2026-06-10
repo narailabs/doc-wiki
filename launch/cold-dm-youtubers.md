@@ -34,10 +34,12 @@ Subject: doc-wiki — Apache 2.0 Claude Code plugin, possible video fit
 Hi [name],
 
 I open-sourced doc-wiki this week — an Apache 2.0 Claude Code plugin
-that solves the "Claude Code falls off on messy enterprise codebases"
+that solves the "Claude Code falls off on complex enterprise codebases"
 problem by maintaining a structured wiki over code + Jira + Confluence
-+ GitHub + Notion + AWS/GCP + ORM/DB schemas. The agent reads the wiki
-through `CLAUDE.md` before touching code.
++ GitHub + Notion + AWS/GCP + ORM/DB schemas (and the root-of-
+microservices submodule case, where it documents how the services
+relate to each other; works fine on smaller projects too). The agent
+reads the wiki through `CLAUDE.md` before touching code.
 
 On the author's enterprise codebase (private, 500k LOC, 8 years old),
 autonomous ticket-fix accuracy went from ~10% to ~80% after wiring it

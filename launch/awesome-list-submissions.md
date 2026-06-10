@@ -29,7 +29,7 @@ init/onboard/atlas/ingest/query/lint/fix/promote/refresh/stats.
 
 **PR title:**
 ```
-Add doc-wiki: ecosystem-aware wiki for messy enterprise codebases
+Add doc-wiki: ecosystem-aware wiki for complex enterprise codebases
 ```
 
 **PR body:**

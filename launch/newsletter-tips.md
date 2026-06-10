@@ -25,7 +25,9 @@ codebases.
 
 Why it's interesting:
 - Most AI coding tools target clean OSS code; doc-wiki targets the
-  messy 8-year-old monoliths people actually work in.
+  8-year-old enterprise monoliths people actually work in — including
+  the root-of-microservices case where it documents how the services
+  relate to each other. Smaller side projects work too.
 - The pattern (LLM Wiki) was named by Karpathy in April 2026 (gist:
   https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f);
   doc-wiki is the enterprise-codebase execution.

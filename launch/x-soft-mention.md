@@ -22,7 +22,8 @@ Boris regularly RTs plugins he likes; the ask here is for him to *see* the repo 
 @alexalbert__ open-sourced doc-wiki this week — Apache 2.0 Claude Code
 plugin that does ecosystem-aware context (code + Jira + Confluence +
 DB schemas as one wiki). The Karpathy LLM Wiki pattern pointed at
-messy enterprise code. Reproducible benchmark in repo.
+complex enterprise code (works on small repos too). Reproducible
+benchmark in repo.
 
 github.com/narailabs/doc-wiki
 ```

@@ -5,7 +5,7 @@
 ## Title
 
 ```
-Anyone else dealing with Claude Code falling off on messy enterprise codebases? Here's the wiki layer I built.
+Anyone else dealing with Claude Code falling off on complex enterprise codebases? Here's the wiki layer I built.
 ```
 
 113 chars. r/ClaudeCode's audience appreciates the genuine-question framing over launch-y framings.
@@ -16,8 +16,8 @@ Anyone else dealing with Claude Code falling off on messy enterprise codebases? 
 Quick context: my day job is on a 500k LOC, 8-year-old codebase glued
 to a Jira backlog stretching back to 2018. Claude Code is a daily
 driver for the team. On clean greenfield work it's great; on tickets
-that involve the actual messy parts, it gets things wrong in confident,
-plausible-looking ways maybe 80–90% of the time. The most expensive
+that involve the gnarly enterprise parts, it gets things wrong in
+confident, plausible-looking ways maybe 80–90% of the time. The most expensive
 errors are when it doesn't *know* that the obvious fix was tried in
 2023 and reverted because of (some Jira ticket).
 

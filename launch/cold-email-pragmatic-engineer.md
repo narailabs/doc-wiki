@@ -51,9 +51,12 @@ relicense commitment, signed-release attestations. After Terraform→
 OpenTofu and Redis→Valkey, enterprise teams now check for this language.
 I'd argue it's the new SOC2-equivalent for OSS dev tools.
 
-(3) The "messy enterprise codebase" wedge. Your survey shows Claude
-Code adoption is hockey-sticking inside large engineering orgs (Stripe
-at 1370 engineers, Mercado Libre's 90% autonomous target). Those orgs
+(3) The "complex enterprise codebase" wedge — including the root-of-
+microservices submodule case, where the wiki documents how the
+services relate to each other (works on small codebases too, but the
+gap is largest at enterprise scale). Your survey shows Claude Code
+adoption is hockey-sticking inside large engineering orgs (Stripe at
+1370 engineers, Mercado Libre's 90% autonomous target). Those orgs
 hit the same context-bottleneck wall I did. doc-wiki is the early
 artifact for that.
 
