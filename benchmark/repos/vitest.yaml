@@ -29,7 +29,7 @@ exclude_test_paths: # suites needing Playwright browsers — not installed in th
   - "test/ui/**"
 test_retries: 1
 ticket_after: "2025-06-01"
-wiki_commit: "32bb9037caae50cb8d0b02f9dd472d655d88ad65" # parent of the octopus merge-base of all 30 mined base_commits (2026-04-27)
+wiki_commit: "1f2d318493363855b66a22caaf7c1c10579029d5" # parent of the octopus merge-base of all 30 mined base_commits (release v4.1.1, 2026-03-23); ancestor-verified against every base
 toolchain:
   - "node:22"
 services: []
