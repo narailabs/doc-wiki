@@ -48,7 +48,7 @@ if [ -d /wiki ]; then
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
-[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || /usr/local/bin/init-firewall.sh
+[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo /usr/local/bin/init-firewall.sh # entrypoint runs as non-root; iptables needs root (scoped NOPASSWD rule)
 
 set +e
 claude -p "$(cat /out/prompt.txt)" \
