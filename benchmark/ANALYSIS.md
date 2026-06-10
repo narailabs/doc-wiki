@@ -1,5 +1,7 @@
 # Benchmark analysis — what we actually measured
 
+> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+
 > Honest reading of the 14-run benchmark (7 real OSS issues × 2 conditions). Run via session-agent dispatch on 2026-06-03 against `claude-sonnet-4-6`. Methodology: SWE-bench-style test patch applied at parent commit; subagent edits source only.
 
 ## Headline (final dataset — 113 runs, 25 issues, N=1–3)

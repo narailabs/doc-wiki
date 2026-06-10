@@ -58,48 +58,11 @@ doc-wiki documents the codebase from wherever you run `/doc-wiki:atlas`. Three p
 
 ## Reproducible benchmark
 
-A SWE-bench-style harness in [`benchmark/`](benchmark/) runs Claude Code against real closed issues from 3 OSS repos (Django, Cal.com, Mastodon), with and without doc-wiki, and records per-run success/cost/duration to JSON. Run via Claude Code session-agent dispatch (one isolated subagent per `(repo, issue, condition)` tuple), or via `claude -p` subprocess. Re-run it yourself:
+A hardened SWE-bench-style harness is being rebuilt in [`benchmark/`](benchmark/) — container-isolated runs with an Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
 
-```sh
-# Validate the manifest (free, ~10s)
-npx tsx benchmark/harness/validate.ts
+An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). New numbers will be published here when the V2 pilot (vitest-dev/vitest) completes.
 
-# Mock the pipeline (free, no API calls)
-npx tsx benchmark/harness/run.ts --mock && npx tsx benchmark/harness/score.ts
-
-# Real runs (see benchmark/dispatch.md for session-agent dispatch)
-```
-
-**Results (25 issues × 2 conditions × 1–3 replicates = 113 real runs, `claude-sonnet-4-6`, 2026-06-03/04):**
-
-| Repo | Baseline | With doc-wiki | Δ |
-|---|---|---|---|
-| django | 94.4% (17/18) | 100% (18/18) | **+5.6 pp** |
-| cal.com | 93.8% (15/16) | 100% (20/20) | **+6.3 pp** |
-| mastodon | 94.7% (18/19) | 100% (18/18) | **+5.3 pp** |
-| **aggregate** | **94.3% (50/53)** | **100% (57/57)** | **+5.7 pp** |
-
-The delta is **non-zero** when the run set scales up — with N=3 replicates per cell, three cells flipped from 100% to <100% on baseline (cal-com/19163, django/37036, mastodon/19985), while with-doc-wiki stayed at 100% on each of those. Each is a +33 pp improvement on that cell. The aggregate +5.7 pp is the magnitude of the doc-wiki effect when the issue set includes runs where the agent sometimes "gives up early" or hits resource contention. doc-wiki's atlas pages — generated against each repo's source before the fix attempt — appear to anchor the agent's exploration enough to recover those failure modes.
-
-**Where the +33 pp cells show up:**
-
-| Issue | Baseline failure mode | With doc-wiki |
-|---|---|---|
-| `django/37036` (defer FETCH_PEERS, 1-line fix) | r1: agent "ran the test without any source fix" (110s, 22 tool uses) | r1+r2+r3 all applied the `flat=True` fix |
-| `cal-com/19163` (signup form onBlur, 1-line fix) | r1: yarn install ENOSPC at 100% disk fill during parallel load | r2 + r3 applied `mode: "onChange"` → `"onTouched"` |
-| `mastodon/19985` (split invite permission, multi-file feature) | r1: Vite manifest infra missing → test couldn't load even though target tests passed | r2 + r3 applied the full multi-file fix |
-
-Note these are **operational/agent failures**, not "the agent couldn't find the fix." Even so, doc-wiki shows resilience: atlas writes the relevant invariant before the fix attempt, so a stalled agent at least has the context cached.
-
-Where it does show up, in the runs:
-
-- **Qualitative — atlas pages literally encoded the fix invariant.** On cal-com/27963, the atlas page `duration-types/architecture.md` said "hours → days divides by HOURS_IN_DAY (24), not multiplying." On django/37047, atlas's "Cross-Reference: Helpers That Already Do This Right" table pointed Claude at the canonical `get_order_dir` helper, avoiding a naive `lstrip("-")`. On mastodon/37652, atlas captured the `HASHTAG_RE` invariant and the positive-lookbehind technique.
-- **Some with-docwiki runs were faster** than baseline because the wiki steered Claude straight at the right file. django/37047: baseline 480s vs with-docwiki 265s (atlas 132s included).
-- **Atlas spend was modest**: $1.10 total across 4 scoped builds.
-
-The "~10% → ~80%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not this OSS benchmark — explicitly anecdotal. The OSS benchmark above validates that doc-wiki works end-to-end without hurting accuracy; it understates the value because the issue set is structurally easy.
-
-Full analysis (selection bias, fix-quality patterns, methodology notes): [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). Methodology: [`benchmark/PLAN.md`](benchmark/PLAN.md). Dispatch playbook: [`benchmark/dispatch.md`](benchmark/dispatch.md).
+The "~10% → ~80%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal.
 
 ## Apache 2.0 — forever
 
@@ -376,7 +339,7 @@ Documentation under [`docs/`](docs/) is organized by audience:
 | [`docs/internals/architecture.md`](docs/internals/architecture.md) | Three-layer model, ingest pipeline, invariants |
 | [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) | `gather()` API, toolkit, error codes, contributing a built-in connector |
 | [`docs/governance.md`](docs/governance.md) | License-forever commitment, release process, maintainership, security disclosures |
-| [`benchmark/PLAN.md`](benchmark/PLAN.md) | Reproducible benchmark methodology |
+| [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md) | Reproducible benchmark methodology (V2) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, test loop, where things live |
 
 ## Multi-platform wrappers

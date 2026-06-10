@@ -1,5 +1,7 @@
 # Session-agent dispatch harness
 
+> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+
 The benchmark runs **inside a Claude Code session** using the user's subscription. Each `(repo, issue, condition)` tuple becomes a single isolated subagent dispatched via Claude Code's Agent tool. The subagent IS the "Claude" being measured: it clones the repo, installs deps, optionally runs `/doc-wiki:atlas`, attempts the fix, runs the test, and writes a result JSON.
 
 The original `harness/run.ts` script — which shells out to `claude -p` as a subprocess — is preserved for users who want CLI-mode runs, but **the session-agent mode below is the canonical path**.
