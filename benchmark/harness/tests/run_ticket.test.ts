@@ -191,3 +191,31 @@ describe("runBatch", () => {
     })).rejects.toThrow(/build-wiki/);
   });
 });
+
+describe("container lifecycle ordering", () => {
+  it("issues docker rm -f for the named container before each paid run", async () => {
+    const { root, ticketsPath } = setup([ticket(1)]);
+    const wikiDir = mkdtempSync(join(tmpdir(), "overlay-"));
+    writeFileSync(join(wikiDir, "CLAUDE.md"), "wiki");
+    const calls: string[][] = [];
+    const recording: Runner = async (cmd, args) => {
+      expect(cmd).toBe("docker");
+      calls.push([...args]);
+      if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
+      const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+      writeFileSync(join(String(outDir), "result.json"), JSON.stringify({ result: "ok", total_cost_usd: 0.1, session_id: "s" }));
+      writeFileSync(join(String(outDir), "stderr.log"), "");
+      writeFileSync(join(String(outDir), "exit_code"), "0");
+      writeFileSync(join(String(outDir), "diff.patch"), "");
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner: recording,
+    });
+    const rmIdx = calls.findIndex((a) => a[0] === "rm" && a.includes("bench-demo-1-baseline"));
+    const runIdx = calls.findIndex((a) => a[0] === "run" && a.includes("bench-demo-1-baseline"));
+    expect(rmIdx).toBeGreaterThanOrEqual(0);
+    expect(runIdx).toBeGreaterThan(rmIdx);
+  });
+});

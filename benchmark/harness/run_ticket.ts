@@ -80,8 +80,8 @@ export async function runBatch(opts: RunBatchOpts): Promise<RunBatchSummary> {
           process.stderr.write(`reusing completed artifacts for ${item.issue}:${arm}\n`);
           continue;
         }
-        for (const f of ["result.json", "exit_code", "stderr.log", "diff.patch"]) {
-          rmSync(join(outDir, f), { force: true });
+        for (const f of ["result.json", "exit_code", "stderr.log", "diff.patch", "transcript"]) {
+          rmSync(join(outDir, f), { force: true, recursive: true });
         }
       }
 
