@@ -1,12 +1,37 @@
 # doc-wiki benchmark
 
-> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+Reproducible measurement of Claude Code's ticket-fix pass rate, baseline vs with a doc-wiki wiki.
+Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
+Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). Numbers: `RESULTS.md` (generated; committed when pilot runs complete).
 
-The V2 harness is being built in this directory — container-isolated runs, Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Methodology and components: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
+## One-time setup
 
-What's here today:
+1. `claude setup-token` → export the printed token as `CLAUDE_CODE_OAUTH_TOKEN` (draws on your Claude subscription; never commit it).
+2. Build the image: `docker build -t docwiki-bench-vitest --build-arg TOOLCHAIN=node:22 benchmark/harness/docker/`
+3. Cache a bare clone: `git clone --bare https://github.com/vitest-dev/vitest.git benchmark/wiki-cache/vitest.git`
 
-- [`repos.yaml`](repos.yaml) — the hand-curated 25-issue manifest (django / cal.com / mastodon), SHAs verified in [`results/curation-report.md`](results/curation-report.md). Retained as input for the V2 full-mix phase.
-- [`PLAN.md`](PLAN.md), [`ANALYSIS.md`](ANALYSIS.md), [`PUBLISH.md`](PUBLISH.md), [`dispatch.md`](dispatch.md) — V1 strategy docs, kept for the historical record (see the banner above for why V1 was withdrawn).
+## Pipeline (pilot: vitest)
 
-The V2 runbook will replace this file when the harness lands.
+| step | command |
+|---|---|
+| mine tickets | `npm run benchmark -- mine --repo vitest --target 30` |
+| set `wiki_commit` | parent of the oldest `base_commit` in `benchmark/tickets/vitest.json` → `benchmark/repos/vitest.yaml` |
+| build wiki overlay | `npm run benchmark -- build-wiki --repo vitest --plugin-dir .` |
+| calibrate | `npm run benchmark -- calibrate --repo vitest` |
+| run a batch (both arms) | `npm run benchmark -- run --repo vitest --batch 10` |
+| grade | `npm run benchmark -- grade --repo vitest` |
+| report | `npm run benchmark -- report --repo vitest` |
+
+Hitting your subscription's rate limit mid-batch is expected: the run stops, prints the reset time, and the same `run` command resumes exactly where it left off (completing half-finished pairs first, reusing any completed-but-unrecorded session artifacts at zero spend).
+
+Artifacts land in `benchmark/runs/<repo>/<issue>/<arm>/` (gitignored): `prompt.txt`, `result.json`, `diff.patch`, `transcript/` (credential-pruned + token-redacted), `grade.json`. The checkpoint lives at `benchmark/runs/<repo>/state.json`.
+
+## Performance notes
+
+- Every grade/calibration run pays the repo's full `install` (for vitest: `pnpm install` + build, minutes each) inside a fresh clone. For long sweeps, mount a persistent pnpm store into the grade container (`-e PNPM_STORE_DIR` + a volume) or run grading overnight; install caching is deliberately not built into V1 of the harness to keep grading hermetic.
+- Containers are named `bench-<repo>-<issue>-<arm>`; a crashed harness never leaks runaway containers (each run pre-cleans its name and reaps on failure), but `docker ps` is your friend after a hard kill.
+
+## Salvaged V1 inputs
+
+- [`repos.yaml`](repos.yaml) — hand-curated 25-issue manifest (django / cal.com / mastodon), SHAs verified in [`results/curation-report.md`](results/curation-report.md). Input for the V2 full-mix phase (django needs the `trac-commits` mining adapter, not yet implemented).
+- [`PLAN.md`](PLAN.md), [`ANALYSIS.md`](ANALYSIS.md), [`PUBLISH.md`](PUBLISH.md), [`dispatch.md`](dispatch.md) — superseded V1 strategy docs (see their banners).
