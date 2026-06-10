@@ -1,7 +1,7 @@
 # Benchmark Harness — Design
 
 > Status: approved design, pre-implementation. Date: 2026-06-10.
-> Launch-plan context: this is **Anchor 1** of the launch campaign — the reproducible benchmark that gates publishing the "~10% → ~80% ticket-fix accuracy" claim.
+> Launch-plan context: this is **Anchor 1** of the launch campaign — the reproducible benchmark that gates publishing the headline ticket-fix-accuracy claim (currently "~10% to ~50%" on the README hero).
 
 ## Goal
 

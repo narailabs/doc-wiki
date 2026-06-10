@@ -211,4 +211,4 @@ emits `benchmark/results/RESULTS.md` (Markdown headline table) and `benchmark/re
 - **No automatic cost accounting.** Per-run `cost_usd` in the JSON is always 0 because session-agent token usage is billed against the parent session. Total cost lives in the parent session's usage report — sum the subagent task notifications for an approximate per-run figure.
 - **Skill access required.** The orchestrating session must have the `doc-wiki` skill loaded for the `with-docwiki` condition. Subagents inherit skills from the parent session.
 - **Workspace isolation is filesystem-only.** Subagents are isolated in context (separate Claude instances) but share `/tmp` and host network. A subagent running `yarn install` in one tree may compete with another for npm registry bandwidth.
-- **`--mock` mode still works** on `harness/run.ts` for pipeline validation without spending money. The session-agent path replaces real runs, not mock runs.
+- **`--mock` mode** on the removed `harness/run.ts` was V1's free pipeline-validation path. The V2 harness covers this with a zero-token end-to-end smoke test (fake `claude` binary + real git grading) that runs in CI.

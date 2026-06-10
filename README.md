@@ -62,7 +62,7 @@ A hardened SWE-bench-style harness is being rebuilt in [`benchmark/`](benchmark/
 
 An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). New numbers will be published here when the V2 pilot (vitest-dev/vitest) completes.
 
-The "~10% → ~80%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal.
+The "~10% to ~50%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal.
 
 ## Apache 2.0 — forever
 
