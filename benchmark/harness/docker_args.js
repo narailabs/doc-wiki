@@ -2,6 +2,7 @@
 export function sessionRunArgs(s) {
     const args = [
         "run", "--rm",
+        "--name", s.name,
         "--cap-add=NET_ADMIN",
         "--stop-timeout", "10",
         "-v", `${s.bareDir}:/bare:ro`,

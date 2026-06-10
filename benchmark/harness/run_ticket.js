@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { loadState, nextPairs, runKey, saveState, setRun } from "./bench_checkpoint.js";
@@ -20,6 +20,12 @@ export async function runBatch(opts) {
     const state = loadState(stateFile, opts.cfg.id);
     const summary = { ran: 0, rateLimited: 0, errors: 0 };
     const work = nextPairs(state, runnable.map((t) => t.issue), opts.batch);
+    // `docker -v` silently CREATES a missing host path as an empty dir, which
+    // would degrade the wiki arm to a de-facto baseline. The overlay build
+    // always emits CLAUDE.md — use it as the sentinel.
+    if (work.some((w) => w.arms.includes("wiki")) && !existsSync(join(opts.wikiDir, "CLAUDE.md"))) {
+        throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} — run "benchmark build-wiki" first`);
+    }
     for (const item of work) {
         const ticket = byIssue.get(item.issue);
         if (ticket === undefined)
@@ -27,11 +33,33 @@ export async function runBatch(opts) {
         for (const arm of item.arms) {
             const outDir = resolve(opts.runsRoot, opts.cfg.id, String(item.issue), arm);
             mkdirSync(outDir, { recursive: true });
+            // A crash between session completion and recording `ran` leaves good
+            // artifacts with state still pending — reuse them instead of re-spending.
+            if (existsSync(join(outDir, "result.json"))) {
+                const prior = classifySession(readOut(outDir, "result.json"), Number(readOut(outDir, "exit_code").trim() || "0"), readOut(outDir, "stderr.log"));
+                if (prior.kind === "ok") {
+                    setRun(state, item.issue, arm, {
+                        status: "ran", finished_at: new Date().toISOString(),
+                        cost_usd: prior.costUsd, session_id: prior.sessionId,
+                    });
+                    saveState(stateFile, state);
+                    summary.ran += 1;
+                    process.stderr.write(`reusing completed artifacts for ${item.issue}:${arm}\n`);
+                    continue;
+                }
+                for (const f of ["result.json", "exit_code", "stderr.log", "diff.patch"]) {
+                    rmSync(join(outDir, f), { force: true });
+                }
+            }
             writeFileSync(join(outDir, "prompt.txt"), buildPrompt(ticket));
             setRun(state, item.issue, arm, { status: "running", started_at: new Date().toISOString() });
             saveState(stateFile, state);
+            const containerName = `bench-${opts.cfg.id}-${item.issue}-${arm}`;
+            // Clear stale crash leftovers and prevent --name collisions; result ignored.
+            await opts.runner("docker", ["rm", "-f", containerName]);
             const dockerArgs = sessionRunArgs({
                 image: opts.image,
+                name: containerName,
                 outDir,
                 bareDir: opts.bareDir,
                 wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
@@ -42,6 +70,10 @@ export async function runBatch(opts) {
                 timeoutSec: opts.timeoutSec,
             });
             const exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
+            // Host-side timeout kills our docker CLI process, not the container —
+            // reap it so it can't keep burning quota in the background.
+            if (exec.code !== 0)
+                await opts.runner("docker", ["rm", "-f", containerName]);
             const result = classifySession(readOut(outDir, "result.json"), exec.code !== 0 ? exec.code : Number(readOut(outDir, "exit_code").trim() || "0"), readOut(outDir, "stderr.log") + exec.stderr);
             const finished = new Date().toISOString();
             if (result.kind === "ok") {

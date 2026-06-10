@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Runner } from "../exec.js";
 import { runBatch } from "../run_ticket.js";
-import { loadState, runKey } from "../bench_checkpoint.js";
+import { loadState, runKey, saveState, setRun } from "../bench_checkpoint.js";
 import type { RepoConfig, TicketsFile } from "../types.js";
 
 const CFG: RepoConfig = {
@@ -22,30 +22,39 @@ const ticket = (issue: number) => ({
   calibration: { paths_stable: true, tests_fail_on_base: true, tests_pass_on_fix: true },
 });
 
-function setup(tickets: TicketsFile["tickets"]): { root: string; ticketsPath: string } {
+function setup(tickets: TicketsFile["tickets"]): { root: string; ticketsPath: string; wikiDir: string } {
   const root = mkdtempSync(join(tmpdir(), "benchrun-"));
   mkdirSync(join(root, "tickets"), { recursive: true });
   const ticketsPath = join(root, "tickets", "demo.json");
   writeFileSync(ticketsPath, JSON.stringify({ schema_version: 1, repo: "demo", mined_at: "x", tickets }));
-  return { root, ticketsPath };
+  // Built wiki overlay with its CLAUDE.md sentinel.
+  const wikiDir = join(root, "overlay");
+  mkdirSync(wikiDir);
+  writeFileSync(join(wikiDir, "CLAUDE.md"), "# wiki\n");
+  return { root, ticketsPath, wikiDir };
 }
 
-/** Fake docker: succeeds, writing a plausible /out result envelope. */
+function writeOkArtifacts(outDir: string, costUsd: number, sessionId: string): void {
+  writeFileSync(join(outDir, "result.json"), JSON.stringify({ result: "ok", total_cost_usd: costUsd, session_id: sessionId }));
+  writeFileSync(join(outDir, "stderr.log"), "");
+  writeFileSync(join(outDir, "exit_code"), "0");
+  writeFileSync(join(outDir, "diff.patch"), "diff --git a/x b/x\n");
+}
+
+/** Fake docker: succeeds, writing a plausible /out result envelope. Ignores non-"run" invocations (container cleanup). */
 const okDocker = (costs: number[]): Runner => async (cmd, args) => {
   expect(cmd).toBe("docker");
+  if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
   const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
-  writeFileSync(join(String(outDir), "result.json"), JSON.stringify({ result: "ok", total_cost_usd: costs.shift() ?? 0.5, session_id: "s" }));
-  writeFileSync(join(String(outDir), "stderr.log"), "");
-  writeFileSync(join(String(outDir), "exit_code"), "0");
-  writeFileSync(join(String(outDir), "diff.patch"), "diff --git a/x b/x\n");
+  writeOkArtifacts(String(outDir), costs.shift() ?? 0.5, "s");
   return { code: 0, stdout: "", stderr: "" };
 };
 
 describe("runBatch", () => {
   it("runs both arms of each pair and records ran + cost", async () => {
-    const { root, ticketsPath } = setup([ticket(1)]);
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
     const summary = await runBatch({
-      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/bare", wikiDir: "/wiki",
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/bare", wikiDir,
       image: "img", model: "claude-sonnet-4-6", maxTurns: 80, batch: 5, timeoutSec: 60,
       runner: okDocker([0.5, 0.7]),
     });
@@ -56,9 +65,10 @@ describe("runBatch", () => {
   });
 
   it("stops the batch on rate-limit and persists the reset hint", async () => {
-    const { root, ticketsPath } = setup([ticket(1), ticket(2)]);
+    const { root, ticketsPath, wikiDir } = setup([ticket(1), ticket(2)]);
     let calls = 0;
     const limited: Runner = async (_cmd, args) => {
+      if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
       const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
       calls += 1;
       const envelope = calls === 1
@@ -71,7 +81,7 @@ describe("runBatch", () => {
       return { code: 0, stdout: "", stderr: "" };
     };
     const summary = await runBatch({
-      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir: "/w",
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
       image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner: limited,
     });
     expect(summary).toMatchObject({ ran: 1, rateLimited: 1 });
@@ -83,12 +93,101 @@ describe("runBatch", () => {
   });
 
   it("skips excluded tickets entirely", async () => {
-    const { root, ticketsPath } = setup([{ ...ticket(3), excluded: "calibration-failed" }]);
+    const { root, ticketsPath, wikiDir } = setup([{ ...ticket(3), excluded: "calibration-failed" }]);
     const summary = await runBatch({
-      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir: "/w",
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
       image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
       runner: async () => { throw new Error("must not be called"); },
     });
     expect(summary).toMatchObject({ ran: 0 });
+  });
+
+  it("records error and continues the batch", async () => {
+    const { root, ticketsPath, wikiDir } = setup([ticket(1), ticket(2)]);
+    let runs = 0;
+    const flaky: Runner = async (_cmd, args) => {
+      if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
+      runs += 1;
+      const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+      if (runs === 1) {
+        writeFileSync(join(String(outDir), "result.json"), "not json");
+        writeFileSync(join(String(outDir), "stderr.log"), "");
+        writeFileSync(join(String(outDir), "exit_code"), "0");
+        writeFileSync(join(String(outDir), "diff.patch"), "");
+      } else {
+        writeOkArtifacts(String(outDir), 0.1, "s");
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const summary = await runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner: flaky,
+    });
+    expect(summary).toMatchObject({ ran: 3, rateLimited: 0, errors: 1 });
+    expect(runs).toBe(4); // batch continued past the error
+    const state = loadState(join(root, "runs", "demo", "state.json"), "demo");
+    expect(state.runs[runKey(2, "baseline")]).toMatchObject({ status: "ran" });
+    expect(state.runs[runKey(2, "wiki")]).toMatchObject({ status: "ran" });
+  });
+
+  it("resumes a partial pair: only the missing arm runs, the done arm is untouched", async () => {
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    const stateFile = join(root, "runs", "demo", "state.json");
+    const pre = loadState(stateFile, "demo");
+    setRun(pre, 1, "baseline", { status: "ran", cost_usd: 0.3, session_id: "old" });
+    saveState(stateFile, pre);
+    let runs = 0;
+    const counting: Runner = async (_cmd, args) => {
+      if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
+      runs += 1;
+      const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+      writeOkArtifacts(String(outDir), 0.9, "new");
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const summary = await runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner: counting,
+    });
+    expect(summary).toMatchObject({ ran: 1, rateLimited: 0, errors: 0 });
+    expect(runs).toBe(1); // only the wiki arm went to docker
+    const state = loadState(stateFile, "demo");
+    expect(state.runs[runKey(1, "baseline")]).toMatchObject({ status: "ran", cost_usd: 0.3, session_id: "old" });
+    expect(state.runs[runKey(1, "wiki")]).toMatchObject({ status: "ran", cost_usd: 0.9 });
+  });
+
+  it("reuses completed artifacts instead of re-spending", async () => {
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    // Crash-after-session leftovers: good artifacts, state never recorded `ran`.
+    const baselineOut = join(root, "runs", "demo", "1", "baseline");
+    mkdirSync(baselineOut, { recursive: true });
+    writeOkArtifacts(baselineOut, 0.42, "pre");
+    let runs = 0;
+    const guard: Runner = async (_cmd, args) => {
+      if (args[0] !== "run") return { code: 0, stdout: "", stderr: "" };
+      runs += 1;
+      const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+      expect(String(outDir)).not.toContain("baseline"); // baseline must not be re-run
+      writeOkArtifacts(String(outDir), 0.6, "new");
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const summary = await runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner: guard,
+    });
+    expect(summary).toMatchObject({ ran: 2, rateLimited: 0, errors: 0 });
+    expect(runs).toBe(1); // only the wiki arm was paid for
+    const state = loadState(join(root, "runs", "demo", "state.json"), "demo");
+    expect(state.runs[runKey(1, "baseline")]).toMatchObject({ status: "ran", cost_usd: 0.42, session_id: "pre" });
+    expect(state.runs[runKey(1, "wiki")]).toMatchObject({ status: "ran", cost_usd: 0.6 });
+  });
+
+  it("throws when a wiki arm is scheduled but the overlay is missing", async () => {
+    const { root, ticketsPath } = setup([ticket(1)]);
+    await expect(runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b",
+      wikiDir: join(root, "no-such-overlay"),
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
+      runner: async () => { throw new Error("must not be called"); },
+    })).rejects.toThrow(/build-wiki/);
   });
 });

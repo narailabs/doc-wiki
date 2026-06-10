@@ -3,6 +3,7 @@ import { buildImageArgs, gradeRunArgs, sessionRunArgs } from "../docker_args.js"
 
 const SPEC = {
   image: "docwiki-bench-vitest",
+  name: "bench-vitest-17-wiki",
   outDir: "/abs/runs/vitest/17/wiki",
   bareDir: "/abs/cache/vitest.git",
   wikiDir: "/abs/wiki-cache/vitest/overlay",
@@ -47,6 +48,13 @@ describe("docker argv builders", () => {
     expect(args).toEqual([
       "build", "-t", "docwiki-bench-vitest", "--build-arg", "TOOLCHAIN=node:22", "benchmark/harness/docker",
     ]);
+  });
+
+  it("session args include --name with the container name as adjacent elements", () => {
+    const args = sessionRunArgs(SPEC);
+    const i = args.indexOf("--name");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-vitest-17-wiki");
   });
 
   it("session args include --stop-timeout 10 as adjacent elements", () => {

@@ -1,5 +1,6 @@
 export interface SessionSpec {
   image: string;
+  name: string; // deterministic container name so the orchestrator can reap leaked containers
   outDir: string; // absolute host path for /out
   bareDir: string; // absolute host path of the cached bare clone
   wikiDir?: string; // absolute host path of the wiki overlay (wiki arm only)
@@ -14,6 +15,7 @@ export interface SessionSpec {
 export function sessionRunArgs(s: SessionSpec): string[] {
   const args = [
     "run", "--rm",
+    "--name", s.name,
     "--cap-add=NET_ADMIN",
     "--stop-timeout", "10",
     "-v", `${s.bareDir}:/bare:ro`,
