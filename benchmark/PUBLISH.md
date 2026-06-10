@@ -1,5 +1,7 @@
 # How to publish this benchmark (and have it land)
 
+> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+
 > Companion to [`ANALYSIS.md`](ANALYSIS.md). Strategy doc for taking the benchmark public — how to position it, where to publish, which voices to reach, and what to do next to make it stronger.
 
 ## Position truthfully or it backfires

@@ -112,6 +112,67 @@ git commit -m "chore(benchmark): scaffold benchmark/ and wire into build/test"
 
 ---
 
+### Task 1.6: V1 supersession sweep
+
+**Context (added 2026-06-10 after Task 1):** a V1 benchmark already exists in `benchmark/` (committed 2026-06-04): hand-curated 25-issue manifest (`repos.yaml`, SHAs verified in `results/curation-report.md`), a 1,266-line harness (`harness/run.ts`, `score.ts`, `validate.ts`, `verify-curation.ts`), strategy docs (`PLAN.md`, `ANALYSIS.md`, `PUBLISH.md`, `dispatch.md`, `README.md`), and published results (`results/RESULTS.md`, `results/raw.csv`) showing baseline 94.4% vs with-doc-wiki 100%. **User decision:** V2 supersedes V1; the V1 results are withdrawn with an explanatory commit (methodology gaps: sessions had unrestricted network access, several curated ticket bodies contain root-cause analysis, no training-data contamination controls, and the README's model attribution contradicts raw.csv). The curated manifest is salvaged for V2's django/cal.com/mastodon phase.
+
+**Files:**
+- Delete: `benchmark/harness/run.ts`, `benchmark/harness/score.ts`, `benchmark/harness/validate.ts`, `benchmark/harness/verify-curation.ts`, `benchmark/results/RESULTS.md`, `benchmark/results/raw.csv`
+- Keep untouched: `benchmark/repos.yaml`, `benchmark/results/curation-report.md`
+- Modify (prepend supersession banner): `benchmark/PLAN.md`, `benchmark/ANALYSIS.md`, `benchmark/PUBLISH.md`, `benchmark/dispatch.md`, `benchmark/README.md`
+- Modify: `README.md` (§Reproducible benchmark rewrite + line ~379 table row), `launch/cold-email-alex-albert.md` (one checklist line), `.gitignore` + `benchmark/.gitignore` (consolidation)
+
+- [ ] **Step 1: Delete the V1 harness + withdrawn results.**
+
+```bash
+git rm benchmark/harness/run.ts benchmark/harness/score.ts benchmark/harness/validate.ts benchmark/harness/verify-curation.ts benchmark/results/RESULTS.md benchmark/results/raw.csv
+```
+
+- [ ] **Step 2: Prepend this banner** (exact text, as the first lines after the H1) to each of `benchmark/PLAN.md`, `benchmark/ANALYSIS.md`, `benchmark/PUBLISH.md`, `benchmark/dispatch.md`, `benchmark/README.md`:
+
+```markdown
+> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+```
+
+- [ ] **Step 3: Rewrite root `README.md` §"Reproducible benchmark"** — replace the entire section body (from the `## Reproducible benchmark` heading down to, but not including, `## Apache 2.0 — forever`) with exactly:
+
+```markdown
+## Reproducible benchmark
+
+A hardened SWE-bench-style harness is being rebuilt in [`benchmark/`](benchmark/) — container-isolated runs with an Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
+
+An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). New numbers will be published here when the V2 pilot (vitest-dev/vitest) completes.
+
+The "~10% → ~80%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal.
+```
+
+Also update the reference-table row at ~line 379 from `benchmark/PLAN.md | Reproducible benchmark methodology` to `docs/superpowers/specs/2026-06-10-benchmark-harness-design.md | Reproducible benchmark methodology (V2)` (keep the table's markdown-link formatting). Leave the README's other `benchmark/` links (hero lines ~7/19/24) untouched.
+
+- [ ] **Step 4: Fix the stale launch-doc reference.** In `launch/cold-email-alex-albert.md` change the checklist line `- [ ] benchmark/results/RESULTS.md populated with real numbers` to `- [ ] benchmark/RESULTS.md populated with real V2 numbers`.
+
+- [ ] **Step 5: Consolidate gitignore.** Append `wiki-cache/` to `benchmark/.gitignore`; remove the two lines Task 1 added to the root `.gitignore` (`benchmark/runs/`, `benchmark/wiki-cache/`) along with their comment line.
+
+- [ ] **Step 6: Verify.** `npm run typecheck && npm run build && git status --short` — typecheck/build clean, and **no stray `benchmark/harness/*.js` files** appear (the V1 `.ts` files are gone, so the Task 1 build wiring no longer produces orphan `.js`). `npx vitest run benchmark/` still exits 0.
+
+- [ ] **Step 7: Commit** (deletions + edits in one commit; message must carry the explanation):
+
+```bash
+git add -u benchmark/ .gitignore README.md launch/cold-email-alex-albert.md
+git add benchmark/.gitignore
+git commit -m "feat(benchmark)!: withdraw V1 results, supersede V1 harness with V2
+
+V1's published runs were not defensible: sessions had unrestricted
+network access (could look up the real fix), several curated ticket
+bodies contained root-cause analysis, there were no training-data
+contamination controls, and the README's model attribution
+contradicted raw.csv. V2 (container isolation, egress firewall,
+sanitized tickets, pre-registered calibration) replaces the harness.
+The hand-curated 25-issue manifest (repos.yaml) and its verification
+report are kept as input for the V2 django/cal.com/mastodon phase."
+```
+
+---
+
 ### Task 2: Shared types, repo config loader, pilot config
 
 **Files:**
@@ -2304,7 +2365,7 @@ if (isMain) {
 
 - [ ] **Step 3: Run tests to verify PASS.**
 
-- [ ] **Step 4: Write `benchmark/README.md`** — the operator runbook (full text):
+- [ ] **Step 4: Write `benchmark/README.md`** — NOTE: this file already exists (the bannered V1 readme from Task 1.6); Read it, then fully REPLACE its contents with the operator runbook below (the V1 history note lives in ANALYSIS.md/PLAN.md banners, not here):
 
 ```markdown
 # doc-wiki benchmark
@@ -2467,7 +2528,9 @@ describe("e2e smoke: run -> grade -> report (fake claude, real git)", () => {
 
 **Known caveats:**
 - Single run per (ticket, arm): no variance estimate per ticket; treat per-repo aggregates, not per-ticket outcomes, as the signal.
-- OSS repos ≠ enterprise codebases. The author's 10%→80% personal-project experience is an anecdote, not this benchmark's claim; the benchmark's claim is whatever RESULTS.md says.
+- OSS repos ≠ enterprise codebases. The author's enterprise-codebase experience is an anecdote, not this benchmark's claim; the benchmark's claim is whatever RESULTS.md says.
+- Ticket discovery uses GitHub's `closingIssuesReferences` (keyword-linked issues only) — PRs that reference an issue solely in free-text prose are not mined, so the candidate pool understates true fix volume. Selection bias is toward well-linked, process-followed fixes.
+- Rebase-merged PRs can make `base_commit` (merge-commit parent) partially contain the fix; the calibration gate excludes them. `merge_parents` on each ticket record flags true merge commits (=2); rebase merges have a single parent and are detectable only via calibration.
 - `--max-turns` and container timeout: <set during pilot calibration>.
 
 **Reproduction:** see [README.md](README.md). Total cost and wall-clock for the published runs: <filled from RESULTS.md>.

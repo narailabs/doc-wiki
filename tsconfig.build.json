@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["agents/**/*.ts", "skills/**/*.ts"],
+  "include": ["agents/**/*.ts", "skills/**/*.ts", "benchmark/**/*.ts"],
   "exclude": [
     "node_modules",
     ".worktrees",

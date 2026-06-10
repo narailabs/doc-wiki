@@ -1,8 +1,10 @@
 # Session-agent dispatch harness
 
+> **Superseded (2026-06-10).** The V1 harness and its published runs were withdrawn: sessions ran with unrestricted network access, several curated ticket bodies contained root-cause analysis, and there were no training-data contamination controls. The V2 harness (container isolation, Anthropic-only egress firewall, sanitized tickets, pre-registered calibration) replaces it — see [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md). The curated 25-issue manifest in [`repos.yaml`](repos.yaml) remains valid input and will be re-used (re-sanitized + calibrated) for the V2 django/cal.com/mastodon phase.
+
 The benchmark runs **inside a Claude Code session** using the user's subscription. Each `(repo, issue, condition)` tuple becomes a single isolated subagent dispatched via Claude Code's Agent tool. The subagent IS the "Claude" being measured: it clones the repo, installs deps, optionally runs `/doc-wiki:atlas`, attempts the fix, runs the test, and writes a result JSON.
 
-The original `harness/run.ts` script — which shells out to `claude -p` as a subprocess — is preserved for users who want CLI-mode runs, but **the session-agent mode below is the canonical path**.
+The original `harness/run.ts` script — which shelled out to `claude -p` as a subprocess — was removed with the V1 withdrawal (see banner).
 
 ## Why session-agent over `claude -p`
 
@@ -209,4 +211,4 @@ emits `benchmark/results/RESULTS.md` (Markdown headline table) and `benchmark/re
 - **No automatic cost accounting.** Per-run `cost_usd` in the JSON is always 0 because session-agent token usage is billed against the parent session. Total cost lives in the parent session's usage report — sum the subagent task notifications for an approximate per-run figure.
 - **Skill access required.** The orchestrating session must have the `doc-wiki` skill loaded for the `with-docwiki` condition. Subagents inherit skills from the parent session.
 - **Workspace isolation is filesystem-only.** Subagents are isolated in context (separate Claude instances) but share `/tmp` and host network. A subagent running `yarn install` in one tree may compete with another for npm registry bandwidth.
-- **`--mock` mode still works** on `harness/run.ts` for pipeline validation without spending money. The session-agent path replaces real runs, not mock runs.
+- **`--mock` mode** on the removed `harness/run.ts` was V1's free pipeline-validation path. The V2 harness covers this with a zero-token end-to-end smoke test (fake `claude` binary + real git grading) that runs in CI.

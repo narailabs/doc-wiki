@@ -1,0 +1,6 @@
+{
+  "number": 17,
+  "html_url": "https://github.com/acme/demo/issues/17",
+  "title": "Crash when config file is empty",
+  "body": "When the config file exists but is empty, the loader crashes with a TypeError instead of falling back to defaults. Steps to reproduce: create an empty demo.config.ts, run the CLI, observe the stack trace. Expected: defaults are used and a warning is printed. This worked in 1.2."
+}

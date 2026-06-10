@@ -94,6 +94,6 @@ If no Tier-A signal landed by T+60, postpone the email. Land more signal first.
 - [ ] Simon Willison post live OR equivalent Tier-A signal in hand
 - [ ] ≥1000 GitHub stars
 - [ ] ≥1 merged external contributor PR
-- [ ] benchmark/results/RESULTS.md populated with real numbers
+- [ ] benchmark/RESULTS.md populated with real V2 numbers
 - [ ] docs/governance.md signed off as accurate (esp. the bus-factor co-maintainer line — do not promise what you can't deliver)
 - [ ] Draft engineering-blog post (~2000 words) sitting in a private gist, ready to share if asked

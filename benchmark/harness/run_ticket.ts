@@ -1,0 +1,183 @@
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
+import { loadState, nextPairs, runKey, saveState, setRun } from "./bench_checkpoint.js";
+import { sessionRunArgs } from "./docker_args.js";
+import type { Runner } from "./exec.js";
+import { realRunner } from "./exec.js";
+import { loadRepoConfig } from "./repo_config.js";
+import { buildPrompt, classifySession } from "./session.js";
+import type { RepoConfig, TicketsFile } from "./types.js";
+
+export interface RunBatchOpts {
+  cfg: RepoConfig;
+  ticketsPath: string;
+  runsRoot: string;
+  bareDir: string;
+  wikiDir: string; // overlay dir; only mounted for the wiki arm
+  image: string;
+  model: string;
+  maxTurns: number;
+  batch: number;
+  timeoutSec: number;
+  runner: Runner;
+}
+
+export interface RunBatchSummary {
+  ran: number;
+  rateLimited: number;
+  errors: number;
+}
+
+function readOut(outDir: string, name: string): string {
+  const p = join(outDir, name);
+  return existsSync(p) ? readFileSync(p, "utf8") : "";
+}
+
+export async function runBatch(opts: RunBatchOpts): Promise<RunBatchSummary> {
+  const ticketsFile = JSON.parse(readFileSync(opts.ticketsPath, "utf8")) as TicketsFile;
+  const runnable = ticketsFile.tickets.filter(
+    (t) => t.excluded === undefined &&
+      (t.calibration === undefined ||
+        (t.calibration.paths_stable && t.calibration.tests_fail_on_base && t.calibration.tests_pass_on_fix)),
+  );
+  const byIssue = new Map(runnable.map((t) => [t.issue, t]));
+  const stateFile = join(opts.runsRoot, opts.cfg.id, "state.json");
+  const state = loadState(stateFile, opts.cfg.id);
+
+  const summary: RunBatchSummary = { ran: 0, rateLimited: 0, errors: 0 };
+  const work = nextPairs(state, runnable.map((t) => t.issue), opts.batch);
+
+  // `docker -v` silently CREATES a missing host path as an empty dir, which
+  // would degrade the wiki arm to a de-facto baseline. The overlay build
+  // always emits CLAUDE.md — use it as the sentinel.
+  if (work.some((w) => w.arms.includes("wiki")) && !existsSync(join(opts.wikiDir, "CLAUDE.md"))) {
+    throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} — run "benchmark build-wiki" first`);
+  }
+
+  for (const item of work) {
+    const ticket = byIssue.get(item.issue);
+    if (ticket === undefined) continue;
+    for (const arm of item.arms) {
+      const outDir = resolve(opts.runsRoot, opts.cfg.id, String(item.issue), arm);
+      mkdirSync(outDir, { recursive: true });
+
+      // A crash between session completion and recording `ran` leaves good
+      // artifacts with state still pending — reuse them instead of re-spending.
+      if (existsSync(join(outDir, "result.json"))) {
+        const prior = classifySession(
+          readOut(outDir, "result.json"),
+          Number(readOut(outDir, "exit_code").trim() || "0"),
+          readOut(outDir, "stderr.log"),
+        );
+        if (prior.kind === "ok") {
+          setRun(state, item.issue, arm, {
+            status: "ran", finished_at: new Date().toISOString(),
+            cost_usd: prior.costUsd, session_id: prior.sessionId,
+          });
+          saveState(stateFile, state);
+          summary.ran += 1;
+          process.stderr.write(`reusing completed artifacts for ${item.issue}:${arm}\n`);
+          continue;
+        }
+        for (const f of ["result.json", "exit_code", "stderr.log", "diff.patch", "transcript"]) {
+          rmSync(join(outDir, f), { force: true, recursive: true });
+        }
+      }
+
+      writeFileSync(join(outDir, "prompt.txt"), buildPrompt(ticket));
+
+      setRun(state, item.issue, arm, { status: "running", started_at: new Date().toISOString() });
+      saveState(stateFile, state);
+
+      const containerName = `bench-${opts.cfg.id}-${item.issue}-${arm}`;
+      // Clear stale crash leftovers and prevent --name collisions; result ignored.
+      await opts.runner("docker", ["rm", "-f", containerName]);
+
+      const dockerArgs = sessionRunArgs({
+        image: opts.image,
+        name: containerName,
+        outDir,
+        bareDir: opts.bareDir,
+        wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
+        baseCommit: ticket.base_commit,
+        model: opts.model,
+        maxTurns: opts.maxTurns,
+        install: opts.cfg.install,
+        timeoutSec: opts.timeoutSec,
+      });
+      const exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
+      // Host-side timeout kills our docker CLI process, not the container —
+      // reap it so it can't keep burning quota in the background.
+      if (exec.code !== 0) await opts.runner("docker", ["rm", "-f", containerName]);
+
+      const result = classifySession(
+        readOut(outDir, "result.json"),
+        exec.code !== 0 ? exec.code : Number(readOut(outDir, "exit_code").trim() || "0"),
+        readOut(outDir, "stderr.log") + exec.stderr,
+      );
+      const finished = new Date().toISOString();
+
+      if (result.kind === "ok") {
+        setRun(state, item.issue, arm, {
+          status: "ran", started_at: state.runs[runKey(item.issue, arm)]?.started_at,
+          finished_at: finished, cost_usd: result.costUsd, session_id: result.sessionId,
+        });
+        summary.ran += 1;
+      } else if (result.kind === "rate-limited") {
+        setRun(state, item.issue, arm, { status: "rate-limited", finished_at: finished, detail: result.detail });
+        saveState(stateFile, state);
+        summary.rateLimited += 1;
+        process.stderr.write(`rate limit hit (${result.detail ?? ""}) — stopping batch; resume with the same command\n`);
+        return summary;
+      } else {
+        setRun(state, item.issue, arm, { status: "error", finished_at: finished, detail: result.detail });
+        summary.errors += 1;
+      }
+      saveState(stateFile, state);
+    }
+  }
+  return summary;
+}
+
+export async function main(argv: readonly string[]): Promise<number> {
+  const { help, values } = parseFlags(argv, {
+    "--repo": "repo", "--batch": "batch", "--max-turns": "maxTurns",
+    "--timeout-sec": "timeoutSec", "--model": "model",
+    "--bare-dir": "bareDir", "--wiki-dir": "wikiDir", "--image": "image",
+  });
+  if (help || values.repo === undefined) {
+    process.stderr.write(
+      "usage: benchmark run --repo <id> [--batch 10] [--max-turns 80] [--timeout-sec 1800] [--model claude-sonnet-4-6] [--bare-dir d] [--wiki-dir d] [--image i]\n",
+    );
+    return help ? 0 : 2;
+  }
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN === undefined) {
+    process.stderr.write("CLAUDE_CODE_OAUTH_TOKEN is not set (run: claude setup-token)\n");
+    return 2;
+  }
+  const repo = String(values.repo);
+  const cfg = loadRepoConfig(join("benchmark", "repos", `${repo}.yaml`));
+  const batch = values.batch === undefined ? 10 : Number(values.batch);
+  const maxTurns = values.maxTurns === undefined ? 80 : Number(values.maxTurns);
+  const timeoutSec = values.timeoutSec === undefined ? 1800 : Number(values.timeoutSec);
+  for (const [name, v] of [["--batch", batch], ["--max-turns", maxTurns], ["--timeout-sec", timeoutSec]] as const) {
+    if (!Number.isInteger(v) || v <= 0) {
+      process.stderr.write(`${name} must be a positive integer\n`);
+      return 2;
+    }
+  }
+  const summary = await runBatch({
+    cfg,
+    ticketsPath: join("benchmark", "tickets", `${repo}.json`),
+    runsRoot: join("benchmark", "runs"),
+    bareDir: String(values.bareDir ?? resolve("benchmark", "wiki-cache", `${repo}.git`)),
+    wikiDir: String(values.wikiDir ?? resolve("benchmark", "wiki-cache", repo, "overlay")),
+    image: String(values.image ?? `docwiki-bench-${repo}`),
+    model: String(values.model ?? "claude-sonnet-4-6"),
+    maxTurns, batch, timeoutSec,
+    runner: realRunner,
+  });
+  process.stderr.write(`ran=${summary.ran} rate-limited=${summary.rateLimited} errors=${summary.errors}\n`);
+  return summary.errors > 0 ? 1 : 0;
+}

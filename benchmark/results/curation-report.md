@@ -1,5 +1,7 @@
 # Curation verification report
 
+> **Superseded (2026-06-10).** This report verified the V1 manifest (`../repos.yaml`); its generator (`verify-curation.ts`) was removed with the V1 withdrawal. The manifest and this verification remain valid inputs for the V2 django/cal.com/mastodon phase.
+
 _Generated: 2026-06-03T20:15:20.992Z. 25 entries checked._
 
 **25 pass · 0 flag · 0 fail**

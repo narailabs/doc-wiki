@@ -26,7 +26,8 @@
     "test:coverage": "vitest run --coverage",
     "build": "tsc -b tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "dev": "tsx"
+    "dev": "tsx",
+    "benchmark": "node benchmark/harness/cli.js"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
