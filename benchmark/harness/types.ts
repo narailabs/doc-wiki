@@ -46,6 +46,7 @@ export interface TicketRecord {
   test_files: string[];
   src_files: string[];
   changed_lines: number;
+  merge_parents?: number; // parents of the merge commit; >1 = true merge, base_commit may predate the PR
   merged_at: string; // ISO timestamp, published for contamination audit
   calibration?: TicketCalibration;
   excluded?: string; // exclusion reason; excluded tickets never run
