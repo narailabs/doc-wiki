@@ -468,7 +468,7 @@ Running atlas from the root is what makes the pattern pay off:
 
 ```sh
 # 5. Commit the wiki to the root repo.
-$ git add docs/ wiki.config.yaml .gitmodules
+$ git add docs/ .gitmodules    # the wiki (incl. wiki.config.yaml) lives under docs/<root-name>-wiki/
 $ git commit -m "doc-wiki atlas v1"
 ```
 
@@ -495,7 +495,7 @@ The same wiki works for any of the seven supported agents. The submodule structu
 
 ### Caveats and tips
 
-- **Submodule updates.** Pull each service to its latest commit with `git submodule update --remote`. After a sweep, re-run `/doc-wiki:ingest --refresh --all` from the root to pick up changed sources and re-compile only the pages whose content hash moved.
+- **Submodule updates.** Pull each service to its latest commit with `git submodule update --remote`. After a sweep, re-run `/doc-wiki:ingest --refresh --all` from the root to pick up changed sources and re-compile only the pages whose content hash moved. Note `--refresh` only covers ingested sources — the service graph and registry pages are atlas outputs, so when inter-service calls, queues, or dependencies change, re-run `/doc-wiki:atlas --cross-service` to rebuild `service-graph.json` and the service-map/registry pages.
 - **A service gets renamed or removed.** Drop or rename the submodule (`git submodule deinit -f services/<old>` then `git rm services/<old>`), then re-run `/doc-wiki:atlas`. Pages whose source paths no longer exist are detected as orphaned and moved to `wiki/_archive/`; you can restore one with `/doc-wiki:unarchive <slug>` if the rename was a mistake.
 - **Targeting a single service.** `/doc-wiki:ingest services/auth/` runs against just that submodule and is fine for incremental updates. For atlas, use `/doc-wiki:atlas --scope auth` to limit a re-run to one topic without rebuilding the whole wiki.
 - **Where to run from.** Always run the slash commands from the root repo — that's the directory whose `wiki.config.yaml` defines the wiki. Running from inside `services/<name>/` will look for that service's own config and either fail to find one or scaffold a second, narrower wiki.
