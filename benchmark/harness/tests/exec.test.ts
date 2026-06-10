@@ -13,3 +13,10 @@ describe("realRunner", () => {
     expect(r.stderr).toContain("boom");
   });
 });
+
+describe("realRunner error mapping", () => {
+  it("maps ENOENT (missing binary) to code 1", async () => {
+    const r = await realRunner("nonexistent-binary-xyz", []);
+    expect(r.code).toBe(1);
+  });
+});

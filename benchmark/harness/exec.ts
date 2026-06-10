@@ -8,6 +8,7 @@ export interface ExecResult {
 
 export interface ExecOpts {
   timeoutMs?: number;
+  /** Fully REPLACES the child environment — spread process.env yourself if PATH/HOME are needed. */
   env?: NodeJS.ProcessEnv;
   cwd?: string;
 }
@@ -24,7 +25,7 @@ export const realRunner: Runner = (cmd, args, opts = {}) =>
         timeout: opts.timeoutMs ?? 0,
         env: opts.env ?? process.env,
         cwd: opts.cwd,
-        maxBuffer: 64 * 1024 * 1024,
+        maxBuffer: 64 * 1024 * 1024, // exceeded → code=1 with truncated stdout; no separate signal
       },
       (err, stdout, stderr) => {
         let code = 0;

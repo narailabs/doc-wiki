@@ -4,7 +4,7 @@ export const realRunner = (cmd, args, opts = {}) => new Promise((resolve) => {
         timeout: opts.timeoutMs ?? 0,
         env: opts.env ?? process.env,
         cwd: opts.cwd,
-        maxBuffer: 64 * 1024 * 1024,
+        maxBuffer: 64 * 1024 * 1024, // exceeded → code=1 with truncated stdout; no separate signal
     }, (err, stdout, stderr) => {
         let code = 0;
         if (err !== null) {
