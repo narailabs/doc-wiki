@@ -11,6 +11,7 @@ test_command: "pnpm vitest run {test_files}"
 test_patterns:
   - "test/**"
   - "**/*.test.ts"
+  - "**/*.spec.ts"
   - "**/__tests__/**"
 test_retries: 1
 ticket_after: "2025-06-01"

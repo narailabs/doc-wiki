@@ -53,3 +53,23 @@ describe("checkEligibility", () => {
     expect(checkEligibility({ ...BASE, mergedAt: "2025-01-01T00:00:00Z" }, CFG)).toEqual({ ok: false, reason: "before-ticket-after" });
   });
 });
+
+describe("checkEligibility boundaries", () => {
+  it("rejects exactly 400 changed lines, accepts 399", () => {
+    const at400 = { ...BASE, files: [
+      { path: "test/x.test.ts", additions: 100, deletions: 0 },
+      { path: "src/x.ts", additions: 300, deletions: 0 },
+    ]};
+    expect(checkEligibility(at400, CFG)).toEqual({ ok: false, reason: "too-large" });
+    const at399 = { ...BASE, files: [
+      { path: "test/x.test.ts", additions: 100, deletions: 0 },
+      { path: "src/x.ts", additions: 299, deletions: 0 },
+    ]};
+    expect(checkEligibility(at399, CFG).ok).toBe(true);
+  });
+
+  it("accepts a merge exactly at the ticket_after floor (inclusive)", () => {
+    const r = checkEligibility({ ...BASE, mergedAt: "2025-06-01T00:00:00Z" }, CFG);
+    expect(r.ok).toBe(true);
+  });
+});
