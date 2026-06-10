@@ -36,7 +36,9 @@ That's the case I built doc-wiki for.
 ```
 The pattern: Karpathy's LLM Wiki
 (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-but pointed at messy enterprise code instead of personal notes.
+but pointed at complex enterprise code instead of personal notes
+(scales down to small repos, scales up to root-of-microservices
+submodule layouts).
 
 A maintained, compounding artifact the agent reads instead of
 re-deriving everything from raw sources every turn.
@@ -89,7 +91,7 @@ claude plugin install narailabs/doc-wiki
 5-min walkthrough:
 github.com/narailabs/doc-wiki/blob/main/docs/getting-started.md
 
-Manifesto (why this exists, what "AI-readable wiki for messy code"
+Manifesto (why this exists, what "LLM Wiki for enterprise code"
 means, the standard-track argument):
 github.com/narailabs/doc-wiki/blob/main/docs/manifesto.md
 

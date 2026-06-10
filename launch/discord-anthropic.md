@@ -14,8 +14,10 @@
 Hey folks 👋 building a Claude Code plugin called doc-wiki — keeps a
 structured wiki over an entire codebase + Jira / Confluence / GitHub /
 Notion / AWS / GCP / DB schemas, so the agent can work accurately on
-messy enterprise code. On my own codebase autonomous ticket-fix rate
-went from ~10% → ~80% after wiring it up.
+complex enterprise code (and on small repos, and on root-of-
+microservices submodule layouts where it documents how the services
+relate). On my own codebase autonomous ticket-fix rate went from
+~10% → ~80% after wiring it up.
 
 Soft-launching publicly next week (Show HN + the usual circuit), but
 wanted to get the Discord's eyes on it first since you'll spot any

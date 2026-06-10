@@ -75,10 +75,11 @@ it yourself if you want to argue with it.
 
 **What I want from you**
 
-Try it on a codebase that's actually messy and tell me what works /
-doesn't. Pop a /doc-wiki:atlas --dry-run, see what it estimates. The
-plugin is at github.com/narailabs/doc-wiki. Manifesto + benchmark linked
-from the README.
+Try it on a real-world codebase — gnarly enterprise monolith, root-of-
+microservices submodules, or even a small side project — and tell me
+what works / doesn't. Pop a /doc-wiki:atlas --dry-run, see what it
+estimates. The plugin is at github.com/narailabs/doc-wiki. Manifesto
++ benchmark linked from the README.
 
 Built it solo, no funding. Happy to argue methodology, defend numbers,
 hear that I'm wrong.

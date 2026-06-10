@@ -27,10 +27,12 @@ Hi Simon,
 
 I built doc-wiki, an open-source Claude Code plugin that implements
 the LLM Wiki pattern Andrej Karpathy named in April — but pointed at
-messy enterprise codebases instead of personal notes. It ingests code
-+ Jira + Confluence + GitHub + Notion + AWS/GCP + ORM/DB schemas
-through one planner and maintains a structured wiki the agent reads
-before touching code.
+complex enterprise codebases instead of personal notes (it works fine
+on small repos and especially shines on root-of-microservices
+submodule layouts, where it documents how the services relate). It
+ingests code + Jira + Confluence + GitHub + Notion + AWS/GCP + ORM/DB
+schemas through one planner and maintains a structured wiki the agent
+reads before touching code.
 
 On my own enterprise codebase (private; 500k LOC, 8 years old, glued to
 Jira / Confluence / 4 databases) autonomous ticket-fix accuracy went
