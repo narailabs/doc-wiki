@@ -50,4 +50,30 @@ describe("classifySession", () => {
     expect(r.kind).toBe("rate-limited");
     expect(r.detail).toContain("resets 4:00pm");
   });
+
+  it("error: json null envelope does not throw", () => {
+    expect(classifySession("null", 0, "").kind).toBe("error");
+  });
+
+  it("error: json string envelope", () => {
+    expect(classifySession('"hi"', 0, "").kind).toBe("error");
+  });
+
+  it("error: json array envelope", () => {
+    expect(classifySession("[1]", 0, "").kind).toBe("error");
+  });
+
+  it("ok: long successful result that merely quotes a rate-limit message", () => {
+    const r = classifySession(
+      JSON.stringify({
+        result:
+          'Fixed the retry handler. Previously when the API returned "You\'ve hit your daily limit" the client crashed. ' +
+          "x".repeat(300),
+        total_cost_usd: 1,
+        session_id: "s9",
+      }),
+      0, "",
+    );
+    expect(r.kind).toBe("ok");
+  });
 });

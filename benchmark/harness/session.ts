@@ -14,8 +14,9 @@ const RATE_LIMIT = /You['’]ve hit your .{0,40}limit[^\n"]*/i;
  * (re-queued on resume), so a changed message can never corrupt results.
  */
 export function classifySession(resultJson: string, exitCode: number, stderr: string): SessionResult {
-  const limitHit = RATE_LIMIT.exec(resultJson) ?? RATE_LIMIT.exec(stderr);
-  if (limitHit !== null) return { kind: "rate-limited", detail: limitHit[0] };
+  // stderr first: covers the case where claude is killed before writing an envelope.
+  const stderrHit = RATE_LIMIT.exec(stderr);
+  if (stderrHit !== null) return { kind: "rate-limited", detail: stderrHit[0] };
 
   let envelope: { result?: unknown; total_cost_usd?: unknown; session_id?: unknown };
   try {
@@ -23,6 +24,18 @@ export function classifySession(resultJson: string, exitCode: number, stderr: st
   } catch {
     return { kind: "error", detail: `unparseable result envelope (exit ${exitCode})` };
   }
+  if (envelope === null || typeof envelope !== "object" || Array.isArray(envelope)) {
+    return { kind: "error", detail: `non-object envelope (exit ${exitCode})` };
+  }
+
+  // Rate-limit detection is scoped to envelope.result, and only when short:
+  // a genuine limit notice IS the whole result and is short; an agent summary
+  // that merely quotes the phrase (e.g. a ticket about API/retry code) is long.
+  if (typeof envelope.result === "string" && envelope.result.trim().length < 300) {
+    const resultHit = RATE_LIMIT.exec(envelope.result);
+    if (resultHit !== null) return { kind: "rate-limited", detail: resultHit[0] };
+  }
+
   if (exitCode !== 0) return { kind: "error", detail: `claude exited ${exitCode}: ${stderr.slice(0, 200)}` };
   return {
     kind: "ok",
