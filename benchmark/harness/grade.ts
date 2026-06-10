@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
@@ -76,9 +76,16 @@ export async function calibrateAll(cfg: RepoConfig, ticketsPath: string, bareDir
       t.excluded = `calibration-error (${err instanceof Error ? err.message : String(err)})`;
     }
     if (t.excluded !== undefined) process.stderr.write(`issue #${t.issue}: ${t.excluded}\n`);
-    writeFileSync(ticketsPath, `${JSON.stringify(file, null, 2)}\n`);
+    writeTickets(ticketsPath, file);
   }
-  writeFileSync(ticketsPath, `${JSON.stringify(file, null, 2)}\n`);
+  writeTickets(ticketsPath, file);
+}
+
+/** Atomic tmp+rename, same pattern as saveState — a crash mid-write must not truncate the committed ticket set. */
+function writeTickets(ticketsPath: string, file: TicketsFile): void {
+  const tmp = `${ticketsPath}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(file, null, 2)}\n`);
+  renameSync(tmp, ticketsPath);
 }
 
 /** Every test_file must exist at the FIX commit; missing there = renamed away/deleted → ill-defined overlay. */
