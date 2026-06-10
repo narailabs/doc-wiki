@@ -5,9 +5,22 @@
 # mounts:     /bare (ro bare clone), /out (rw artifacts), /wiki (ro overlay, wiki arm only)
 set -uo pipefail
 
-mode="${1:?usage: entrypoint.sh session|grade}"
+mode="${1:?usage: entrypoint.sh session|grade|wiki-build}"
 if [ "$mode" = "grade" ]; then
   exec /usr/local/bin/grade.sh
+fi
+
+if [ "$mode" = "wiki-build" ]; then
+  set -e
+  git clone --no-hardlinks /bare /work && cd /work
+  git checkout -q "$BENCH_BASE_COMMIT"
+  git config user.email bench@localhost && git config user.name bench
+  claude -p "/doc-wiki:init --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --output-format json --dangerously-skip-permissions >/out/init.json 2>&1
+  claude -p "/doc-wiki:atlas --cross-service --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --output-format json --dangerously-skip-permissions >/out/atlas.json 2>&1
+  mkdir -p /out/overlay
+  cp CLAUDE.md /out/overlay/CLAUDE.md 2>/dev/null || true
+  cp -R docs /out/overlay/docs
+  exit 0
 fi
 
 set -e
