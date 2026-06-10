@@ -1,0 +1,13 @@
+{
+  "number": 42,
+  "url": "https://github.com/acme/demo/pull/42",
+  "title": "fix: handle empty config",
+  "files": [
+    { "path": "test/config.test.ts", "additions": 12, "deletions": 0 },
+    { "path": "src/config.ts", "additions": 8, "deletions": 2 }
+  ],
+  "closingIssuesReferences": [{ "number": 17 }],
+  "mergeCommit": { "oid": "aaaa111122223333444455556666777788889999" },
+  "mergedAt": "2025-09-01T12:00:00Z",
+  "author": { "login": "alice", "is_bot": false }
+}
