@@ -15,11 +15,13 @@ if [ "$mode" = "wiki-build" ]; then
   git clone --no-hardlinks /bare /work && cd /work
   git checkout -q "$BENCH_BASE_COMMIT"
   git config user.email bench@localhost && git config user.name bench
-  claude -p "/doc-wiki:init --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --output-format json --dangerously-skip-permissions >/out/init.json 2>&1
-  claude -p "/doc-wiki:atlas --cross-service --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --output-format json --dangerously-skip-permissions >/out/atlas.json 2>&1
-  mkdir -p /out/overlay
-  cp CLAUDE.md /out/overlay/CLAUDE.md 2>/dev/null || true
-  cp -R docs /out/overlay/docs
+  claude -p "/doc-wiki:init --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --max-turns 300 --output-format json --dangerously-skip-permissions >/out/init.json 2>/out/init.err
+  claude -p "/doc-wiki:atlas --cross-service --yes" --plugin-dir /plugin --model "$BENCH_MODEL" --max-turns 300 --output-format json --dangerously-skip-permissions >/out/atlas.json 2>/out/atlas.err
+  # Copy exactly what doc-wiki generated/modified (new untracked paths + tracked edits), nothing else.
+  { git ls-files --others --exclude-standard -z; git diff --name-only -z; } \
+    | sort -zu \
+    | tar --null -cf - -T - \
+    | tar -C /out -xf -
   exit 0
 fi
 
