@@ -79,7 +79,7 @@ export async function mineGithub(cfg: RepoConfig, opts: MineOpts): Promise<Ticke
     const parent = commit?.parents[0];
     if (commit === undefined || parent === undefined) { note(pr.number, "no-parent-commit"); continue; }
     if (commit.parents.length > 1) {
-      note(pr.number, "multi-parent-merge (kept; calibration will validate base_commit)");
+      process.stderr.write(`PR #${pr.number}: multi-parent merge (kept; calibration will validate base_commit)\n`);
     }
 
     const sanitized = sanitizeIssueBody(body, issue.number);

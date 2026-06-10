@@ -2530,7 +2530,7 @@ describe("e2e smoke: run -> grade -> report (fake claude, real git)", () => {
 - Single run per (ticket, arm): no variance estimate per ticket; treat per-repo aggregates, not per-ticket outcomes, as the signal.
 - OSS repos ≠ enterprise codebases. The author's enterprise-codebase experience is an anecdote, not this benchmark's claim; the benchmark's claim is whatever RESULTS.md says.
 - Ticket discovery uses GitHub's `closingIssuesReferences` (keyword-linked issues only) — PRs that reference an issue solely in free-text prose are not mined, so the candidate pool understates true fix volume. Selection bias is toward well-linked, process-followed fixes.
-- Rebase-merged PRs can make `base_commit` (merge-commit parent) partially contain the fix; the calibration gate excludes them, and `merge_parents` on each ticket record attributes such exclusions.
+- Rebase-merged PRs can make `base_commit` (merge-commit parent) partially contain the fix; the calibration gate excludes them. `merge_parents` on each ticket record flags true merge commits (=2); rebase merges have a single parent and are detectable only via calibration.
 - `--max-turns` and container timeout: <set during pilot calibration>.
 
 **Reproduction:** see [README.md](README.md). Total cost and wall-clock for the published runs: <filled from RESULTS.md>.

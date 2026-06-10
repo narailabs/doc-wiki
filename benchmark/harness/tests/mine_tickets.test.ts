@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Runner } from "../exec.js";
-import { mineGithub } from "../mine_tickets.js";
+import { main, mineGithub } from "../mine_tickets.js";
 
 const fx = (name: string): string =>
   readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
@@ -127,5 +127,45 @@ describe("mineGithub", () => {
     const t = out.tickets[0]!;
     expect(t.body_sanitized).not.toBe(t.body);
     expect(t.body_sanitized).toContain("[ref-removed]");
+  });
+});
+
+describe("mineGithub hardening regressions", () => {
+  it("skips a PR whose gh response is non-JSON and continues the walk", async () => {
+    const prList = [
+      { number: 42, url: "https://github.com/acme/demo/pull/42", mergedAt: "2025-09-01T12:00:00Z" },
+      { number: 43, url: "https://github.com/acme/demo/pull/43", mergedAt: "2025-09-02T12:00:00Z" },
+    ];
+    const view43 = { ...fxJson<Json>("gh_pr_view_42.json"), number: 43, url: "https://github.com/acme/demo/pull/43" };
+    const inner = makeGh({
+      "pr list": prList,
+      "pr view 43": view43,
+      "issues/17": fxJson<Json>("gh_issue_17.json"),
+      "commits/aaaa": fxJson<Json>("gh_commit.json"),
+    });
+    const runner: Runner = async (cmd, args) => {
+      if (args.join(" ").includes("pr view 42")) return { code: 0, stdout: "WARNING: <html>not json</html>", stderr: "" };
+      return inner(cmd, args);
+    };
+    const out = await mineGithub(CFG, { target: 10, limit: 200, runner });
+    expect(out.tickets).toHaveLength(1);
+    expect(out.tickets[0]!.fix_pr).toBe(43);
+  });
+
+  it("keeps multi-parent merges and records merge_parents", async () => {
+    const commit = fxJson<{ sha: string; parents: Array<{ sha: string }> }>("gh_commit.json");
+    const twoParent = { ...commit, parents: [...commit.parents, { sha: "cccc111122223333444455556666777788881111" }] };
+    const out = await mine({ ...baseRoutes(), "commits/aaaa": twoParent });
+    expect(out.tickets).toHaveLength(1);
+    expect(out.tickets[0]).toMatchObject({
+      merge_parents: 2,
+      base_commit: "bbbb111122223333444455556666777788880000",
+    });
+  });
+
+  it("main rejects non-positive/non-integer --target and --limit with exit 2", async () => {
+    expect(await main(["--repo", "vitest", "--target", "abc"])).toBe(2);
+    expect(await main(["--repo", "vitest", "--target", "0"])).toBe(2);
+    expect(await main(["--repo", "vitest", "--limit", "2.5"])).toBe(2);
   });
 });

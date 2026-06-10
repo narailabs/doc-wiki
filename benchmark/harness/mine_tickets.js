@@ -67,7 +67,7 @@ export async function mineGithub(cfg, opts) {
             continue;
         }
         if (commit.parents.length > 1) {
-            note(pr.number, "multi-parent-merge (kept; calibration will validate base_commit)");
+            process.stderr.write(`PR #${pr.number}: multi-parent merge (kept; calibration will validate base_commit)\n`);
         }
         const sanitized = sanitizeIssueBody(body, issue.number);
         seenIssues.add(issue.number);
