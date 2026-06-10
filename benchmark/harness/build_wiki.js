@@ -26,7 +26,6 @@ export function wikiSessionArgs(s) {
         "-e", "CLAUDE_CODE_OAUTH_TOKEN",
         "-e", `BENCH_BASE_COMMIT=${s.wikiCommit}`,
         "-e", `BENCH_MODEL=${s.model}`,
-        "-e", "BENCH_SKIP_FIREWALL=1",
         s.image, "wiki-build",
     ];
 }

@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. A hardened cross-OSS benchmark (V2) is being rebuilt at <a href="benchmark/"><code>benchmark/</code></a> — once it lands, run it on your own repo to see yours.</em></sub>
+  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. A hardened cross-OSS benchmark (V2) ships at <a href="benchmark/"><code>benchmark/</code></a> — pilot numbers pending; run it on your own repo to see yours.</em></sub>
 </p>
 
 <p align="center">
@@ -51,14 +51,14 @@ doc-wiki documents the codebase from wherever you run `/doc-wiki:atlas`. Three p
   git submodule add <repo-url-2> services/svc-b
   # ...add the rest of the service repos as submodules
   /doc-wiki:init && /doc-wiki:atlas
-  git add docs/ wiki.config.yaml && git commit -m "atlas v1"
+  git add docs/ .gitmodules && git commit -m "atlas v1"   # the wiki (incl. wiki.config.yaml) lives under docs/<name>-wiki/
   ```
 
 - **Polyglot / multi-team.** Same as the microservices pattern, with language and team ownership picked up automatically by `/doc-wiki:atlas`'s code-inventory step.
 
 ## Reproducible benchmark
 
-A hardened SWE-bench-style harness is being rebuilt in [`benchmark/`](benchmark/) — container-isolated runs with an Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
+A hardened SWE-bench-style harness ships in [`benchmark/`](benchmark/) (pilot numbers pending) — container-isolated runs with an Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
 
 An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). New numbers will be published here when the V2 pilot (vitest-dev/vitest) completes.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Modes: entrypoint.sh session | entrypoint.sh grade
 # session env: BENCH_BASE_COMMIT, BENCH_MODEL, BENCH_MAX_TURNS, BENCH_INSTALL, CLAUDE_CODE_OAUTH_TOKEN
-#              BENCH_SKIP_FIREWALL=1 skips the egress lockdown (wiki-build only)
+#              BENCH_SKIP_FIREWALL=1 skips the egress lockdown in session mode (wiki-build has full egress by construction — it never reaches the firewall)
 # mounts:     /bare (ro bare clone), /out (rw artifacts), /wiki (ro overlay, wiki arm only)
 set -uo pipefail
 
@@ -42,6 +42,9 @@ if [ -d /wiki ]; then
   cp -R /wiki/. /work/
   git add -A
   git commit -qm "bench: wiki overlay (excluded from agent diff)"
+  # Manifest of overlay paths (NUL-separated): agent edits to these are excluded
+  # from diff.patch — grading applies the diff at base_commit, where they don't exist.
+  git show --format= --name-only -z HEAD >/tmp/overlay-files.nul
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
@@ -58,8 +61,13 @@ echo "$?" >/out/exit_code
 set -e
 
 # Capture the agent's full working-tree delta (incl. new files). The wiki overlay
-# was committed pre-session, so diff.patch contains only the agent's work.
+# was committed pre-session, so diff.patch contains only the agent's work; any agent
+# edits to overlay files are reverted first — they can't apply at base_commit and
+# would otherwise sink the wiki arm as apply-failed by construction.
 git add -A
+if [ -s /tmp/overlay-files.nul ]; then
+  git checkout HEAD --pathspec-from-file=/tmp/overlay-files.nul --pathspec-file-nul -- 2>/dev/null || true
+fi
 git diff --cached --binary >/out/diff.patch
 
 # Publish the transcript for auditability — strip credential files and redact the token.

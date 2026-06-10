@@ -17,7 +17,7 @@ Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). Numbers: `RESULTS.m
 | mine tickets | `npm run benchmark -- mine --repo vitest --target 30` |
 | set `wiki_commit` | parent of the oldest `base_commit` in `benchmark/tickets/vitest.json` → `benchmark/repos/vitest.yaml` |
 | build wiki overlay | `npm run benchmark -- build-wiki --repo vitest --plugin-dir .` |
-| calibrate | `npm run benchmark -- calibrate --repo vitest` |
+| calibrate | `npm run benchmark -- calibrate --repo vitest` (runs on the HOST — needs the repo toolchain, e.g. node+pnpm for vitest) |
 | run a batch (both arms) | `npm run benchmark -- run --repo vitest --batch 10` |
 | grade | `npm run benchmark -- grade --repo vitest` |
 | report | `npm run benchmark -- report --repo vitest` |

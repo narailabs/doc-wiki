@@ -141,7 +141,8 @@ export async function main(argv) {
         "--repo": "repo", "--local": "local", "--image": "image", "--bare-dir": "bareDir",
     });
     if (help || values.repo === undefined || (sub !== "calibrate" && sub !== "grade")) {
-        process.stderr.write("usage: benchmark <calibrate|grade> --repo <id> [--local] [--image i] [--bare-dir d]\n");
+        process.stderr.write("usage: benchmark <calibrate|grade> --repo <id> [--local] [--image i] [--bare-dir d]\n" +
+            "note: calibrate always runs on the host (needs the repo's toolchain); --local/--image apply to grade only\n");
         return help ? 0 : 2;
     }
     const repo = String(values.repo);
