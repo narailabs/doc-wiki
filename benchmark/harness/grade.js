@@ -6,7 +6,7 @@ import { loadState, saveState } from "./bench_checkpoint.js";
 import { gradeRunArgs } from "./docker_args.js";
 import { realRunner } from "./exec.js";
 import { loadRepoConfig } from "./repo_config.js";
-import { networkName, startSidecars, teardownSidecars } from "./services.js";
+import { networkName, serviceContainerName, startSidecars, teardownSidecars } from "./services.js";
 const GRADE_SH = fileURLToPath(new URL("./docker/grade.sh", import.meta.url));
 export function decideGrade(exitCode) {
     if (exitCode === 0)
@@ -160,6 +160,15 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
                 const net = hasSidecars ? networkName(gradePrefix) : undefined;
                 try {
                     if (hasSidecars && net !== undefined) {
+                        // Pre-clean stale sidecars + network from a prior grade process that was killed
+                        // (e.g. SIGKILL) after startSidecars but before its finally teardown: otherwise
+                        // `docker network create` collides and (with the new exit-code checks) throws,
+                        // stranding this arm as `error` since gradeAll only re-processes `ran` records.
+                        // Mirrors run_ticket.ts runBatch's pre-clean; result ignored (best-effort).
+                        for (const svc of cfg.services) {
+                            await opts.runner("docker", ["rm", "-f", serviceContainerName(gradePrefix, svc)]);
+                        }
+                        await opts.runner("docker", ["network", "rm", net]);
                         await startSidecars(opts.runner, net, gradePrefix, cfg.services);
                     }
                     const extraEnv = {
