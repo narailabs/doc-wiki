@@ -8,16 +8,14 @@ install:
   - "uv sync --locked"
 test_command: "uv run pytest {test_files}"
 test_patterns:
-  - "tests/**"
-  - "**/*_test.py"
-  - "**/*test*.py"
+  - "**/tests/**"
+  - "**/test_*.py"
 run_patterns:
-  - "tests/**/*_test.py"
-  - "tests/**/*test*.py"
+  - "**/test_*.py"
 exclude_test_paths: []
 test_retries: 1
 ticket_after: "2025-06-01"
-wiki_commit: ""
+wiki_commit: "83cf096b54bc7c72cf7cf44dcbc22fa75dcecfc8"
 toolchain:
   - "node:22"
 system_packages:

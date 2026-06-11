@@ -22,10 +22,26 @@ export async function runBatch(opts) {
     const summary = { ran: 0, rateLimited: 0, errors: 0 };
     const work = nextPairs(state, runnable.map((t) => t.issue), opts.batch);
     // `docker -v` silently CREATES a missing host path as an empty dir, which
-    // would degrade the wiki arm to a de-facto baseline. The overlay build
-    // always emits CLAUDE.md — use it as the sentinel.
-    if (work.some((w) => w.arms.includes("wiki")) && !existsSync(join(opts.wikiDir, "CLAUDE.md"))) {
-        throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} — run "benchmark build-wiki" first`);
+    // would degrade the wiki arm to a de-facto baseline. The overlay always
+    // carries a root AI pointer file: CLAUDE.md, or — for repos whose CLAUDE.md is
+    // a symlink to AGENTS.md (atlas edits resolve through the symlink) — AGENTS.md
+    // alone. AGENTS-only is accepted ONLY when every scheduled wiki arm's base
+    // checkout actually has that symlink; otherwise claude never sees the pointer
+    // and the wiki arm silently runs as a de-facto baseline.
+    const wikiArms = work.filter((w) => w.arms.includes("wiki"));
+    if (wikiArms.length > 0 && !existsSync(join(opts.wikiDir, "CLAUDE.md"))) {
+        if (!existsSync(join(opts.wikiDir, "AGENTS.md"))) {
+            throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} (no CLAUDE.md or AGENTS.md) — run "benchmark build-wiki" first`);
+        }
+        const bases = [...new Set(wikiArms.map((w) => byIssue.get(w.issue)?.base_commit).filter((b) => b !== undefined))];
+        for (const base of bases) {
+            const tree = await opts.runner("git", ["-C", opts.bareDir, "ls-tree", base, "--", "CLAUDE.md"]);
+            const link = await opts.runner("git", ["-C", opts.bareDir, "cat-file", "-p", `${base}:CLAUDE.md`]);
+            if (tree.code !== 0 || !tree.stdout.includes("120000") || link.code !== 0 || link.stdout.trim() !== "AGENTS.md") {
+                throw new Error(`wiki overlay at ${opts.wikiDir} has only AGENTS.md, but base ${base.slice(0, 7)} has no CLAUDE.md -> AGENTS.md symlink — ` +
+                    `the wiki arm would run without a Claude-readable pointer (de-facto baseline). Run "benchmark build-wiki" first.`);
+            }
+        }
     }
     for (const item of work) {
         const ticket = byIssue.get(item.issue);
