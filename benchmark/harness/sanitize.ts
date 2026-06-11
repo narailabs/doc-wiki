@@ -4,6 +4,32 @@ export interface SanitizeResult {
 }
 
 /**
+ * Strip PR-template boilerplate from a PR description before it becomes a problem
+ * statement. PR bodies (unlike issue bodies) commonly carry repo PR-template scaffolding
+ * (e.g. saleor/saleor) that is pure noise and could leak harness/context hints:
+ * - multiline HTML comments `<!-- ... -->` (template instructions);
+ * - a trailing "# Impact" / changelog section and everything after it;
+ * - GitHub-flavoured checklist lines (`- [ ]` / `- [x]`).
+ * The remaining substantive text is collapsed (no 3+ blank-line runs) and trimmed.
+ * Applied in the PR ticket path BEFORE sanitizeIssueBody; the issue path is untouched.
+ */
+export function stripPrTemplate(body: string): string {
+  let text = body.replace(/<!--[\s\S]*?-->/g, "");
+  // Drop a "# Impact" (or "## Impact" ...) heading and everything after it.
+  text = text.replace(/^#{1,6}\s+Impact\b[\s\S]*$/im, "");
+  // Drop any remaining task-list checklist lines (template acknowledgement boxes).
+  text = text.replace(/^[ \t]*[-*]\s+\[[ xX]\].*$/gm, "");
+  // Collapse 3+ newline runs to a paragraph break, trim trailing whitespace per line, trim ends.
+  text = text
+    .split("\n")
+    .map((line) => line.replace(/\s+$/, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return text;
+}
+
+/**
  * Strip references that could leak the real fix to the agent:
  * - `#N`, `owner/repo#N`, and `GH-N` cross-references where N >= the issue's
  *   own number (the fix PR is always opened after the issue);

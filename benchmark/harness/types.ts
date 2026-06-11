@@ -45,6 +45,7 @@ export interface TicketCalibration {
 }
 
 export interface TicketRecord {
+  source: "issue" | "pr"; // provenance: "issue" = linked GitHub issue body; "pr" = PR-as-ticket fallback (repo doesn't link issues)
   issue: number;
   issue_url: string;
   title: string;
