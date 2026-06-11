@@ -209,4 +209,38 @@ describe("writeCrossServicePages", () => {
     expect(written.find((p) => p.endsWith("shared-libraries.md"))).toBeUndefined();
     cleanupTmpPath(wiki);
   });
+
+  it("writes service-map + service-dependencies from service count alone (≥2 services, no edges), without a client-registry link", () => {
+    const wiki = makeTmpPath("xs-pages-svconly");
+    const inventory = {
+      atlas_run_id: RUN_ID,
+      services: [
+        { identity: { id: "svc-a", kind: "service" }, rest_endpoints: [{ method: "GET", path: "/api/a/x" }], http_clients: [], queue_endpoints: [], orm_entities: [], external_sources: [], library_deps: [] },
+        { identity: { id: "svc-b", kind: "service" }, rest_endpoints: [{ method: "GET", path: "/api/b/y" }], http_clients: [], queue_endpoints: [], orm_entities: [], external_sources: [], library_deps: [] },
+      ],
+    } as any;
+    const graph = {
+      services: [
+        { id: "svc-a", kind: "service", language: "java", root: "svc-a" },
+        { id: "svc-b", kind: "service", language: "java", root: "svc-b" },
+      ],
+      edges: [], // no calls/queue/db/lib edges yet
+      generated_at: "",
+    } as any;
+    const written = writeCrossServicePages(wiki, inventory, graph);
+    const slugs = written.map((p) => path.basename(p, ".md"));
+    // The real service list is genuine information → both topology pages emitted.
+    expect(slugs).toContain("service-map");
+    expect(slugs).toContain("service-dependencies");
+    // Nothing else has data → those pages are skipped.
+    for (const slug of ["client-registry", "queue-registry", "database-traces", "shared-libraries"] as const) {
+      expect(written.find((p) => p.endsWith(`${slug}.md`)), `unexpected page: ${slug}`).toBeUndefined();
+      expect(fs.existsSync(path.join(wiki, "wiki", `${slug}.md`))).toBe(false);
+    }
+    // Dangling-link safety: with no calls edges there is no transitive note,
+    // so the service-map body must NOT link to the (skipped) client-registry page.
+    const serviceMapBody = fs.readFileSync(path.join(wiki, "wiki", "service-map.md"), "utf-8");
+    expect(serviceMapBody).not.toContain("client-registry.md");
+    cleanupTmpPath(wiki);
+  });
 });

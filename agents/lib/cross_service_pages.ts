@@ -709,12 +709,20 @@ export function renderServiceDependencies(
 
 /**
  * Returns true when there is enough data to emit a meaningful service-map or
- * service-dependencies page (≥1 calls edge between two real, non-synthetic
- * services OR ≥2 real services in the graph).
+ * service-dependencies page: either ≥2 real (non-synthetic) services in the
+ * graph, OR ≥1 calls edge between two real services. A service map listing
+ * two or more real services is true information worth emitting even before any
+ * call edges are detected.
  */
 export function hasServiceTopology(graph: ServiceGraph): boolean {
   const serviceIds = new Set(graph.services.map((s) => s.id));
-  // At least one direct calls edge between two real services is sufficient.
+
+  // ≥2 real (non-synthetic) services is enough — the service list alone is
+  // genuine, true information.
+  const realServiceCount = graph.services.filter((s) => !isSynthetic(s.id)).length;
+  if (realServiceCount >= 2) return true;
+
+  // Otherwise require at least one direct calls edge between two real services.
   return graph.edges.some(
     (e) =>
       e.kind === "calls" &&
