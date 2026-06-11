@@ -12,7 +12,9 @@ import * as path from "node:path";
 
 import {
   generateClaudeMd,
+  generateManagedBlock,
   updateClaudeMd,
+  updateReferenceBlock,
   extractManagedSection,
   listSubmodules,
   listWikiPagesForRouting,
@@ -21,6 +23,8 @@ import {
   MarkerCorruptError,
   MARKER_START,
   MARKER_END,
+  REFERENCE_MARKER_START,
+  REFERENCE_MARKER_END,
   type WikiPageInfo,
 } from "../claude_md_gen.js";
 
@@ -971,6 +975,244 @@ describe("generateClaudeMd — behavioral directive", () => {
   });
 });
 
+// ── generateManagedBlock tests (Phase 8 root-file block) ──────────
+
+describe("generateManagedBlock", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("managed-block-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** Nested-wiki fixture: wiki scaffold at <root>/docs/proj-wiki/. */
+  function makeNestedWikiProject(root: string): string {
+    const wikiRoot = path.join(root, "docs", "proj-wiki");
+    fs.mkdirSync(path.join(wikiRoot, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "wiki", "index.md"), "# Index\n");
+    makeWikiPage(wikiRoot, "auth/architecture.md", [
+      "title: Auth Architecture",
+      "atlas_facet: architecture",
+    ]);
+    makeWikiPage(wikiRoot, "overview.md", [
+      "title: Overview",
+      "atlas_facet: overview",
+    ]);
+    return wikiRoot;
+  }
+
+  it("returns directive + routing rows for a faceted wiki, links relative to projectRoot (sibling wiki/)", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const block = generateManagedBlock(root, root);
+
+    // Behavioral directive leads the block.
+    expect(block).toContain("consult the wiki");
+    expect(block).toContain("source of truth");
+    // Routing table with rows for the faceted pages, relative to projectRoot.
+    expect(block).toContain("| If you need to");
+    expect(block).toContain("[overview.md](wiki/overview.md)");
+    expect(block).toContain("[architecture.md](wiki/auth/architecture.md)");
+    expect(block).toContain("[configuration.md](wiki/configuration.md)");
+    // Documentation-index link.
+    expect(block).toContain("[Full wiki index](wiki/index.md)");
+
+    // Every linked .md page resolves on disk FROM THE PROJECT ROOT —
+    // root files (CLAUDE.md, AGENTS.md, …) live there.
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let m: RegExpExecArray | null;
+    let linked = 0;
+    while ((m = linkRe.exec(block)) !== null) {
+      if (m[1].endsWith(".md")) {
+        linked++;
+        expect(fs.existsSync(path.join(root, m[1])), `Expected ${m[1]} on disk`).toBe(true);
+      }
+    }
+    expect(linked).toBeGreaterThan(0);
+  });
+
+  it("emits the block BODY only — no wiki-managed markers, no file header", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const block = generateManagedBlock(root, root);
+    expect(block).not.toContain("wiki-managed");
+    expect(block).not.toContain(MARKER_START);
+    expect(block).not.toContain(MARKER_END);
+    // No file-level (h1) header — the block splices into existing root files.
+    expect(block.startsWith("# ")).toBe(false);
+  });
+
+  it("nested wiki root (<p>/docs/proj-wiki): links prefixed docs/proj-wiki/, index link correct", () => {
+    const root = tmpPath;
+    const wikiRoot = makeNestedWikiProject(root);
+    const block = generateManagedBlock(root, wikiRoot);
+
+    expect(block).toContain(
+      "[architecture.md](docs/proj-wiki/wiki/auth/architecture.md)",
+    );
+    expect(block).toContain("[overview.md](docs/proj-wiki/wiki/overview.md)");
+    expect(block).toContain("[Full wiki index](docs/proj-wiki/wiki/index.md)");
+    // No doubled wiki path segment (the scaffold folder itself ends in
+    // "-wiki", so match the full doubled segment, not the bare substring).
+    expect(block).not.toContain("/wiki/wiki/");
+
+    // Every linked .md page resolves from the project root.
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(block)) !== null) {
+      if (m[1].endsWith(".md")) {
+        expect(fs.existsSync(path.join(root, m[1])), `Expected ${m[1]} on disk`).toBe(true);
+      }
+    }
+  });
+
+  it("nested wiki root: content-dir layout (<p>/docs/proj-wiki/wiki) produces an identical block (resolveScaffoldRoot reuse)", () => {
+    const root = tmpPath;
+    const wikiRoot = makeNestedWikiProject(root);
+    const scaffoldBlock = generateManagedBlock(root, wikiRoot);
+    const contentDirBlock = generateManagedBlock(root, path.join(wikiRoot, "wiki"));
+    expect(contentDirBlock).toBe(scaffoldBlock);
+  });
+
+  it("no-pages fallback: directive + browse pointer still emitted", () => {
+    const root = tmpPath;
+    fs.mkdirSync(path.join(root, "wiki"), { recursive: true });
+    const block = generateManagedBlock(root, root);
+    expect(block).toContain("consult the wiki");
+    expect(block).not.toContain("| If you need to");
+    expect(block).toContain("No topic routing table yet");
+    expect(block).toContain("/doc-wiki:atlas");
+  });
+
+  it("shares one implementation with generateClaudeMd — the imperative core is identical", () => {
+    // The full-file body for a root CLAUDE.md (no submodule) must contain the
+    // managed block verbatim: same directive, same rows, same links.
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const block = generateManagedBlock(root, root);
+    const full = generateClaudeMd(root, root);
+    expect(full).toContain(block);
+  });
+
+  // ── AI-tool configuration registry line ──────────────────────────
+
+  it("emits the AI-tool configuration registry line when <scaffoldRoot>/ai-dev exists (nested layout)", () => {
+    const root = tmpPath;
+    const wikiRoot = makeNestedWikiProject(root);
+    fs.mkdirSync(path.join(wikiRoot, "ai-dev"), { recursive: true });
+    const block = generateManagedBlock(root, wikiRoot);
+    expect(block).toContain(
+      "AI-tool configuration registry: [docs/proj-wiki/ai-dev/](docs/proj-wiki/ai-dev/)",
+    );
+    // After the index link — the registry line trails the block.
+    expect(block.indexOf("AI-tool configuration registry")).toBeGreaterThan(
+      block.indexOf("[Full wiki index]"),
+    );
+  });
+
+  it("emits the registry line with a bare ai-dev/ path when scaffoldRoot === projectRoot", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    fs.mkdirSync(path.join(root, "ai-dev"), { recursive: true });
+    const block = generateManagedBlock(root, root);
+    expect(block).toContain("AI-tool configuration registry: [ai-dev/](ai-dev/)");
+  });
+
+  it("omits the registry line when <scaffoldRoot>/ai-dev does not exist", () => {
+    const root = tmpPath;
+    const wikiRoot = makeNestedWikiProject(root);
+    const block = generateManagedBlock(root, wikiRoot);
+    expect(block).not.toContain("AI-tool configuration registry");
+    expect(block).not.toContain("ai-dev");
+  });
+});
+
+// ── updateReferenceBlock tests (body-pair skip guard) ─────────────
+
+describe("updateReferenceBlock", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("ref-block-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  const BLOCK_BODY = "## Wiki\n\nDirective.\n\n[Full wiki index](wiki/index.md)\n";
+
+  it("a file carrying the body pair is returned unchanged (skip guard — no duplicate imperative block)", () => {
+    // A doc-wiki-generated root CLAUDE.md: body pair already contains the
+    // imperative core, so the reference splice must be a no-op.
+    const file = path.join(tmpPath, "CLAUDE.md");
+    const original =
+      "# Project\n\n" +
+      `${MARKER_START}\n## Wiki\n\nDirective.\n${MARKER_END}\n`;
+    fs.writeFileSync(file, original, "utf-8");
+
+    const result = updateReferenceBlock(file, BLOCK_BODY);
+    expect(result.skipped).toBe(true);
+    expect(result.content).toBe(original);
+    // Crucially: no reference markers were added.
+    expect(result.content).not.toContain(REFERENCE_MARKER_START);
+  });
+
+  it("a file with reference markers (and no body pair) gets the block spliced; outside content preserved", () => {
+    const file = path.join(tmpPath, "AGENTS.md");
+    fs.writeFileSync(
+      file,
+      "# AGENTS\n\nUser intro.\n\n" +
+        `${REFERENCE_MARKER_START}\n## Reference\n\nOld passive listing.\n${REFERENCE_MARKER_END}\n`,
+      "utf-8",
+    );
+
+    const result = updateReferenceBlock(file, BLOCK_BODY);
+    expect(result.skipped).toBe(false);
+    expect(result.content).toContain("User intro.");
+    expect(result.content).toContain("Directive.");
+    expect(result.content).not.toContain("Old passive listing.");
+    // Marker vocabulary unchanged — same reference pair, updated in place.
+    expect(result.content).toContain(REFERENCE_MARKER_START);
+    expect(result.content).toContain(REFERENCE_MARKER_END);
+  });
+
+  it("a file without any markers gets the block appended wrapped in reference markers", () => {
+    const file = path.join(tmpPath, "GEMINI.md");
+    fs.writeFileSync(file, "# GEMINI\n\nUser prose.\n", "utf-8");
+    const result = updateReferenceBlock(file, BLOCK_BODY);
+    expect(result.skipped).toBe(false);
+    expect(result.content).toContain("User prose.");
+    expect(result.content).toContain(
+      `${REFERENCE_MARKER_START}\n${BLOCK_BODY}${REFERENCE_MARKER_END}`,
+    );
+  });
+
+  it("idempotent: re-applying the same body yields identical content", () => {
+    const file = path.join(tmpPath, "AGENTS.md");
+    fs.writeFileSync(
+      file,
+      `# AGENTS\n\n${REFERENCE_MARKER_START}\nold\n${REFERENCE_MARKER_END}\n`,
+      "utf-8",
+    );
+    const first = updateReferenceBlock(file, BLOCK_BODY);
+    fs.writeFileSync(file, first.content, "utf-8");
+    const second = updateReferenceBlock(file, BLOCK_BODY);
+    expect(second.content).toBe(first.content);
+  });
+
+  it("unbalanced reference markers throw MarkerCorruptError", () => {
+    const file = path.join(tmpPath, "AGENTS.md");
+    fs.writeFileSync(
+      file,
+      `# AGENTS\n\n${REFERENCE_MARKER_START}\ndangling\n`,
+      "utf-8",
+    );
+    expect(() => updateReferenceBlock(file, BLOCK_BODY)).toThrow(
+      MarkerCorruptError,
+    );
+  });
+});
+
 // ── CLI tests ─────────────────────────────────────────────────────
 
 describe("TestClaudeMdGenCLI", () => {
@@ -1161,6 +1403,129 @@ describe("CLI: --check flag", () => {
     expect(out.target).toBe(target);
     expect(typeof out.would_write).toBe("string");
     // File on disk is unchanged
+    expect(fs.readFileSync(target, "utf-8")).toBe(original);
+  });
+});
+
+describe("CLI: --block flag", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("cli-block-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** Recursively list every file under `dir` (sorted) for no-writes assertions. */
+  function listAllFiles(dir: string): string[] {
+    const out: string[] = [];
+    const stack = [dir];
+    while (stack.length > 0) {
+      const d = stack.pop()!;
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else out.push(full);
+      }
+    }
+    return out.sort();
+  }
+
+  it("prints the managed-block body to stdout and writes no files", () => {
+    // Nested-wiki layout — the case Phase 8 hits on real repos.
+    const root = tmpPath;
+    const wikiRoot = path.join(root, "docs", "proj-wiki");
+    fs.mkdirSync(path.join(wikiRoot, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "wiki", "index.md"), "# Index\n");
+    makeWikiPage(wikiRoot, "auth/architecture.md", [
+      "title: Auth Architecture",
+      "atlas_facet: architecture",
+    ]);
+
+    const filesBefore = listAllFiles(root);
+    const { stdout, status } = runCli([
+      "--project-root",
+      root,
+      "--wiki-root",
+      wikiRoot,
+      "--block",
+    ]);
+
+    expect(status).toBe(0);
+    // Block body on stdout: directive + routing row + index link, no markers.
+    expect(stdout).toContain("consult the wiki");
+    expect(stdout).toContain("| If you need to");
+    expect(stdout).toContain(
+      "[architecture.md](docs/proj-wiki/wiki/auth/architecture.md)",
+    );
+    expect(stdout).toContain("[Full wiki index](docs/proj-wiki/wiki/index.md)");
+    expect(stdout).not.toContain("wiki-managed");
+    // No files written anywhere under the project root.
+    expect(listAllFiles(root)).toEqual(filesBefore);
+    expect(fs.existsSync(path.join(root, "CLAUDE.md"))).toBe(false);
+  });
+
+  it("--block is documented in --help", () => {
+    const { stdout, status } = runCli(["--help"]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("--block");
+  });
+
+  it("--block --update splices the body between the reference markers on disk", () => {
+    const root = tmpPath;
+    const wikiRoot = path.join(root, "docs", "proj-wiki");
+    fs.mkdirSync(path.join(wikiRoot, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "wiki", "index.md"), "# Index\n");
+    makeWikiPage(wikiRoot, "overview.md", ["atlas_facet: overview"]);
+    const target = path.join(root, "AGENTS.md");
+    fs.writeFileSync(
+      target,
+      "# AGENTS\n\nUser intro.\n\n" +
+        `${REFERENCE_MARKER_START}\n## Reference\n\nOld passive listing.\n${REFERENCE_MARKER_END}\n`,
+      "utf-8",
+    );
+
+    const { stdout, status } = runCli([
+      "--project-root",
+      root,
+      "--wiki-root",
+      wikiRoot,
+      "--block",
+      "--update",
+      target,
+    ]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("Updated:");
+    const after = fs.readFileSync(target, "utf-8");
+    expect(after).toContain("User intro.");
+    expect(after).toContain("consult the wiki");
+    expect(after).toContain("[overview.md](docs/proj-wiki/wiki/overview.md)");
+    expect(after).not.toContain("Old passive listing.");
+  });
+
+  it("--block --update skips a body-managed file and leaves it untouched", () => {
+    const root = tmpPath;
+    const wikiRoot = path.join(root, "docs", "proj-wiki");
+    fs.mkdirSync(path.join(wikiRoot, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "wiki", "index.md"), "# Index\n");
+    const target = path.join(root, "CLAUDE.md");
+    const original =
+      "# Project\n\n" + `${MARKER_START}\n## Wiki\n\nDirective.\n${MARKER_END}\n`;
+    fs.writeFileSync(target, original, "utf-8");
+
+    const { stdout, status } = runCli([
+      "--project-root",
+      root,
+      "--wiki-root",
+      wikiRoot,
+      "--block",
+      "--update",
+      target,
+    ]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("Skipped (body-managed)");
     expect(fs.readFileSync(target, "utf-8")).toBe(original);
   });
 });

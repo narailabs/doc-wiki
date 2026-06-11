@@ -11,13 +11,27 @@
  * `resolveScaffoldRoot` normalizes both to the scaffold root internally.
  *
  * Library usage:
- *     import { generateClaudeMd, updateClaudeMd } from "./claude_md_gen.js";
+ *     import { generateClaudeMd, generateManagedBlock, updateClaudeMd } from "./claude_md_gen.js";
  *     const md = generateClaudeMd("/path/to/project", "/path/to/wiki");
+ *     const block = generateManagedBlock("/path/to/project", "/path/to/wiki");
  *     const result = updateClaudeMd("CLAUDE.md", newManagedContent);
  *
  * CLI usage:
  *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki
  *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --update CLAUDE.md
+ *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --block
+ *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --block --update AGENTS.md
+ *
+ * `--block` prints ONLY the managed-block body (behavioral directive +
+ * intent→page routing table + wiki index link + AI-tool config registry
+ * pointer when `<wiki-root>/ai-dev/` exists; links relative to the project
+ * root) to stdout, with no markers and no file writes — atlas Phase 8 splices
+ * it between the `<!-- wiki-managed: reference start/end -->` markers of every
+ * AI-tool root file (CLAUDE.md, AGENTS.md, GEMINI.md, …). `--block --update
+ * FILE` performs that splice directly, with a guard: files already carrying
+ * the body pair (`<!-- wiki-managed: start -->`) are skipped unchanged — they
+ * already contain the imperative core, so splicing the reference block too
+ * would duplicate it.
  *
  * This is a TypeScript port of claude_md_gen.py; behaviour matches the
  * Python reference byte-for-byte for the same inputs.
@@ -349,6 +363,9 @@ export function buildRoutingTable(pages, wikiRelDir) {
 // ── Constants ───────────────────────────────────────────────────────
 export const MARKER_START = "<!-- wiki-managed: start -->";
 export const MARKER_END = "<!-- wiki-managed: end -->";
+/** Root-file reference pair — the block atlas Phase 8 fills via `--block`. */
+export const REFERENCE_MARKER_START = "<!-- wiki-managed: reference start -->";
+export const REFERENCE_MARKER_END = "<!-- wiki-managed: reference end -->";
 /**
  * G-CLAUDE-MD-MARKER: raised by `updateClaudeMd` when the target file's
  * wiki-managed markers are unbalanced — e.g. a `start` without an `end`,
@@ -392,6 +409,9 @@ function escapeRegex(s) {
     return s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 }
 const _MANAGED_RE = new RegExp(escapeRegex(MARKER_START) + "\\n([\\s\\S]*?)" + escapeRegex(MARKER_END));
+const _REFERENCE_RE = new RegExp(escapeRegex(REFERENCE_MARKER_START) +
+    "\\n([\\s\\S]*?)" +
+    escapeRegex(REFERENCE_MARKER_END));
 // ── Library API ────────────────────────────────────────────────────
 /**
  * Compute a relative path from `from` to `to`, matching Python's
@@ -412,24 +432,17 @@ function safeRelpath(to, from) {
     }
 }
 /**
- * Generate CLAUDE.md content with wiki-managed markers.
+ * Build the IMPERATIVE CORE shared by `generateClaudeMd` (full-file body
+ * between `wiki-managed: start/end`) and `generateManagedBlock` (root-file
+ * block between `wiki-managed: reference start/end`): the behavioral
+ * directive, the intent→page routing table (or its no-routing-rows fallback
+ * pointer), and the documentation-index link.
  *
- * `projectRoot` is the top-level project directory. `wikiRoot` is the
- * path to the wiki directory. `submodule` (optional) is a relative path
- * to a submodule; when set the generated content includes a link back
- * to the root CLAUDE.md.
- *
- * The generated block ALWAYS leads with a behavioral directive that tells
- * coding agents to consult the wiki before making changes, followed by an
- * intent→resource routing table derived from the actual pages in the wiki.
- * Only pages with a recognized `atlas_facet` appear in the table, so the
- * table degrades gracefully when few pages exist. When there are no faceted
- * pages at all, the table is replaced by a short pointer line so the body
- * never collapses to a bare directive.
- *
- * Returns the full managed section (between markers) as a markdown string.
+ * `linkBaseDir` is the directory the emitted links must resolve from — the
+ * project root for root files, the submodule directory for a submodule
+ * CLAUDE.md. Returns the lines (with a trailing "" so a join ends in \n).
  */
-export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
+function buildImperativeCoreLines(wikiRoot, linkBaseDir) {
     const lines = [];
     // ── Behavioral directive ────────────────────────────────────────────
     lines.push("## Wiki");
@@ -444,14 +457,6 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
     // both the atlas `--wiki-root <root>` layout and the documented content-dir
     // `--wiki-root <root>/wiki` layout produce correct page paths and links.
     const scaffoldRoot = resolveScaffoldRoot(wikiRoot);
-    // Links must resolve from wherever THIS file lives. For a submodule
-    // CLAUDE.md (e.g. services/auth/CLAUDE.md) the relative base is the
-    // submodule directory, not the project root — otherwise the links point
-    // under the submodule and break. Stay consistent with the back-link block
-    // below, which also offsets by the submodule depth.
-    const linkBaseDir = submodule
-        ? path.join(projectRoot, submodule)
-        : projectRoot;
     // `wikiRel` points at the scaffold root; `<wikiRel>/wiki/...` is a content path.
     const wikiRel = safeRelpath(scaffoldRoot, linkBaseDir);
     const pages = listWikiPagesForRouting(scaffoldRoot);
@@ -483,6 +488,75 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         lines.push(`[Full wiki index](${wikiIndexPath})`);
         lines.push("");
     }
+    // ── AI-tool configuration registry pointer ──────────────────────────
+    // Per-tool config files (<tool>-config.md) live at <scaffoldRoot>/ai-dev/ —
+    // OUTSIDE wiki/, so the routing table and index cannot surface them. One
+    // compact pointer line keeps them discoverable from the root files. Only
+    // emitted when the directory exists — never a phantom link.
+    let aiDevExists = false;
+    try {
+        aiDevExists = fs.statSync(path.join(scaffoldRoot, "ai-dev")).isDirectory();
+    }
+    catch {
+        aiDevExists = false;
+    }
+    if (aiDevExists) {
+        const aiDevDirRel = wikiRel ? `${wikiRel}/ai-dev` : "ai-dev";
+        lines.push(`AI-tool configuration registry: [${aiDevDirRel}/](${aiDevDirRel}/)`);
+        lines.push("");
+    }
+    return lines;
+}
+/**
+ * Generate the managed-block BODY for AI-tool root files (CLAUDE.md,
+ * AGENTS.md, GEMINI.md, …) — the content atlas Phase 8 splices between
+ * `<!-- wiki-managed: reference start -->` / `<!-- wiki-managed: reference end -->`.
+ *
+ * Returns ONLY the body: behavioral directive + intent→page routing table
+ * (or its no-routing-rows fallback pointer) + documentation-index link. No
+ * markers, no file header. Exactly the imperative core `generateClaudeMd`
+ * emits — both share `buildImperativeCoreLines`, so the two paths can never
+ * drift.
+ *
+ * Links are relative to `projectRoot` (root files live there). `wikiRoot`
+ * accepts both layouts via `resolveScaffoldRoot` — e.g. a nested
+ * `<projectRoot>/docs/saleor-wiki` scaffold yields links like
+ * `docs/saleor-wiki/wiki/<topic>/<facet>.md`, while a sibling `wiki/` at the
+ * project root yields `wiki/<topic>/<facet>.md`.
+ */
+export function generateManagedBlock(projectRoot, wikiRoot) {
+    return buildImperativeCoreLines(wikiRoot, projectRoot).join("\n");
+}
+/**
+ * Generate CLAUDE.md content with wiki-managed markers.
+ *
+ * `projectRoot` is the top-level project directory. `wikiRoot` is the
+ * path to the wiki directory. `submodule` (optional) is a relative path
+ * to a submodule; when set the generated content includes a link back
+ * to the root CLAUDE.md.
+ *
+ * The generated block ALWAYS leads with a behavioral directive that tells
+ * coding agents to consult the wiki before making changes, followed by an
+ * intent→resource routing table derived from the actual pages in the wiki.
+ * Only pages with a recognized `atlas_facet` appear in the table, so the
+ * table degrades gracefully when few pages exist. When there are no faceted
+ * pages at all, the table is replaced by a short pointer line so the body
+ * never collapses to a bare directive.
+ *
+ * Returns the full managed section (between markers) as a markdown string.
+ */
+export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
+    // Links must resolve from wherever THIS file lives. For a submodule
+    // CLAUDE.md (e.g. services/auth/CLAUDE.md) the relative base is the
+    // submodule directory, not the project root — otherwise the links point
+    // under the submodule and break. Stay consistent with the back-link block
+    // below, which also offsets by the submodule depth.
+    const linkBaseDir = submodule
+        ? path.join(projectRoot, submodule)
+        : projectRoot;
+    // ── Behavioral directive + routing table + index link ──────────────
+    // Shared with generateManagedBlock (the Phase 8 root-file block).
+    const lines = buildImperativeCoreLines(wikiRoot, linkBaseDir);
     // ── Submodule back-link ─────────────────────────────────────────────
     // Emitted under a "Parent Project" heading: a navigational section boundary
     // around the backlink (required by the eval contract in evals/evals.json,
@@ -553,6 +627,50 @@ export function updateClaudeMd(filePath, newManagedContent) {
     return `${replacement}\n`;
 }
 /**
+ * Splice `blockBody` between a root file's reference markers
+ * (`wiki-managed: reference start/end`), preserving everything outside.
+ *
+ * BODY-PAIR GUARD: if the file already carries the body pair
+ * (`<!-- wiki-managed: start -->`), it already contains the imperative core
+ * verbatim (both blocks come from `buildImperativeCoreLines`), so splicing
+ * the reference block too would duplicate the directive + routing table.
+ * Such files are returned unchanged with `skipped: true` — the caller
+ * reports them as `skipped (body-managed)`.
+ *
+ * Missing file / no markers → block is appended wrapped in reference
+ * markers (same semantics as `updateClaudeMd` for the body pair).
+ * Unbalanced reference markers throw `MarkerCorruptError`.
+ */
+export function updateReferenceBlock(filePath, blockBody) {
+    let content = "";
+    if (fs.existsSync(filePath)) {
+        content = fs.readFileSync(filePath, { encoding: "utf-8" });
+    }
+    // Body-pair guard: body-managed files already carry the imperative core.
+    if (content.includes(MARKER_START)) {
+        return { content, skipped: true };
+    }
+    const replacement = `${REFERENCE_MARKER_START}\n${blockBody}${REFERENCE_MARKER_END}`;
+    const starts = countOccurrences(content, REFERENCE_MARKER_START);
+    const ends = countOccurrences(content, REFERENCE_MARKER_END);
+    const isClean = starts === 0 && ends === 0;
+    const isBalanced = starts === 1 && ends === 1;
+    if (!isClean && !isBalanced) {
+        throw new MarkerCorruptError(starts, ends);
+    }
+    if (isBalanced) {
+        return { content: content.replace(_REFERENCE_RE, replacement), skipped: false };
+    }
+    if (content) {
+        let base = content;
+        if (!base.endsWith("\n")) {
+            base += "\n";
+        }
+        return { content: `${base}\n${replacement}\n`, skipped: false };
+    }
+    return { content: `${replacement}\n`, skipped: false };
+}
+/**
  * Return content between wiki-managed markers, or null if absent.
  */
 export function extractManagedSection(content) {
@@ -614,6 +732,11 @@ function parseArgs(argv) {
             i++;
             continue;
         }
+        if (a === "--block") {
+            out.block = true;
+            i++;
+            continue;
+        }
         let name;
         let value;
         if (a.startsWith("--")) {
@@ -651,7 +774,7 @@ function parseArgs(argv) {
     }
     return out;
 }
-const HELP_TEXT = `usage: claude_md_gen.js [-h] --project-root PROJECT_ROOT --wiki-root WIKI_ROOT [--submodule SUBMODULE] [--update FILE] [--check]
+const HELP_TEXT = `usage: claude_md_gen.js [-h] --project-root PROJECT_ROOT --wiki-root WIKI_ROOT [--submodule SUBMODULE] [--update FILE] [--check] [--block]
 
 Generate or update CLAUDE.md with wiki-managed sections.
 
@@ -668,6 +791,18 @@ options:
                         stdout without writing the target file. Exit 0 on success,
                         1 on MarkerCorruptError (same as --update without --check).
                         Has no effect when --update is not set.
+  --block               Print ONLY the managed-block body (behavioral directive +
+                        intent→page routing table + wiki index link + AI-tool
+                        config registry pointer when <wiki-root>/ai-dev exists)
+                        to stdout — no markers, no file writes. Links are
+                        relative to --project-root. Used by atlas Phase 8 to
+                        fill the "wiki-managed: reference" block in AI-tool
+                        root files. With --update FILE, splice the body between
+                        the file's "wiki-managed: reference start/end" markers
+                        instead — SKIPPED when the file already carries the
+                        body pair "wiki-managed: start" (it already contains
+                        the imperative core; duplicating it is never correct).
+                        Honors --check (JSON dry-run).
 `;
 export function main(argv = process.argv.slice(2)) {
     let args;
@@ -685,6 +820,50 @@ export function main(argv = process.argv.slice(2)) {
     if (!args.projectRoot || !args.wikiRoot) {
         process.stderr.write("the following arguments are required: --project-root, --wiki-root\n");
         return 2;
+    }
+    if (args.block) {
+        const blockBody = generateManagedBlock(args.projectRoot, args.wikiRoot);
+        if (args.update) {
+            // Guarded reference splice: write the body between the target's
+            // `wiki-managed: reference` markers — UNLESS the target already
+            // carries the body pair (it then already contains the imperative
+            // core, and splicing again would duplicate it).
+            let result;
+            try {
+                result = updateReferenceBlock(args.update, blockBody);
+            }
+            catch (e) {
+                if (e instanceof MarkerCorruptError) {
+                    process.stdout.write(JSON.stringify({
+                        status: "error",
+                        error_code: e.error_code,
+                        message: e.message,
+                        details: { starts: e.starts, ends: e.ends },
+                    }, null, 2) + "\n");
+                    return 1;
+                }
+                throw e;
+            }
+            if (args.check) {
+                process.stdout.write(JSON.stringify(result.skipped
+                    ? { status: "skipped", reason: "body-managed", target: args.update }
+                    : { status: "would-update", target: args.update, would_write: result.content }, null, 2) + "\n");
+                return 0;
+            }
+            if (result.skipped) {
+                process.stdout.write(`Skipped (body-managed): ${args.update}\n`);
+                return 0;
+            }
+            fs.mkdirSync(path.dirname(args.update), { recursive: true });
+            fs.writeFileSync(args.update, result.content);
+            process.stdout.write(`Updated: ${args.update}\n`);
+            return 0;
+        }
+        // No --update: print only the managed-block body (no markers, no
+        // writes). The caller splices it between the existing
+        // `wiki-managed: reference` markers in CLAUDE.md / AGENTS.md / etc.
+        process.stdout.write(blockBody);
+        return 0;
     }
     const fullGenerated = generateClaudeMd(args.projectRoot, args.wikiRoot, args.submodule ?? null);
     let inner = extractManagedSection(fullGenerated);

@@ -335,13 +335,13 @@ This is **a meta-orchestrator over `/doc-wiki:ingest`**. It does not replace the
    - Update `wiki/index.md` (re-list all atlas pages by facet).
    - Run global crosslink + tag-harmonize over the entire wiki.
    - **Dispatch root-file agents in parallel** (after crosslink + tag-harmonize so root-file content reflects the final wiki state):
-     - `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [<all present AI-tool root files>]}` — gated on `ecosystem.claude_md.enabled` (default `true`). Targets: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md` (only those that exist on disk).
+     - `Agent(wiki-claude-md-agent)` with `{action: "update", project_root: <repo-root>, wiki_root: <root>, targets: [<all present AI-tool root files>]}` — gated on `ecosystem.claude_md.enabled` (default `true`). Targets: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/doc-wiki.mdc`, `.aider/conventions.md` (only those that exist on disk). The agent splices the `claude_md_gen.js --block` body between each target's `wiki-managed: reference` markers, **skipping targets that already carry the body pair** (`<!-- wiki-managed: start -->`) — those already contain the imperative core, and splicing both pairs would duplicate it; skipped targets report `skipped (body-managed)` in the drift report.
      - `Agent(wiki-readme-agent)` with `{action: "sync", project_root: <repo-root>, wiki_root: <root>}` — gated on `ecosystem.readme.enabled` (default `true`).
      - The two agents touch disjoint files; parallel dispatch is safe.
      - Per-agent failures are logged to the drift report and do not halt Phase 8 (matches the existing per-step error-isolation policy).
      - Under `--dry-run`, both dispatches use `action: "check"` instead of `update`/`sync` — no writes happen but the drift report is still produced.
    - **Format the agent responses into the drift report.** The orchestrator takes the JSON returned by each agent dispatch and appends two sections to `outputs/atlas/<run-id>/drift-report.md`:
-     - `## Root-file appendix sync (wiki-claude-md-agent)` — one row per target with status (`updated` / `skipped` / `error: <error_code>`).
+     - `## Root-file reference block sync (wiki-claude-md-agent)` — one row per target with status (`updated` / `skipped (body-managed)` / `error: <error_code>`).
      - `## README sync (wiki-readme-agent)` — drift summary table from `salvaged_paragraphs[]` with columns `Disposition | Paragraph | Action`, plus a one-line salvage summary (`N paragraphs kept, M reworded, K dropped`).
    - `node {skill_path}/scripts/event_logger.js log --op atlas --wiki-root <root> --details '<json>'` with fields: `atlas_run_id`, `phase_durations`, `total_cost_usd`, `pages_generated`, `pages_refreshed`, `pages_drifted`, `topics_covered`.
    - Clear the checkpoint via `clearCheckpoint(wikiRoot, "atlas")`.
@@ -678,9 +678,9 @@ node {skill_path}/scripts/event_logger.js stats --wiki-root <wiki-root> --since 
 
 Shows running averages, p50/p95 reduction ratios, total spend, per-agent cost breakdown. Per-agent cost sums top-level `agent` fields as well as every `agent_calls[]` sub-entry on every event, so parent-op events that dispatched sub-agents are fully accounted for.
 
-## Root-file Reference Appendix
+## Root-file Reference Block
 
-Every AI-tool entry-point file at the repo root ends with a wiki-managed `## Reference` section that points the AI tool at the wiki for **progressive disclosure** — the root file stays brief and high-signal, and the AI tool follows the pointers to load deeper context only when needed. Affected files:
+Every AI-tool entry-point file at the repo root carries the wiki-managed **imperative** block exactly once: a behavioral directive to consult the wiki before changing code, plus an intent→page routing table. Files doc-wiki generated from scratch carry it in the body pair (`wiki-managed: start/end`); every other root file gets it spliced into the trailing reference block. Passive pointer listings are empirically ignored by coding agents (vitest benchmark); the imperative directive + routing table is what changes behavior. Affected files:
 
 - `CLAUDE.md` (Claude Code)
 - `AGENTS.md` (Codex / OpenAI agents)
@@ -688,39 +688,42 @@ Every AI-tool entry-point file at the repo root ends with a wiki-managed `## Ref
 - `.cursor/rules/doc-wiki.mdc` (Cursor)
 - `.aider/conventions.md` (Aider)
 
-The section is owned by `wiki-claude-md-agent` (which generalizes to all five surfaces despite its Claude-Code-flavored name; the same agent's `scripts/` operate on any of the listed paths). Content between the markers is regenerated on each invocation; content outside the markers is preserved verbatim.
+The block is owned by `wiki-claude-md-agent` (which generalizes to all five surfaces despite its Claude-Code-flavored name). The body is generated **deterministically** by `claude_md_gen.js --block`; the agent only splices it between the existing markers. Content outside the markers is preserved verbatim.
+
+**Body-pair skip rule:** a root file that already carries the body pair (`<!-- wiki-managed: start/end -->`, e.g. a doc-wiki-generated root `CLAUDE.md`) already contains the same imperative core — the reference block is **skipped** for it (never duplicated), and the target reports `skipped (body-managed)`. The guard is enforced in code by `claude_md_gen.js --block --update <target>`.
 
 ### Canonical structure
 
+```bash
+node agents/wiki-claude-md-agent/scripts/claude_md_gen.js --project-root <repo-root> --wiki-root <root> --block --update <target>
+```
+
+(`--block` without `--update` prints the body to stdout, no writes.)
+
 ```markdown
 <!-- wiki-managed: reference start -->
-## Reference
+## Wiki
 
-### Documentation index
+Before changing code in this repository, consult the wiki for the relevant subsystem. Treat the wiki as the source of truth for architecture, data flow, and conventions; verify your assumptions against it before implementing. If the wiki does not cover something, say so rather than guessing.
 
-`docs/<wiki-folder>/wiki/index.md`
+| If you need to… | Read |
+|---|---|
+| understand how the system fits together | [overview.md](docs/<wiki-folder>/wiki/overview.md) |
+| understand the auth subsystem architecture | [architecture.md](docs/<wiki-folder>/wiki/auth/architecture.md) |
 
-### Coding agent configuration registry (Skills & agents)
+[Full wiki index](docs/<wiki-folder>/wiki/index.md)
 
-**claude-code**: `docs/<wiki-folder>/ai-dev/claude-config.md`
-**codex**: `docs/<wiki-folder>/ai-dev/codex-config.md`
-**gemini**: `docs/<wiki-folder>/ai-dev/gemini-config.md`
-**cursor**: `docs/<wiki-folder>/ai-dev/cursor-config.md`
-**aider**: `docs/<wiki-folder>/ai-dev/aider-config.md`
-
-(Only list rows for AI tools whose root file is present in this repo. If the per-tool config file does not exist yet, list it anyway so the absence is visible — the agent will create the file on its next run.)
-
-### Other references
-
-(Optional. 0–5 brief, high-signal pointers the AI tool should know without bloating context. Examples: latest atlas run id, the canonical architecture page, current incident runbook, link to a freeze-window calendar. Each entry is one line. If "Other references" grows past 5 bullets, promote items into the wiki and link there instead.)
+AI-tool configuration registry: [docs/<wiki-folder>/ai-dev/](docs/<wiki-folder>/ai-dev/)
 <!-- wiki-managed: reference end -->
 ```
+
+The marker vocabulary is unchanged (`wiki-managed: reference start/end`), so files written under the old passive structure update in place. Links are relative to the repo root; `--block` accepts both wiki layouts via `resolveScaffoldRoot`. When no faceted pages exist, the routing table degrades to a browse pointer + a nudge to run `/doc-wiki:atlas`. The trailing registry line is emitted only when `docs/<wiki-folder>/ai-dev/` exists — it is the single pointer that keeps the per-tool config files discoverable from the root files (they live outside `wiki/`, so the routing table and index cannot surface them).
 
 `<wiki-folder>` is the leaf-folder name from the wiki path (e.g., for `/doc-wiki:init --path docs/my-app-wiki/`, `<wiki-folder>` = `my-app-wiki`).
 
 ### Per-tool config files (`docs/<wiki-folder>/ai-dev/<tool>-config.md`)
 
-One markdown file per AI tool, all generated and maintained by `wiki-claude-md-agent`. Each file is a structured inventory of how that tool sees the project:
+One markdown file per AI tool (only for tools whose root file is present in the repo), all generated and maintained by `wiki-claude-md-agent`. They are reachable from the root files solely through the block's trailing `AI-tool configuration registry` pointer line. Each file is a structured inventory of how that tool sees the project:
 
 | Section | Content |
 |---|---|
@@ -734,16 +737,16 @@ Files are read by the AI tool only when the user explicitly asks "what skills/ag
 
 ### Generation triggers
 
-The Reference appendix is regenerated on:
+The reference block is regenerated on:
 
-1. `/doc-wiki:init` — initial appendix written with empty registry (no per-tool config files yet).
-2. `/doc-wiki:init` Phase 3 (Onboarding Q&A) — registry populated as installed skills/agents/hooks are detected; per-tool config files are first created here.
+1. `/doc-wiki:init` — initial block written (directive + no-routing-rows pointer; no atlas pages yet).
+2. `/doc-wiki:init` Phase 3 (Onboarding Q&A) — per-tool config files are first created here.
 3. `/doc-wiki:atlas` Phase 8 (finalize) — refreshed alongside the rest of the wiki.
 4. Any direct `Agent(wiki-claude-md-agent)` invocation.
 
-### Brevity rule
+### Determinism rule
 
-The total Reference appendix MUST stay under ~30 lines per root file. The "Other references" subsection is the only freeform area; keep it tight. Anything that wants to be a paragraph belongs as a wiki page, not in the appendix.
+The block body is the verbatim output of `claude_md_gen.js --block` — never hand-edit between the markers. Its length tracks the routing table (one row per actionable wiki page); anything that wants to be a paragraph belongs as a wiki page, not in the block.
 
 ## Post-Operation Hooks
 
@@ -774,7 +777,7 @@ The wiki-specific derivation agents (dispatched directly via the Agent tool, not
 
 | Agent | Purpose |
 |---|---|
-| `wiki-claude-md-agent` | Regenerate the `<!-- wiki-managed: reference start/end -->` block in AI-tool root files (`CLAUDE.md`, `AGENTS.md`, etc.) and refresh per-tool config files under `docs/<wiki-folder>/ai-dev/`; dispatched by atlas Phase 8. |
+| `wiki-claude-md-agent` | Regenerate the imperative `<!-- wiki-managed: reference start/end -->` block (body from `claude_md_gen.js --block`) in AI-tool root files (`CLAUDE.md`, `AGENTS.md`, etc.), skipping body-managed targets, and refresh per-tool config files under `docs/<wiki-folder>/ai-dev/`; dispatched by atlas Phase 8. |
 | `wiki-readme-agent` | Sync repo-root `README.md` quickstart marker block against `wiki/getting-started.md` with LLM salvage; dispatched by atlas Phase 8. |
 | `wiki-mermaid-agent` | Generate Mermaid architecture diagrams for wiki pages. |
 | `wiki-orm-agent` | ORM model detection and entity-to-table mapping; dispatched by `/doc-wiki:init` (Phase 3) and atlas Phase 6. |
