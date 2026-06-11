@@ -193,19 +193,44 @@ describe("runBatch", () => {
     })).rejects.toThrow(/build-wiki/);
   });
 
-  it("accepts an overlay whose only root pointer is AGENTS.md (CLAUDE.md-symlink repos)", async () => {
+  it("accepts an AGENTS-only overlay when the base checkout has CLAUDE.md -> AGENTS.md", async () => {
     const { root, ticketsPath } = setup([ticket(1)]);
     // Saleor-style: atlas's CLAUDE.md edit resolved through the symlink into AGENTS.md,
     // so the overlay carries AGENTS.md but no CLAUDE.md.
     const wikiDir = join(root, "agents-only-overlay");
     mkdirSync(wikiDir);
     writeFileSync(join(wikiDir, "AGENTS.md"), "# wiki pointer\n");
+    const docker = okDocker([0.1, 0.1]);
+    const symlinkAwareRunner: Runner = async (cmd, args) => {
+      if (cmd === "git") {
+        if (args.includes("ls-tree")) return { code: 0, stdout: "120000 blob abc\tCLAUDE.md\n", stderr: "" };
+        if (args.includes("cat-file")) return { code: 0, stdout: "AGENTS.md", stderr: "" };
+        return { code: 0, stdout: "", stderr: "" };
+      }
+      return docker(cmd, args);
+    };
     const summary = await runBatch({
       cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
       image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
-      runner: okDocker([0.1, 0.1]),
+      runner: symlinkAwareRunner,
     });
-    expect(summary.ran).toBe(2); // both arms ran — guard did not throw
+    expect(summary.ran).toBe(2); // both arms ran — guard verified the symlink and passed
+  });
+
+  it("rejects an AGENTS-only overlay when the base checkout has no CLAUDE.md symlink", async () => {
+    const { root, ticketsPath } = setup([ticket(1)]);
+    const wikiDir = join(root, "agents-only-overlay");
+    mkdirSync(wikiDir);
+    writeFileSync(join(wikiDir, "AGENTS.md"), "# wiki pointer\n");
+    const noSymlinkRunner: Runner = async (cmd, args) => {
+      if (cmd === "git") return { code: 128, stdout: "", stderr: "fatal: not found" };
+      throw new Error("docker must not be called");
+    };
+    await expect(runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
+      runner: noSymlinkRunner,
+    })).rejects.toThrow(/no CLAUDE.md -> AGENTS.md symlink/);
   });
 });
 
