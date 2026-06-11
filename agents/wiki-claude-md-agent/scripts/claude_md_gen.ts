@@ -20,12 +20,18 @@
  *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki
  *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --update CLAUDE.md
  *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --block
+ *     node claude_md_gen.js --project-root /path --wiki-root /path/wiki --block --update AGENTS.md
  *
  * `--block` prints ONLY the managed-block body (behavioral directive +
- * intent→page routing table + wiki index link, links relative to the project
+ * intent→page routing table + wiki index link + AI-tool config registry
+ * pointer when `<wiki-root>/ai-dev/` exists; links relative to the project
  * root) to stdout, with no markers and no file writes — atlas Phase 8 splices
  * it between the `<!-- wiki-managed: reference start/end -->` markers of every
- * AI-tool root file (CLAUDE.md, AGENTS.md, GEMINI.md, …).
+ * AI-tool root file (CLAUDE.md, AGENTS.md, GEMINI.md, …). `--block --update
+ * FILE` performs that splice directly, with a guard: files already carrying
+ * the body pair (`<!-- wiki-managed: start -->`) are skipped unchanged — they
+ * already contain the imperative core, so splicing the reference block too
+ * would duplicate it.
  *
  * This is a TypeScript port of claude_md_gen.py; behaviour matches the
  * Python reference byte-for-byte for the same inputs.
@@ -402,6 +408,10 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
 export const MARKER_START = "<!-- wiki-managed: start -->";
 export const MARKER_END = "<!-- wiki-managed: end -->";
 
+/** Root-file reference pair — the block atlas Phase 8 fills via `--block`. */
+export const REFERENCE_MARKER_START = "<!-- wiki-managed: reference start -->";
+export const REFERENCE_MARKER_END = "<!-- wiki-managed: reference end -->";
+
 /**
  * G-CLAUDE-MD-MARKER: raised by `updateClaudeMd` when the target file's
  * wiki-managed markers are unbalanced — e.g. a `start` without an `end`,
@@ -449,6 +459,12 @@ function escapeRegex(s: string): string {
 
 const _MANAGED_RE = new RegExp(
   escapeRegex(MARKER_START) + "\\n([\\s\\S]*?)" + escapeRegex(MARKER_END),
+);
+
+const _REFERENCE_RE = new RegExp(
+  escapeRegex(REFERENCE_MARKER_START) +
+    "\\n([\\s\\S]*?)" +
+    escapeRegex(REFERENCE_MARKER_END),
 );
 
 // ── Library API ────────────────────────────────────────────────────
@@ -535,6 +551,25 @@ function buildImperativeCoreLines(wikiRoot: string, linkBaseDir: string): string
   const wikiIndexPath = `${wikiDirRel}/index.md`;
   if (fs.existsSync(path.join(scaffoldRoot, "wiki", "index.md"))) {
     lines.push(`[Full wiki index](${wikiIndexPath})`);
+    lines.push("");
+  }
+
+  // ── AI-tool configuration registry pointer ──────────────────────────
+  // Per-tool config files (<tool>-config.md) live at <scaffoldRoot>/ai-dev/ —
+  // OUTSIDE wiki/, so the routing table and index cannot surface them. One
+  // compact pointer line keeps them discoverable from the root files. Only
+  // emitted when the directory exists — never a phantom link.
+  let aiDevExists = false;
+  try {
+    aiDevExists = fs.statSync(path.join(scaffoldRoot, "ai-dev")).isDirectory();
+  } catch {
+    aiDevExists = false;
+  }
+  if (aiDevExists) {
+    const aiDevDirRel = wikiRel ? `${wikiRel}/ai-dev` : "ai-dev";
+    lines.push(
+      `AI-tool configuration registry: [${aiDevDirRel}/](${aiDevDirRel}/)`,
+    );
     lines.push("");
   }
 
@@ -676,6 +711,67 @@ export function updateClaudeMd(filePath: string, newManagedContent: string): str
   return `${replacement}\n`;
 }
 
+/** Result of a reference-block splice: the (possibly unchanged) file content
+ *  plus whether the body-pair guard skipped the splice. */
+export interface ReferenceBlockResult {
+  content: string;
+  skipped: boolean;
+}
+
+/**
+ * Splice `blockBody` between a root file's reference markers
+ * (`wiki-managed: reference start/end`), preserving everything outside.
+ *
+ * BODY-PAIR GUARD: if the file already carries the body pair
+ * (`<!-- wiki-managed: start -->`), it already contains the imperative core
+ * verbatim (both blocks come from `buildImperativeCoreLines`), so splicing
+ * the reference block too would duplicate the directive + routing table.
+ * Such files are returned unchanged with `skipped: true` — the caller
+ * reports them as `skipped (body-managed)`.
+ *
+ * Missing file / no markers → block is appended wrapped in reference
+ * markers (same semantics as `updateClaudeMd` for the body pair).
+ * Unbalanced reference markers throw `MarkerCorruptError`.
+ */
+export function updateReferenceBlock(
+  filePath: string,
+  blockBody: string,
+): ReferenceBlockResult {
+  let content = "";
+  if (fs.existsSync(filePath)) {
+    content = fs.readFileSync(filePath, { encoding: "utf-8" });
+  }
+
+  // Body-pair guard: body-managed files already carry the imperative core.
+  if (content.includes(MARKER_START)) {
+    return { content, skipped: true };
+  }
+
+  const replacement = `${REFERENCE_MARKER_START}\n${blockBody}${REFERENCE_MARKER_END}`;
+
+  const starts = countOccurrences(content, REFERENCE_MARKER_START);
+  const ends = countOccurrences(content, REFERENCE_MARKER_END);
+  const isClean = starts === 0 && ends === 0;
+  const isBalanced = starts === 1 && ends === 1;
+  if (!isClean && !isBalanced) {
+    throw new MarkerCorruptError(starts, ends);
+  }
+
+  if (isBalanced) {
+    return { content: content.replace(_REFERENCE_RE, replacement), skipped: false };
+  }
+
+  if (content) {
+    let base = content;
+    if (!base.endsWith("\n")) {
+      base += "\n";
+    }
+    return { content: `${base}\n${replacement}\n`, skipped: false };
+  }
+
+  return { content: `${replacement}\n`, skipped: false };
+}
+
 /**
  * Return content between wiki-managed markers, or null if absent.
  */
@@ -808,11 +904,17 @@ options:
                         1 on MarkerCorruptError (same as --update without --check).
                         Has no effect when --update is not set.
   --block               Print ONLY the managed-block body (behavioral directive +
-                        intent→page routing table + wiki index link) to stdout —
-                        no markers, no file writes. Links are relative to
-                        --project-root. Used by atlas Phase 8 to fill the
-                        "wiki-managed: reference" block in AI-tool root files.
-                        Takes precedence over --update.
+                        intent→page routing table + wiki index link + AI-tool
+                        config registry pointer when <wiki-root>/ai-dev exists)
+                        to stdout — no markers, no file writes. Links are
+                        relative to --project-root. Used by atlas Phase 8 to
+                        fill the "wiki-managed: reference" block in AI-tool
+                        root files. With --update FILE, splice the body between
+                        the file's "wiki-managed: reference start/end" markers
+                        instead — SKIPPED when the file already carries the
+                        body pair "wiki-managed: start" (it already contains
+                        the imperative core; duplicating it is never correct).
+                        Honors --check (JSON dry-run).
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -837,10 +939,60 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   }
 
   if (args.block) {
-    // Root-file block mode: print only the managed-block body (no markers,
-    // no writes). The caller splices it between the existing
+    const blockBody = generateManagedBlock(args.projectRoot, args.wikiRoot);
+
+    if (args.update) {
+      // Guarded reference splice: write the body between the target's
+      // `wiki-managed: reference` markers — UNLESS the target already
+      // carries the body pair (it then already contains the imperative
+      // core, and splicing again would duplicate it).
+      let result: ReferenceBlockResult;
+      try {
+        result = updateReferenceBlock(args.update, blockBody);
+      } catch (e) {
+        if (e instanceof MarkerCorruptError) {
+          process.stdout.write(
+            JSON.stringify(
+              {
+                status: "error",
+                error_code: e.error_code,
+                message: e.message,
+                details: { starts: e.starts, ends: e.ends },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          return 1;
+        }
+        throw e;
+      }
+      if (args.check) {
+        process.stdout.write(
+          JSON.stringify(
+            result.skipped
+              ? { status: "skipped", reason: "body-managed", target: args.update }
+              : { status: "would-update", target: args.update, would_write: result.content },
+            null,
+            2,
+          ) + "\n",
+        );
+        return 0;
+      }
+      if (result.skipped) {
+        process.stdout.write(`Skipped (body-managed): ${args.update}\n`);
+        return 0;
+      }
+      fs.mkdirSync(path.dirname(args.update), { recursive: true });
+      fs.writeFileSync(args.update, result.content);
+      process.stdout.write(`Updated: ${args.update}\n`);
+      return 0;
+    }
+
+    // No --update: print only the managed-block body (no markers, no
+    // writes). The caller splices it between the existing
     // `wiki-managed: reference` markers in CLAUDE.md / AGENTS.md / etc.
-    process.stdout.write(generateManagedBlock(args.projectRoot, args.wikiRoot));
+    process.stdout.write(blockBody);
     return 0;
   }
 
