@@ -503,6 +503,48 @@ describe("generateClaudeMd — behavioral directive", () => {
     expect(result).not.toContain("| If you need to");
   });
 
+  it("no-routing-rows body still carries the directive + a navigation pointer (not near-empty)", () => {
+    // Wiki with an index but NO faceted pages — the contract requires the
+    // body never collapse to a bare directive (codex P2: preserve body guidance).
+    // makeProjectRoot writes the index at <root>/wiki/index.md, so wikiRoot = root.
+    const root = makeProjectRoot(tmpPath);
+    const result = generateClaudeMd(root, root);
+
+    // 1. Behavioral directive always present.
+    expect(result).toContain("consult the wiki");
+    expect(result).toContain("source of truth");
+    // 2. No routing table (no faceted pages).
+    expect(result).not.toContain("| If you need to");
+    // 3. Fallback navigation guidance is present: a pointer to the wiki dir
+    //    and a nudge to run atlas, plus the index link.
+    expect(result).toContain("No topic routing table yet");
+    expect(result).toContain("/doc-wiki:atlas");
+    expect(result).toContain("[Full wiki index]");
+
+    // The managed body has substantive content beyond the directive line:
+    // count non-empty content lines inside the markers.
+    const inner = result
+      .replace(MARKER_START + "\n", "")
+      .replace("\n" + MARKER_END + "\n", "");
+    const contentLines = inner
+      .split("\n")
+      .filter((l) => l.trim() !== "" && l.trim() !== "## Wiki");
+    // directive + pointer + index link → at least 3 substantive lines.
+    expect(contentLines.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("no-routing-rows AND no index file still emits directive + pointer (worst case)", () => {
+    // Fresh wiki dir, no index.md, no faceted pages.
+    const root = tmpPath;
+    fs.mkdirSync(path.join(root, "wiki"), { recursive: true });
+    const result = generateClaudeMd(root, root);
+    expect(result).toContain("consult the wiki");
+    expect(result).toContain("No topic routing table yet");
+    expect(result).toContain("/doc-wiki:atlas");
+    // No index link (file doesn't exist) — but the body is NOT just the directive.
+    expect(result).not.toContain("[Full wiki index]");
+  });
+
   it("routing table appears when atlas pages exist", () => {
     const root = makeProjectWithAtlasPages(tmpPath);
     const result = generateClaudeMd(root, root);

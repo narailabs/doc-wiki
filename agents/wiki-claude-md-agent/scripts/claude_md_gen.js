@@ -309,11 +309,13 @@ function safeRelpath(to, from) {
  * to a submodule; when set the generated content includes a link back
  * to the root CLAUDE.md.
  *
- * The generated block leads with a behavioral directive that tells coding
- * agents to consult the wiki before making changes, followed by an
+ * The generated block ALWAYS leads with a behavioral directive that tells
+ * coding agents to consult the wiki before making changes, followed by an
  * intent→resource routing table derived from the actual pages in the wiki.
  * Only pages with a recognized `atlas_facet` appear in the table, so the
- * table degrades gracefully when few pages exist.
+ * table degrades gracefully when few pages exist. When there are no faceted
+ * pages at all, the table is replaced by a short pointer line so the body
+ * never collapses to a bare directive.
  *
  * Returns the full managed section (between markers) as a markdown string.
  */
@@ -339,6 +341,7 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
     const wikiRel = safeRelpath(wikiRoot, linkBaseDir);
     const pages = listWikiPagesForRouting(wikiRoot);
     const routingRows = buildRoutingTable(pages, wikiRel);
+    const wikiDirRel = wikiRel ? `${wikiRel}/wiki` : "wiki";
     if (routingRows.length > 0) {
         lines.push("| If you need to… | Read |");
         lines.push("|---|---|");
@@ -348,10 +351,19 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         }
         lines.push("");
     }
+    else {
+        // No faceted pages yet (fresh or pre-atlas wiki). The behavioral directive
+        // above still applies, so the body must NOT collapse to a bare directive —
+        // give the agent a concrete pointer to where docs live and grow.
+        lines.push(`No topic routing table yet — the wiki has not been built out with atlas ` +
+            `pages. Browse [${wikiDirRel}/](${wikiDirRel}/) for whatever pages exist, ` +
+            `and run \`/doc-wiki:atlas\` to generate full coverage.`);
+        lines.push("");
+    }
     // ── Documentation index ─────────────────────────────────────────────
     // The index lives under <wikiRoot>/wiki/ (same dir the page scanner walks).
     // Only link it if it actually exists — never emit a phantom link.
-    const wikiIndexPath = wikiRel ? `${wikiRel}/wiki/index.md` : "wiki/index.md";
+    const wikiIndexPath = `${wikiDirRel}/index.md`;
     if (fs.existsSync(path.join(wikiRoot, "wiki", "index.md"))) {
         lines.push(`[Full wiki index](${wikiIndexPath})`);
         lines.push("");

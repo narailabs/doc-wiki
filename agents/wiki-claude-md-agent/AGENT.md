@@ -45,7 +45,7 @@ Two marker pairs are recognized; user content outside both is preserved verbatim
 
 | Marker | Purpose |
 |---|---|
-| `<!-- wiki-managed: start --> ... <!-- wiki-managed: end -->` | Body sections (architecture summary, build & run, etc.) — legacy CLAUDE.md format |
+| `<!-- wiki-managed: start --> ... <!-- wiki-managed: end -->` | Body section: behavioral wiki directive + intent→resource routing table (see "Body section — canonical structure" below). Supersedes the legacy passive `Build & Run` / `Service Dependencies` / `Database References` stubs. |
 | `<!-- wiki-managed: reference start --> ... <!-- wiki-managed: reference end -->` | The Reference appendix (Documentation index + Coding agent configuration registry + Other references). **REQUIRED** at the end of every root file. |
 
 ## INVOCATION
@@ -100,6 +100,34 @@ Dry-run update (compute would-be content, do not write):
 ```
 
 The `check` action runs the same logic as `update` but never writes to disk; it returns `{status: "would-update", target, would_write}` for each target. Used by `/doc-wiki:atlas --dry-run`. The underlying CLI mechanism is the `--check` flag passed alongside `--update` to `scripts/claude_md_gen.js`.
+
+## Body section — canonical structure
+
+(Applies to `CLAUDE.md` and submodule `CLAUDE.md` only. Generated deterministically by `scripts/claude_md_gen.js` — `generateClaudeMd()`.)
+
+The body is **imperative and behavioral**, not a passive index. It supersedes the old `Build & Run` / `Service Dependencies` / `Database References` placeholder stubs (which were content-free pointers and added no signal). Three parts, in order:
+
+1. **Behavioral directive (ALWAYS emitted).** A short, strong instruction to consult the wiki before changing code and treat it as the source of truth. This leads the block on every run, regardless of how many pages exist.
+2. **Intent→resource routing table.** One `| If you need to… | Read |` row per actionable wiki page, derived from the `atlas_facet` frontmatter of pages that actually exist. Per-topic facets (architecture, api, data-model, operations, environments) emit one row per topic; global facets (overview, configuration, troubleshooting, …) emit one row. Links resolve relative to the file's own directory (submodule-aware).
+3. **Full wiki index link.** Emitted when `wiki/index.md` exists.
+
+**Graceful degradation — no near-empty body.** When the wiki has no recognized `atlas_facet` pages yet (fresh / pre-atlas), the routing table is replaced by a one-line pointer to the wiki directory plus a nudge to run `/doc-wiki:atlas`. The behavioral directive still leads. The body never collapses to a bare directive.
+
+```markdown
+<!-- wiki-managed: start -->
+## Wiki
+
+Before changing code in this repository, consult the wiki for the relevant subsystem. Treat the wiki as the source of truth for architecture, data flow, and conventions; verify your assumptions against it before implementing. If the wiki does not cover something, say so rather than guessing.
+
+| If you need to… | Read |
+|---|---|
+| understand how the system fits together | [overview.md](docs/<wiki-folder>/wiki/overview.md) |
+| understand the auth subsystem architecture | [architecture.md](docs/<wiki-folder>/wiki/auth/architecture.md) |
+| change configuration or environment variables | [configuration.md](docs/<wiki-folder>/wiki/configuration.md) |
+
+[Full wiki index](docs/<wiki-folder>/wiki/index.md)
+<!-- wiki-managed: end -->
+```
 
 ## Reference appendix — canonical structure
 
@@ -196,7 +224,7 @@ On partial implementation (script supports a subset of the spec):
 1. **Parse request** — extract action, project_root, wiki_root, targets/target/submodule.
 2. **Scan repository** — detect which AI-tool root files exist; detect submodules with their own CLAUDE.md; enumerate skills / agents / hooks / MCP servers / slash commands per tool.
 3. **Generate managed content** — for each target file, build:
-   - Body section (legacy `wiki-managed: start/end`, applies to CLAUDE.md and submodule CLAUDE.md only): wiki summary, build & run, architecture pointers.
+   - Body section (`wiki-managed: start/end`, applies to CLAUDE.md and submodule CLAUDE.md only): the behavioral wiki directive + intent→resource routing table (see "Body section — canonical structure" below). Generated deterministically by `scripts/claude_md_gen.js`.
    - Reference appendix (`wiki-managed: reference start/end`, applies to **every** root file): the three canonical subsections.
 4. **Generate per-tool config files** — write one `docs/<wiki-folder>/ai-dev/<tool>-config.md` per detected AI tool. Idempotent: existing files are diffed and only the changed sections are rewritten.
 5. **Merge with existing** — preserve user-authored content outside markers:
