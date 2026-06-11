@@ -17,6 +17,7 @@ import {
   listSubmodules,
   listWikiPagesForRouting,
   buildRoutingTable,
+  resolveScaffoldRoot,
   MarkerCorruptError,
   MARKER_START,
   MARKER_END,
@@ -375,6 +376,56 @@ describe("listWikiPagesForRouting", () => {
     expect(pages[0].relPath.endsWith("a_page.md")).toBe(true);
     expect(pages[1].relPath.endsWith("z_page.md")).toBe(true);
   });
+
+  it("accepts the content-dir layout (wikiRoot points directly at the content dir)", () => {
+    // Pages live at <tmp>/wiki/<...>; pass the content dir <tmp>/wiki itself.
+    makeWikiPage(tmpPath, "overview.md", ["atlas_facet: overview"]);
+    makeWikiPage(tmpPath, "auth/architecture.md", ["atlas_facet: architecture"]);
+    const contentDir = path.join(tmpPath, "wiki");
+    const pages = listWikiPagesForRouting(contentDir);
+    // relPaths are normalized to the scaffold root, so they keep the wiki/ prefix.
+    const rels = pages.map((p) => p.relPath).sort();
+    expect(rels).toEqual(["wiki/auth/architecture.md", "wiki/overview.md"]);
+    // No path doubles the wiki segment.
+    expect(rels.every((r) => !r.includes("wiki/wiki"))).toBe(true);
+  });
+});
+
+// ── resolveScaffoldRoot tests ─────────────────────────────────────
+
+describe("resolveScaffoldRoot", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("scaffold-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns the input unchanged when it already contains a wiki/ subdir", () => {
+    fs.mkdirSync(path.join(tmpPath, "wiki"), { recursive: true });
+    expect(resolveScaffoldRoot(tmpPath)).toBe(tmpPath);
+  });
+
+  it("climbs to the parent when pointed at the content dir (basename === wiki)", () => {
+    const contentDir = path.join(tmpPath, "wiki");
+    fs.mkdirSync(contentDir, { recursive: true });
+    expect(resolveScaffoldRoot(contentDir)).toBe(tmpPath);
+  });
+
+  it("prefers the scaffold check over the basename rule for a genuine wiki/wiki layout", () => {
+    // <tmp>/wiki itself contains a wiki/ subdir → it IS a scaffold root.
+    const outerWiki = path.join(tmpPath, "wiki");
+    fs.mkdirSync(path.join(outerWiki, "wiki"), { recursive: true });
+    expect(resolveScaffoldRoot(outerWiki)).toBe(outerWiki);
+  });
+
+  it("falls back to the input as-is for a fresh path with neither marker", () => {
+    const fresh = path.join(tmpPath, "brand-new");
+    expect(resolveScaffoldRoot(fresh)).toBe(fresh);
+  });
 });
 
 // ── buildRoutingTable tests ───────────────────────────────────────
@@ -543,6 +594,43 @@ describe("generateClaudeMd — behavioral directive", () => {
     expect(result).toContain("/doc-wiki:atlas");
     // No index link (file doesn't exist) — but the body is NOT just the directive.
     expect(result).not.toContain("[Full wiki index]");
+  });
+
+  it("documented content-dir invocation produces correct routing + index links (no wiki/wiki)", () => {
+    // Regression for #68: the script's --help / CLI tests pass --wiki-root
+    // <project>/wiki (the dir that directly holds index.md + pages). That MUST
+    // produce real routing rows, a correct index link, and never wiki/wiki.
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const contentDir = path.join(root, "wiki");
+
+    const result = generateClaudeMd(root, contentDir);
+
+    // (a) Routing rows reference the real pages at their correct relative paths.
+    expect(result).toContain("| If you need to");
+    expect(result).toContain("[overview.md](wiki/overview.md)");
+    expect(result).toContain("[architecture.md](wiki/auth/architecture.md)");
+    expect(result).toContain("[configuration.md](wiki/configuration.md)");
+    // (b) Index link points at the real index.
+    expect(result).toContain("[Full wiki index](wiki/index.md)");
+    // (c) No path doubles the wiki segment anywhere in the block.
+    expect(result).not.toContain("wiki/wiki");
+
+    // Every linked .md page resolves on disk (phantom-link invariant).
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(result)) !== null) {
+      if (m[1].endsWith(".md")) {
+        expect(fs.existsSync(path.join(root, m[1])), `Expected ${m[1]} on disk`).toBe(true);
+      }
+    }
+  });
+
+  it("scaffold-root and content-dir invocations produce identical bodies", () => {
+    // Both documented layouts must normalize to the same output.
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const scaffoldResult = generateClaudeMd(root, root);
+    const contentDirResult = generateClaudeMd(root, path.join(root, "wiki"));
+    expect(contentDirResult).toBe(scaffoldResult);
   });
 
   it("routing table appears when atlas pages exist", () => {

@@ -5,6 +5,11 @@
  * Content between ``<!-- wiki-managed: start -->`` and ``<!-- wiki-managed: end -->``
  * is regenerated on re-invocation. All content outside markers is preserved.
  *
+ * `--wiki-root` / the `wikiRoot` arg accepts EITHER layout: the scaffold root
+ * (the dir that contains a `wiki/` folder — how `/doc-wiki:atlas` invokes us)
+ * or the content dir itself (`<root>/wiki`, the layout the CLI examples use).
+ * `resolveScaffoldRoot` normalizes both to the scaffold root internally.
+ *
  * Library usage:
  *     import { generateClaudeMd, updateClaudeMd } from "./claude_md_gen.js";
  *     const md = generateClaudeMd("/path/to/project", "/path/to/wiki");
@@ -20,6 +25,41 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+// ── Wiki page scanning ──────────────────────────────────────────────
+/**
+ * Normalize a caller-supplied `wikiRoot` to the canonical SCAFFOLD root —
+ * the directory that *contains* the `wiki/` content folder (so pages live at
+ * `<scaffoldRoot>/wiki/` and the index at `<scaffoldRoot>/wiki/index.md`).
+ *
+ * Two layouts are accepted so both the atlas caller and the documented CLI
+ * invocation produce correct output:
+ *
+ *   - `<scaffoldRoot>` already containing a `wiki/` subdir → scaffold root,
+ *     used as-is. This is how `/doc-wiki:atlas` Phase 8 (and every other
+ *     `--wiki-root <root>` consumer in the pipeline) invokes us.
+ *   - `<…>/wiki` — the caller pointed at the CONTENT dir that directly holds
+ *     `index.md`. This is what the script's `--help` examples and the CLI
+ *     tests pass. We climb one level to `dirname(wikiRoot)` so the content
+ *     dir is treated as `<scaffoldRoot>/wiki/`.
+ *   - Otherwise (e.g. an empty/fresh path with neither marker) → use as-is.
+ *
+ * The first check takes precedence: if `<wikiRoot>/wiki` exists we trust it
+ * even when `basename(wikiRoot) === "wiki"` (a genuine `…/wiki/wiki/` scaffold).
+ */
+export function resolveScaffoldRoot(wikiRoot) {
+    let isScaffold = false;
+    try {
+        isScaffold = fs.statSync(path.join(wikiRoot, "wiki")).isDirectory();
+    }
+    catch {
+        isScaffold = false;
+    }
+    if (isScaffold)
+        return wikiRoot;
+    if (path.basename(wikiRoot) === "wiki")
+        return path.dirname(wikiRoot);
+    return wikiRoot;
+}
 /**
  * Parse a minimal YAML frontmatter block from `content`.
  * Returns a plain object or null when the block is absent or malformed.
@@ -51,12 +91,18 @@ function parseMinimalFrontmatter(content) {
     return Object.keys(result).length > 0 ? result : null;
 }
 /**
- * Walk `<wikiRoot>/wiki/` for `.md` files (excluding `_archive` and other
+ * Walk `<scaffoldRoot>/wiki/` for `.md` files (excluding `_archive` and other
  * `_*` reserved dirs), read each file's frontmatter, and return page info
- * records. Silently skips unreadable files.
+ * records. `relPath` is expressed relative to the scaffold root (e.g.
+ * `"wiki/auth/architecture.md"`). Silently skips unreadable files.
+ *
+ * `wikiRoot` is normalized via `resolveScaffoldRoot` so both the scaffold-root
+ * layout (`<root>` containing `wiki/`) and the content-dir layout (`<root>/wiki`)
+ * resolve to the same pages.
  */
 export function listWikiPagesForRouting(wikiRoot) {
-    const wikiDir = path.join(wikiRoot, "wiki");
+    const scaffoldRoot = resolveScaffoldRoot(wikiRoot);
+    const wikiDir = path.join(scaffoldRoot, "wiki");
     if (!fs.existsSync(wikiDir))
         return [];
     const pages = [];
@@ -86,7 +132,7 @@ export function listWikiPagesForRouting(wikiRoot) {
                     continue;
                 }
                 const fm = parseMinimalFrontmatter(content);
-                const relPath = path.relative(wikiRoot, full).split(path.sep).join("/");
+                const relPath = path.relative(scaffoldRoot, full).split(path.sep).join("/");
                 pages.push({
                     relPath,
                     facet: fm?.["atlas_facet"] ?? null,
@@ -330,6 +376,10 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         "the wiki does not cover something, say so rather than guessing.");
     lines.push("");
     // ── Intent → resource routing table ────────────────────────────────
+    // Normalize wikiRoot to the scaffold root (the dir containing `wiki/`), so
+    // both the atlas `--wiki-root <root>` layout and the documented content-dir
+    // `--wiki-root <root>/wiki` layout produce correct page paths and links.
+    const scaffoldRoot = resolveScaffoldRoot(wikiRoot);
     // Links must resolve from wherever THIS file lives. For a submodule
     // CLAUDE.md (e.g. services/auth/CLAUDE.md) the relative base is the
     // submodule directory, not the project root — otherwise the links point
@@ -338,8 +388,9 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
     const linkBaseDir = submodule
         ? path.join(projectRoot, submodule)
         : projectRoot;
-    const wikiRel = safeRelpath(wikiRoot, linkBaseDir);
-    const pages = listWikiPagesForRouting(wikiRoot);
+    // `wikiRel` points at the scaffold root; `<wikiRel>/wiki/...` is a content path.
+    const wikiRel = safeRelpath(scaffoldRoot, linkBaseDir);
+    const pages = listWikiPagesForRouting(scaffoldRoot);
     const routingRows = buildRoutingTable(pages, wikiRel);
     const wikiDirRel = wikiRel ? `${wikiRel}/wiki` : "wiki";
     if (routingRows.length > 0) {
@@ -361,10 +412,10 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         lines.push("");
     }
     // ── Documentation index ─────────────────────────────────────────────
-    // The index lives under <wikiRoot>/wiki/ (same dir the page scanner walks).
-    // Only link it if it actually exists — never emit a phantom link.
+    // The index lives under <scaffoldRoot>/wiki/ (same dir the page scanner
+    // walks). Only link it if it actually exists — never emit a phantom link.
     const wikiIndexPath = `${wikiDirRel}/index.md`;
-    if (fs.existsSync(path.join(wikiRoot, "wiki", "index.md"))) {
+    if (fs.existsSync(path.join(scaffoldRoot, "wiki", "index.md"))) {
         lines.push(`[Full wiki index](${wikiIndexPath})`);
         lines.push("");
     }
