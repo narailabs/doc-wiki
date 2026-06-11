@@ -5,6 +5,11 @@
  * Content between ``<!-- wiki-managed: start -->`` and ``<!-- wiki-managed: end -->``
  * is regenerated on re-invocation. All content outside markers is preserved.
  *
+ * `--wiki-root` / the `wikiRoot` arg accepts EITHER layout: the scaffold root
+ * (the dir that contains a `wiki/` folder — how `/doc-wiki:atlas` invokes us)
+ * or the content dir itself (`<root>/wiki`, the layout the CLI examples use).
+ * `resolveScaffoldRoot` normalizes both to the scaffold root internally.
+ *
  * Library usage:
  *     import { generateClaudeMd, updateClaudeMd } from "./claude_md_gen.js";
  *     const md = generateClaudeMd("/path/to/project", "/path/to/wiki");
@@ -20,6 +25,369 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// ── Wiki page scanning ──────────────────────────────────────────────
+
+/**
+ * Normalize a caller-supplied `wikiRoot` to the canonical SCAFFOLD root —
+ * the directory that *contains* the `wiki/` content folder (so pages live at
+ * `<scaffoldRoot>/wiki/` and the index at `<scaffoldRoot>/wiki/index.md`).
+ *
+ * Two layouts are accepted so both the atlas caller and the documented CLI
+ * invocation produce correct output:
+ *
+ *   - `<scaffoldRoot>` already containing a `wiki/` subdir → scaffold root,
+ *     used as-is. This is how `/doc-wiki:atlas` Phase 8 (and every other
+ *     `--wiki-root <root>` consumer in the pipeline) invokes us.
+ *   - `<…>/wiki` — the caller pointed at the CONTENT dir that directly holds
+ *     `index.md`. This is what the script's `--help` examples and the CLI
+ *     tests pass. We climb one level to `dirname(wikiRoot)` so the content
+ *     dir is treated as `<scaffoldRoot>/wiki/`.
+ *   - Otherwise (e.g. an empty/fresh path with neither marker) → use as-is.
+ *
+ * The first check takes precedence: if `<wikiRoot>/wiki` exists we trust it
+ * even when `basename(wikiRoot) === "wiki"` (a genuine `…/wiki/wiki/` scaffold).
+ */
+export function resolveScaffoldRoot(wikiRoot: string): string {
+  let isScaffold = false;
+  try {
+    isScaffold = fs.statSync(path.join(wikiRoot, "wiki")).isDirectory();
+  } catch {
+    isScaffold = false;
+  }
+  if (isScaffold) return wikiRoot;
+  if (path.basename(wikiRoot) === "wiki") return path.dirname(wikiRoot);
+  return wikiRoot;
+}
+
+/**
+ * Minimal frontmatter fields read from wiki pages for routing-table generation.
+ */
+export interface WikiPageInfo {
+  /** Relative path from wikiRoot (e.g. "wiki/auth/architecture.md"). */
+  relPath: string;
+  /** `atlas_facet` frontmatter value, if present. */
+  facet: string | null;
+  /** `title` frontmatter value, if present. */
+  title: string | null;
+  /**
+   * `cross_service_page` frontmatter value, if present. The six cross-service
+   * pages (service-map, service-dependencies, client-registry, queue-registry,
+   * database-traces, shared-libraries) carry `atlas_facet: architecture` AND
+   * this slug; the router branches on this slug FIRST so they get slug-specific
+   * intents instead of collapsing into generic per-topic architecture rows.
+   */
+  crossServicePage: string | null;
+}
+
+/**
+ * Parse a minimal YAML frontmatter block from `content`.
+ * Returns a plain object or null when the block is absent or malformed.
+ * This is an intentionally lightweight parser — we only read string-valued
+ * top-level keys. It does NOT require the `js-yaml` package so that this
+ * script stays self-contained.
+ */
+function parseMinimalFrontmatter(content: string): Record<string, string> | null {
+  if (!content.startsWith("---\n")) return null;
+  const end = content.indexOf("\n---\n", 4);
+  if (end === -1) return null;
+  const fmStr = content.slice(4, end);
+  const result: Record<string, string> = {};
+  for (const line of fmStr.split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon < 1) continue;
+    const key = line.slice(0, colon).trim();
+    const raw = line.slice(colon + 1).trim();
+    // Only accept bare scalar strings (no block literals, lists, etc.)
+    if (raw.startsWith("|") || raw.startsWith(">") || raw.startsWith("[") || raw.startsWith("{")) continue;
+    if (key && raw) {
+      result[key] = raw.replace(/^['"]|['"]$/g, "");
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Walk `<scaffoldRoot>/wiki/` for `.md` files (excluding `_archive` and other
+ * `_*` reserved dirs), read each file's frontmatter, and return page info
+ * records. `relPath` is expressed relative to the scaffold root (e.g.
+ * `"wiki/auth/architecture.md"`). Silently skips unreadable files.
+ *
+ * `wikiRoot` is normalized via `resolveScaffoldRoot` so both the scaffold-root
+ * layout (`<root>` containing `wiki/`) and the content-dir layout (`<root>/wiki`)
+ * resolve to the same pages.
+ */
+export function listWikiPagesForRouting(wikiRoot: string): WikiPageInfo[] {
+  const scaffoldRoot = resolveScaffoldRoot(wikiRoot);
+  const wikiDir = path.join(scaffoldRoot, "wiki");
+  if (!fs.existsSync(wikiDir)) return [];
+
+  const pages: WikiPageInfo[] = [];
+  const stack: string[] = [wikiDir];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Exclude _archive and other _* reserved dirs
+        if (!entry.name.startsWith("_")) stack.push(full);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        let content = "";
+        try {
+          content = fs.readFileSync(full, { encoding: "utf-8" });
+        } catch {
+          continue;
+        }
+        const fm = parseMinimalFrontmatter(content);
+        const relPath = path.relative(scaffoldRoot, full).split(path.sep).join("/");
+        pages.push({
+          relPath,
+          facet: fm?.["atlas_facet"] ?? null,
+          title: fm?.["title"] ?? null,
+          crossServicePage: fm?.["cross_service_page"] ?? null,
+        });
+      }
+    }
+  }
+  pages.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
+  return pages;
+}
+
+/**
+ * A single row in the intent-to-resource routing table.
+ */
+export interface RoutingRow {
+  /** Human-readable intent clause: "If you need to…" */
+  intent: string;
+  /** Relative path to the wiki page, from the project root. */
+  pagePath: string;
+}
+
+/**
+ * Well-known facet → intent mapping. These strings are intentionally generic;
+ * they read well for any codebase.
+ *
+ * The map is split into two groups for routing purposes:
+ *
+ *   - PER_TOPIC facets recur once per topic in an atlas run (e.g. both
+ *     `auth/architecture.md` and `billing/architecture.md` exist). Each page
+ *     gets its OWN routing row, with the topic woven into the intent so the
+ *     agent can route to the right one. The intent here is a template that
+ *     `{topic}` is substituted into.
+ *   - GLOBAL facets are single-instance per wiki (e.g. one `overview.md`).
+ *     They collapse to one row; if duplicates somehow exist, the
+ *     lexicographically-first page wins.
+ *
+ * The order of keys across both maps (PER_TOPIC first, then GLOBAL) defines
+ * the logical sort order of the rendered table.
+ */
+const PER_TOPIC_FACET_INTENTS: Record<string, string> = {
+  architecture: "understand the {topic} subsystem architecture",
+  api: "trace or modify a {topic} API endpoint",
+  "data-model": "understand the {topic} data model or schema",
+  operations: "operate, deploy, or monitor {topic}",
+  environments: "understand {topic} runtime environments",
+};
+
+const GLOBAL_FACET_INTENTS: Record<string, string> = {
+  overview: "understand how the system fits together",
+  configuration: "change configuration or environment variables",
+  integrations: "wire in or debug an external service",
+  deploy: "understand the deployment pipeline",
+  "getting-started": "get set up for the first time",
+  commands: "look up available commands or options",
+  troubleshooting: "diagnose a failure or unexpected behaviour",
+};
+
+/**
+ * Cross-service page slug → intent. The six pages written by
+ * `agents/lib/cross_service_pages.ts` all carry `atlas_facet: architecture`
+ * but are distinguished by their `cross_service_page` slug. The router branches
+ * on the slug FIRST so each gets a distinct, slug-specific intent — never the
+ * generic per-topic architecture row. (Cross-service is the product's biggest
+ * differentiator; these rows must surface.)
+ *
+ * Key insertion order defines the rendered order of the cross-service group.
+ */
+const CROSS_SERVICE_INTENTS: Record<string, string> = {
+  "service-map": "Understand the overall service topology — how services connect",
+  "service-dependencies": "See which services depend on which",
+  "client-registry": "Find where one service calls another (HTTP/RPC client callsites)",
+  "queue-registry": "Trace async/queue producers and consumers",
+  "database-traces": "See which services read/write which database tables",
+  "shared-libraries": "Find shared libraries used across services",
+};
+
+/** Slug order for the cross-service group (matches the writer's page order). */
+const CROSS_SERVICE_ORDER: string[] = Object.keys(CROSS_SERVICE_INTENTS);
+
+/**
+ * Resolve the intent for a cross-service page. Known slugs use the curated
+ * mapping; an unknown slug falls back to a sensible generic phrasing that
+ * still names the slug, so a future cross-service page type never crashes the
+ * router or collapses into a generic architecture row.
+ */
+function crossServiceIntent(slug: string): string {
+  const known = CROSS_SERVICE_INTENTS[slug];
+  if (known) return known;
+  // Humanize the slug (kebab → spaced) for the fallback.
+  const human = slug.replace(/[-_]+/g, " ").trim();
+  return `See the cross-service ${human} view`;
+}
+
+/**
+ * Combined facet order: per-topic facets first, then global facets. Cross-service
+ * rows are ordered separately (by CROSS_SERVICE_ORDER) and rendered after these.
+ */
+const FACET_ORDER: string[] = [
+  ...Object.keys(PER_TOPIC_FACET_INTENTS),
+  ...Object.keys(GLOBAL_FACET_INTENTS),
+];
+
+/**
+ * Derive a human-readable topic label for a per-topic page from its relPath.
+ *
+ * `wiki/auth/architecture.md` → "auth". A top-level page such as
+ * `wiki/architecture.md` has no topic directory; fall back to the page's
+ * `title` (if any), else a generic "subsystem"/"the system" phrasing handled
+ * by the caller via a null return.
+ */
+function deriveTopic(page: WikiPageInfo): string | null {
+  // relPath looks like "wiki/<maybe-topic>/<file>.md" or "wiki/<file>.md".
+  const parts = page.relPath.split("/");
+  // Drop the leading "wiki" segment and the trailing filename.
+  const dirSegments = parts.slice(1, -1);
+  if (dirSegments.length > 0) {
+    // Use the deepest directory as the topic (e.g. wiki/services/auth/api.md → "auth").
+    return dirSegments[dirSegments.length - 1] ?? null;
+  }
+  return null;
+}
+
+/**
+ * Build a routing table from wiki pages that have a recognized `atlas_facet`.
+ * Pages without a known facet are omitted — the table only lists rows the
+ * agent can act on.
+ *
+ * Per-topic facets (architecture, api, data-model, operations, environments)
+ * emit ONE ROW PER PAGE, disambiguated by the page's topic, so the agent can
+ * route to (say) the auth vs billing architecture page. Global single-instance
+ * facets (overview, configuration, troubleshooting, …) collapse to one row.
+ *
+ * `wikiRelDir` is the path from the project root (or submodule dir) to the
+ * wiki folder (e.g. `"docs/my-app-wiki"` or `"wiki"`), used to prefix page
+ * paths so links resolve from wherever the generated file lives.
+ */
+export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): RoutingRow[] {
+  const prefix = (relPath: string): string =>
+    wikiRelDir ? `${wikiRelDir}/${relPath}` : relPath;
+
+  // `group` orders the three row families: 0 = per-topic/global facets,
+  // 1 = cross-service pages. `orderKey` sorts within a group.
+  interface TaggedRow extends RoutingRow {
+    group: number;
+    orderKey: number;
+    sortKey: string;
+  }
+  const tagged: TaggedRow[] = [];
+  // Maps a global facet to its currently-winning row, so duplicate global
+  // pages collapse to the lexicographically-smallest page deterministically
+  // (independent of input iteration order).
+  const globalSeen = new Map<string, TaggedRow>();
+  // De-dupe cross-service pages by slug (one row per slug, smallest path wins).
+  const crossSeen = new Map<string, TaggedRow>();
+
+  for (const page of pages) {
+    // Branch on cross_service_page FIRST: these pages carry
+    // `atlas_facet: architecture` but must NOT route as per-topic architecture
+    // rows. Each gets its own slug-specific intent.
+    if (page.crossServicePage) {
+      const slug = page.crossServicePage;
+      const existing = crossSeen.get(slug);
+      if (existing) {
+        if (page.relPath < existing.sortKey) {
+          existing.pagePath = prefix(page.relPath);
+          existing.sortKey = page.relPath;
+        }
+        continue;
+      }
+      const orderIdx = CROSS_SERVICE_ORDER.indexOf(slug);
+      const row: TaggedRow = {
+        intent: crossServiceIntent(slug),
+        pagePath: prefix(page.relPath),
+        // Unknown slugs sort after known ones, then alphabetically by slug.
+        group: 1,
+        orderKey: orderIdx === -1 ? CROSS_SERVICE_ORDER.length : orderIdx,
+        sortKey: orderIdx === -1 ? `~${slug}` : page.relPath,
+      };
+      crossSeen.set(slug, row);
+      tagged.push(row);
+      continue;
+    }
+
+    if (!page.facet) continue;
+
+    const perTopicTemplate = PER_TOPIC_FACET_INTENTS[page.facet];
+    if (perTopicTemplate) {
+      const topic = deriveTopic(page);
+      const intent = topic
+        ? perTopicTemplate.replace("{topic}", topic)
+        : // No topic dir: strip the "{topic} " placeholder for a clean generic phrasing.
+          perTopicTemplate.replace("{topic} ", "");
+      tagged.push({
+        intent,
+        pagePath: prefix(page.relPath),
+        group: 0,
+        orderKey: FACET_ORDER.indexOf(page.facet),
+        sortKey: page.relPath,
+      });
+      continue;
+    }
+
+    const globalIntent = GLOBAL_FACET_INTENTS[page.facet];
+    if (globalIntent) {
+      const existing = globalSeen.get(page.facet);
+      if (existing) {
+        // Keep the lexicographically-smallest page so the choice is
+        // deterministic regardless of input iteration order.
+        if (page.relPath < existing.sortKey) {
+          existing.pagePath = prefix(page.relPath);
+          existing.sortKey = page.relPath;
+        }
+        continue;
+      }
+      const row: TaggedRow = {
+        intent: globalIntent,
+        pagePath: prefix(page.relPath),
+        group: 0,
+        orderKey: FACET_ORDER.indexOf(page.facet),
+        sortKey: page.relPath,
+      };
+      globalSeen.set(page.facet, row);
+      tagged.push(row);
+    }
+    // Unknown facets are ignored.
+  }
+
+  // Sort by group (facets before cross-service), then the within-group order
+  // key (facet order / cross-service slug order), then page path for stable
+  // per-topic grouping.
+  tagged.sort((a, b) => {
+    if (a.group !== b.group) return a.group - b.group;
+    const oa = a.orderKey === -1 ? 999 : a.orderKey;
+    const ob = b.orderKey === -1 ? 999 : b.orderKey;
+    if (oa !== ob) return oa - ob;
+    return a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0;
+  });
+
+  return tagged.map(({ intent, pagePath }) => ({ intent, pagePath }));
+}
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -103,6 +471,14 @@ function safeRelpath(to: string, from: string): string {
  * to a submodule; when set the generated content includes a link back
  * to the root CLAUDE.md.
  *
+ * The generated block ALWAYS leads with a behavioral directive that tells
+ * coding agents to consult the wiki before making changes, followed by an
+ * intent→resource routing table derived from the actual pages in the wiki.
+ * Only pages with a recognized `atlas_facet` appear in the table, so the
+ * table degrades gracefully when few pages exist. When there are no faceted
+ * pages at all, the table is replaced by a short pointer line so the body
+ * never collapses to a bare directive.
+ *
  * Returns the full managed section (between markers) as a markdown string.
  */
 export function generateClaudeMd(
@@ -112,29 +488,81 @@ export function generateClaudeMd(
 ): string {
   const lines: string[] = [];
 
-  // Overview
-  lines.push("## Overview");
+  // ── Behavioral directive ────────────────────────────────────────────
+  lines.push("## Wiki");
   lines.push("");
-  const projectName = path.basename(projectRoot) || "Project";
-  lines.push(`Auto-generated documentation index for **${projectName}**.`);
+  lines.push(
+    "Before changing code in this repository, consult the wiki for the relevant " +
+      "subsystem. Treat the wiki as the source of truth for architecture, data flow, " +
+      "and conventions; verify your assumptions against it before implementing. If " +
+      "the wiki does not cover something, say so rather than guessing.",
+  );
   lines.push("");
 
-  // Wiki link — prefer a relative path when possible.
-  const wikiRel = safeRelpath(wikiRoot, projectRoot);
-  lines.push(`- [Wiki documentation](${wikiRel}/index.md)`);
-  lines.push("");
+  // ── Intent → resource routing table ────────────────────────────────
+  // Normalize wikiRoot to the scaffold root (the dir containing `wiki/`), so
+  // both the atlas `--wiki-root <root>` layout and the documented content-dir
+  // `--wiki-root <root>/wiki` layout produce correct page paths and links.
+  const scaffoldRoot = resolveScaffoldRoot(wikiRoot);
 
+  // Links must resolve from wherever THIS file lives. For a submodule
+  // CLAUDE.md (e.g. services/auth/CLAUDE.md) the relative base is the
+  // submodule directory, not the project root — otherwise the links point
+  // under the submodule and break. Stay consistent with the back-link block
+  // below, which also offsets by the submodule depth.
+  const linkBaseDir = submodule
+    ? path.join(projectRoot, submodule)
+    : projectRoot;
+  // `wikiRel` points at the scaffold root; `<wikiRel>/wiki/...` is a content path.
+  const wikiRel = safeRelpath(scaffoldRoot, linkBaseDir);
+  const pages = listWikiPagesForRouting(scaffoldRoot);
+  const routingRows = buildRoutingTable(pages, wikiRel);
+
+  const wikiDirRel = wikiRel ? `${wikiRel}/wiki` : "wiki";
+
+  if (routingRows.length > 0) {
+    lines.push("| If you need to… | Read |");
+    lines.push("|---|---|");
+    for (const row of routingRows) {
+      const filename = path.basename(row.pagePath);
+      lines.push(`| ${row.intent} | [${filename}](${row.pagePath}) |`);
+    }
+    lines.push("");
+  } else {
+    // No faceted pages yet (fresh or pre-atlas wiki). The behavioral directive
+    // above still applies, so the body must NOT collapse to a bare directive —
+    // give the agent a concrete pointer to where docs live and grow.
+    lines.push(
+      `No topic routing table yet — the wiki has not been built out with atlas ` +
+        `pages. Browse [${wikiDirRel}/](${wikiDirRel}/) for whatever pages exist, ` +
+        `and run \`/doc-wiki:atlas\` to generate full coverage.`,
+    );
+    lines.push("");
+  }
+
+  // ── Documentation index ─────────────────────────────────────────────
+  // The index lives under <scaffoldRoot>/wiki/ (same dir the page scanner
+  // walks). Only link it if it actually exists — never emit a phantom link.
+  const wikiIndexPath = `${wikiDirRel}/index.md`;
+  if (fs.existsSync(path.join(scaffoldRoot, "wiki", "index.md"))) {
+    lines.push(`[Full wiki index](${wikiIndexPath})`);
+    lines.push("");
+  }
+
+  // ── Submodule back-link ─────────────────────────────────────────────
+  // Emitted under a "Parent Project" heading: a navigational section boundary
+  // around the backlink (required by the eval contract in evals/evals.json,
+  // eval 1 expectation 3 — "under a Parent Project heading").
   if (submodule) {
-    // Link back to root CLAUDE.md
     const subDepth = submodule.split(path.sep).filter((s) => s.length > 0).length;
     const rootRel = new Array(subDepth).fill("..").join("/");
     lines.push("## Parent Project");
     lines.push("");
-    lines.push(`- [Root CLAUDE.md](${rootRel}/CLAUDE.md)`);
+    lines.push(`[Root CLAUDE.md](${rootRel}/CLAUDE.md)`);
     lines.push("");
   }
 
-  // Submodules listing (only for root, not submodule pages)
+  // ── Submodules listing (root only) ──────────────────────────────────
   if (!submodule) {
     const submodules = listSubmodules(projectRoot);
     if (submodules.length > 0) {
@@ -146,24 +574,6 @@ export function generateClaudeMd(
       lines.push("");
     }
   }
-
-  // Build & Run
-  lines.push("## Build & Run");
-  lines.push("");
-  lines.push("See project-specific build instructions.");
-  lines.push("");
-
-  // Service Dependencies
-  lines.push("## Service Dependencies");
-  lines.push("");
-  lines.push("See wiki for service dependency details.");
-  lines.push("");
-
-  // Database references
-  lines.push("## Database References");
-  lines.push("");
-  lines.push("See wiki for database schema documentation.");
-  lines.push("");
 
   const innerContent = lines.join("\n");
   return `${MARKER_START}\n${innerContent}${MARKER_END}\n`;
