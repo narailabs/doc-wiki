@@ -5,7 +5,7 @@ import type { Runner } from "./exec.js";
 import { realRunner } from "./exec.js";
 import { checkEligibility } from "./mine_filters.js";
 import { loadRepoConfig } from "./repo_config.js";
-import { sanitizeIssueBody } from "./sanitize.js";
+import { sanitizeIssueBody, stripPrTemplate } from "./sanitize.js";
 import type { RepoConfig, TicketRecord, TicketsFile } from "./types.js";
 
 interface MineOpts {
@@ -31,6 +31,7 @@ async function ghJson<T>(runner: Runner, args: string[]): Promise<T | undefined>
 interface PrListEntry { number: number; url: string; mergedAt: string }
 interface PrView {
   number: number; url: string; title: string;
+  body: string | null;
   files: Array<{ path: string; additions: number; deletions: number }>;
   closingIssuesReferences: Array<{ number: number }>;
   mergeCommit: { oid: string } | null;
@@ -43,6 +44,7 @@ interface CommitView { sha: string; parents: Array<{ sha: string }> }
 export async function mineGithub(cfg: RepoConfig, opts: MineOpts): Promise<TicketsFile> {
   const tickets: TicketRecord[] = [];
   const seenIssues = new Set<number>();
+  const seenPrs = new Set<number>();
 
   const prs = await ghJson<PrListEntry[]>(opts.runner, [
     "pr", "list", "--repo", cfg.github, "--state", "merged",
@@ -56,11 +58,18 @@ export async function mineGithub(cfg: RepoConfig, opts: MineOpts): Promise<Ticke
 
     const pr = await ghJson<PrView>(opts.runner, [
       "pr", "view", String(entry.number), "--repo", cfg.github,
-      "--json", "number,url,title,files,closingIssuesReferences,mergeCommit,mergedAt,author",
+      "--json", "number,url,title,body,files,closingIssuesReferences,mergeCommit,mergedAt,author",
     ]);
     if (pr === undefined || pr.mergeCommit === null) continue;
     const issueRef = pr.closingIssuesReferences[0];
-    if (issueRef === undefined) { note(pr.number, "no-linked-issue"); continue; }
+    if (issueRef === undefined) {
+      // PR-as-ticket fallback: repos that don't link issues to PRs (e.g. saleor/saleor, where
+      // 0/100 recent merged PRs carry a closingIssuesReference) would otherwise yield no tickets.
+      // Build the ticket from the PR itself, through the SAME eligibility gates as the issue path.
+      const prTicket = await prAsTicket(pr, cfg, opts.runner, seenPrs);
+      if (prTicket !== undefined) tickets.push(prTicket);
+      continue;
+    }
     if (seenIssues.has(issueRef.number)) { note(pr.number, "duplicate-issue"); continue; }
 
     const issue = await ghJson<IssueView>(opts.runner, ["api", `repos/${cfg.github}/issues/${issueRef.number}`]);
@@ -85,6 +94,7 @@ export async function mineGithub(cfg: RepoConfig, opts: MineOpts): Promise<Ticke
     const sanitized = sanitizeIssueBody(body, issue.number);
     seenIssues.add(issue.number);
     tickets.push({
+      source: "issue",
       issue: issue.number,
       issue_url: issue.html_url,
       title: issue.title,
@@ -106,6 +116,68 @@ export async function mineGithub(cfg: RepoConfig, opts: MineOpts): Promise<Ticke
     }
   }
   return { schema_version: 1, repo: cfg.id, mined_at: new Date().toISOString(), tickets };
+}
+
+/**
+ * Build a ticket from a PR that links no issue (the PR description IS the problem statement).
+ * Returns undefined (and logs a skip note) when the PR fails the same eligibility gates as the
+ * issue path, when it's a duplicate, or when its parent commit can't be resolved.
+ */
+async function prAsTicket(
+  pr: PrView,
+  cfg: RepoConfig,
+  runner: Runner,
+  seenPrs: Set<number>,
+): Promise<TicketRecord | undefined> {
+  if (seenPrs.has(pr.number)) { note(pr.number, "duplicate-pr"); return undefined; }
+  if (pr.mergeCommit === null) { note(pr.number, "no-merge-commit"); return undefined; }
+
+  // PR bodies carry repo PR-template boilerplate (HTML comments, "# Impact" checklists). Strip it
+  // first so the cleaned text is the substantive problem statement (and to minimize context leakage),
+  // THEN run the shared issue-body sanitizer on the result. The issue path's sanitization is unchanged.
+  const cleaned = stripPrTemplate(pr.body ?? "");
+
+  // thin-body gate for PR-tickets: the prompt the agent receives is always `${title}\n\n${body_sanitized}`
+  // (see session.ts buildPrompt), so the title is itself a meaningful problem statement. A PR whose
+  // cleaned body is short is therefore NOT useless — we gate thin-body on (title + cleaned body) length
+  // rather than the body alone, so a terse-but-titled PR still qualifies. All other gates are identical.
+  const bodyLength = pr.title.length + cleaned.length;
+  const verdict = checkEligibility(
+    { files: pr.files, authorIsBot: pr.author?.is_bot === true, bodyLength, mergedAt: pr.mergedAt },
+    cfg,
+  );
+  if (!verdict.ok) { note(pr.number, verdict.reason); return undefined; }
+
+  const commit = await ghJson<CommitView>(runner, ["api", `repos/${cfg.github}/commits/${pr.mergeCommit.oid}`]);
+  const parent = commit?.parents[0];
+  if (commit === undefined || parent === undefined) { note(pr.number, "no-parent-commit"); return undefined; }
+  if (commit.parents.length > 1) {
+    process.stderr.write(`PR #${pr.number}: multi-parent merge (kept; calibration will validate base_commit)\n`);
+  }
+
+  const sanitized = sanitizeIssueBody(cleaned, pr.number);
+  seenPrs.add(pr.number);
+  if (sanitized.redactions.length > 0) {
+    process.stderr.write(`PR #${pr.number}: redacted ${sanitized.redactions.join(", ")}\n`);
+  }
+  return {
+    source: "pr",
+    issue: pr.number, // the PR number serves as the ticket id
+    issue_url: pr.url,
+    title: pr.title,
+    body: pr.body ?? "",
+    body_sanitized: sanitized.text,
+    fix_pr: pr.number,
+    fix_pr_url: pr.url,
+    base_commit: parent.sha,
+    fix_commit: pr.mergeCommit.oid,
+    test_files: verdict.test_files,
+    src_files: verdict.src_files,
+    run_files: verdict.run_files,
+    changed_lines: verdict.changed_lines,
+    merge_parents: commit.parents.length,
+    merged_at: pr.mergedAt,
+  };
 }
 
 function note(pr: number, reason: string): void {

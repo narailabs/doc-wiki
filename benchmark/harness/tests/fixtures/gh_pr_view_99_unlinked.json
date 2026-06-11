@@ -1,0 +1,14 @@
+{
+  "number": 99,
+  "url": "https://github.com/acme/demo/pull/99",
+  "title": "Fix discount stacking on the checkout total",
+  "body": "<!-- Thanks for your contribution! Describe your change below. -->\nThe checkout total double-counts percentage discounts when more than one voucher applies, so the order total comes out lower than it should. Steps: add two percentage vouchers to a cart and observe the total. Expected: vouchers compose multiplicatively, not additively.\n\n# Impact\n\n- [ ] New feature\n- [x] Bugfix\n- [ ] Documentation",
+  "files": [
+    { "path": "test/checkout.test.ts", "additions": 14, "deletions": 0 },
+    { "path": "src/checkout.ts", "additions": 9, "deletions": 3 }
+  ],
+  "closingIssuesReferences": [],
+  "mergeCommit": { "oid": "aaaa111122223333444455556666777788889999" },
+  "mergedAt": "2025-09-01T12:00:00Z",
+  "author": { "login": "alice", "is_bot": false }
+}

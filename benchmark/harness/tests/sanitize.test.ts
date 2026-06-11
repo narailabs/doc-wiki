@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeIssueBody } from "../sanitize.js";
+import { sanitizeIssueBody, stripPrTemplate } from "../sanitize.js";
 
 describe("sanitizeIssueBody", () => {
   it("strips cross-references >= the issue number, keeps earlier ones", () => {
@@ -73,5 +73,41 @@ describe("sanitizeIssueBody", () => {
     const r = sanitizeIssueBody("Duplicate of JIRA-1234567.", 50);
     expect(r.text).toBe("Duplicate of JIRA-1234567.");
     expect(r.redactions).toEqual([]);
+  });
+});
+
+describe("stripPrTemplate", () => {
+  it("removes multiline HTML comments", () => {
+    const out = stripPrTemplate(
+      "The cart total is wrong.\n<!-- Please describe\nyour changes here -->\nIt double-counts discounts.",
+    );
+    expect(out).not.toContain("<!--");
+    expect(out).not.toContain("Please describe");
+    expect(out).toContain("The cart total is wrong.");
+    expect(out).toContain("It double-counts discounts.");
+  });
+
+  it("removes a trailing '# Impact' checklist section", () => {
+    const out = stripPrTemplate(
+      "Fix the checkout race condition.\n\n# Impact\n\n- [ ] New feature\n- [x] Bugfix\n- [ ] Docs",
+    );
+    expect(out).toBe("Fix the checkout race condition.");
+    expect(out).not.toContain("Impact");
+    expect(out).not.toContain("[ ]");
+    expect(out).not.toContain("[x]");
+  });
+
+  it("removes stray checklist lines even without an Impact heading", () => {
+    const out = stripPrTemplate("Real description here.\n- [ ] I have tested\n- [x] I added tests");
+    expect(out).toBe("Real description here.");
+  });
+
+  it("collapses blank runs and trims", () => {
+    const out = stripPrTemplate("\n\n  First line.\n\n\n\nSecond line.  \n\n");
+    expect(out).toBe("First line.\n\nSecond line.");
+  });
+
+  it("leaves a clean body unchanged", () => {
+    expect(stripPrTemplate("Just a plain problem statement.")).toBe("Just a plain problem statement.");
   });
 });

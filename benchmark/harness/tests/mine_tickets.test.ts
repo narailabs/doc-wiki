@@ -58,11 +58,52 @@ describe("mineGithub", () => {
     expect(out.schema_version).toBe(1);
   });
 
-  it("skips PRs with no linked issue", async () => {
+  it("tags issue-linked tickets with source 'issue'", async () => {
+    const out = await mine(baseRoutes());
+    expect(out.tickets).toHaveLength(1);
+    expect(out.tickets[0]!.source).toBe("issue");
+  });
+
+  it("falls back to a PR-as-ticket when no issue is linked", async () => {
     const routes = baseRoutes();
-    routes["pr view 42"] = { ...fxJson<Json>("gh_pr_view_42.json"), closingIssuesReferences: [] };
+    routes["pr view 42"] = fxJson<Json>("gh_pr_view_99_unlinked.json");
+    const out = await mine(routes);
+    expect(out.tickets).toHaveLength(1);
+    const t = out.tickets[0]!;
+    expect(t.source).toBe("pr");
+    expect(t.issue).toBe(99); // PR number serves as the ticket id
+    expect(t.fix_pr).toBe(99);
+    expect(t.issue_url).toBe("https://github.com/acme/demo/pull/99");
+    expect(t.base_commit).toBe("bbbb111122223333444455556666777788880000"); // PR's first parent
+    expect(t.fix_commit).toBe("aaaa111122223333444455556666777788889999"); // PR merge commit
+    expect(t.test_files).toEqual(["test/checkout.test.ts"]);
+    expect(t.src_files).toEqual(["src/checkout.ts"]);
+    // body_sanitized has the template boilerplate stripped:
+    expect(t.body_sanitized).not.toContain("<!--");
+    expect(t.body_sanitized).not.toContain("# Impact");
+    expect(t.body_sanitized).not.toContain("[ ]");
+    expect(t.body_sanitized).not.toContain("[x]");
+    expect(t.body_sanitized).toContain("double-counts percentage discounts");
+  });
+
+  it("still filters PR-as-ticket fallbacks with no test changes", async () => {
+    const routes = baseRoutes();
+    routes["pr view 42"] = {
+      ...fxJson<Json>("gh_pr_view_99_unlinked.json"),
+      files: [{ path: "src/checkout.ts", additions: 9, deletions: 3 }],
+    };
     const out = await mine(routes);
     expect(out.tickets).toHaveLength(0);
+  });
+
+  it("dedupes a PR-as-ticket so it is not double-emitted", async () => {
+    const routes = baseRoutes();
+    const list = fxJson<Json[]>("gh_pr_list.json");
+    const entry42 = { ...(list[0] as Json), number: 99, url: "https://github.com/acme/demo/pull/99" };
+    routes["pr list"] = [entry42, { ...entry42 }];
+    routes["pr view 99"] = fxJson<Json>("gh_pr_view_99_unlinked.json");
+    const out = await mineGithub(CFG, { target: 10, limit: 200, runner: makeGh(routes) });
+    expect(out.tickets).toHaveLength(1);
   });
 
   it("skips references that are actually PRs", async () => {
