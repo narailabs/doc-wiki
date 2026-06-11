@@ -8,7 +8,11 @@ Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). Numbers: `RESULTS.m
 
 1. `claude setup-token` → export the printed token as `CLAUDE_CODE_OAUTH_TOKEN` (draws on your Claude subscription; never commit it).
 2. Build the image: `docker build -t docwiki-bench-vitest --build-arg TOOLCHAIN=node:22 benchmark/harness/docker/`
+   - For repos with `system_packages` (e.g. saleor needs `libpq-dev`): add `--build-arg EXTRA_APT="libpq-dev"` to the build command, or use the harness `build-image` subcommand which reads `system_packages` from the repo config automatically.
+   - All images include `uv` (installed system-wide), so Python repos can provision their own Python at session time via `uv sync --locked` without root.
 3. Cache a bare clone: `git clone --bare https://github.com/vitest-dev/vitest.git benchmark/wiki-cache/vitest.git`
+
+**Service-backed repos** (e.g. saleor with Postgres + valkey/redis): the harness automatically starts the configured sidecars on a per-run private docker network before each session/grade container, injects `DATABASE_URL`/`CACHE_URL` (and `BENCH_ALLOW_PRIVATE_NET=1`) via environment variables, and tears them down in a `finally` block after each run. No extra setup is required beyond ensuring docker is running; the sidecar config lives entirely in `benchmark/repos/<repo>.yaml`.
 
 ## Pipeline (pilot: vitest)
 

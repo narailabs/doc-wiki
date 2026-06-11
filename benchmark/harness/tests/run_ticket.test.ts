@@ -5,13 +5,15 @@ import { describe, expect, it } from "vitest";
 import type { Runner } from "../exec.js";
 import { runBatch } from "../run_ticket.js";
 import { loadState, runKey, saveState, setRun } from "../bench_checkpoint.js";
-import type { RepoConfig, TicketsFile } from "../types.js";
+import type { RepoConfig, ServiceSpec, TicketsFile } from "../types.js";
 
 const CFG: RepoConfig = {
   id: "demo", github: "acme/demo", clone_url: "x", language: "ts",
   ticket_source: "github", install: ["true"], test_command: "t {test_files}",
-  test_patterns: ["test/**"], test_retries: 0, ticket_after: "2025-06-01",
+  test_patterns: ["test/**"], run_patterns: ["test/**"], exclude_test_paths: [],
+  test_retries: 0, ticket_after: "2025-06-01",
   wiki_commit: "cccc", toolchain: ["node:22"], services: [],
+  container_env: {}, system_packages: [],
 };
 
 const ticket = (issue: number) => ({
@@ -189,6 +191,104 @@ describe("runBatch", () => {
       image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
       runner: async () => { throw new Error("must not be called"); },
     })).rejects.toThrow(/build-wiki/);
+  });
+});
+
+describe("sidecar lifecycle in runBatch", () => {
+  const DB_SVC: ServiceSpec = {
+    name: "db",
+    image: "postgres:15-alpine",
+    env: { POSTGRES_USER: "test" },
+  };
+
+  it("starts network + service, passes --network + BENCH_ALLOW_PRIVATE_NET to session, teardown after run", async () => {
+    const cfgWithSvc: RepoConfig = {
+      ...CFG,
+      services: [DB_SVC],
+      container_env: { DATABASE_URL: "postgres://test@db/test" },
+    };
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    const calls: string[][] = [];
+
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      if (args[0] === "run" && args.some((a) => a.includes(":/out"))) {
+        const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+        writeFileSync(join(String(outDir), "result.json"), JSON.stringify({ result: "ok", total_cost_usd: 0.1, session_id: "s" }));
+        writeFileSync(join(String(outDir), "stderr.log"), "");
+        writeFileSync(join(String(outDir), "exit_code"), "0");
+        writeFileSync(join(String(outDir), "diff.patch"), "");
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const summary = await runBatch({
+      cfg: cfgWithSvc, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner,
+    });
+    expect(summary.errors).toBe(0);
+
+    // For each arm (baseline, wiki) we expect: rm -f, network create, svc run (detached), session run, svc rm, network rm
+    const networkCreates = calls.filter((a) => a[0] === "network" && a[1] === "create");
+    const networkRms = calls.filter((a) => a[0] === "network" && a[1] === "rm");
+    const svcRuns = calls.filter((a) => a[0] === "run" && a.includes("-d") && a.some((x) => x.includes("-svc-db")));
+    const sessionRuns = calls.filter((a) => a[0] === "run" && a.some((x) => x.includes(":/out")));
+    const svcRmFs = calls.filter((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("-svc-db")));
+
+    // 2 arms × each lifecycle step
+    expect(networkCreates).toHaveLength(2);
+    expect(networkRms).toHaveLength(2);
+    expect(svcRuns).toHaveLength(2);
+    expect(sessionRuns).toHaveLength(2);
+    expect(svcRmFs).toHaveLength(2);
+
+    // Session run must include --network
+    for (const run of sessionRuns) {
+      expect(run).toContain("--network");
+      expect(run).toContain("BENCH_ALLOW_PRIVATE_NET=1");
+      expect(run).toContain("DATABASE_URL=postgres://test@db/test");
+    }
+
+    // Ordering for each arm: network create → svc run → session run → svc rm → network rm
+    // (We just verify that for the baseline arm the indices are in the right order.)
+    const baselineNetCreate = calls.findIndex((a) => a[0] === "network" && a[1] === "create" && a[2]?.includes("baseline"));
+    const baselineSvcRun = calls.findIndex((a) => a[0] === "run" && a.includes("-d") && a.some((x) => x.includes("baseline-svc-db")));
+    const baselineSessionRun = calls.findIndex((a) => a[0] === "run" && a.some((x) => x.includes("baseline") && x.includes(":/out")));
+    const baselineSvcRm = calls.findIndex((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("baseline-svc-db")));
+    const baselineNetRm = calls.findIndex((a) => a[0] === "network" && a[1] === "rm" && a[2]?.includes("baseline"));
+
+    expect(baselineNetCreate).toBeGreaterThanOrEqual(0);
+    expect(baselineSvcRun).toBeGreaterThan(baselineNetCreate);
+    expect(baselineSessionRun).toBeGreaterThan(baselineSvcRun);
+    expect(baselineSvcRm).toBeGreaterThan(baselineSessionRun);
+    expect(baselineNetRm).toBeGreaterThan(baselineSvcRm);
+  });
+
+  it("teardown runs even when the session docker run errors", async () => {
+    const cfgWithSvc: RepoConfig = { ...CFG, services: [DB_SVC], container_env: {} };
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    const calls: string[][] = [];
+
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      // Session run fails (no artifacts written)
+      if (args[0] === "run" && args.some((a) => a.includes(":/out"))) {
+        return { code: 1, stdout: "", stderr: "docker error" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const summary = await runBatch({
+      cfg: cfgWithSvc, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner,
+    });
+    // Errors recorded (session failed) but teardown still ran
+    expect(summary.errors).toBeGreaterThan(0);
+    const svcRmFs = calls.filter((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("-svc-db")));
+    const networkRms = calls.filter((a) => a[0] === "network" && a[1] === "rm");
+    // teardown should have been called (once per arm)
+    expect(svcRmFs.length).toBeGreaterThanOrEqual(1);
+    expect(networkRms.length).toBeGreaterThanOrEqual(1);
   });
 });
 

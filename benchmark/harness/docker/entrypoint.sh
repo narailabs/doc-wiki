@@ -53,7 +53,9 @@ if [ -d /wiki ]; then
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
-[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo /usr/local/bin/init-firewall.sh # entrypoint runs as non-root; iptables needs root (scoped NOPASSWD rule)
+# Pass BENCH_ALLOW_PRIVATE_NET explicitly so sudo does not strip it (sudoers env_keep
+# is not configured for this var; explicit env= assignment is the portable path).
+[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo BENCH_ALLOW_PRIVATE_NET="${BENCH_ALLOW_PRIVATE_NET:-0}" /usr/local/bin/init-firewall.sh
 
 set +e
 claude -p "$(cat /out/prompt.txt)" \

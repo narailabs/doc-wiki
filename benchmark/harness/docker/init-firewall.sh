@@ -19,6 +19,15 @@ for domain in "${ALLOWED_DOMAINS[@]}"; do
   done
 done
 
+# Allow RFC1918 private ranges when sidecars are present so the agent can reach
+# local DB/cache containers on the docker network, while public internet (incl.
+# github → the fix) stays REJECTed — contamination guarantee preserved.
+if [ "${BENCH_ALLOW_PRIVATE_NET:-0}" = "1" ]; then
+  for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
+    iptables -A OUTPUT -d "$cidr" -p tcp -j ACCEPT
+  done
+fi
+
 iptables -A OUTPUT -j REJECT
 
 # IPv6: fail-closed if ip6tables exists; if the kernel lacks v6 there's no v6 egress to close.

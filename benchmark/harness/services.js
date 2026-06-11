@@ -1,0 +1,60 @@
+const READY_TIMEOUT_MS = 60_000;
+const READY_POLL_MS = 2_000;
+export function networkName(prefix) {
+    return `${prefix}-net`;
+}
+export function serviceContainerName(prefix, svc) {
+    return `${prefix}-svc-${svc.name}`;
+}
+export function networkCreateArgs(net) {
+    return ["network", "create", net];
+}
+export function serviceRunArgs(net, prefix, svc) {
+    const args = [
+        "run", "-d", "--rm",
+        "--name", serviceContainerName(prefix, svc),
+        "--network", net,
+        "--network-alias", svc.name,
+        ...Object.entries(svc.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+        svc.image,
+    ];
+    return args;
+}
+/** Returns argv arrays to tear down all service containers and the network. */
+export function teardownArgs(net, prefix, services) {
+    const cmds = services.map((svc) => ["rm", "-f", serviceContainerName(prefix, svc)]);
+    cmds.push(["network", "rm", net]);
+    return cmds;
+}
+export async function startSidecars(runner, net, prefix, services) {
+    if (services.length === 0)
+        return;
+    await runner("docker", networkCreateArgs(net));
+    for (const svc of services) {
+        await runner("docker", serviceRunArgs(net, prefix, svc));
+        if (svc.ready !== undefined) {
+            const ready = svc.ready;
+            const containerName = serviceContainerName(prefix, svc);
+            const deadline = Date.now() + READY_TIMEOUT_MS;
+            let ready_ok = false;
+            while (Date.now() < deadline) {
+                const r = await runner("docker", ["exec", containerName, "sh", "-c", ready]);
+                if (r.code === 0) {
+                    ready_ok = true;
+                    break;
+                }
+                await new Promise((res) => setTimeout(res, READY_POLL_MS));
+            }
+            if (!ready_ok) {
+                throw new Error(`sidecar "${svc.name}" (${containerName}) did not become ready within ${READY_TIMEOUT_MS / 1000}s`);
+            }
+        }
+    }
+}
+export async function teardownSidecars(runner, net, prefix, services) {
+    if (services.length === 0)
+        return;
+    for (const argv of teardownArgs(net, prefix, services)) {
+        await runner("docker", argv).catch(() => { });
+    }
+}

@@ -6,6 +6,7 @@ import { loadState, saveState } from "./bench_checkpoint.js";
 import { gradeRunArgs } from "./docker_args.js";
 import { realRunner } from "./exec.js";
 import { loadRepoConfig } from "./repo_config.js";
+import { networkName, startSidecars, teardownSidecars } from "./services.js";
 const GRADE_SH = fileURLToPath(new URL("./docker/grade.sh", import.meta.url));
 export function decideGrade(exitCode) {
     if (exitCode === 0)
@@ -115,12 +116,31 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
                 });
             }
             else {
-                const r = await opts.runner("docker", gradeRunArgs({
-                    image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
-                    testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
-                    testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
-                }));
-                graded = decideGrade(r.code);
+                const hasSidecars = cfg.services.length > 0;
+                const gradePrefix = `bench-${cfg.id}-${t.issue}-${String(arm)}-grade`;
+                const net = hasSidecars ? networkName(gradePrefix) : undefined;
+                try {
+                    if (hasSidecars && net !== undefined) {
+                        await startSidecars(opts.runner, net, gradePrefix, cfg.services);
+                    }
+                    const extraEnv = {
+                        ...cfg.container_env,
+                        ...(hasSidecars ? { BENCH_ALLOW_PRIVATE_NET: "1" } : {}),
+                    };
+                    const r = await opts.runner("docker", gradeRunArgs({
+                        image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
+                        testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
+                        testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
+                        network: net,
+                        extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+                    }));
+                    graded = decideGrade(r.code);
+                }
+                finally {
+                    if (hasSidecars && net !== undefined) {
+                        await teardownSidecars(opts.runner, net, gradePrefix, cfg.services);
+                    }
+                }
             }
             const grade = { ...graded, graded_at: new Date().toISOString() };
             writeFileSync(join(outDir, "grade.json"), `${JSON.stringify(grade, null, 2)}\n`);

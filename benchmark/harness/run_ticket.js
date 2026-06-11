@@ -5,6 +5,7 @@ import { loadState, nextPairs, runKey, saveState, setRun } from "./bench_checkpo
 import { sessionRunArgs } from "./docker_args.js";
 import { realRunner } from "./exec.js";
 import { loadRepoConfig } from "./repo_config.js";
+import { networkName, startSidecars, teardownSidecars } from "./services.js";
 import { buildPrompt, classifySession } from "./session.js";
 function readOut(outDir, name) {
     const p = join(outDir, name);
@@ -57,23 +58,42 @@ export async function runBatch(opts) {
             const containerName = `bench-${opts.cfg.id}-${item.issue}-${arm}`;
             // Clear stale crash leftovers and prevent --name collisions; result ignored.
             await opts.runner("docker", ["rm", "-f", containerName]);
-            const dockerArgs = sessionRunArgs({
-                image: opts.image,
-                name: containerName,
-                outDir,
-                bareDir: opts.bareDir,
-                wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
-                baseCommit: ticket.base_commit,
-                model: opts.model,
-                maxTurns: opts.maxTurns,
-                install: opts.cfg.install,
-                timeoutSec: opts.timeoutSec,
-            });
-            const exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
-            // Host-side timeout kills our docker CLI process, not the container —
-            // reap it so it can't keep burning quota in the background.
-            if (exec.code !== 0)
-                await opts.runner("docker", ["rm", "-f", containerName]);
+            const hasSidecars = opts.cfg.services.length > 0;
+            const net = hasSidecars ? networkName(containerName) : undefined;
+            let exec = { code: 0, stdout: "", stderr: "" };
+            try {
+                if (hasSidecars && net !== undefined) {
+                    await startSidecars(opts.runner, net, containerName, opts.cfg.services);
+                }
+                const extraEnv = {
+                    ...opts.cfg.container_env,
+                    ...(hasSidecars ? { BENCH_ALLOW_PRIVATE_NET: "1" } : {}),
+                };
+                const dockerArgs = sessionRunArgs({
+                    image: opts.image,
+                    name: containerName,
+                    outDir,
+                    bareDir: opts.bareDir,
+                    wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
+                    baseCommit: ticket.base_commit,
+                    model: opts.model,
+                    maxTurns: opts.maxTurns,
+                    install: opts.cfg.install,
+                    timeoutSec: opts.timeoutSec,
+                    network: net,
+                    extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+                });
+                exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
+                // Host-side timeout kills our docker CLI process, not the container —
+                // reap it so it can't keep burning quota in the background.
+                if (exec.code !== 0)
+                    await opts.runner("docker", ["rm", "-f", containerName]);
+            }
+            finally {
+                if (hasSidecars && net !== undefined) {
+                    await teardownSidecars(opts.runner, net, containerName, opts.cfg.services);
+                }
+            }
             const result = classifySession(readOut(outDir, "result.json"), exec.code !== 0 ? exec.code : Number(readOut(outDir, "exit_code").trim() || "0"), readOut(outDir, "stderr.log") + exec.stderr);
             const finished = new Date().toISOString();
             if (result.kind === "ok") {

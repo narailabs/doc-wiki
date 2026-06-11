@@ -11,6 +11,13 @@ export type RunStatus =
   | "error"
   | "rate-limited";
 
+export interface ServiceSpec {
+  name: string;        // network alias + DNS name other containers use (e.g. "db", "cache")
+  image: string;       // docker image (e.g. "postgres:15-alpine")
+  env: Record<string, string>; // env for the service container (e.g. POSTGRES_PASSWORD)
+  ready?: string;      // optional readiness probe run via `docker exec <svc> sh -c "<ready>"`; polled until exit 0
+}
+
 export interface RepoConfig {
   id: string;
   github: string; // "owner/name"
@@ -26,7 +33,9 @@ export interface RepoConfig {
   ticket_after: string; // ISO date floor (training-data contamination control)
   wiki_commit: string; // "" until the wiki is built
   toolchain: string[];
-  services: string[];
+  services: ServiceSpec[];              // default []
+  container_env: Record<string, string>; // injected into session+grade containers (e.g. DATABASE_URL); default {}
+  system_packages: string[];             // apt packages baked into the image at build time (root); default []
 }
 
 export interface TicketCalibration {

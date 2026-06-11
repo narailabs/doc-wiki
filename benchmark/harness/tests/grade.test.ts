@@ -132,8 +132,10 @@ describe("calibrateAll (real git, no docker)", () => {
     const { bare, base, fix } = fixtureRepo();
     const cfg: RepoConfig = {
       id: "demo", github: "o/r", clone_url: "", language: "js", ticket_source: "github",
-      install: [], test_command: TEST_CMD, test_patterns: ["test/**"], test_retries: 0,
+      install: [], test_command: TEST_CMD, test_patterns: ["test/**"], run_patterns: ["test/**"],
+      exclude_test_paths: [], test_retries: 0,
       ticket_after: "2026-01-01", wiki_commit: "", toolchain: [], services: [],
+      container_env: {}, system_packages: [],
     };
     const tickets: TicketsFile = {
       schema_version: 1, repo: "demo", mined_at: "2026-06-10T00:00:00Z",

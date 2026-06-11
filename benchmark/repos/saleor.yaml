@@ -1,0 +1,38 @@
+id: saleor
+github: saleor/saleor
+clone_url: https://github.com/saleor/saleor.git
+language: python
+ticket_source: github
+# uv auto-provisions Python 3.12 from requires-python in pyproject.toml; no apt/pip needed at session time.
+install:
+  - "uv sync --locked"
+test_command: "uv run pytest {test_files}"
+test_patterns:
+  - "tests/**"
+  - "**/*_test.py"
+  - "**/*test*.py"
+run_patterns:
+  - "tests/**/*_test.py"
+  - "tests/**/*test*.py"
+exclude_test_paths: []
+test_retries: 1
+ticket_after: "2025-06-01"
+wiki_commit: ""
+toolchain:
+  - "node:22"
+system_packages:
+  - "libpq-dev"
+services:
+  - name: db
+    image: postgres:15-alpine
+    env:
+      POSTGRES_USER: saleor
+      POSTGRES_PASSWORD: saleor
+      POSTGRES_DB: saleor
+    ready: "pg_isready -U saleor"
+  - name: cache
+    image: valkey/valkey:8.1-alpine
+    env: {}
+container_env:
+  DATABASE_URL: "postgres://saleor:saleor@db:5432/saleor"
+  CACHE_URL: "redis://cache:6379/0"
