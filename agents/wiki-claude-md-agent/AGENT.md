@@ -110,6 +110,7 @@ The body is **imperative and behavioral**, not a passive index. It supersedes th
 1. **Behavioral directive (ALWAYS emitted).** A short, strong instruction to consult the wiki before changing code and treat it as the source of truth. This leads the block on every run, regardless of how many pages exist.
 2. **Intent→resource routing table.** One `| If you need to… | Read |` row per actionable wiki page, derived from the `atlas_facet` frontmatter of pages that actually exist. Per-topic facets (architecture, api, data-model, operations, environments) emit one row per topic; global facets (overview, configuration, troubleshooting, …) emit one row. Links resolve relative to the file's own directory (submodule-aware).
 3. **Full wiki index link.** Emitted when `wiki/index.md` exists.
+4. **Navigational section boundary (root ⇄ submodule).** A root `CLAUDE.md` lists each discovered submodule under a `## Submodules` heading. A submodule `CLAUDE.md` links back to the root under a `## Parent Project` heading. These headings are required by the eval contract (`evals/evals.json` eval 1 expectation 3) as section boundaries around the cross-links.
 
 **Graceful degradation — no near-empty body.** When the wiki has no recognized `atlas_facet` pages yet (fresh / pre-atlas), the routing table is replaced by a one-line pointer to the wiki directory plus a nudge to run `/doc-wiki:atlas`. The behavioral directive still leads. The body never collapses to a bare directive.
 

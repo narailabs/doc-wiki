@@ -200,6 +200,21 @@ describe("TestGenerateClaudeMd", () => {
     // Should reference the root CLAUDE.md
     expect(result.includes("CLAUDE.md")).toBe(true);
   });
+
+  it("submodule backlink sits under a Parent Project heading (eval contract)", () => {
+    // evals/evals.json eval 1 expectation 3: the backlink to root CLAUDE.md
+    // must appear "under a Parent Project heading".
+    const root = makeProjectWithSubmodules(tmpPath);
+    const result = generateClaudeMd(root, root, "services/auth");
+    expect(result).toContain("## Parent Project");
+    // The heading appears immediately before the backlink line.
+    const headingIdx = result.indexOf("## Parent Project");
+    const linkIdx = result.indexOf("[Root CLAUDE.md](");
+    expect(headingIdx).toBeGreaterThanOrEqual(0);
+    expect(linkIdx).toBeGreaterThan(headingIdx);
+    // The backlink target is a relative climb to the root CLAUDE.md.
+    expect(result).toContain("[Root CLAUDE.md](../../CLAUDE.md)");
+  });
 });
 
 // ── update_claude_md tests ────────────────────────────────────────

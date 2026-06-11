@@ -420,9 +420,14 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         lines.push("");
     }
     // ── Submodule back-link ─────────────────────────────────────────────
+    // Emitted under a "Parent Project" heading: a navigational section boundary
+    // around the backlink (required by the eval contract in evals/evals.json,
+    // eval 1 expectation 3 — "under a Parent Project heading").
     if (submodule) {
         const subDepth = submodule.split(path.sep).filter((s) => s.length > 0).length;
         const rootRel = new Array(subDepth).fill("..").join("/");
+        lines.push("## Parent Project");
+        lines.push("");
         lines.push(`[Root CLAUDE.md](${rootRel}/CLAUDE.md)`);
         lines.push("");
     }
