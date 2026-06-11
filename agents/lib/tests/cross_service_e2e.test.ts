@@ -126,6 +126,11 @@ public class OrderEventConsumer {
   <version>1.0.0</version>
   <dependencies>
     <dependency>
+      <groupId>com.x.shared</groupId>
+      <artifactId>common-model</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.amqp</groupId>
       <artifactId>spring-rabbit</artifactId>
     </dependency>
