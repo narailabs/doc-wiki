@@ -21,6 +21,169 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// ── Wiki page scanning ──────────────────────────────────────────────
+
+/**
+ * Minimal frontmatter fields read from wiki pages for routing-table generation.
+ */
+export interface WikiPageInfo {
+  /** Relative path from wikiRoot (e.g. "wiki/auth/architecture.md"). */
+  relPath: string;
+  /** `atlas_facet` frontmatter value, if present. */
+  facet: string | null;
+  /** `title` frontmatter value, if present. */
+  title: string | null;
+}
+
+/**
+ * Parse a minimal YAML frontmatter block from `content`.
+ * Returns a plain object or null when the block is absent or malformed.
+ * This is an intentionally lightweight parser — we only read string-valued
+ * top-level keys. It does NOT require the `js-yaml` package so that this
+ * script stays self-contained.
+ */
+function parseMinimalFrontmatter(content: string): Record<string, string> | null {
+  if (!content.startsWith("---\n")) return null;
+  const end = content.indexOf("\n---\n", 4);
+  if (end === -1) return null;
+  const fmStr = content.slice(4, end);
+  const result: Record<string, string> = {};
+  for (const line of fmStr.split("\n")) {
+    const colon = line.indexOf(":");
+    if (colon < 1) continue;
+    const key = line.slice(0, colon).trim();
+    const raw = line.slice(colon + 1).trim();
+    // Only accept bare scalar strings (no block literals, lists, etc.)
+    if (raw.startsWith("|") || raw.startsWith(">") || raw.startsWith("[") || raw.startsWith("{")) continue;
+    if (key && raw) {
+      result[key] = raw.replace(/^['"]|['"]$/g, "");
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Walk `<wikiRoot>/wiki/` for `.md` files (excluding `_archive` and other
+ * `_*` reserved dirs), read each file's frontmatter, and return page info
+ * records. Silently skips unreadable files.
+ */
+export function listWikiPagesForRouting(wikiRoot: string): WikiPageInfo[] {
+  const wikiDir = path.join(wikiRoot, "wiki");
+  if (!fs.existsSync(wikiDir)) return [];
+
+  const pages: WikiPageInfo[] = [];
+  const stack: string[] = [wikiDir];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Exclude _archive and other _* reserved dirs
+        if (!entry.name.startsWith("_")) stack.push(full);
+      } else if (entry.isFile() && entry.name.endsWith(".md")) {
+        let content = "";
+        try {
+          content = fs.readFileSync(full, { encoding: "utf-8" });
+        } catch {
+          continue;
+        }
+        const fm = parseMinimalFrontmatter(content);
+        const relPath = path.relative(wikiRoot, full).split(path.sep).join("/");
+        pages.push({
+          relPath,
+          facet: fm?.["atlas_facet"] ?? null,
+          title: fm?.["title"] ?? null,
+        });
+      }
+    }
+  }
+  pages.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
+  return pages;
+}
+
+/**
+ * A single row in the intent-to-resource routing table.
+ */
+export interface RoutingRow {
+  /** Human-readable intent clause: "If you need to…" */
+  intent: string;
+  /** Relative path to the wiki page, from the project root. */
+  pagePath: string;
+}
+
+/**
+ * Well-known facet → intent mapping. These strings are intentionally generic;
+ * they read well for any codebase.
+ */
+const FACET_INTENTS: Record<string, string> = {
+  overview: "understand how the system fits together",
+  architecture: "understand the architecture of a subsystem",
+  "data-model": "understand the data model or schema",
+  api: "trace or modify an API endpoint",
+  configuration: "change configuration or environment variables",
+  operations: "operate, deploy, or monitor the system",
+  environments: "understand runtime environments or deployment targets",
+  integrations: "wire in or debug an external service",
+  deploy: "understand the deployment pipeline",
+  "getting-started": "get set up for the first time",
+  commands: "look up available commands or options",
+  troubleshooting: "diagnose a failure or unexpected behaviour",
+  "service-map": "see the service topology diagram",
+  "service-dependencies": "trace inter-service dependencies",
+  "client-registry": "find HTTP client callsites",
+  "queue-registry": "find queue producers and consumers",
+  "database-traces": "trace datasource access paths",
+  "shared-libraries": "find shared library usage across services",
+};
+
+/**
+ * Build a routing table from wiki pages that have a recognized `atlas_facet`.
+ * Pages without a known facet are omitted — the table only lists rows the
+ * agent can act on.
+ *
+ * `wikiRelDir` is the path from the project root to the wiki folder
+ * (e.g. `"docs/my-app-wiki"` or `"wiki"`), used to prefix page paths.
+ */
+export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): RoutingRow[] {
+  // Collect the first page seen per facet (pages are sorted by relPath so the
+  // result is deterministic across runs).
+  const seen = new Set<string>();
+  const rows: RoutingRow[] = [];
+  for (const page of pages) {
+    if (!page.facet) continue;
+    const intent = FACET_INTENTS[page.facet];
+    if (!intent) continue;
+    if (seen.has(page.facet)) continue;
+    seen.add(page.facet);
+    // page.relPath is already relative to wikiRoot; prepend wikiRelDir if needed
+    const fullRel = wikiRelDir ? `${wikiRelDir}/${page.relPath}` : page.relPath;
+    rows.push({ intent, pagePath: fullRel });
+  }
+  // Sort by the order facets appear in FACET_INTENTS for a stable, logical order
+  const facetOrder = Object.keys(FACET_INTENTS);
+  rows.sort((a, b) => {
+    // Recover the facet key from pagePath by looking up which row it came from
+    const facetA = pages.find((p) => {
+      const fp = wikiRelDir ? `${wikiRelDir}/${p.relPath}` : p.relPath;
+      return fp === a.pagePath;
+    })?.facet ?? "";
+    const facetB = pages.find((p) => {
+      const fp = wikiRelDir ? `${wikiRelDir}/${p.relPath}` : p.relPath;
+      return fp === b.pagePath;
+    })?.facet ?? "";
+    const ia = facetOrder.indexOf(facetA);
+    const ib = facetOrder.indexOf(facetB);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+  return rows;
+}
+
 // ── Constants ───────────────────────────────────────────────────────
 
 export const MARKER_START = "<!-- wiki-managed: start -->";
@@ -103,6 +266,12 @@ function safeRelpath(to: string, from: string): string {
  * to a submodule; when set the generated content includes a link back
  * to the root CLAUDE.md.
  *
+ * The generated block leads with a behavioral directive that tells coding
+ * agents to consult the wiki before making changes, followed by an
+ * intent→resource routing table derived from the actual pages in the wiki.
+ * Only pages with a recognized `atlas_facet` appear in the table, so the
+ * table degrades gracefully when few pages exist.
+ *
  * Returns the full managed section (between markers) as a markdown string.
  */
 export function generateClaudeMd(
@@ -112,29 +281,46 @@ export function generateClaudeMd(
 ): string {
   const lines: string[] = [];
 
-  // Overview
-  lines.push("## Overview");
+  // ── Behavioral directive ────────────────────────────────────────────
+  lines.push("## Wiki");
   lines.push("");
-  const projectName = path.basename(projectRoot) || "Project";
-  lines.push(`Auto-generated documentation index for **${projectName}**.`);
+  lines.push(
+    "Before changing code in this repository, consult the wiki for the relevant " +
+      "subsystem. Treat the wiki as the source of truth for architecture, data flow, " +
+      "and conventions; verify your assumptions against it before implementing. If " +
+      "the wiki does not cover something, say so rather than guessing.",
+  );
   lines.push("");
 
-  // Wiki link — prefer a relative path when possible.
+  // ── Intent → resource routing table ────────────────────────────────
   const wikiRel = safeRelpath(wikiRoot, projectRoot);
-  lines.push(`- [Wiki documentation](${wikiRel}/index.md)`);
-  lines.push("");
+  const pages = listWikiPagesForRouting(wikiRoot);
+  const routingRows = buildRoutingTable(pages, wikiRel);
 
-  if (submodule) {
-    // Link back to root CLAUDE.md
-    const subDepth = submodule.split(path.sep).filter((s) => s.length > 0).length;
-    const rootRel = new Array(subDepth).fill("..").join("/");
-    lines.push("## Parent Project");
-    lines.push("");
-    lines.push(`- [Root CLAUDE.md](${rootRel}/CLAUDE.md)`);
+  if (routingRows.length > 0) {
+    lines.push("| If you need to… | Read |");
+    lines.push("|---|---|");
+    for (const row of routingRows) {
+      const filename = path.basename(row.pagePath);
+      lines.push(`| ${row.intent} | [${filename}](${row.pagePath}) |`);
+    }
     lines.push("");
   }
 
-  // Submodules listing (only for root, not submodule pages)
+  // ── Documentation index ─────────────────────────────────────────────
+  const wikiIndexPath = wikiRel ? `${wikiRel}/index.md` : "wiki/index.md";
+  lines.push(`[Full wiki index](${wikiIndexPath})`);
+  lines.push("");
+
+  // ── Submodule back-link ─────────────────────────────────────────────
+  if (submodule) {
+    const subDepth = submodule.split(path.sep).filter((s) => s.length > 0).length;
+    const rootRel = new Array(subDepth).fill("..").join("/");
+    lines.push(`[Root CLAUDE.md](${rootRel}/CLAUDE.md)`);
+    lines.push("");
+  }
+
+  // ── Submodules listing (root only) ──────────────────────────────────
   if (!submodule) {
     const submodules = listSubmodules(projectRoot);
     if (submodules.length > 0) {
@@ -146,24 +332,6 @@ export function generateClaudeMd(
       lines.push("");
     }
   }
-
-  // Build & Run
-  lines.push("## Build & Run");
-  lines.push("");
-  lines.push("See project-specific build instructions.");
-  lines.push("");
-
-  // Service Dependencies
-  lines.push("## Service Dependencies");
-  lines.push("");
-  lines.push("See wiki for service dependency details.");
-  lines.push("");
-
-  // Database references
-  lines.push("## Database References");
-  lines.push("");
-  lines.push("See wiki for database schema documentation.");
-  lines.push("");
 
   const innerContent = lines.join("\n");
   return `${MARKER_START}\n${innerContent}${MARKER_END}\n`;

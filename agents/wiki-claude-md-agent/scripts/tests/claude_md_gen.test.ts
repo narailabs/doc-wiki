@@ -15,6 +15,8 @@ import {
   updateClaudeMd,
   extractManagedSection,
   listSubmodules,
+  listWikiPagesForRouting,
+  buildRoutingTable,
   MarkerCorruptError,
   MARKER_START,
   MARKER_END,
@@ -91,6 +93,44 @@ function makeProjectWithSubmodules(tmpPath: string): string {
       `# ${name}\n\nCustom content.\n`,
     );
   }
+  return tmpPath;
+}
+
+/**
+ * Create a wiki page with YAML frontmatter in `<wikiRoot>/wiki/<relPath>`.
+ * `frontmatterLines` are bare YAML key: value lines (no delimiters needed).
+ */
+function makeWikiPage(
+  wikiRoot: string,
+  relPath: string,
+  frontmatterLines: string[],
+  body: string = "Content.\n",
+): void {
+  const absPath = path.join(wikiRoot, "wiki", relPath);
+  fs.mkdirSync(path.dirname(absPath), { recursive: true });
+  const fm = `---\n${frontmatterLines.join("\n")}\n---\n`;
+  fs.writeFileSync(absPath, fm + body, "utf-8");
+}
+
+/** Create a minimal project root with wiki directory and several atlas pages. */
+function makeProjectWithAtlasPages(tmpPath: string): string {
+  const wikiDir = path.join(tmpPath, "wiki");
+  fs.mkdirSync(wikiDir, { recursive: true });
+  fs.writeFileSync(path.join(wikiDir, "index.md"), "# Wiki Index\n");
+  makeWikiPage(tmpPath, "overview.md", ["title: Overview", "atlas_facet: overview"]);
+  makeWikiPage(tmpPath, "auth/architecture.md", [
+    "title: Auth Architecture",
+    "atlas_facet: architecture",
+  ]);
+  makeWikiPage(tmpPath, "auth/api.md", ["title: Auth API", "atlas_facet: api"]);
+  makeWikiPage(tmpPath, "configuration.md", [
+    "title: Configuration",
+    "atlas_facet: configuration",
+  ]);
+  makeWikiPage(tmpPath, "troubleshooting.md", [
+    "title: Troubleshooting",
+    "atlas_facet: troubleshooting",
+  ]);
   return tmpPath;
 }
 
@@ -263,6 +303,251 @@ describe("TestListSubmodules", () => {
     const root = makeProjectRoot(tmpPath);
     const result = listSubmodules(root);
     expect(result).toEqual([]);
+  });
+});
+
+// ── listWikiPagesForRouting tests ─────────────────────────────────
+
+describe("listWikiPagesForRouting", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("wiki-pages-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("returns empty array when wiki dir does not exist", () => {
+    const result = listWikiPagesForRouting(path.join(tmpPath, "nonexistent"));
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when wiki dir exists but is empty", () => {
+    fs.mkdirSync(path.join(tmpPath, "wiki"), { recursive: true });
+    const result = listWikiPagesForRouting(tmpPath);
+    expect(result).toEqual([]);
+  });
+
+  it("reads atlas_facet from frontmatter", () => {
+    makeWikiPage(tmpPath, "overview.md", ["title: Overview", "atlas_facet: overview"]);
+    const pages = listWikiPagesForRouting(tmpPath);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].facet).toBe("overview");
+    expect(pages[0].title).toBe("Overview");
+  });
+
+  it("returns null facet and title for pages without frontmatter", () => {
+    fs.mkdirSync(path.join(tmpPath, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "plain.md"), "No frontmatter.\n");
+    const pages = listWikiPagesForRouting(tmpPath);
+    expect(pages).toHaveLength(1);
+    expect(pages[0].facet).toBeNull();
+    expect(pages[0].title).toBeNull();
+  });
+
+  it("excludes pages under _archive and other _ dirs", () => {
+    makeWikiPage(tmpPath, "overview.md", ["atlas_facet: overview"]);
+    // Create an archived page — should be excluded
+    const archiveDir = path.join(tmpPath, "wiki", "_archive");
+    fs.mkdirSync(archiveDir, { recursive: true });
+    fs.writeFileSync(path.join(archiveDir, "old.md"), "---\natlas_facet: architecture\n---\nOld.\n");
+    const pages = listWikiPagesForRouting(tmpPath);
+    // Only overview.md; old.md under _archive is excluded
+    expect(pages.every((p) => !p.relPath.includes("_archive"))).toBe(true);
+    expect(pages.some((p) => p.facet === "overview")).toBe(true);
+    expect(pages.some((p) => p.facet === "architecture")).toBe(false);
+  });
+
+  it("returns relative paths from wikiRoot (POSIX separators)", () => {
+    makeWikiPage(tmpPath, "auth/architecture.md", ["atlas_facet: architecture"]);
+    const pages = listWikiPagesForRouting(tmpPath);
+    expect(pages[0].relPath).toBe("wiki/auth/architecture.md");
+    expect(pages[0].relPath).not.toContain("\\");
+  });
+
+  it("returns pages sorted lexicographically by relPath", () => {
+    makeWikiPage(tmpPath, "z_page.md", ["atlas_facet: operations"]);
+    makeWikiPage(tmpPath, "a_page.md", ["atlas_facet: overview"]);
+    const pages = listWikiPagesForRouting(tmpPath);
+    expect(pages[0].relPath.endsWith("a_page.md")).toBe(true);
+    expect(pages[1].relPath.endsWith("z_page.md")).toBe(true);
+  });
+});
+
+// ── buildRoutingTable tests ───────────────────────────────────────
+
+describe("buildRoutingTable", () => {
+  it("returns empty array when no pages have a recognized facet", () => {
+    const pages = [
+      { relPath: "wiki/notes.md", facet: null, title: null },
+      { relPath: "wiki/custom.md", facet: "unknown-facet", title: null },
+    ];
+    expect(buildRoutingTable(pages, "docs/wiki")).toEqual([]);
+  });
+
+  it("emits a row for each recognized atlas_facet", () => {
+    const pages = [
+      { relPath: "wiki/overview.md", facet: "overview", title: "Overview" },
+      { relPath: "wiki/api.md", facet: "api", title: "API" },
+      { relPath: "wiki/config.md", facet: "configuration", title: "Config" },
+    ];
+    const rows = buildRoutingTable(pages, "docs/wiki");
+    expect(rows).toHaveLength(3);
+    const intents = rows.map((r) => r.intent);
+    expect(intents.some((i) => i.includes("fits together"))).toBe(true);
+    expect(intents.some((i) => i.includes("API"))).toBe(true);
+    expect(intents.some((i) => i.includes("configuration"))).toBe(true);
+  });
+
+  it("prefixes pagePath with wikiRelDir", () => {
+    const pages = [{ relPath: "wiki/overview.md", facet: "overview", title: null }];
+    const rows = buildRoutingTable(pages, "docs/my-wiki");
+    expect(rows[0].pagePath).toBe("docs/my-wiki/wiki/overview.md");
+  });
+
+  it("handles empty wikiRelDir (wikiRoot === projectRoot)", () => {
+    const pages = [{ relPath: "wiki/overview.md", facet: "overview", title: null }];
+    const rows = buildRoutingTable(pages, "");
+    expect(rows[0].pagePath).toBe("wiki/overview.md");
+  });
+
+  it("deduplicates: only the first page per facet is kept", () => {
+    const pages = [
+      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: "Auth Arch" },
+      { relPath: "wiki/billing/architecture.md", facet: "architecture", title: "Billing Arch" },
+    ];
+    const rows = buildRoutingTable(pages, "docs/wiki");
+    // Both share the same facet — only one row emitted
+    expect(rows.filter((r) => r.intent.includes("architecture"))).toHaveLength(1);
+    // The first alphabetically is kept
+    expect(rows[0].pagePath).toContain("auth/architecture.md");
+  });
+
+  it("rows appear in a stable, logical order (overview before troubleshooting)", () => {
+    const pages = [
+      { relPath: "wiki/troubleshooting.md", facet: "troubleshooting", title: null },
+      { relPath: "wiki/overview.md", facet: "overview", title: null },
+    ];
+    const rows = buildRoutingTable(pages, "");
+    expect(rows[0].intent).toContain("fits together");
+    expect(rows[1].intent).toContain("diagnose");
+  });
+});
+
+// ── Behavioral directive tests ────────────────────────────────────
+
+describe("generateClaudeMd — behavioral directive", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("behavioral-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  it("generated block contains a strong behavioral directive", () => {
+    const root = makeProjectRoot(tmpPath);
+    const result = generateClaudeMd(root, path.join(root, "wiki"));
+    // Must contain imperative language telling the agent to consult the wiki
+    expect(result).toContain("consult the wiki");
+    expect(result).toContain("source of truth");
+  });
+
+  it("routing table is absent when no atlas pages exist", () => {
+    const root = makeProjectRoot(tmpPath);
+    const result = generateClaudeMd(root, path.join(root, "wiki"));
+    // No routing table rows when no atlas_facet pages
+    expect(result).not.toContain("| If you need to");
+  });
+
+  it("routing table appears when atlas pages exist", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const result = generateClaudeMd(root, root);
+    expect(result).toContain("| If you need to");
+    expect(result).toContain("overview.md");
+    expect(result).toContain("configuration.md");
+    expect(result).toContain("troubleshooting.md");
+  });
+
+  it("routing table only references pages that actually exist on disk", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const result = generateClaudeMd(root, root);
+    // Extract all markdown links from the managed block
+    const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    const linkedPaths: string[] = [];
+    while ((match = linkRe.exec(result)) !== null) {
+      const href = match[2];
+      if (href.endsWith(".md") && !href.endsWith("index.md")) {
+        linkedPaths.push(href);
+      }
+    }
+    // Every linked page must exist on disk
+    for (const relPath of linkedPaths) {
+      const absPath = path.join(root, relPath);
+      expect(fs.existsSync(absPath), `Expected ${absPath} to exist`).toBe(true);
+    }
+    expect(linkedPaths.length).toBeGreaterThan(0);
+  });
+
+  it("routing table does NOT include pages that are not on disk", () => {
+    // Create a project with only one atlas page
+    const root = makeProjectRoot(tmpPath);
+    makeWikiPage(root, "overview.md", ["atlas_facet: overview"]);
+    const result = generateClaudeMd(root, root);
+    // architecture page was never created — must not appear
+    expect(result).not.toContain("architecture.md");
+    // overview was created — must appear
+    expect(result).toContain("overview.md");
+  });
+
+  it("generated block includes a link to the full wiki index", () => {
+    const root = makeProjectRoot(tmpPath);
+    const result = generateClaudeMd(root, path.join(root, "wiki"));
+    expect(result).toContain("index.md");
+  });
+
+  it("idempotent re-splice: applying the same managed content twice yields identical output", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const claudeMd = path.join(root, "CLAUDE.md");
+    fs.writeFileSync(claudeMd, "# My Project\n\nHand-written intro.\n");
+
+    const fullGenerated = generateClaudeMd(root, root);
+    const inner = fullGenerated
+      .replace(MARKER_START + "\n", "")
+      .replace("\n" + MARKER_END + "\n", "");
+
+    const first = updateClaudeMd(claudeMd, inner);
+    fs.writeFileSync(claudeMd, first);
+    const second = updateClaudeMd(claudeMd, inner);
+    expect(first).toBe(second);
+  });
+
+  it("user content outside markers is preserved on update", () => {
+    const root = makeProjectWithAtlasPages(tmpPath);
+    const claudeMd = path.join(root, "CLAUDE.md");
+    const userContent = "# My Project\n\nHand-written intro that must survive.\n";
+    fs.writeFileSync(
+      claudeMd,
+      userContent +
+        "\n" + MARKER_START + "\nold managed\n" + MARKER_END + "\n" +
+        "\n## Custom Section\n\nKeep this too.\n",
+    );
+
+    const fullGenerated = generateClaudeMd(root, root);
+    const inner = fullGenerated
+      .replace(MARKER_START + "\n", "")
+      .replace("\n" + MARKER_END + "\n", "");
+
+    const result = updateClaudeMd(claudeMd, inner);
+    expect(result).toContain("Hand-written intro that must survive.");
+    expect(result).toContain("Keep this too.");
+    expect(result).toContain("consult the wiki");
+    expect(result).not.toContain("old managed");
   });
 });
 
