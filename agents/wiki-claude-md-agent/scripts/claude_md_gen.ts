@@ -308,9 +308,12 @@ export function generateClaudeMd(
   }
 
   // ── Documentation index ─────────────────────────────────────────────
+  // Only link the index if it actually exists — never emit a phantom link.
   const wikiIndexPath = wikiRel ? `${wikiRel}/index.md` : "wiki/index.md";
-  lines.push(`[Full wiki index](${wikiIndexPath})`);
-  lines.push("");
+  if (fs.existsSync(path.join(wikiRoot, "index.md"))) {
+    lines.push(`[Full wiki index](${wikiIndexPath})`);
+    lines.push("");
+  }
 
   // ── Submodule back-link ─────────────────────────────────────────────
   if (submodule) {
