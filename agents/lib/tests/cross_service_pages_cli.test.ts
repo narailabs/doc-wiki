@@ -188,10 +188,9 @@ describe("writeCrossServicePages", () => {
     const slugs = written.map((p) => path.basename(p, ".md"));
     expect(slugs).toContain("service-map");
     expect(slugs).toContain("service-dependencies");
-    // No calls edges with both non-synthetic endpoints → client-registry has no data
-    // But service-dependencies has calls edges so it IS written; client-registry is the
-    // HTTP-client callsite view — only written when http_clients exist in inventory.
-    // queue-registry, database-traces, shared-libraries have no data → skipped.
+    // The calls edge (svc-a → svc-b, both real) satisfies hasClientData too, so the
+    // three call-graph pages are co-emitted. queue/db/shared have no data → skipped.
+    expect(slugs).toContain("client-registry");
     expect(written.find((p) => p.endsWith("queue-registry.md"))).toBeUndefined();
     expect(written.find((p) => p.endsWith("database-traces.md"))).toBeUndefined();
     expect(written.find((p) => p.endsWith("shared-libraries.md"))).toBeUndefined();
