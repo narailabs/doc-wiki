@@ -148,6 +148,28 @@ describe("gradeRunArgs network + extraEnv", () => {
   });
 });
 
+describe("gradeRunArgs mode", () => {
+  const BASE_GRADE = {
+    image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+    testFiles: ["test/a.test.ts"], testCommand: "t {test_files}", retries: 0,
+  };
+
+  it("emits -e BENCH_GRADE_MODE=calibrate-base when mode is set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, mode: "calibrate-base" });
+    expect(args).toContain("BENCH_GRADE_MODE=calibrate-base");
+  });
+
+  it("emits -e BENCH_GRADE_MODE=calibrate-fix when mode is set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, mode: "calibrate-fix" });
+    expect(args).toContain("BENCH_GRADE_MODE=calibrate-fix");
+  });
+
+  it("omits BENCH_GRADE_MODE when mode is unset (grade.sh defaults to grade)", () => {
+    const args = gradeRunArgs(BASE_GRADE);
+    expect(args.join(" ")).not.toContain("BENCH_GRADE_MODE");
+  });
+});
+
 describe("buildImageArgs extraApt", () => {
   it("omits EXTRA_APT build-arg when extraApt is empty/undefined", () => {
     expect(buildImageArgs("tag", "node:22", "ctx")).toEqual([

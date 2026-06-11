@@ -38,10 +38,23 @@ export async function gradeRunLocal(spec) {
     });
     return decideGrade(r.code);
 }
+/** Single container-grade code path: run grade.sh inside the image, optionally on a sidecar network with extra env. */
+async function gradeRunContainer(spec, net, extraEnv, runner) {
+    const r = await runner("docker", gradeRunArgs({
+        ...spec,
+        network: net,
+        extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+    }));
+    return decideGrade(r.code);
+}
 /** Calibrate every un-calibrated ticket; failures get `excluded` set. Mutates + rewrites the tickets file after every ticket (each costs a clone+install+2 test runs — a crash loses at most one). */
 export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
     const file = JSON.parse(readFileSync(ticketsPath, "utf8"));
     const installPrefix = cfg.install.length > 0 ? `${cfg.install.join(" && ")} && ` : "";
+    // Service-backed repos can't calibrate on the host: the DB/cache hostnames (e.g. db:5432) only resolve
+    // INSIDE the docker network, and container_env (DATABASE_URL/...) targets them. Route through the same
+    // container+sidecar path the grade uses. (Requires the repo image to be built first — `build-image`.)
+    const hasSidecars = cfg.services.length > 0;
     for (const t of file.tickets) {
         if (t.calibration !== undefined || t.excluded !== undefined)
             continue;
@@ -53,9 +66,35 @@ export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
         try {
             // paths_stable: every test_file exists at fix_commit (renamed/deleted test files excluded).
             // Missing-at-base is fine — the canonical fix PR ADDS a regression test; calibrate-base overlays it from fix.
+            // testsExistAtFix is a host-side `git -C bareDir cat-file` check — no container needed either way.
             const stable = await testsExistAtFix(opts.runner, bareDir, t.fix_commit, t.test_files);
-            const failsOnBase = stable && (await gradeRunLocal({ ...common, mode: "calibrate-base" })).outcome === "passed";
-            const passesOnFix = stable && failsOnBase && (await gradeRunLocal({ ...common, mode: "calibrate-fix" })).outcome === "passed";
+            let failsOnBase = false;
+            let passesOnFix = false;
+            if (stable) {
+                if (hasSidecars) {
+                    // Start sidecars ONCE per ticket, wrapping BOTH the base and fix runs; teardown in finally.
+                    const prefix = `bench-${cfg.id}-${t.issue}-calib`;
+                    const net = networkName(prefix);
+                    const extraEnv = { ...cfg.container_env, BENCH_ALLOW_PRIVATE_NET: "1" };
+                    const containerSpec = {
+                        image: opts.image, outDir: bareDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
+                        testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
+                        testCommand: installPrefix + cfg.test_command, retries: 0,
+                    };
+                    try {
+                        await startSidecars(opts.runner, net, prefix, cfg.services);
+                        failsOnBase = (await gradeRunContainer({ ...containerSpec, mode: "calibrate-base" }, net, extraEnv, opts.runner)).outcome === "passed";
+                        passesOnFix = failsOnBase && (await gradeRunContainer({ ...containerSpec, mode: "calibrate-fix" }, net, extraEnv, opts.runner)).outcome === "passed";
+                    }
+                    finally {
+                        await teardownSidecars(opts.runner, net, prefix, cfg.services);
+                    }
+                }
+                else {
+                    failsOnBase = (await gradeRunLocal({ ...common, mode: "calibrate-base" })).outcome === "passed";
+                    passesOnFix = failsOnBase && (await gradeRunLocal({ ...common, mode: "calibrate-fix" })).outcome === "passed";
+                }
+            }
             t.calibration = { paths_stable: stable, tests_fail_on_base: failsOnBase, tests_pass_on_fix: passesOnFix };
             if (!stable || !failsOnBase || !passesOnFix) {
                 t.excluded = `calibration-failed (stable=${stable} failsOnBase=${failsOnBase} passesOnFix=${passesOnFix})`;
@@ -127,14 +166,11 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
                         ...cfg.container_env,
                         ...(hasSidecars ? { BENCH_ALLOW_PRIVATE_NET: "1" } : {}),
                     };
-                    const r = await opts.runner("docker", gradeRunArgs({
+                    graded = await gradeRunContainer({
                         image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
                         testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
                         testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
-                        network: net,
-                        extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
-                    }));
-                    graded = decideGrade(r.code);
+                    }, net, extraEnv, opts.runner);
                 }
                 finally {
                     if (hasSidecars && net !== undefined) {

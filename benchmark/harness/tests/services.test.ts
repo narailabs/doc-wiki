@@ -136,36 +136,43 @@ describe("startSidecars", () => {
     expect(probeCount).toBe(2);
   });
 
-  it("throws on readiness timeout", async () => {
-    // Override timeout by making every probe fail; we need to test the throw.
-    // We can't wait 60s in a test, so we test the logic with a svc that has a short
-    // effective timeout. We verify the error message is thrown.
-    // Use a fake that always returns code 1 for exec; we'll override the module's
-    // poll interval by relying on the fact that after enough probes an error is thrown.
-    // Since the real timeout is 60s with 2s polls, we spy on it via the fact that
-    // once Date.now() exceeds deadline the loop exits. We can't easily mock time here,
-    // so we verify via a separate integration path: a service whose probe never passes
-    // should throw. We can call the function with a runner that takes so long it would
-    // time out, but instead confirm the error message shape.
-    //
-    // Practical approach: test with a real runner that always returns code=1 but we
-    // need the deadline to pass. Since that requires 60s, instead we verify that the
-    // mechanism works by checking the thrown error contains the service name.
-    // We do this by creating a special scenario where the runner sets Date on the first
-    // call — but that requires time manipulation. Instead: document that this is covered
-    // by the retry test above (non-zero → zero transition) and the following shape test.
-    //
-    // Shape test: ensure startSidecars throws a meaningful error when polled exhausted.
-    // We achieve this by stubbing time: we simply call teardownSidecars (always no-op
-    // on non-zero services) and confirm the error text contains the container name.
-    // The actual timeout path is exercised by any always-failing probe reaching the
-    // deadline in a real docker environment. Since we can't fake time cleanly in Vitest
-    // without additional libraries, we trust the timeout branch is covered by inspection
-    // and the retry-success path is proven above.
-    //
-    // What we CAN test: if deadline < Date.now() at loop entry, it throws immediately.
-    // We verify the error message format is correct.
-    expect(true).toBe(true); // placeholder — see comment above
+  it("throws when `network create` returns non-zero, including stderr", async () => {
+    const calls: string[][] = [];
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      if (args[0] === "network" && args[1] === "create") {
+        return { code: 1, stdout: "", stderr: "Error: network with name already exists" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await expect(startSidecars(runner, "mynet", PREFIX, [DB])).rejects.toThrow(/already exists/);
+    // It must throw BEFORE running any service container.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual(["network", "create", "mynet"]);
+  });
+
+  it("throws when a `docker run -d` returns non-zero, including stderr", async () => {
+    const calls: string[][] = [];
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      if (args[0] === "run") {
+        return { code: 125, stdout: "", stderr: "Error: pull access denied for postgres:15-alpine" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await expect(startSidecars(runner, "mynet", PREFIX, [DB])).rejects.toThrow(/pull access denied/);
+    // network create + the failed run, then it throws BEFORE polling readiness.
+    expect(calls[0]).toEqual(["network", "create", "mynet"]);
+    expect(calls[1]?.[0]).toBe("run");
+    expect(calls.find((a) => a[0] === "exec")).toBeUndefined();
+  });
+
+  it("thrown error identifies the failing service by name", async () => {
+    const runner: Runner = async (_cmd, args) => {
+      if (args[0] === "run") return { code: 1, stdout: "", stderr: "boom" };
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await expect(startSidecars(runner, "mynet", PREFIX, [DB])).rejects.toThrow(/db/);
   });
 });
 

@@ -161,6 +161,131 @@ describe("calibrateAll (real git, no docker)", () => {
   }, 20_000);
 });
 
+describe("calibrateAll sidecar routing (fake runner, no docker)", () => {
+  const DB: import("../types.js").ServiceSpec = {
+    name: "db",
+    image: "postgres:15-alpine",
+    env: { POSTGRES_PASSWORD: "x" },
+  };
+
+  function baseCfg(overrides: Partial<RepoConfig>): RepoConfig {
+    return {
+      id: "saleor", github: "o/r", clone_url: "", language: "py", ticket_source: "github",
+      install: [], test_command: TEST_CMD, test_patterns: ["test/**"], run_patterns: ["test/**"],
+      exclude_test_paths: [], test_retries: 0,
+      ticket_after: "2026-01-01", wiki_commit: "", toolchain: [], services: [],
+      container_env: {}, system_packages: [],
+      ...overrides,
+    };
+  }
+
+  function ticketsWith(): TicketsFile {
+    return {
+      schema_version: 1, repo: "saleor", mined_at: "2026-06-10T00:00:00Z",
+      tickets: [{
+        issue: 7, issue_url: "u", title: "t", body: "b", body_sanitized: "b",
+        fix_pr: 2, fix_pr_url: "u", base_commit: "base123", fix_commit: "fix456",
+        test_files: TEST_FILES, src_files: ["app.py"], changed_lines: 1,
+        merged_at: "2026-06-01T00:00:00Z",
+      }],
+    };
+  }
+
+  /** Fake runner: git cat-file → exit 0 (paths stable); docker grade runs → exit 0 (calibration ok); everything else exit 0. */
+  function recordingRunner(calls: { cmd: string; args: string[] }[]): import("../exec.js").Runner {
+    return async (cmd, args) => {
+      calls.push({ cmd, args: [...args] });
+      return { code: 0, stdout: "", stderr: "" };
+    };
+  }
+
+  it("HAS services: routes through container path with sidecars, modes, container_env, private-net flag", async () => {
+    const cfg = baseCfg({
+      services: [DB],
+      container_env: { DATABASE_URL: "postgres://db:5432/saleor" },
+    });
+    const dir = mkdtempSync(join(tmpdir(), "benchcal-"));
+    const ticketsPath = join(dir, "saleor.json");
+    writeFileSync(ticketsPath, JSON.stringify(ticketsWith()));
+    const calls: { cmd: string; args: string[] }[] = [];
+
+    await calibrateAll(cfg, ticketsPath, "/bare.git", { local: false, image: "docwiki-bench-saleor", runner: recordingRunner(calls) });
+
+    const dockerCalls = calls.filter((c) => c.cmd === "docker");
+    const joined = dockerCalls.map((c) => c.args.join(" "));
+
+    // No host bash grade.sh path was used.
+    expect(calls.some((c) => c.cmd === "bash")).toBe(false);
+
+    // Sidecars: network create + network rm observed.
+    expect(joined.some((a) => a.startsWith("network create "))).toBe(true);
+    expect(joined.some((a) => a.startsWith("network rm "))).toBe(true);
+
+    // Two grade runs against the image, in calibrate-base then calibrate-fix mode.
+    const gradeRuns = dockerCalls.filter((c) => c.args[0] === "run" && c.args[c.args.length - 1] === "grade");
+    expect(gradeRuns).toHaveLength(2);
+    expect(gradeRuns[0]?.args).toContain("docwiki-bench-saleor");
+    expect(gradeRuns[0]?.args).toContain("BENCH_GRADE_MODE=calibrate-base");
+    expect(gradeRuns[1]?.args).toContain("BENCH_GRADE_MODE=calibrate-fix");
+
+    // Both grade runs join the sidecar network, carry container_env, and the private-net allow flag.
+    for (const gr of gradeRuns) {
+      expect(gr.args).toContain("--network");
+      const net = gr.args[gr.args.indexOf("--network") + 1];
+      expect(net).toMatch(/^bench-saleor-7-.*-net$/);
+      expect(gr.args).toContain("DATABASE_URL=postgres://db:5432/saleor");
+      expect(gr.args).toContain("BENCH_ALLOW_PRIVATE_NET=1");
+    }
+
+    // Calibration recorded as passing.
+    const after = JSON.parse(readFileSync(ticketsPath, "utf8")) as TicketsFile;
+    expect(after.tickets[0]?.excluded).toBeUndefined();
+    expect(after.tickets[0]?.calibration).toEqual({
+      paths_stable: true, tests_fail_on_base: true, tests_pass_on_fix: true,
+    });
+  });
+
+  it("NO services: still uses host grade.sh, no docker run, no network", async () => {
+    const cfg = baseCfg({ services: [] });
+    const dir = mkdtempSync(join(tmpdir(), "benchcal-"));
+    const ticketsPath = join(dir, "saleor.json");
+    writeFileSync(ticketsPath, JSON.stringify(ticketsWith()));
+    const calls: { cmd: string; args: string[] }[] = [];
+
+    await calibrateAll(cfg, ticketsPath, "/bare.git", { local: true, image: "x", runner: recordingRunner(calls) });
+
+    const bashCalls = calls.filter((c) => c.cmd === "bash");
+    expect(bashCalls.length).toBeGreaterThan(0);
+    expect(bashCalls.every((c) => c.args[0]?.endsWith("grade.sh"))).toBe(true);
+    expect(calls.some((c) => c.cmd === "docker" && c.args[0] === "run")).toBe(false);
+    expect(calls.some((c) => c.cmd === "docker" && c.args[0] === "network")).toBe(false);
+  });
+
+  it("HAS services: a startSidecars failure excludes the ticket as calibration-error, no crash", async () => {
+    const cfg = baseCfg({ services: [DB] });
+    const dir = mkdtempSync(join(tmpdir(), "benchcal-"));
+    const ticketsPath = join(dir, "saleor.json");
+    writeFileSync(ticketsPath, JSON.stringify(ticketsWith()));
+    const calls: { cmd: string; args: string[] }[] = [];
+    const runner: import("../exec.js").Runner = async (cmd, args) => {
+      calls.push({ cmd, args: [...args] });
+      if (cmd === "docker" && args[0] === "network" && args[1] === "create") {
+        return { code: 1, stdout: "", stderr: "network create boom" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    await expect(
+      calibrateAll(cfg, ticketsPath, "/bare.git", { local: false, image: "img", runner }),
+    ).resolves.toBeUndefined();
+
+    const after = JSON.parse(readFileSync(ticketsPath, "utf8")) as TicketsFile;
+    expect(after.tickets[0]?.excluded).toMatch(/calibration-error/);
+    // teardown still ran (network rm) despite the create failure.
+    expect(calls.some((c) => c.cmd === "docker" && c.args[0] === "network" && c.args[1] === "rm")).toBe(true);
+  });
+});
+
 describe("run_files vs test_files separation", () => {
   it("executes only the runnable subset while support files are still overlaid", async () => {
     const src = mkdtempSync(join(tmpdir(), "benchrun-src-"));

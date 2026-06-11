@@ -29,12 +29,18 @@ export function teardownArgs(net, prefix, services) {
 export async function startSidecars(runner, net, prefix, services) {
     if (services.length === 0)
         return;
-    await runner("docker", networkCreateArgs(net));
+    const netCreate = await runner("docker", networkCreateArgs(net));
+    if (netCreate.code !== 0) {
+        throw new Error(`docker network create "${net}" failed (exit ${netCreate.code}): ${netCreate.stderr.trim()}`);
+    }
     for (const svc of services) {
-        await runner("docker", serviceRunArgs(net, prefix, svc));
+        const containerName = serviceContainerName(prefix, svc);
+        const run = await runner("docker", serviceRunArgs(net, prefix, svc));
+        if (run.code !== 0) {
+            throw new Error(`sidecar "${svc.name}" (${containerName}) failed to start (exit ${run.code}): ${run.stderr.trim()}`);
+        }
         if (svc.ready !== undefined) {
             const ready = svc.ready;
-            const containerName = serviceContainerName(prefix, svc);
             const deadline = Date.now() + READY_TIMEOUT_MS;
             let ready_ok = false;
             while (Date.now() < deadline) {

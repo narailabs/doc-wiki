@@ -50,6 +50,7 @@ export interface GradeSpec {
   runFiles?: string[];
   testCommand: string;
   retries: number;
+  mode?: "grade" | "calibrate-base" | "calibrate-fix"; // BENCH_GRADE_MODE; omitted → grade.sh defaults to "grade"
   network?: string; // docker network to join (for sidecar connectivity)
   extraEnv?: Record<string, string>; // additional -e KEY=VALUE pairs injected into the container
 }
@@ -67,6 +68,7 @@ export function gradeRunArgs(g: GradeSpec): string[] {
     "-e", `BENCH_TEST_COMMAND=${g.testCommand}`,
     "-e", `BENCH_RETRIES=${g.retries}`,
   );
+  if (g.mode !== undefined) args.push("-e", `BENCH_GRADE_MODE=${g.mode}`);
   if (g.extraEnv !== undefined) {
     for (const [k, v] of Object.entries(g.extraEnv)) args.push("-e", `${k}=${v}`);
   }
