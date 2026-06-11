@@ -715,21 +715,23 @@ export function renderServiceDependencies(
  * call edges are detected.
  */
 export function hasServiceTopology(graph: ServiceGraph): boolean {
-  const serviceIds = new Set(graph.services.map((s) => s.id));
+  // Real deployable services only: exclude synthetic nodes AND library nodes
+  // (a lib is a dependency, not a topology service). Used for BOTH the count
+  // and the calls-edge check, so a library→service calls edge can never make
+  // a 1-service graph emit a service map.
+  const realServiceIds = new Set(
+    graph.services.filter((s) => !isSynthetic(s.id) && s.kind !== "library").map((s) => s.id),
+  );
 
-  // ≥2 real (non-synthetic) services is enough — the service list alone is
-  // genuine, true information.
-  const realServiceCount = graph.services.filter((s) => !isSynthetic(s.id)).length;
-  if (realServiceCount >= 2) return true;
+  // ≥2 real services is enough — the service list alone is genuine information.
+  if (realServiceIds.size >= 2) return true;
 
-  // Otherwise require at least one direct calls edge between two real services.
+  // Otherwise require a direct calls edge between two real (non-library) services.
   return graph.edges.some(
     (e) =>
       e.kind === "calls" &&
-      serviceIds.has(e.from_service) &&
-      serviceIds.has(e.to_service) &&
-      !isSynthetic(e.from_service) &&
-      !isSynthetic(e.to_service),
+      realServiceIds.has(e.from_service) &&
+      realServiceIds.has(e.to_service),
   );
 }
 

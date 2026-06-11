@@ -243,4 +243,60 @@ describe("writeCrossServicePages", () => {
     expect(serviceMapBody).not.toContain("client-registry.md");
     cleanupTmpPath(wiki);
   });
+
+  it("does NOT emit topology pages for one service + a library that calls it (lib->service edge)", () => {
+    const wiki = makeTmpPath("xs-pages-lib-edge");
+    const inventory = {
+      atlas_run_id: RUN_ID,
+      services: [
+        { identity: { id: "svc-a", kind: "service" }, rest_endpoints: [], http_clients: [], queue_endpoints: [], orm_entities: [], external_sources: [], library_deps: [] },
+      ],
+    } as any;
+    const graph = {
+      services: [
+        { id: "svc-a", kind: "service", language: "java", root: "svc-a" },
+        { id: "common-lib", kind: "library", language: "java", root: "shared/common-lib" },
+      ],
+      // A library with an HTTP client can produce a calls edge from the lib to the service.
+      edges: [
+        { from_service: "common-lib", to_service: "svc-a", kind: "calls", detail: "GET /api/a/x", confidence: "high", evidence_file: "common-lib/C.java", evidence_line: 1 },
+      ],
+      generated_at: "",
+    } as any;
+    const written = writeCrossServicePages(wiki, inventory, graph);
+    const slugs = written.map((p) => path.basename(p, ".md"));
+    // The lib->service calls edge is NOT real service topology, so the topology
+    // pages must be skipped (the codex finding). client-registry is allowed —
+    // a library HTTP-client callsite is a genuine, non-fabricated callsite.
+    expect(slugs).not.toContain("service-map");
+    expect(slugs).not.toContain("service-dependencies");
+    expect(fs.existsSync(path.join(wiki, "wiki", "service-map.md"))).toBe(false);
+    expect(fs.existsSync(path.join(wiki, "wiki", "service-dependencies.md"))).toBe(false);
+    cleanupTmpPath(wiki);
+  });
+
+  it("does NOT emit topology pages for one service plus a library (a lib is not a service)", () => {
+    const wiki = makeTmpPath("xs-pages-svc-plus-lib");
+    const inventory = {
+      atlas_run_id: RUN_ID,
+      services: [
+        { identity: { id: "svc-a", kind: "service" }, rest_endpoints: [], http_clients: [], queue_endpoints: [], orm_entities: [], external_sources: [], library_deps: [] },
+      ],
+    } as any;
+    const graph = {
+      services: [
+        { id: "svc-a", kind: "service", language: "java", root: "svc-a" },
+        { id: "common-lib", kind: "library", language: "java", root: "shared/common-lib" },
+      ],
+      edges: [], // no calls edges
+      generated_at: "",
+    } as any;
+    const written = writeCrossServicePages(wiki, inventory, graph);
+    // Only one real service (the library doesn't count) and no calls → no scaffolding.
+    expect(written.length).toBe(0);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wiki, "wiki", `${slug}.md`))).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
 });
