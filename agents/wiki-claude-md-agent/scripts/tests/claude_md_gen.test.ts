@@ -181,7 +181,8 @@ describe("TestGenerateClaudeMd", () => {
 
   it("test_generate_with_wiki_link", () => {
     const root = makeProjectRoot(tmpPath);
-    const result = generateClaudeMd(root, path.join(root, "wiki"));
+    // wikiRoot is the parent dir; the scanner + index live under <wikiRoot>/wiki/.
+    const result = generateClaudeMd(root, root);
     expect(result.toLowerCase().includes("wiki")).toBe(true);
     // Should contain a markdown link to the wiki
     expect(result.includes("[") && result.includes("](")).toBe(true);
@@ -507,7 +508,8 @@ describe("generateClaudeMd — behavioral directive", () => {
 
   it("generated block includes a link to the full wiki index", () => {
     const root = makeProjectRoot(tmpPath);
-    const result = generateClaudeMd(root, path.join(root, "wiki"));
+    // wikiRoot is the parent dir; the index lives at <wikiRoot>/wiki/index.md.
+    const result = generateClaudeMd(root, root);
     expect(result).toContain("index.md");
   });
 
