@@ -22,10 +22,12 @@ export async function runBatch(opts) {
     const summary = { ran: 0, rateLimited: 0, errors: 0 };
     const work = nextPairs(state, runnable.map((t) => t.issue), opts.batch);
     // `docker -v` silently CREATES a missing host path as an empty dir, which
-    // would degrade the wiki arm to a de-facto baseline. The overlay build
-    // always emits CLAUDE.md — use it as the sentinel.
-    if (work.some((w) => w.arms.includes("wiki")) && !existsSync(join(opts.wikiDir, "CLAUDE.md"))) {
-        throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} — run "benchmark build-wiki" first`);
+    // would degrade the wiki arm to a de-facto baseline. The overlay always
+    // carries a root AI pointer file — CLAUDE.md, or AGENTS.md for repos whose
+    // CLAUDE.md is a symlink to it (atlas edits resolve through the symlink).
+    const hasPointer = ["CLAUDE.md", "AGENTS.md"].some((f) => existsSync(join(opts.wikiDir, f)));
+    if (work.some((w) => w.arms.includes("wiki")) && !hasPointer) {
+        throw new Error(`wiki overlay missing or incomplete at ${opts.wikiDir} (no CLAUDE.md or AGENTS.md) — run "benchmark build-wiki" first`);
     }
     for (const item of work) {
         const ticket = byIssue.get(item.issue);

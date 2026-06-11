@@ -1,0 +1,928 @@
+{
+  "schema_version": 1,
+  "repo": "saleor",
+  "mined_at": "2026-06-11T17:37:33.651Z",
+  "tickets": [
+    {
+      "source": "pr",
+      "issue": 19298,
+      "issue_url": "https://github.com/saleor/saleor/pull/19298",
+      "title": "Fix password login mode stripping staff access from third-party tokens",
+      "body": "Port of https://github.com/saleor/saleor/pull/19289\r\n\r\nTested on deployed `main` and it fixes the issue. Repro steps\r\n\r\n1. Install extension which makes graphql call to Saleor from frontend (using JWT)\r\n2. Set \"password login mode\" to \"customer\"\r\n3. Log in with OIDC\r\n\r\nCurrent `main` → works\r\nCurrent `3.23` → Saleor returns error \"not authenticated\"",
+      "body_sanitized": "Port of [link-removed]\n\nTested on deployed `main` and it fixes the issue. Repro steps\n\n1. Install extension which makes graphql call to Saleor from frontend (using JWT)\n2. Set \"password login mode\" to \"customer\"\n3. Log in with OIDC\n\nCurrent `main` → works\nCurrent `3.23` → Saleor returns error \"not authenticated\"",
+      "fix_pr": 19298,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19298",
+      "base_commit": "a01807d1b2a362b061b5836d98526c95f7617572",
+      "fix_commit": "688c1f056cf3538f49ff4787e55f9ed872523c63",
+      "test_files": [
+        "saleor/core/tests/test_auth_backend_default_header.py"
+      ],
+      "src_files": [
+        "saleor/core/auth_backend.py"
+      ],
+      "run_files": [
+        "saleor/core/tests/test_auth_backend_default_header.py"
+      ],
+      "changed_lines": 66,
+      "merge_parents": 1,
+      "merged_at": "2026-06-08T10:48:27Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19289,
+      "issue_url": "https://github.com/saleor/saleor/pull/19289",
+      "title": "Fix password login mode stripping staff access from third-party tokens",
+      "body": "Password login mode restriction in load_user_from_request was applied to every Saleor-issued JWT, including third-party access tokens minted for apps and app extensions (JWT_THIRDPARTY_ACCESS_TYPE). These tokens are issued on behalf of an already-authenticated user (e.g. logged in via OIDC), not from a password login, so under CUSTOMERS_ONLY mode their staff access was wrongly stripped and under DISABLED mode they were rejected outright.\r\n\r\nThis broke the `app { extensions { accessToken } }` flow for staff users authenticated via OIDC: the returned token failed with PermissionDenied.\r\n\r\nScope the restriction to first-party access tokens (JWT_ACCESS_TYPE), which are the only tokens minted from a password login. Add regression tests covering app access tokens under CUSTOMERS_ONLY and DISABLED modes.\r\n",
+      "body_sanitized": "Password login mode restriction in load_user_from_request was applied to every Saleor-issued JWT, including third-party access tokens minted for apps and app extensions (JWT_THIRDPARTY_ACCESS_TYPE). These tokens are issued on behalf of an already-authenticated user (e.g. logged in via OIDC), not from a password login, so under CUSTOMERS_ONLY mode their staff access was wrongly stripped and under DISABLED mode they were rejected outright.\n\nThis broke the `app { extensions { accessToken } }` flow for staff users authenticated via OIDC: the returned token failed with PermissionDenied.\n\nScope the restriction to first-party access tokens (JWT_ACCESS_TYPE), which are the only tokens minted from a password login. Add regression tests covering app access tokens under CUSTOMERS_ONLY and DISABLED modes.",
+      "fix_pr": 19289,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19289",
+      "base_commit": "d287559c4fa8fcb8111e9d8bba5fa4ce585644e3",
+      "fix_commit": "d3c230f7ad19c9979eccf85c5931042f529412dd",
+      "test_files": [
+        "saleor/core/tests/test_auth_backend_default_header.py"
+      ],
+      "src_files": [
+        "saleor/core/auth_backend.py"
+      ],
+      "run_files": [
+        "saleor/core/tests/test_auth_backend_default_header.py"
+      ],
+      "changed_lines": 66,
+      "merge_parents": 1,
+      "merged_at": "2026-06-08T10:07:06Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19286,
+      "issue_url": "https://github.com/saleor/saleor/pull/19286",
+      "title": "Skip JWT decode probe for opaque OIDC access tokens",
+      "body": "The OIDC plugin probes every incoming access token as a JWT before falling back to the user info endpoint. For opaque (non-JWT) reference tokens this probe always fails inside authlib with \"Invalid input segments length\", which decode_access_token logs at INFO as \"Invalid OIDC access token format\" on every request - misleading noise, since an opaque token is simply not a JWT and has nothing to decode.\r\n\r\nAdd is_jwt_shaped() which mirrors authlib's own segment check (2 dots -> JWS, 4 dots -> JWE) and return early from decode_access_token for anything else. This routes opaque tokens straight to the user info path without the log or a wasted JWKS lookup + decode attempt, while still logging genuine JWT decode failures (bad signature, unknown key id, malformed token) that the message is actually meant for.\r\n\r\nBehavior is unchanged: decode_access_token returns None for exactly the same inputs as before; only the spurious log is suppressed.\r\n",
+      "body_sanitized": "The OIDC plugin probes every incoming access token as a JWT before falling back to the user info endpoint. For opaque (non-JWT) reference tokens this probe always fails inside authlib with \"Invalid input segments length\", which decode_access_token logs at INFO as \"Invalid OIDC access token format\" on every request - misleading noise, since an opaque token is simply not a JWT and has nothing to decode.\n\nAdd is_jwt_shaped() which mirrors authlib's own segment check (2 dots -> JWS, 4 dots -> JWE) and return early from decode_access_token for anything else. This routes opaque tokens straight to the user info path without the log or a wasted JWKS lookup + decode attempt, while still logging genuine JWT decode failures (bad signature, unknown key id, malformed token) that the message is actually meant for.\n\nBehavior is unchanged: decode_access_token returns None for exactly the same inputs as before; only the spurious log is suppressed.",
+      "fix_pr": 19286,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19286",
+      "base_commit": "e9088ca5231df0afb3f460f8c9cb68d4b67f70cd",
+      "fix_commit": "ffeb5e7b9c95f2a5e4dd15d250aaad3b8a68966c",
+      "test_files": [
+        "saleor/plugins/openid_connect/tests/test_utils.py"
+      ],
+      "src_files": [
+        "saleor/plugins/openid_connect/utils.py"
+      ],
+      "run_files": [
+        "saleor/plugins/openid_connect/tests/test_utils.py"
+      ],
+      "changed_lines": 109,
+      "merge_parents": 1,
+      "merged_at": "2026-06-08T10:46:03Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19280,
+      "issue_url": "https://github.com/saleor/saleor/pull/19280",
+      "title": "Add support for editorJS table syntax",
+      "body": "Allow  product description (EditorJS format) to accept new `table` field. Effectively user can add WYSIWYG tables\r\n\r\nDashboard\r\nhttps://github.com/saleor/saleor-dashboard/pull/6613\r\n\r\nPort to 3.23\r\nhttps://github.com/saleor/saleor/pull/19281/changes",
+      "body_sanitized": "Allow  product description (EditorJS format) to accept new `table` field. Effectively user can add WYSIWYG tables\n\nDashboard\n[link-removed]\n\nPort to 3.23\n[link-removed]",
+      "fix_pr": 19280,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19280",
+      "base_commit": "88c61148de3a2d71e6d6ca6537de48af1b604c6e",
+      "fix_commit": "086a8562ba41290ac041f70a66c67f38ae4f3213",
+      "test_files": [
+        "saleor/core/editorjs/tests/test_editorjs.py"
+      ],
+      "src_files": [
+        "saleor/core/editorjs/models.py"
+      ],
+      "run_files": [
+        "saleor/core/editorjs/tests/test_editorjs.py"
+      ],
+      "changed_lines": 183,
+      "merge_parents": 1,
+      "merged_at": "2026-06-08T08:54:42Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19253,
+      "issue_url": "https://github.com/saleor/saleor/pull/19253",
+      "title": "Fix KeyError when resolving channel for channel-agnostic account events",
+      "body": "To be back-ported.\r\n\r\nThe `channel` field on `AccountOperationBase` resolved `data[\"channel_slug\"]`\r\nunconditionally, but completed-action events (AccountConfirmed,\r\nAccountEmailChanged, AccountDeleted) are dispatched without a channel_slug,\r\nraising KeyError when a subscription query selected `channel`.\r\n\r\nResolve `channel` to null when no channel slug is present.\r\n\r\nFixes SALEOR-CORE-5A8",
+      "body_sanitized": "To be back-ported.\n\nThe `channel` field on `AccountOperationBase` resolved `data[\"channel_slug\"]`\nunconditionally, but completed-action events (AccountConfirmed,\nAccountEmailChanged, AccountDeleted) are dispatched without a channel_slug,\nraising KeyError when a subscription query selected `channel`.\n\nResolve `channel` to null when no channel slug is present.\n\nFixes SALEOR-CORE-5A8",
+      "fix_pr": 19253,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19253",
+      "base_commit": "85081e46f19a4241d1accec29457320ea1f8d6a2",
+      "fix_commit": "11756ee6b65a255869f551e838edec1742b1c2ce",
+      "test_files": [
+        "saleor/webhook/tests/subscription_webhooks/subscription_queries.py",
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "src_files": [
+        "saleor/graphql/webhook/subscription_types.py"
+      ],
+      "run_files": [
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "changed_lines": 56,
+      "merge_parents": 1,
+      "merged_at": "2026-06-01T11:21:52Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19251,
+      "issue_url": "https://github.com/saleor/saleor/pull/19251",
+      "title": "Fix TypeError when resolving default channel slug on product types",
+      "body": "To be backported.\r\n\r\nThe `channel` field on `Product` and `ProductVariant` returned `root.channel_slug` directly. When no `channel` argument is provided by a requestor without product permissions, the slug is a lazily-evaluated `SimpleLazyObject` (from `get_default_channel_slug_or_graphql_error`). This object leaked into the GraphQL response and broke JSON serialization in `JsonResponse`, raising a 500 (`TypeError: Type is not JSON serializable: SimpleLazyObject`).\r\n\r\nFixes SALEOR-CORE-857.\r\n",
+      "body_sanitized": "To be backported.\n\nThe `channel` field on `Product` and `ProductVariant` returned `root.channel_slug` directly. When no `channel` argument is provided by a requestor without product permissions, the slug is a lazily-evaluated `SimpleLazyObject` (from `get_default_channel_slug_or_graphql_error`). This object leaked into the GraphQL response and broke JSON serialization in `JsonResponse`, raising a 500 (`TypeError: Type is not JSON serializable: SimpleLazyObject`).\n\nFixes SALEOR-CORE-857.",
+      "fix_pr": 19251,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19251",
+      "base_commit": "7700a81e6e6bf693085da3ad875157c468878a49",
+      "fix_commit": "d6656e0f2a1d955b64a48fe21a7fd733203a8cd8",
+      "test_files": [
+        "saleor/graphql/product/tests/queries/test_product_query.py",
+        "saleor/graphql/product/tests/queries/test_variant_query.py"
+      ],
+      "src_files": [
+        "saleor/graphql/product/types/products.py"
+      ],
+      "run_files": [
+        "saleor/graphql/product/tests/queries/test_product_query.py",
+        "saleor/graphql/product/tests/queries/test_variant_query.py"
+      ],
+      "changed_lines": 58,
+      "merge_parents": 1,
+      "merged_at": "2026-06-03T08:40:15Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19229,
+      "issue_url": "https://github.com/saleor/saleor/pull/19229",
+      "title": "[3.23] Fix: checkout delvieries invalidation",
+      "body": "Port of https://github.com/saleor/saleor/pull/19228\r\n\r\n---\r\n\r\nFixes a crash in the checkout delivery invalidation flow where stale duplicate CheckoutDelivery rows could trigger an `IntegrityError` due to a conflict against the `unique_for_checkout` constraint",
+      "body_sanitized": "Port of [link-removed]\n\n---\n\nFixes a crash in the checkout delivery invalidation flow where stale duplicate CheckoutDelivery rows could trigger an `IntegrityError` due to a conflict against the `unique_for_checkout` constraint",
+      "fix_pr": 19229,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19229",
+      "base_commit": "66d6c26d5156595b2ac2d20fbe9e5f364591fae9",
+      "fix_commit": "ae9c4e52ebd0e7be1122b50e8746bdd0ce1826bd",
+      "test_files": [
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/shipping/tests/mutations/test_delivery_options_calculate.py"
+      ],
+      "src_files": [
+        "saleor/checkout/delivery_context.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/shipping/tests/mutations/test_delivery_options_calculate.py"
+      ],
+      "changed_lines": 260,
+      "merge_parents": 1,
+      "merged_at": "2026-05-20T14:56:48Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19228,
+      "issue_url": "https://github.com/saleor/saleor/pull/19228",
+      "title": "Fix: checkout deliveries invalidation",
+      "body": "Fixes a crash in the checkout delivery invalidation flow where stale duplicate CheckoutDelivery rows could trigger an `IntegrityError` due to a conflict against the `unique_for_checkout` constraint",
+      "body_sanitized": "Fixes a crash in the checkout delivery invalidation flow where stale duplicate CheckoutDelivery rows could trigger an `IntegrityError` due to a conflict against the `unique_for_checkout` constraint",
+      "fix_pr": 19228,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19228",
+      "base_commit": "673fb4a9814eb65ea007a96c5ecff120dd27e20f",
+      "fix_commit": "c66efabd1599eee146f1cfb67229ed9818533323",
+      "test_files": [
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/shipping/tests/mutations/test_delivery_options_calculate.py"
+      ],
+      "src_files": [
+        "saleor/checkout/delivery_context.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/shipping/tests/mutations/test_delivery_options_calculate.py"
+      ],
+      "changed_lines": 260,
+      "merge_parents": 1,
+      "merged_at": "2026-05-20T14:56:37Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19179,
+      "issue_url": "https://github.com/saleor/saleor/pull/19179",
+      "title": "Handle RequestDataTooBig error",
+      "body": "Fixes https://saleor.sentry.io/issues/7458508760/?notification_uuid=fd8ae8fa-27a8-4f7e-8b38-4d32b5bb96c6&alert_rule_id=11198640&alert_type=issue\r\n\r\nOn HTTP layer request is rejected by Django. This commit handles exception and returns valid HTTP error and meaningful message. Also error should no longer go to Sentry",
+      "body_sanitized": "Fixes https://saleor.sentry.io/issues/7458508760/?notification_uuid=[sha-removed]-27a8-4f7e-8b38-[sha-removed]&alert_rule_id=11198640&alert_type=issue\n\nOn HTTP layer request is rejected by Django. This commit handles exception and returns valid HTTP error and meaningful message. Also error should no longer go to Sentry",
+      "fix_pr": 19179,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19179",
+      "base_commit": "6b6c73f4acd47bad77b5c04f4aab8c0ec0d59d98",
+      "fix_commit": "93ddf1bda7603c6ae7bc434d02748e7ffa3bc224",
+      "test_files": [
+        "saleor/graphql/core/tests/test_view.py"
+      ],
+      "src_files": [
+        "saleor/graphql/views.py"
+      ],
+      "run_files": [
+        "saleor/graphql/core/tests/test_view.py"
+      ],
+      "changed_lines": 28,
+      "merge_parents": 1,
+      "merged_at": "2026-05-05T08:06:50Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19174,
+      "issue_url": "https://github.com/saleor/saleor/pull/19174",
+      "title": "Added subscription to CUSTOMER_DELETED",
+      "body": "CUSTOMER_DELETED webhook was single, not migrated webhook from legacy static payload to\r\n    subscription queries.\r\n    \r\nThis commit adds possibility to add subscription to this event. This:\r\n    1. Adds possibility for SMTP app to support it modern way\r\n    2. Fix custom apps in dashboard - now webhook can't be registered (validation requires query, Saleor doesn't support it in input)\r\n    3. We can start deprecating and removing old webhooks flow with static payload",
+      "body_sanitized": "CUSTOMER_DELETED webhook was single, not migrated webhook from legacy static payload to\n    subscription queries.\n\nThis commit adds possibility to add subscription to this event. This:\n    1. Adds possibility for SMTP app to support it modern way\n    2. Fix custom apps in dashboard - now webhook can't be registered (validation requires query, Saleor doesn't support it in input)\n    3. We can start deprecating and removing old webhooks flow with static payload",
+      "fix_pr": 19174,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19174",
+      "base_commit": "16b4fb8475815fd9cfa75cd3ce1503b35f628641",
+      "fix_commit": "54e678186e4fd5d3ade63538459e62a3d2120bf5",
+      "test_files": [
+        "saleor/tests/fixtures.py",
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "src_files": [
+        "saleor/graphql/schema.graphql",
+        "saleor/graphql/webhook/subscription_types.py"
+      ],
+      "run_files": [
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "changed_lines": 40,
+      "merge_parents": 1,
+      "merged_at": "2026-05-08T06:55:11Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19173,
+      "issue_url": "https://github.com/saleor/saleor/pull/19173",
+      "title": "Added subscription to CUSTOMER_DELETED",
+      "body": "CUSTOMER_DELETED webhook was single, not migrated webhook from legacy static payload to subscription queries.\r\n\r\nThis commit adds possibility to add subscription to this event. This:\r\n1. Adds possibility for SMTP app to support it modern way\r\n2. Fix custom apps in dashboard - now webhook can't be registered (validation requires query, Saleor doesn't support it in input)\r\n3. We can start deprecating and removing old webhooks flow with static payload\r\n\r\nPort to 3.23\r\nhttps://github.com/saleor/saleor/pull/19174\r\n",
+      "body_sanitized": "CUSTOMER_DELETED webhook was single, not migrated webhook from legacy static payload to subscription queries.\n\nThis commit adds possibility to add subscription to this event. This:\n1. Adds possibility for SMTP app to support it modern way\n2. Fix custom apps in dashboard - now webhook can't be registered (validation requires query, Saleor doesn't support it in input)\n3. We can start deprecating and removing old webhooks flow with static payload\n\nPort to 3.23\n[link-removed]",
+      "fix_pr": 19173,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19173",
+      "base_commit": "4eb59810a269e068cd526eaeec6b2256e63b545e",
+      "fix_commit": "06b063ab9985ada216a308115102b127cc2daded",
+      "test_files": [
+        "saleor/tests/fixtures.py",
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "src_files": [
+        "saleor/graphql/schema.graphql",
+        "saleor/graphql/webhook/subscription_types.py"
+      ],
+      "run_files": [
+        "saleor/webhook/tests/subscription_webhooks/test_create_deliveries_for_subscription.py"
+      ],
+      "changed_lines": 40,
+      "merge_parents": 1,
+      "merged_at": "2026-05-08T06:54:57Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "issue",
+      "issue": 19114,
+      "issue_url": "https://github.com/saleor/saleor/issues/19114",
+      "title": "Add `checkoutDelete` mutation",
+      "body": "### Problem\n\nWhen performing regression testing in storefronts, it's handy to be able to simulate a deleted checkout (e.g., the checkout stored in cookies is no longer valid). But unfortunately Saleor doesn't provide a way to manually delete checkouts which means users must run Python scripts/commands which requires privileged access to the systems (developers and testers usually do not have such access).\n\nSuggestion: add the following mutation:\n\n```graphql\ntype CheckoutDelete @doc(category: \"Checkouts\") {\n  # Note: this will return nothing other than errors.\n  #       This avoids unnecessary risk of improper authorization checks\n  errors: [CheckoutError!]!\n}\n\ntype Mutation {\n  checkoutDelete(id: ID!): CheckoutDelete\n}\n```\n\n## Authorization\n\nOnly staff & apps having `MANAGE_CHECKOUTS` permission should be allowed. Anonymous & non-privileged access is not allowed.\n\n## Deferred Topics\n\n- Unprivileged access: the current use-case is only for staff users to be able to delete checkouts to facilitate testing. Access to anonymous users & non-staff users can be added later on if needed.\n- Returning checkouts in GraphQL responses: as the current use-case is solely to be able to delete checkouts to be able to easily perform regression testing, we will not be returning any data other than `errors` (if any error occurred). More return data can be added later if needed. This simplifies authorization and doesn't increase risks unnecessarily.\n\n## Additional References\n\n- https://linear.app/saleor/issue/ENG-1472/ (internal)\n\n",
+      "body_sanitized": "### Problem\n\nWhen performing regression testing in storefronts, it's handy to be able to simulate a deleted checkout (e.g., the checkout stored in cookies is no longer valid). But unfortunately Saleor doesn't provide a way to manually delete checkouts which means users must run Python scripts/commands which requires privileged access to the systems (developers and testers usually do not have such access).\n\nSuggestion: add the following mutation:\n\n```graphql\ntype CheckoutDelete @doc(category: \"Checkouts\") {\n  # Note: this will return nothing other than errors.\n  #       This avoids unnecessary risk of improper authorization checks\n  errors: [CheckoutError!]!\n}\n\ntype Mutation {\n  checkoutDelete(id: ID!): CheckoutDelete\n}\n```\n\n## Authorization\n\nOnly staff & apps having `MANAGE_CHECKOUTS` permission should be allowed. Anonymous & non-privileged access is not allowed.\n\n## Deferred Topics\n\n- Unprivileged access: the current use-case is only for staff users to be able to delete checkouts to facilitate testing. Access to anonymous users & non-staff users can be added later on if needed.\n- Returning checkouts in GraphQL responses: as the current use-case is solely to be able to delete checkouts to be able to easily perform regression testing, we will not be returning any data other than `errors` (if any error occurred). More return data can be added later if needed. This simplifies authorization and doesn't increase risks unnecessarily.\n\n## Additional References\n\n- https://linear.app/saleor/issue/ENG-1472/ (internal)\n\n",
+      "fix_pr": 19126,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19126",
+      "base_commit": "fad44b00bebd829622fb67b15f277e44a9cc6bb0",
+      "fix_commit": "cf9b59513d0a8c83d410eb5b176e5a55de018797",
+      "test_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_delete.py"
+      ],
+      "src_files": [
+        "saleor/graphql/checkout/mutations/__init__.py",
+        "saleor/graphql/checkout/mutations/checkout_delete.py",
+        "saleor/graphql/checkout/schema.py",
+        "saleor/graphql/schema.graphql"
+      ],
+      "run_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_delete.py"
+      ],
+      "changed_lines": 301,
+      "merge_parents": 1,
+      "merged_at": "2026-04-27T11:27:41Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19123,
+      "issue_url": "https://github.com/saleor/saleor/pull/19123",
+      "title": "Fix failed request handler in AvataxPlugin",
+      "body": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.\r\n\r\nPort of changes: #19120\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.\n\nPort of changes: #19120",
+      "fix_pr": 19123,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19123",
+      "base_commit": "d498167dcd3037b15682c8ec8278d38ab1a465dd",
+      "fix_commit": "e8733aee630a007e0ec031e772ed517ce6c20e9d",
+      "test_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py",
+        "saleor/webhook/tests/test_webhook_payloads.py"
+      ],
+      "src_files": [
+        "saleor/plugins/avatax/__init__.py",
+        "saleor/plugins/avatax/plugin.py"
+      ],
+      "run_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py",
+        "saleor/webhook/tests/test_webhook_payloads.py"
+      ],
+      "changed_lines": 50,
+      "merge_parents": 1,
+      "merged_at": "2026-04-22T06:40:51Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19122,
+      "issue_url": "https://github.com/saleor/saleor/pull/19122",
+      "title": "Fix failed request handler in AvataxPlugin",
+      "body": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.\r\n\r\nPort of changes: #19120\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.\n\nPort of changes: #19120",
+      "fix_pr": 19122,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19122",
+      "base_commit": "ce4ac68553fd9bccdc948c02faa7bc77148e68e0",
+      "fix_commit": "7d403733bfbff4c6abc0b49da6ea3294f4e8ca8b",
+      "test_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py"
+      ],
+      "src_files": [
+        "saleor/plugins/avatax/__init__.py",
+        "saleor/plugins/avatax/plugin.py"
+      ],
+      "run_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py"
+      ],
+      "changed_lines": 49,
+      "merge_parents": 1,
+      "merged_at": "2026-04-21T06:56:17Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19120,
+      "issue_url": "https://github.com/saleor/saleor/pull/19120",
+      "title": "Fix failed request handler in AvataxPlugin",
+      "body": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it fixes the issue where a failed Avatax request was being processed as a correct one. In that case, we were returning the response as an empty dict. The empty dict was treated as a correct response, and later we were incorrectly calling `str(response.get(\"currencyCode\"))`, which produced `\"None\"` as the currency value.",
+      "fix_pr": 19120,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19120",
+      "base_commit": "cec8316e186a9c55d0d338adae838db68176e30d",
+      "fix_commit": "ae6aafe1a3b5aed3d64ea42c0572d2f1f78d731b",
+      "test_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py"
+      ],
+      "src_files": [
+        "saleor/plugins/avatax/__init__.py",
+        "saleor/plugins/avatax/plugin.py"
+      ],
+      "run_files": [
+        "saleor/plugins/avatax/tests/test_avatax.py"
+      ],
+      "changed_lines": 49,
+      "merge_parents": 1,
+      "merged_at": "2026-04-21T06:56:06Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19116,
+      "issue_url": "https://github.com/saleor/saleor/pull/19116",
+      "title": "Allow metadata crud for STAFF for apps",
+      "body": "Port of https://github.com/saleor/saleor/pull/19111\r\n\r\nPrior to this change, *all* metadata operations were prohibited for combination of APP (requestor) and STAFF USER (object adding metadata to). Even with `MANAGE_APPS` permission, there was a custom rule to ignore this permission and prevent writing this data.\r\n\r\nWhile the concept is correct in general for staff mutations (e.g. app should not be able to create staff user, because it can extend given permissions), for metadata there is no such risk.\r\n\r\nAdding possibility to mutate metadata was a requested feature, that improves building around Saleor.\r\n\r\nThis PR allows to add/update/delete both public & privata metadata for apps with `MANAGE_STAFF` permission. Essentially, it makes permission model for this mutations *the same* as for user requestors\r\n\r\nMirgation guide https://github.com/saleor/saleor-docs/pull/1777",
+      "body_sanitized": "Port of [link-removed]\n\nPrior to this change, *all* metadata operations were prohibited for combination of APP (requestor) and STAFF USER (object adding metadata to). Even with `MANAGE_APPS` permission, there was a custom rule to ignore this permission and prevent writing this data.\n\nWhile the concept is correct in general for staff mutations (e.g. app should not be able to create staff user, because it can extend given permissions), for metadata there is no such risk.\n\nAdding possibility to mutate metadata was a requested feature, that improves building around Saleor.\n\nThis PR allows to add/update/delete both public & privata metadata for apps with `MANAGE_STAFF` permission. Essentially, it makes permission model for this mutations *the same* as for user requestors\n\nMirgation guide [link-removed]",
+      "fix_pr": 19116,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19116",
+      "base_commit": "be1b99c1c574f907eddd6d9cba6c2fd826a7011a",
+      "fix_commit": "90f4724279d9a9c9e301005d0adadb7f87b7ca4f",
+      "test_files": [
+        "saleor/graphql/csv/tests/queries/test_export_file.py",
+        "saleor/graphql/discount/tests/queries/test_promotion.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card.py",
+        "saleor/graphql/meta/tests/mutations/test_account.py"
+      ],
+      "src_files": [
+        "saleor/graphql/meta/mutations/base.py"
+      ],
+      "run_files": [
+        "saleor/graphql/csv/tests/queries/test_export_file.py",
+        "saleor/graphql/discount/tests/queries/test_promotion.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card.py",
+        "saleor/graphql/meta/tests/mutations/test_account.py"
+      ],
+      "changed_lines": 362,
+      "merge_parents": 1,
+      "merged_at": "2026-04-20T08:35:18Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19111,
+      "issue_url": "https://github.com/saleor/saleor/pull/19111",
+      "title": "Allow metadata crud for STAFF for apps",
+      "body": "Prior to this change, *all* metadata operations were prohibited for combination of APP (requestor) and STAFF USER (object adding metadata to). Even with `MANAGE_APPS` permission, there was a custom rule to ignore this permission and prevent writing this data.\r\n\r\nWhile the concept is correct in general for staff mutations (e.g. app should not be able to create staff user, because it can extend given permissions), for metadata there is no such risk.\r\n\r\nAdding possibility to mutate metadata was a requested feature, that improves building around Saleor.\r\n\r\nThis PR allows to add/update/delete both public & privata metadata for apps with `MANAGE_STAFF` permission. Essentially, it makes permission model for this mutations *the same* as for user requestors\r\n\r\nPort to 3.23 https://github.com/saleor/saleor/pull/19116",
+      "body_sanitized": "Prior to this change, *all* metadata operations were prohibited for combination of APP (requestor) and STAFF USER (object adding metadata to). Even with `MANAGE_APPS` permission, there was a custom rule to ignore this permission and prevent writing this data.\n\nWhile the concept is correct in general for staff mutations (e.g. app should not be able to create staff user, because it can extend given permissions), for metadata there is no such risk.\n\nAdding possibility to mutate metadata was a requested feature, that improves building around Saleor.\n\nThis PR allows to add/update/delete both public & privata metadata for apps with `MANAGE_STAFF` permission. Essentially, it makes permission model for this mutations *the same* as for user requestors\n\nPort to 3.23 [link-removed]",
+      "fix_pr": 19111,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19111",
+      "base_commit": "b40f4635e155ecfe07bd914dad53f1cd304c4c5d",
+      "fix_commit": "30b4edece5aa284f5a1e344e70350a680e43d9cd",
+      "test_files": [
+        "saleor/graphql/csv/tests/queries/test_export_file.py",
+        "saleor/graphql/discount/tests/queries/test_promotion.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card.py",
+        "saleor/graphql/meta/tests/mutations/test_account.py"
+      ],
+      "src_files": [
+        "saleor/graphql/meta/mutations/base.py"
+      ],
+      "run_files": [
+        "saleor/graphql/csv/tests/queries/test_export_file.py",
+        "saleor/graphql/discount/tests/queries/test_promotion.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card.py",
+        "saleor/graphql/meta/tests/mutations/test_account.py"
+      ],
+      "changed_lines": 362,
+      "merge_parents": 1,
+      "merged_at": "2026-04-20T08:35:13Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19094,
+      "issue_url": "https://github.com/saleor/saleor/pull/19094",
+      "title": "Drop external shipping identifier from checkout metadata",
+      "body": "I want to merge this change because it drops the logic responsible for handling the external shipping method id stored in checkout's metadata. As Checkout has own `CheckoutDelviery` model, the previous flow is not used any more. This PR just drops this logic\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it drops the logic responsible for handling the external shipping method id stored in checkout's metadata. As Checkout has own `CheckoutDelviery` model, the previous flow is not used any more. This PR just drops this logic",
+      "fix_pr": 19094,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19094",
+      "base_commit": "853ed54e0526c4c22a9ac5ff90acceccb8c6143b",
+      "fix_commit": "d498167dcd3037b15682c8ec8278d38ab1a465dd",
+      "test_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_payment.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_shipping_method_update.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py",
+        "saleor/graphql/checkout/tests/test_checkout.py",
+        "saleor/graphql/order/tests/queries/test_order.py"
+      ],
+      "src_files": [
+        "saleor/checkout/complete_checkout.py",
+        "saleor/checkout/delivery_context.py"
+      ],
+      "run_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_payment.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_shipping_method_update.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py",
+        "saleor/graphql/checkout/tests/test_checkout.py",
+        "saleor/graphql/order/tests/queries/test_order.py"
+      ],
+      "changed_lines": 106,
+      "merge_parents": 1,
+      "merged_at": "2026-04-22T06:35:15Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": false,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=false passesOnFix=false)"
+    },
+    {
+      "source": "pr",
+      "issue": 19085,
+      "issue_url": "https://github.com/saleor/saleor/pull/19085",
+      "title": "fix(accounts): missing validations for accountRegister",
+      "body": "*Cherry-pick of #19070*\r\n\r\nWhenever account confirmations were disabled, the following validations weren't running:\r\n\r\n- Password was never validated\r\n- Language code was never set\r\n- Email was never normalized\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19070*\n\nWhenever account confirmations were disabled, the following validations weren't running:\n\n- Password was never validated\n- Language code was never set\n- Email was never normalized\n\nI want to merge this change because...",
+      "fix_pr": 19085,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19085",
+      "base_commit": "9653275f64b9bdeae9700c29e184c377c6450bfe",
+      "fix_commit": "c0b6d0524b819916f207098fffce4ef724de7f61",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "src_files": [
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "changed_lines": 71,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:28Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19084,
+      "issue_url": "https://github.com/saleor/saleor/pull/19084",
+      "title": "fix(graphql): missing error handling when no channel in DB",
+      "body": "*Cherry-pick of #19068*\r\n\r\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19068*\n\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\n\nI want to merge this change because...",
+      "fix_pr": 19084,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19084",
+      "base_commit": "c0b6d0524b819916f207098fffce4ef724de7f61",
+      "fix_commit": "b764a0247c148f0fe60510d30fd25fc6ae6c9e3b",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "src_files": [
+        "saleor/graphql/channel/utils.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "changed_lines": 22,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:44Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19083,
+      "issue_url": "https://github.com/saleor/saleor/pull/19083",
+      "title": "fix(accounts): missing validations for accountRegister",
+      "body": "*Cherry-pick of #19070*\r\n\r\nWhenever account confirmations were disabled, the following validations weren't running:\r\n\r\n- Password was never validated\r\n- Language code was never set\r\n- Email was never normalized\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19070*\n\nWhenever account confirmations were disabled, the following validations weren't running:\n\n- Password was never validated\n- Language code was never set\n- Email was never normalized\n\nI want to merge this change because...",
+      "fix_pr": 19083,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19083",
+      "base_commit": "c5af6d858fffca2248070de7ba333f6331c3821d",
+      "fix_commit": "d6824a1953aa39aefb33cb091bdcf66ee9d0df26",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "src_files": [
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "changed_lines": 71,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:24Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19082,
+      "issue_url": "https://github.com/saleor/saleor/pull/19082",
+      "title": "fix(graphql): missing error handling when no channel in DB",
+      "body": "*Cherry-pick of #19068*\r\n\r\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19068*\n\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\n\nI want to merge this change because...",
+      "fix_pr": 19082,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19082",
+      "base_commit": "d6824a1953aa39aefb33cb091bdcf66ee9d0df26",
+      "fix_commit": "de34a8bc63fdfc074b3799f7f59fff0bc5835698",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "src_files": [
+        "saleor/graphql/channel/utils.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "changed_lines": 22,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:42Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19081,
+      "issue_url": "https://github.com/saleor/saleor/pull/19081",
+      "title": "fix(graphql): missing error handling when no channel in DB",
+      "body": "*Cherry-pick of #19068*\r\n\r\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\r\n\r\n\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19068*\n\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.",
+      "fix_pr": 19081,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19081",
+      "base_commit": "00ccc431868b9d20f01126971227107f28feba97",
+      "fix_commit": "dc3d6a9818cc822ab4dbe709723f69ff6ca4fb3b",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "src_files": [
+        "saleor/graphql/channel/utils.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "changed_lines": 22,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:39Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "source": "pr",
+      "issue": 19080,
+      "issue_url": "https://github.com/saleor/saleor/pull/19080",
+      "title": "fix(accounts): missing validations for accountRegister",
+      "body": "*Cherry-pick of #19070*\r\n\r\nWhenever account confirmations were disabled, the following validations weren't running:\r\n\r\n- Password was never validated\r\n- Language code was never set\r\n- Email was never normalized\r\n\r\n\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19070*\n\nWhenever account confirmations were disabled, the following validations weren't running:\n\n- Password was never validated\n- Language code was never set\n- Email was never normalized",
+      "fix_pr": 19080,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19080",
+      "base_commit": "6de81f1260138a0b2fb120fbd058e98b71e39493",
+      "fix_commit": "00ccc431868b9d20f01126971227107f28feba97",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "src_files": [
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "changed_lines": 71,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:18Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "source": "pr",
+      "issue": 19079,
+      "issue_url": "https://github.com/saleor/saleor/pull/19079",
+      "title": "fix(graphql): missing error handling when no channel in DB",
+      "body": "*Cherry-pick of #19068*\r\n\r\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19068*\n\nThis fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\n\nI want to merge this change because...",
+      "fix_pr": 19079,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19079",
+      "base_commit": "b56959cb3137d0b3b2f1e225c9e39942a509a0c4",
+      "fix_commit": "92497982632f1bd9eaa39df8569f449f3777f145",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "src_files": [
+        "saleor/graphql/channel/utils.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "changed_lines": 22,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:35Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "source": "pr",
+      "issue": 19078,
+      "issue_url": "https://github.com/saleor/saleor/pull/19078",
+      "title": "fix(accounts): missing validations for accountRegister",
+      "body": "*Cherry-pick of #19070*\r\n\r\nWhenever account confirmations were disabled, the following validations weren't running:\r\n\r\n- Password was never validated\r\n- Language code was never set\r\n- Email was never normalized\r\n\r\nI want to merge this change because...\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "*Cherry-pick of #19070*\n\nWhenever account confirmations were disabled, the following validations weren't running:\n\n- Password was never validated\n- Language code was never set\n- Email was never normalized\n\nI want to merge this change because...",
+      "fix_pr": 19078,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19078",
+      "base_commit": "13053ea0061f0a54dbddfdda857a7c16e91e57d0",
+      "fix_commit": "b56959cb3137d0b3b2f1e225c9e39942a509a0c4",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "src_files": [
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "changed_lines": 73,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T12:43:15Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "source": "pr",
+      "issue": 19070,
+      "issue_url": "https://github.com/saleor/saleor/pull/19070",
+      "title": "fix(accounts): missing validations for accountRegister",
+      "body": "Whenever account confirmations were disabled, the following validations weren't running:\r\n\r\n- Password was never validated\r\n- Language code was never set\r\n- Email was never normalized\r\n\r\nTo be ported onto 3.20+\r\n\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Whenever account confirmations were disabled, the following validations weren't running:\n\n- Password was never validated\n- Language code was never set\n- Email was never normalized\n\nTo be ported onto 3.20+",
+      "fix_pr": 19070,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19070",
+      "base_commit": "9bf2755c9bd033c0aac4f3bd3293ca2dca181a2c",
+      "fix_commit": "d23c7c11d1d95d247e639cfa8994d34606f4e49f",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "src_files": [
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_account_register.py"
+      ],
+      "changed_lines": 71,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T08:59:06Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19068,
+      "issue_url": "https://github.com/saleor/saleor/pull/19068",
+      "title": "fix(graphql): missing error handling when no channel in DB",
+      "body": "This fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\r\n\r\nShould be ported to 3.20+\r\n\r\n<i> Closes https://linear.app/saleor/issue/ENG-1432/ </i>\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "This fixes a crash (HTTP 500) in mutations when no channel exists in DB. Affected mutations: `customerCreate`, `accountRequestDeletion`, `requestPasswordReset`, `accountRegister`, `confirmEmailChange`, `checkoutCreated`.\n\nShould be ported to 3.20+\n\n<i> Closes https://linear.app/saleor/issue/ENG-1432/ </i>",
+      "fix_pr": 19068,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19068",
+      "base_commit": "e0890780bf56856d2b20ac14b1786749309450ae",
+      "fix_commit": "9bf2755c9bd033c0aac4f3bd3293ca2dca181a2c",
+      "test_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "src_files": [
+        "saleor/graphql/channel/utils.py"
+      ],
+      "run_files": [
+        "saleor/graphql/account/tests/mutations/account/test_request_email_change.py"
+      ],
+      "changed_lines": 22,
+      "merge_parents": 1,
+      "merged_at": "2026-04-13T08:54:02Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19045,
+      "issue_url": "https://github.com/saleor/saleor/pull/19045",
+      "title": "Allow to assigning product without variant to collection",
+      "body": "I want to merge this change because it unifies the behaviour of the API in terms of relation between collection and product.\r\ncollectionAddProduct was blocking the assignment of the product without variant, but productUpdate was allowing that.\r\nAs we're still able to delete variants later, it doesn't make sense to validate this on that step.\r\n\r\nPort of changes: #19044\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it unifies the behaviour of the API in terms of relation between collection and product.\ncollectionAddProduct was blocking the assignment of the product without variant, but productUpdate was allowing that.\nAs we're still able to delete variants later, it doesn't make sense to validate this on that step.\n\nPort of changes: #19044",
+      "fix_pr": 19045,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19045",
+      "base_commit": "2dd70df51c47bfe2e966ee060da805a9d7e0535f",
+      "fix_commit": "e0890780bf56856d2b20ac14b1786749309450ae",
+      "test_files": [
+        "saleor/graphql/product/tests/mutations/test_collection_add_products.py"
+      ],
+      "src_files": [
+        "saleor/graphql/core/enums.py",
+        "saleor/graphql/product/mutations/collection/collection_add_products.py",
+        "saleor/graphql/schema.graphql"
+      ],
+      "run_files": [
+        "saleor/graphql/product/tests/mutations/test_collection_add_products.py"
+      ],
+      "changed_lines": 49,
+      "merge_parents": 1,
+      "merged_at": "2026-04-10T11:30:52Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    },
+    {
+      "source": "pr",
+      "issue": 19044,
+      "issue_url": "https://github.com/saleor/saleor/pull/19044",
+      "title": "Allow to assigning product without variant to collection",
+      "body": "I want to merge this change because it unifies the behaviour of the API in terms of relation between collection and product. \r\ncollectionAddProduct was blocking the assignment of the product without variant, but productUpdate was allowing that. \r\nAs we're still able to delete variants later, it doesn't make sense to validate this on that step.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it unifies the behaviour of the API in terms of relation between collection and product.\ncollectionAddProduct was blocking the assignment of the product without variant, but productUpdate was allowing that.\nAs we're still able to delete variants later, it doesn't make sense to validate this on that step.",
+      "fix_pr": 19044,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19044",
+      "base_commit": "e11a5557eff29fbb2eed36e6ff3cd0af08ab9e10",
+      "fix_commit": "7316091dee2751c3a93d45e5262191616a2033d5",
+      "test_files": [
+        "saleor/graphql/product/tests/mutations/test_collection_add_products.py"
+      ],
+      "src_files": [
+        "saleor/graphql/core/enums.py",
+        "saleor/graphql/product/mutations/collection/collection_add_products.py",
+        "saleor/graphql/schema.graphql"
+      ],
+      "run_files": [
+        "saleor/graphql/product/tests/mutations/test_collection_add_products.py"
+      ],
+      "changed_lines": 49,
+      "merge_parents": 1,
+      "merged_at": "2026-04-09T11:16:30Z",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      }
+    }
+  ]
+}

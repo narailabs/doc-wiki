@@ -192,6 +192,21 @@ describe("runBatch", () => {
       runner: async () => { throw new Error("must not be called"); },
     })).rejects.toThrow(/build-wiki/);
   });
+
+  it("accepts an overlay whose only root pointer is AGENTS.md (CLAUDE.md-symlink repos)", async () => {
+    const { root, ticketsPath } = setup([ticket(1)]);
+    // Saleor-style: atlas's CLAUDE.md edit resolved through the symlink into AGENTS.md,
+    // so the overlay carries AGENTS.md but no CLAUDE.md.
+    const wikiDir = join(root, "agents-only-overlay");
+    mkdirSync(wikiDir);
+    writeFileSync(join(wikiDir, "AGENTS.md"), "# wiki pointer\n");
+    const summary = await runBatch({
+      cfg: CFG, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
+      runner: okDocker([0.1, 0.1]),
+    });
+    expect(summary.ran).toBe(2); // both arms ran — guard did not throw
+  });
 });
 
 describe("sidecar lifecycle in runBatch", () => {
