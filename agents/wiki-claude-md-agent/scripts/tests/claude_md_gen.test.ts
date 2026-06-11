@@ -21,6 +21,7 @@ import {
   MarkerCorruptError,
   MARKER_START,
   MARKER_END,
+  type WikiPageInfo,
 } from "../claude_md_gen.js";
 
 const SCRIPTS_DIR = path.resolve(
@@ -445,20 +446,40 @@ describe("resolveScaffoldRoot", () => {
 
 // ── buildRoutingTable tests ───────────────────────────────────────
 
+/**
+ * Construct a WikiPageInfo with sensible defaults so test literals stay
+ * concise while satisfying the full interface (incl. crossServicePage).
+ */
+function pg(
+  fields: {
+    relPath: string;
+    facet?: string | null;
+    title?: string | null;
+    crossServicePage?: string | null;
+  },
+): WikiPageInfo {
+  return {
+    relPath: fields.relPath,
+    facet: fields.facet ?? null,
+    title: fields.title ?? null,
+    crossServicePage: fields.crossServicePage ?? null,
+  };
+}
+
 describe("buildRoutingTable", () => {
   it("returns empty array when no pages have a recognized facet", () => {
     const pages = [
-      { relPath: "wiki/notes.md", facet: null, title: null },
-      { relPath: "wiki/custom.md", facet: "unknown-facet", title: null },
+      pg({ relPath: "wiki/notes.md", facet: null }),
+      pg({ relPath: "wiki/custom.md", facet: "unknown-facet" }),
     ];
     expect(buildRoutingTable(pages, "docs/wiki")).toEqual([]);
   });
 
   it("emits a row for each recognized atlas_facet", () => {
     const pages = [
-      { relPath: "wiki/overview.md", facet: "overview", title: "Overview" },
-      { relPath: "wiki/api.md", facet: "api", title: "API" },
-      { relPath: "wiki/config.md", facet: "configuration", title: "Config" },
+      pg({ relPath: "wiki/overview.md", facet: "overview", title: "Overview" }),
+      pg({ relPath: "wiki/api.md", facet: "api", title: "API" }),
+      pg({ relPath: "wiki/config.md", facet: "configuration", title: "Config" }),
     ];
     const rows = buildRoutingTable(pages, "docs/wiki");
     expect(rows).toHaveLength(3);
@@ -469,21 +490,21 @@ describe("buildRoutingTable", () => {
   });
 
   it("prefixes pagePath with wikiRelDir", () => {
-    const pages = [{ relPath: "wiki/overview.md", facet: "overview", title: null }];
+    const pages = [pg({ relPath: "wiki/overview.md", facet: "overview" })];
     const rows = buildRoutingTable(pages, "docs/my-wiki");
     expect(rows[0].pagePath).toBe("docs/my-wiki/wiki/overview.md");
   });
 
   it("handles empty wikiRelDir (wikiRoot === projectRoot)", () => {
-    const pages = [{ relPath: "wiki/overview.md", facet: "overview", title: null }];
+    const pages = [pg({ relPath: "wiki/overview.md", facet: "overview" })];
     const rows = buildRoutingTable(pages, "");
     expect(rows[0].pagePath).toBe("wiki/overview.md");
   });
 
   it("per-topic facet: emits one row per topic for a recurring facet", () => {
     const pages = [
-      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: "Auth Arch" },
-      { relPath: "wiki/billing/architecture.md", facet: "architecture", title: "Billing Arch" },
+      pg({ relPath: "wiki/auth/architecture.md", facet: "architecture", title: "Auth Arch" }),
+      pg({ relPath: "wiki/billing/architecture.md", facet: "architecture", title: "Billing Arch" }),
     ];
     const rows = buildRoutingTable(pages, "docs/wiki");
     // Both topics get their own architecture row — neither is dropped.
@@ -501,8 +522,8 @@ describe("buildRoutingTable", () => {
 
   it("per-topic rows for the same facet are sorted deterministically by page path", () => {
     const pages = [
-      { relPath: "wiki/billing/architecture.md", facet: "architecture", title: null },
-      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: null },
+      pg({ relPath: "wiki/billing/architecture.md", facet: "architecture" }),
+      pg({ relPath: "wiki/auth/architecture.md", facet: "architecture" }),
     ];
     const rows = buildRoutingTable(pages, "");
     expect(rows[0].pagePath).toBe("wiki/auth/architecture.md");
@@ -512,8 +533,8 @@ describe("buildRoutingTable", () => {
   it("global facet: collapses duplicate pages to one row (lexicographically-smallest wins, order-independent)", () => {
     // Even with unsorted input, the smallest relPath wins deterministically.
     const pages = [
-      { relPath: "wiki/b/overview.md", facet: "overview", title: null },
-      { relPath: "wiki/a/overview.md", facet: "overview", title: null },
+      pg({ relPath: "wiki/b/overview.md", facet: "overview" }),
+      pg({ relPath: "wiki/a/overview.md", facet: "overview" }),
     ];
     const rows = buildRoutingTable(pages, "docs/wiki");
     expect(rows).toHaveLength(1);
@@ -521,7 +542,7 @@ describe("buildRoutingTable", () => {
   });
 
   it("per-topic facet with no topic dir: drops the {topic} placeholder cleanly", () => {
-    const pages = [{ relPath: "wiki/architecture.md", facet: "architecture", title: null }];
+    const pages = [pg({ relPath: "wiki/architecture.md", facet: "architecture" })];
     const rows = buildRoutingTable(pages, "");
     expect(rows[0].intent).not.toContain("{topic}");
     expect(rows[0].intent).toContain("architecture");
@@ -529,15 +550,97 @@ describe("buildRoutingTable", () => {
 
   it("rows appear in a stable, logical order (per-topic facets before global facets)", () => {
     const pages = [
-      { relPath: "wiki/troubleshooting.md", facet: "troubleshooting", title: null },
-      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: null },
-      { relPath: "wiki/overview.md", facet: "overview", title: null },
+      pg({ relPath: "wiki/troubleshooting.md", facet: "troubleshooting" }),
+      pg({ relPath: "wiki/auth/architecture.md", facet: "architecture" }),
+      pg({ relPath: "wiki/overview.md", facet: "overview" }),
     ];
     const rows = buildRoutingTable(pages, "");
     // architecture (per-topic) comes first, then global facets in their order.
     expect(rows[0].intent).toContain("architecture");
     expect(rows[1].intent).toContain("fits together");
     expect(rows[2].intent).toContain("diagnose");
+  });
+
+  // ── cross-service page routing (#68) ──────────────────────────────
+
+  it("cross-service pages route to slug-specific intents, not generic architecture", () => {
+    // All six carry atlas_facet: architecture + a cross_service_page slug, and
+    // sit at the wiki/ top level (no topic dir). They must NOT collapse into
+    // duplicate generic "subsystem architecture" rows.
+    const slugs = [
+      "service-map",
+      "service-dependencies",
+      "client-registry",
+      "queue-registry",
+      "database-traces",
+      "shared-libraries",
+    ];
+    // Intentionally shuffled input order to prove ordering is deterministic.
+    const pages = [...slugs]
+      .reverse()
+      .map((slug) =>
+        pg({ relPath: `wiki/${slug}.md`, facet: "architecture", crossServicePage: slug }),
+      );
+    const rows = buildRoutingTable(pages, "docs/wiki");
+
+    // Exactly six rows, in the canonical writer order.
+    expect(rows).toHaveLength(6);
+    expect(rows.map((r) => r.pagePath)).toEqual([
+      "docs/wiki/wiki/service-map.md",
+      "docs/wiki/wiki/service-dependencies.md",
+      "docs/wiki/wiki/client-registry.md",
+      "docs/wiki/wiki/queue-registry.md",
+      "docs/wiki/wiki/database-traces.md",
+      "docs/wiki/wiki/shared-libraries.md",
+    ]);
+    // Each gets its exact slug-specific intent.
+    const byPath = new Map(rows.map((r) => [r.pagePath, r.intent]));
+    expect(byPath.get("docs/wiki/wiki/service-map.md")).toBe(
+      "Understand the overall service topology — how services connect",
+    );
+    expect(byPath.get("docs/wiki/wiki/service-dependencies.md")).toBe(
+      "See which services depend on which",
+    );
+    expect(byPath.get("docs/wiki/wiki/client-registry.md")).toBe(
+      "Find where one service calls another (HTTP/RPC client callsites)",
+    );
+    expect(byPath.get("docs/wiki/wiki/queue-registry.md")).toBe(
+      "Trace async/queue producers and consumers",
+    );
+    expect(byPath.get("docs/wiki/wiki/database-traces.md")).toBe(
+      "See which services read/write which database tables",
+    );
+    expect(byPath.get("docs/wiki/wiki/shared-libraries.md")).toBe(
+      "Find shared libraries used across services",
+    );
+    // No generic architecture row leaked in.
+    expect(rows.some((r) => r.intent.includes("subsystem architecture"))).toBe(false);
+  });
+
+  it("cross-service rows coexist with a normal per-topic architecture page", () => {
+    const pages = [
+      pg({ relPath: "wiki/auth/architecture.md", facet: "architecture" }),
+      pg({ relPath: "wiki/service-map.md", facet: "architecture", crossServicePage: "service-map" }),
+    ];
+    const rows = buildRoutingTable(pages, "");
+    // Normal per-topic page routes as before (group 0, rendered first).
+    expect(rows[0].intent).toBe("understand the auth subsystem architecture");
+    expect(rows[0].pagePath).toBe("wiki/auth/architecture.md");
+    // Cross-service page gets its slug intent (group 1, after facets).
+    expect(rows[1].intent).toBe(
+      "Understand the overall service topology — how services connect",
+    );
+    expect(rows[1].pagePath).toBe("wiki/service-map.md");
+  });
+
+  it("unknown cross_service_page slug falls back to a generic cross-service intent (no crash)", () => {
+    const pages = [
+      pg({ relPath: "wiki/mesh-traces.md", facet: "architecture", crossServicePage: "mesh-traces" }),
+    ];
+    const rows = buildRoutingTable(pages, "");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].intent).toBe("See the cross-service mesh traces view");
+    expect(rows[0].pagePath).toBe("wiki/mesh-traces.md");
   });
 });
 
@@ -646,6 +749,72 @@ describe("generateClaudeMd — behavioral directive", () => {
     const scaffoldResult = generateClaudeMd(root, root);
     const contentDirResult = generateClaudeMd(root, path.join(root, "wiki"));
     expect(contentDirResult).toBe(scaffoldResult);
+  });
+
+  it("end-to-end: cross-service pages get slug-specific rows; per-topic page unaffected (#68)", () => {
+    // Fixture: six top-level cross-service pages (atlas_facet: architecture +
+    // cross_service_page slug) plus a normal per-topic architecture page.
+    const root = tmpPath;
+    const wikiDir = path.join(root, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    fs.writeFileSync(path.join(wikiDir, "index.md"), "# Index\n");
+    const slugs = [
+      "service-map",
+      "service-dependencies",
+      "client-registry",
+      "queue-registry",
+      "database-traces",
+      "shared-libraries",
+    ];
+    for (const slug of slugs) {
+      makeWikiPage(root, `${slug}.md`, [
+        `title: ${slug}`,
+        "atlas_facet: architecture",
+        "atlas_run_id: 2026-06-11T00-00-00",
+        `cross_service_page: ${slug}`,
+        "audience: contributor",
+        "generated_by: cross_service_pages",
+      ]);
+    }
+    makeWikiPage(root, "auth/architecture.md", [
+      "title: Auth Architecture",
+      "atlas_facet: architecture",
+    ]);
+
+    const result = generateClaudeMd(root, root);
+
+    const expectedIntents: Record<string, string> = {
+      "service-map": "Understand the overall service topology — how services connect",
+      "service-dependencies": "See which services depend on which",
+      "client-registry":
+        "Find where one service calls another (HTTP/RPC client callsites)",
+      "queue-registry": "Trace async/queue producers and consumers",
+      "database-traces": "See which services read/write which database tables",
+      "shared-libraries": "Find shared libraries used across services",
+    };
+    // Each slug-specific intent appears exactly once, linking the real page.
+    for (const slug of slugs) {
+      const line = `| ${expectedIntents[slug]} | [${slug}.md](wiki/${slug}.md) |`;
+      expect(result.split(line).length - 1, `row for ${slug}`).toBe(1);
+    }
+    // No duplicate generic "subsystem architecture" rows for the six.
+    const genericArch = result.split("understand the subsystem architecture").length - 1;
+    expect(genericArch).toBe(0);
+    // The normal per-topic page still routes as before — exactly once.
+    expect(
+      result.split(
+        "| understand the auth subsystem architecture | [architecture.md](wiki/auth/architecture.md) |",
+      ).length - 1,
+    ).toBe(1);
+
+    // Every linked .md page resolves on disk (phantom-link invariant).
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(result)) !== null) {
+      if (m[1].endsWith(".md")) {
+        expect(fs.existsSync(path.join(root, m[1])), `Expected ${m[1]} on disk`).toBe(true);
+      }
+    }
   });
 
   it("routing table appears when atlas pages exist", () => {

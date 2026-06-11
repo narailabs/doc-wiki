@@ -70,6 +70,14 @@ export interface WikiPageInfo {
   facet: string | null;
   /** `title` frontmatter value, if present. */
   title: string | null;
+  /**
+   * `cross_service_page` frontmatter value, if present. The six cross-service
+   * pages (service-map, service-dependencies, client-registry, queue-registry,
+   * database-traces, shared-libraries) carry `atlas_facet: architecture` AND
+   * this slug; the router branches on this slug FIRST so they get slug-specific
+   * intents instead of collapsing into generic per-topic architecture rows.
+   */
+  crossServicePage: string | null;
 }
 
 /**
@@ -142,6 +150,7 @@ export function listWikiPagesForRouting(wikiRoot: string): WikiPageInfo[] {
           relPath,
           facet: fm?.["atlas_facet"] ?? null,
           title: fm?.["title"] ?? null,
+          crossServicePage: fm?.["cross_service_page"] ?? null,
         });
       }
     }
@@ -194,15 +203,48 @@ const GLOBAL_FACET_INTENTS: Record<string, string> = {
   "getting-started": "get set up for the first time",
   commands: "look up available commands or options",
   troubleshooting: "diagnose a failure or unexpected behaviour",
-  "service-map": "see the service topology diagram",
-  "service-dependencies": "trace inter-service dependencies",
-  "client-registry": "find HTTP client callsites",
-  "queue-registry": "find queue producers and consumers",
-  "database-traces": "trace datasource access paths",
-  "shared-libraries": "find shared library usage across services",
 };
 
-/** Combined facet order: per-topic facets first, then global facets. */
+/**
+ * Cross-service page slug → intent. The six pages written by
+ * `agents/lib/cross_service_pages.ts` all carry `atlas_facet: architecture`
+ * but are distinguished by their `cross_service_page` slug. The router branches
+ * on the slug FIRST so each gets a distinct, slug-specific intent — never the
+ * generic per-topic architecture row. (Cross-service is the product's biggest
+ * differentiator; these rows must surface.)
+ *
+ * Key insertion order defines the rendered order of the cross-service group.
+ */
+const CROSS_SERVICE_INTENTS: Record<string, string> = {
+  "service-map": "Understand the overall service topology — how services connect",
+  "service-dependencies": "See which services depend on which",
+  "client-registry": "Find where one service calls another (HTTP/RPC client callsites)",
+  "queue-registry": "Trace async/queue producers and consumers",
+  "database-traces": "See which services read/write which database tables",
+  "shared-libraries": "Find shared libraries used across services",
+};
+
+/** Slug order for the cross-service group (matches the writer's page order). */
+const CROSS_SERVICE_ORDER: string[] = Object.keys(CROSS_SERVICE_INTENTS);
+
+/**
+ * Resolve the intent for a cross-service page. Known slugs use the curated
+ * mapping; an unknown slug falls back to a sensible generic phrasing that
+ * still names the slug, so a future cross-service page type never crashes the
+ * router or collapses into a generic architecture row.
+ */
+function crossServiceIntent(slug: string): string {
+  const known = CROSS_SERVICE_INTENTS[slug];
+  if (known) return known;
+  // Humanize the slug (kebab → spaced) for the fallback.
+  const human = slug.replace(/[-_]+/g, " ").trim();
+  return `See the cross-service ${human} view`;
+}
+
+/**
+ * Combined facet order: per-topic facets first, then global facets. Cross-service
+ * rows are ordered separately (by CROSS_SERVICE_ORDER) and rendered after these.
+ */
 const FACET_ORDER: string[] = [
   ...Object.keys(PER_TOPIC_FACET_INTENTS),
   ...Object.keys(GLOBAL_FACET_INTENTS),
@@ -246,10 +288,11 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
   const prefix = (relPath: string): string =>
     wikiRelDir ? `${wikiRelDir}/${relPath}` : relPath;
 
-  // Track which facet each emitted row came from, so we can sort by FACET_ORDER
-  // and, within a facet, keep the rows in deterministic (page-sorted) order.
+  // `group` orders the three row families: 0 = per-topic/global facets,
+  // 1 = cross-service pages. `orderKey` sorts within a group.
   interface TaggedRow extends RoutingRow {
-    facet: string;
+    group: number;
+    orderKey: number;
     sortKey: string;
   }
   const tagged: TaggedRow[] = [];
@@ -257,8 +300,37 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
   // pages collapse to the lexicographically-smallest page deterministically
   // (independent of input iteration order).
   const globalSeen = new Map<string, TaggedRow>();
+  // De-dupe cross-service pages by slug (one row per slug, smallest path wins).
+  const crossSeen = new Map<string, TaggedRow>();
 
   for (const page of pages) {
+    // Branch on cross_service_page FIRST: these pages carry
+    // `atlas_facet: architecture` but must NOT route as per-topic architecture
+    // rows. Each gets its own slug-specific intent.
+    if (page.crossServicePage) {
+      const slug = page.crossServicePage;
+      const existing = crossSeen.get(slug);
+      if (existing) {
+        if (page.relPath < existing.sortKey) {
+          existing.pagePath = prefix(page.relPath);
+          existing.sortKey = page.relPath;
+        }
+        continue;
+      }
+      const orderIdx = CROSS_SERVICE_ORDER.indexOf(slug);
+      const row: TaggedRow = {
+        intent: crossServiceIntent(slug),
+        pagePath: prefix(page.relPath),
+        // Unknown slugs sort after known ones, then alphabetically by slug.
+        group: 1,
+        orderKey: orderIdx === -1 ? CROSS_SERVICE_ORDER.length : orderIdx,
+        sortKey: orderIdx === -1 ? `~${slug}` : page.relPath,
+      };
+      crossSeen.set(slug, row);
+      tagged.push(row);
+      continue;
+    }
+
     if (!page.facet) continue;
 
     const perTopicTemplate = PER_TOPIC_FACET_INTENTS[page.facet];
@@ -271,7 +343,8 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
       tagged.push({
         intent,
         pagePath: prefix(page.relPath),
-        facet: page.facet,
+        group: 0,
+        orderKey: FACET_ORDER.indexOf(page.facet),
         sortKey: page.relPath,
       });
       continue;
@@ -292,7 +365,8 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
       const row: TaggedRow = {
         intent: globalIntent,
         pagePath: prefix(page.relPath),
-        facet: page.facet,
+        group: 0,
+        orderKey: FACET_ORDER.indexOf(page.facet),
         sortKey: page.relPath,
       };
       globalSeen.set(page.facet, row);
@@ -301,13 +375,14 @@ export function buildRoutingTable(pages: WikiPageInfo[], wikiRelDir: string): Ro
     // Unknown facets are ignored.
   }
 
-  // Sort by facet order, then by page path for stable per-topic grouping.
+  // Sort by group (facets before cross-service), then the within-group order
+  // key (facet order / cross-service slug order), then page path for stable
+  // per-topic grouping.
   tagged.sort((a, b) => {
-    const ia = FACET_ORDER.indexOf(a.facet);
-    const ib = FACET_ORDER.indexOf(b.facet);
-    const fa = ia === -1 ? 999 : ia;
-    const fb = ib === -1 ? 999 : ib;
-    if (fa !== fb) return fa - fb;
+    if (a.group !== b.group) return a.group - b.group;
+    const oa = a.orderKey === -1 ? 999 : a.orderKey;
+    const ob = b.orderKey === -1 ? 999 : b.orderKey;
+    if (oa !== ob) return oa - ob;
     return a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0;
   });
 
