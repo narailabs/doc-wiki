@@ -482,11 +482,11 @@ describe("generateClaudeMd — behavioral directive", () => {
     const linkedPaths: string[] = [];
     while ((match = linkRe.exec(result)) !== null) {
       const href = match[2];
-      if (href.endsWith(".md") && !href.endsWith("index.md")) {
+      if (href.endsWith(".md")) {
         linkedPaths.push(href);
       }
     }
-    // Every linked page must exist on disk
+    // Every linked page — INCLUDING the index — must exist on disk (no phantom links)
     for (const relPath of linkedPaths) {
       const absPath = path.join(root, relPath);
       expect(fs.existsSync(absPath), `Expected ${absPath} to exist`).toBe(true);
