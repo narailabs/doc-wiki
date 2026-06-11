@@ -31,11 +31,21 @@ describe("wikiSessionArgs", () => {
   it("mounts the plugin and overlay dirs dirs", () => {
     const args = wikiSessionArgs({
       image: "docwiki-bench-vitest", bareDir: "/b", outDir: "/o", pluginDir: "/p",
-      wikiCommit: "cccc", model: "claude-sonnet-4-6",
+      wikiCommit: "cccc", model: "claude-sonnet-4-6", name: "bench-vitest-wiki-build",
     });
     expect(args).toContain("/p:/plugin:ro");
     expect(args).toContain("/o:/out");
     expect(args).toContain("CLAUDE_CODE_OAUTH_TOKEN"); // name-only
     expect(args[args.length - 1]).toBe("wiki-build");
+  });
+
+  it("names the container so a timed-out build can be pre-cleaned and reaped", () => {
+    const args = wikiSessionArgs({
+      image: "docwiki-bench-vitest", bareDir: "/b", outDir: "/o", pluginDir: "/p",
+      wikiCommit: "cccc", model: "claude-sonnet-4-6", name: "bench-vitest-wiki-build",
+    });
+    const i = args.indexOf("--name");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-vitest-wiki-build");
   });
 });

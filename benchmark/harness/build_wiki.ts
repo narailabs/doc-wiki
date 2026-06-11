@@ -32,11 +32,14 @@ export interface WikiBuildSpec {
   pluginDir: string;
   wikiCommit: string;
   model: string;
+  /** Deterministic container name so a timed-out build can be pre-cleaned and reaped (same contract as run_ticket's session container). */
+  name: string;
 }
 
 export function wikiSessionArgs(s: WikiBuildSpec): string[] {
   return [
     "run", "--rm",
+    "--name", s.name,
     "-v", `${s.bareDir}:/bare:ro`,
     "-v", `${s.outDir}:/out`,
     "-v", `${s.pluginDir}:/plugin:ro`,
@@ -79,6 +82,10 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   mkdirSync(outDir, { recursive: true });
 
+  const containerName = `bench-${repo}-wiki-build`;
+  // Clear stale crash leftovers and prevent --name collisions; result ignored.
+  await realRunner("docker", ["rm", "-f", containerName]);
+
   const args = wikiSessionArgs({
     image: String(values.image ?? `docwiki-bench-${repo}`),
     bareDir,
@@ -86,8 +93,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     pluginDir: resolve(String(values.pluginDir ?? ".")),
     wikiCommit: cfg.wiki_commit,
     model: String(values.model ?? "claude-sonnet-4-6"),
+    name: containerName,
   });
   const r = await realRunner("docker", args, { timeoutMs: 4 * 60 * 60 * 1000 });
+  // Host-side timeout SIGKILLs the docker CLI, not the container — reap it so an
+  // orphan can't keep burning quota (full egress + token) or corrupt /out on a re-run.
+  if (r.code !== 0) await realRunner("docker", ["rm", "-f", containerName]);
   process.stderr.write(r.stderr);
   return r.code;
 }
