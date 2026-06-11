@@ -414,26 +414,64 @@ describe("buildRoutingTable", () => {
     expect(rows[0].pagePath).toBe("wiki/overview.md");
   });
 
-  it("deduplicates: only the first page per facet is kept", () => {
+  it("per-topic facet: emits one row per topic for a recurring facet", () => {
     const pages = [
       { relPath: "wiki/auth/architecture.md", facet: "architecture", title: "Auth Arch" },
       { relPath: "wiki/billing/architecture.md", facet: "architecture", title: "Billing Arch" },
     ];
     const rows = buildRoutingTable(pages, "docs/wiki");
-    // Both share the same facet — only one row emitted
-    expect(rows.filter((r) => r.intent.includes("architecture"))).toHaveLength(1);
-    // The first alphabetically is kept
-    expect(rows[0].pagePath).toContain("auth/architecture.md");
+    // Both topics get their own architecture row — neither is dropped.
+    const archRows = rows.filter((r) => r.intent.includes("architecture"));
+    expect(archRows).toHaveLength(2);
+    // Topic woven into the intent so the agent can route to the right page.
+    expect(archRows.some((r) => r.intent.includes("auth"))).toBe(true);
+    expect(archRows.some((r) => r.intent.includes("billing"))).toBe(true);
+    // Both pages are referenced.
+    expect(rows.map((r) => r.pagePath)).toEqual([
+      "docs/wiki/wiki/auth/architecture.md",
+      "docs/wiki/wiki/billing/architecture.md",
+    ]);
   });
 
-  it("rows appear in a stable, logical order (overview before troubleshooting)", () => {
+  it("per-topic rows for the same facet are sorted deterministically by page path", () => {
+    const pages = [
+      { relPath: "wiki/billing/architecture.md", facet: "architecture", title: null },
+      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: null },
+    ];
+    const rows = buildRoutingTable(pages, "");
+    expect(rows[0].pagePath).toBe("wiki/auth/architecture.md");
+    expect(rows[1].pagePath).toBe("wiki/billing/architecture.md");
+  });
+
+  it("global facet: collapses duplicate pages to one row (lexicographically-smallest wins, order-independent)", () => {
+    // Even with unsorted input, the smallest relPath wins deterministically.
+    const pages = [
+      { relPath: "wiki/b/overview.md", facet: "overview", title: null },
+      { relPath: "wiki/a/overview.md", facet: "overview", title: null },
+    ];
+    const rows = buildRoutingTable(pages, "docs/wiki");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].pagePath).toBe("docs/wiki/wiki/a/overview.md");
+  });
+
+  it("per-topic facet with no topic dir: drops the {topic} placeholder cleanly", () => {
+    const pages = [{ relPath: "wiki/architecture.md", facet: "architecture", title: null }];
+    const rows = buildRoutingTable(pages, "");
+    expect(rows[0].intent).not.toContain("{topic}");
+    expect(rows[0].intent).toContain("architecture");
+  });
+
+  it("rows appear in a stable, logical order (per-topic facets before global facets)", () => {
     const pages = [
       { relPath: "wiki/troubleshooting.md", facet: "troubleshooting", title: null },
+      { relPath: "wiki/auth/architecture.md", facet: "architecture", title: null },
       { relPath: "wiki/overview.md", facet: "overview", title: null },
     ];
     const rows = buildRoutingTable(pages, "");
-    expect(rows[0].intent).toContain("fits together");
-    expect(rows[1].intent).toContain("diagnose");
+    // architecture (per-topic) comes first, then global facets in their order.
+    expect(rows[0].intent).toContain("architecture");
+    expect(rows[1].intent).toContain("fits together");
+    expect(rows[2].intent).toContain("diagnose");
   });
 });
 
@@ -550,6 +588,72 @@ describe("generateClaudeMd — behavioral directive", () => {
     expect(result).toContain("Keep this too.");
     expect(result).toContain("consult the wiki");
     expect(result).not.toContain("old managed");
+  });
+
+  it("two topics sharing the architecture facet produce two routing rows, both on disk", () => {
+    const root = makeProjectRoot(tmpPath);
+    makeWikiPage(root, "auth/architecture.md", [
+      "title: Auth Architecture",
+      "atlas_facet: architecture",
+    ]);
+    makeWikiPage(root, "billing/architecture.md", [
+      "title: Billing Architecture",
+      "atlas_facet: architecture",
+    ]);
+    const result = generateClaudeMd(root, root);
+
+    // Two distinct architecture rows, disambiguated by topic.
+    expect(result).toContain("auth subsystem architecture");
+    expect(result).toContain("billing subsystem architecture");
+
+    // Every linked .md page resolves on disk (phantom-link invariant).
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    const linked: string[] = [];
+    while ((match = linkRe.exec(result)) !== null) {
+      if (match[1].endsWith(".md")) linked.push(match[1]);
+    }
+    expect(linked).toContain("wiki/auth/architecture.md");
+    expect(linked).toContain("wiki/billing/architecture.md");
+    for (const rel of linked) {
+      expect(fs.existsSync(path.join(root, rel)), `Expected ${rel} on disk`).toBe(true);
+    }
+  });
+
+  it("submodule CLAUDE.md: routing-table and index links resolve from the submodule dir", () => {
+    // Project layout: wiki under docs/app-wiki, submodule at services/auth.
+    const root = tmpPath;
+    const wikiRoot = path.join(root, "docs", "app-wiki");
+    fs.mkdirSync(path.join(wikiRoot, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "wiki", "index.md"), "# Index\n");
+    makeWikiPage(wikiRoot, "auth/architecture.md", [
+      "title: Auth Architecture",
+      "atlas_facet: architecture",
+    ]);
+    makeWikiPage(wikiRoot, "overview.md", ["atlas_facet: overview"]);
+    const submoduleDir = path.join(root, "services", "auth");
+    fs.mkdirSync(submoduleDir, { recursive: true });
+
+    const result = generateClaudeMd(root, wikiRoot, "services/auth");
+
+    // Links must climb out of services/auth/ before descending into docs/.
+    const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    const linked: string[] = [];
+    while ((match = linkRe.exec(result)) !== null) {
+      const href = match[1];
+      if (href.endsWith(".md") && !href.endsWith("CLAUDE.md")) linked.push(href);
+    }
+    expect(linked.length).toBeGreaterThan(0);
+    // Resolve each link relative to the submodule directory — it must exist.
+    for (const rel of linked) {
+      expect(rel.startsWith("../../"), `Expected ${rel} to be submodule-relative`).toBe(true);
+      const resolved = path.resolve(submoduleDir, rel);
+      expect(fs.existsSync(resolved), `Expected ${resolved} to exist`).toBe(true);
+    }
+    // The same links would NOT resolve from the project root (proves the fix).
+    const archLink = linked.find((l) => l.includes("architecture.md"))!;
+    expect(fs.existsSync(path.resolve(root, archLink))).toBe(false);
   });
 });
 

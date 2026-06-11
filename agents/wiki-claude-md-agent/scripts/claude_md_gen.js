@@ -101,15 +101,31 @@ export function listWikiPagesForRouting(wikiRoot) {
 /**
  * Well-known facet → intent mapping. These strings are intentionally generic;
  * they read well for any codebase.
+ *
+ * The map is split into two groups for routing purposes:
+ *
+ *   - PER_TOPIC facets recur once per topic in an atlas run (e.g. both
+ *     `auth/architecture.md` and `billing/architecture.md` exist). Each page
+ *     gets its OWN routing row, with the topic woven into the intent so the
+ *     agent can route to the right one. The intent here is a template that
+ *     `{topic}` is substituted into.
+ *   - GLOBAL facets are single-instance per wiki (e.g. one `overview.md`).
+ *     They collapse to one row; if duplicates somehow exist, the
+ *     lexicographically-first page wins.
+ *
+ * The order of keys across both maps (PER_TOPIC first, then GLOBAL) defines
+ * the logical sort order of the rendered table.
  */
-const FACET_INTENTS = {
+const PER_TOPIC_FACET_INTENTS = {
+    architecture: "understand the {topic} subsystem architecture",
+    api: "trace or modify a {topic} API endpoint",
+    "data-model": "understand the {topic} data model or schema",
+    operations: "operate, deploy, or monitor {topic}",
+    environments: "understand {topic} runtime environments",
+};
+const GLOBAL_FACET_INTENTS = {
     overview: "understand how the system fits together",
-    architecture: "understand the architecture of a subsystem",
-    "data-model": "understand the data model or schema",
-    api: "trace or modify an API endpoint",
     configuration: "change configuration or environment variables",
-    operations: "operate, deploy, or monitor the system",
-    environments: "understand runtime environments or deployment targets",
     integrations: "wire in or debug an external service",
     deploy: "understand the deployment pipeline",
     "getting-started": "get set up for the first time",
@@ -122,49 +138,103 @@ const FACET_INTENTS = {
     "database-traces": "trace datasource access paths",
     "shared-libraries": "find shared library usage across services",
 };
+/** Combined facet order: per-topic facets first, then global facets. */
+const FACET_ORDER = [
+    ...Object.keys(PER_TOPIC_FACET_INTENTS),
+    ...Object.keys(GLOBAL_FACET_INTENTS),
+];
+/**
+ * Derive a human-readable topic label for a per-topic page from its relPath.
+ *
+ * `wiki/auth/architecture.md` → "auth". A top-level page such as
+ * `wiki/architecture.md` has no topic directory; fall back to the page's
+ * `title` (if any), else a generic "subsystem"/"the system" phrasing handled
+ * by the caller via a null return.
+ */
+function deriveTopic(page) {
+    // relPath looks like "wiki/<maybe-topic>/<file>.md" or "wiki/<file>.md".
+    const parts = page.relPath.split("/");
+    // Drop the leading "wiki" segment and the trailing filename.
+    const dirSegments = parts.slice(1, -1);
+    if (dirSegments.length > 0) {
+        // Use the deepest directory as the topic (e.g. wiki/services/auth/api.md → "auth").
+        return dirSegments[dirSegments.length - 1] ?? null;
+    }
+    return null;
+}
 /**
  * Build a routing table from wiki pages that have a recognized `atlas_facet`.
  * Pages without a known facet are omitted — the table only lists rows the
  * agent can act on.
  *
- * `wikiRelDir` is the path from the project root to the wiki folder
- * (e.g. `"docs/my-app-wiki"` or `"wiki"`), used to prefix page paths.
+ * Per-topic facets (architecture, api, data-model, operations, environments)
+ * emit ONE ROW PER PAGE, disambiguated by the page's topic, so the agent can
+ * route to (say) the auth vs billing architecture page. Global single-instance
+ * facets (overview, configuration, troubleshooting, …) collapse to one row.
+ *
+ * `wikiRelDir` is the path from the project root (or submodule dir) to the
+ * wiki folder (e.g. `"docs/my-app-wiki"` or `"wiki"`), used to prefix page
+ * paths so links resolve from wherever the generated file lives.
  */
 export function buildRoutingTable(pages, wikiRelDir) {
-    // Collect the first page seen per facet (pages are sorted by relPath so the
-    // result is deterministic across runs).
-    const seen = new Set();
-    const rows = [];
+    const prefix = (relPath) => wikiRelDir ? `${wikiRelDir}/${relPath}` : relPath;
+    const tagged = [];
+    // Maps a global facet to its currently-winning row, so duplicate global
+    // pages collapse to the lexicographically-smallest page deterministically
+    // (independent of input iteration order).
+    const globalSeen = new Map();
     for (const page of pages) {
         if (!page.facet)
             continue;
-        const intent = FACET_INTENTS[page.facet];
-        if (!intent)
+        const perTopicTemplate = PER_TOPIC_FACET_INTENTS[page.facet];
+        if (perTopicTemplate) {
+            const topic = deriveTopic(page);
+            const intent = topic
+                ? perTopicTemplate.replace("{topic}", topic)
+                : // No topic dir: strip the "{topic} " placeholder for a clean generic phrasing.
+                    perTopicTemplate.replace("{topic} ", "");
+            tagged.push({
+                intent,
+                pagePath: prefix(page.relPath),
+                facet: page.facet,
+                sortKey: page.relPath,
+            });
             continue;
-        if (seen.has(page.facet))
-            continue;
-        seen.add(page.facet);
-        // page.relPath is already relative to wikiRoot; prepend wikiRelDir if needed
-        const fullRel = wikiRelDir ? `${wikiRelDir}/${page.relPath}` : page.relPath;
-        rows.push({ intent, pagePath: fullRel });
+        }
+        const globalIntent = GLOBAL_FACET_INTENTS[page.facet];
+        if (globalIntent) {
+            const existing = globalSeen.get(page.facet);
+            if (existing) {
+                // Keep the lexicographically-smallest page so the choice is
+                // deterministic regardless of input iteration order.
+                if (page.relPath < existing.sortKey) {
+                    existing.pagePath = prefix(page.relPath);
+                    existing.sortKey = page.relPath;
+                }
+                continue;
+            }
+            const row = {
+                intent: globalIntent,
+                pagePath: prefix(page.relPath),
+                facet: page.facet,
+                sortKey: page.relPath,
+            };
+            globalSeen.set(page.facet, row);
+            tagged.push(row);
+        }
+        // Unknown facets are ignored.
     }
-    // Sort by the order facets appear in FACET_INTENTS for a stable, logical order
-    const facetOrder = Object.keys(FACET_INTENTS);
-    rows.sort((a, b) => {
-        // Recover the facet key from pagePath by looking up which row it came from
-        const facetA = pages.find((p) => {
-            const fp = wikiRelDir ? `${wikiRelDir}/${p.relPath}` : p.relPath;
-            return fp === a.pagePath;
-        })?.facet ?? "";
-        const facetB = pages.find((p) => {
-            const fp = wikiRelDir ? `${wikiRelDir}/${p.relPath}` : p.relPath;
-            return fp === b.pagePath;
-        })?.facet ?? "";
-        const ia = facetOrder.indexOf(facetA);
-        const ib = facetOrder.indexOf(facetB);
-        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    // Sort by facet order, then by page path for stable per-topic grouping.
+    tagged.sort((a, b) => {
+        const ia = FACET_ORDER.indexOf(a.facet);
+        const ib = FACET_ORDER.indexOf(b.facet);
+        const fa = ia === -1 ? 999 : ia;
+        const fb = ib === -1 ? 999 : ib;
+        if (fa !== fb)
+            return fa - fb;
+        return a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0;
     });
-    return rows;
+    return tagged.map(({ intent, pagePath }) => ({ intent, pagePath }));
 }
 // ── Constants ───────────────────────────────────────────────────────
 export const MARKER_START = "<!-- wiki-managed: start -->";
@@ -258,7 +328,15 @@ export function generateClaudeMd(projectRoot, wikiRoot, submodule = null) {
         "the wiki does not cover something, say so rather than guessing.");
     lines.push("");
     // ── Intent → resource routing table ────────────────────────────────
-    const wikiRel = safeRelpath(wikiRoot, projectRoot);
+    // Links must resolve from wherever THIS file lives. For a submodule
+    // CLAUDE.md (e.g. services/auth/CLAUDE.md) the relative base is the
+    // submodule directory, not the project root — otherwise the links point
+    // under the submodule and break. Stay consistent with the back-link block
+    // below, which also offsets by the submodule depth.
+    const linkBaseDir = submodule
+        ? path.join(projectRoot, submodule)
+        : projectRoot;
+    const wikiRel = safeRelpath(wikiRoot, linkBaseDir);
     const pages = listWikiPagesForRouting(wikiRoot);
     const routingRows = buildRoutingTable(pages, wikiRel);
     if (routingRows.length > 0) {
