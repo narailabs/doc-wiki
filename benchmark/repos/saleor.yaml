@@ -1,0 +1,39 @@
+id: saleor
+github: saleor/saleor
+clone_url: https://github.com/saleor/saleor.git
+language: python
+ticket_source: github
+install:
+  # libpq-dev is required by psycopg2 (pulled by uv sync)
+  - "apt-get update -qq && apt-get install -y --no-install-recommends libpq-dev"
+  - "pip install uv --quiet"
+  - "uv sync --locked"
+# Matches CI exactly (see .github/workflows/tests-and-linters.yml).
+# --ds=saleor.tests.settings is already baked into setup.cfg addopts so
+# we don't repeat it here. -p no:recording prevents pytest-recording from
+# trying to write cassette files during grade. -x stops on first failure
+# so the grade result is deterministic.
+test_command: "uv run pytest -x -m 'not e2e' -p no:recording {test_files}"
+test_patterns:
+  - "saleor/**/tests/**/*.py"
+  - "saleor/**/test_*.py"
+run_patterns:
+  # Exclude conftest, fixtures, and utility helpers — only runnable test_ files.
+  - "saleor/**/tests/**/test_*.py"
+exclude_test_paths:
+  - "saleor/tests/e2e/**"           # Playwright / full-stack e2e (require running storefront)
+  - "saleor/**/tests/benchmark/**"  # query-count benchmarks, not regression tests
+test_retries: 1
+ticket_after: "2025-06-01"
+# Candidate wiki_commit: b2782842 (2025-05-30) — ancestor-verified against the sampled
+# base commits; pin the actual value after mining (parent of the oldest base_commit).
+wiki_commit: ""
+toolchain:
+  - "python:3.12"
+# Saleor's pytest suite needs Postgres + valkey(redis) sidecars. The harness must run
+# these alongside the grade/session container and inject DATABASE_URL / CACHE_URL. Wiki
+# is built WITHOUT --cross-service (single-repo Django monolith). See task tracking the
+# sidecar harness support.
+services:
+  - "postgres:15-alpine"
+  - "valkey/valkey:8.1-alpine"
