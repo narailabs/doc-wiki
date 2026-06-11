@@ -2,9 +2,11 @@
 ARG TOOLCHAIN=node:22
 FROM ${TOOLCHAIN}
 ARG CLAUDE_CODE_VERSION=2.1.170
+# EXTRA_APT: optional space-separated list of additional apt packages to install at build time (e.g. "libpq-dev").
+ARG EXTRA_APT=""
 ENV DISABLE_AUTOUPDATER=1 \
     CLAUDE_CONFIG_DIR=/claude-cfg
-RUN apt-get update && apt-get install -y --no-install-recommends git iptables dnsutils ca-certificates bash sudo \
+RUN apt-get update && apt-get install -y --no-install-recommends git iptables dnsutils ca-certificates bash sudo curl ${EXTRA_APT} \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     # Enable corepack now (as root): the pnpm/yarn shims live in the root-owned global
@@ -19,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git iptables dn
     && chown -R node:node /claude-cfg /out /work \
     && echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/bench-firewall \
     && chmod 440 /etc/sudoers.d/bench-firewall
+# Install uv system-wide so Python repos can provision their own Python at session time (no root needed).
+# UV_INSTALL_DIR places the binary directly into /usr/local/bin (on PATH for the node user).
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 COPY entrypoint.sh grade.sh init-firewall.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/grade.sh /usr/local/bin/init-firewall.sh
 USER node

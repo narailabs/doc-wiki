@@ -5,13 +5,15 @@ import { describe, expect, it } from "vitest";
 import type { Runner } from "../exec.js";
 import { runBatch } from "../run_ticket.js";
 import { loadState, runKey, saveState, setRun } from "../bench_checkpoint.js";
-import type { RepoConfig, TicketsFile } from "../types.js";
+import type { RepoConfig, ServiceSpec, TicketsFile } from "../types.js";
 
 const CFG: RepoConfig = {
   id: "demo", github: "acme/demo", clone_url: "x", language: "ts",
   ticket_source: "github", install: ["true"], test_command: "t {test_files}",
-  test_patterns: ["test/**"], test_retries: 0, ticket_after: "2025-06-01",
+  test_patterns: ["test/**"], run_patterns: ["test/**"], exclude_test_paths: [],
+  test_retries: 0, ticket_after: "2025-06-01",
   wiki_commit: "cccc", toolchain: ["node:22"], services: [],
+  container_env: {}, system_packages: [],
 };
 
 const ticket = (issue: number) => ({
@@ -189,6 +191,164 @@ describe("runBatch", () => {
       image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60,
       runner: async () => { throw new Error("must not be called"); },
     })).rejects.toThrow(/build-wiki/);
+  });
+});
+
+describe("sidecar lifecycle in runBatch", () => {
+  const DB_SVC: ServiceSpec = {
+    name: "db",
+    image: "postgres:15-alpine",
+    env: { POSTGRES_USER: "test" },
+  };
+
+  it("starts network + service, passes --network + BENCH_ALLOW_PRIVATE_NET to session, teardown after run", async () => {
+    const cfgWithSvc: RepoConfig = {
+      ...CFG,
+      services: [DB_SVC],
+      container_env: { DATABASE_URL: "postgres://test@db/test" },
+    };
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    const calls: string[][] = [];
+
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      if (args[0] === "run" && args.some((a) => a.includes(":/out"))) {
+        const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+        writeFileSync(join(String(outDir), "result.json"), JSON.stringify({ result: "ok", total_cost_usd: 0.1, session_id: "s" }));
+        writeFileSync(join(String(outDir), "stderr.log"), "");
+        writeFileSync(join(String(outDir), "exit_code"), "0");
+        writeFileSync(join(String(outDir), "diff.patch"), "");
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const summary = await runBatch({
+      cfg: cfgWithSvc, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner,
+    });
+    expect(summary.errors).toBe(0);
+
+    // For each arm (baseline, wiki) we expect: pre-clean (svc rm + network rm), network
+    // create, svc run (detached), session run, then teardown (svc rm + network rm).
+    const networkCreates = calls.filter((a) => a[0] === "network" && a[1] === "create");
+    const networkRms = calls.filter((a) => a[0] === "network" && a[1] === "rm");
+    const svcRuns = calls.filter((a) => a[0] === "run" && a.includes("-d") && a.some((x) => x.includes("-svc-db")));
+    const sessionRuns = calls.filter((a) => a[0] === "run" && a.some((x) => x.includes(":/out")));
+    const svcRmFs = calls.filter((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("-svc-db")));
+
+    // 2 arms × each lifecycle step. svc rm + network rm happen twice per arm
+    // (once in the stale pre-clean, once in teardown) → 4 total each.
+    expect(networkCreates).toHaveLength(2);
+    expect(networkRms).toHaveLength(4);
+    expect(svcRuns).toHaveLength(2);
+    expect(sessionRuns).toHaveLength(2);
+    expect(svcRmFs).toHaveLength(4);
+
+    // Session run must include --network
+    for (const run of sessionRuns) {
+      expect(run).toContain("--network");
+      expect(run).toContain("BENCH_ALLOW_PRIVATE_NET=1");
+      expect(run).toContain("DATABASE_URL=postgres://test@db/test");
+    }
+
+    // Ordering for the baseline arm. Pre-clean svc-rm + network-rm come FIRST (before
+    // network create); teardown svc-rm + network-rm come LAST (after the session run).
+    const lastIndex = (pred: (a: string[]) => boolean): number => {
+      for (let i = calls.length - 1; i >= 0; i--) { const c = calls[i]; if (c !== undefined && pred(c)) return i; }
+      return -1;
+    };
+    const baselineNetCreate = calls.findIndex((a) => a[0] === "network" && a[1] === "create" && a[2]?.includes("baseline"));
+    const baselineSvcRun = calls.findIndex((a) => a[0] === "run" && a.includes("-d") && a.some((x) => x.includes("baseline-svc-db")));
+    const baselineSessionRun = calls.findIndex((a) => a[0] === "run" && a.some((x) => x.includes("baseline") && x.includes(":/out")));
+    // Pre-clean (first occurrence) vs teardown (last occurrence).
+    const baselinePreSvcRm = calls.findIndex((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("baseline-svc-db")));
+    const baselinePreNetRm = calls.findIndex((a) => a[0] === "network" && a[1] === "rm" && a[2]?.includes("baseline"));
+    const baselineTeardownSvcRm = lastIndex((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("baseline-svc-db")));
+    const baselineTeardownNetRm = lastIndex((a) => a[0] === "network" && a[1] === "rm" && (a[2]?.includes("baseline") ?? false));
+
+    expect(baselineNetCreate).toBeGreaterThanOrEqual(0);
+    // Pre-clean precedes the network create.
+    expect(baselinePreSvcRm).toBeLessThan(baselineNetCreate);
+    expect(baselinePreNetRm).toBeLessThan(baselineNetCreate);
+    expect(baselineSvcRun).toBeGreaterThan(baselineNetCreate);
+    expect(baselineSessionRun).toBeGreaterThan(baselineSvcRun);
+    // Teardown follows the session run.
+    expect(baselineTeardownSvcRm).toBeGreaterThan(baselineSessionRun);
+    expect(baselineTeardownNetRm).toBeGreaterThan(baselineTeardownSvcRm);
+  });
+
+  it("teardown runs even when the session docker run errors", async () => {
+    const cfgWithSvc: RepoConfig = { ...CFG, services: [DB_SVC], container_env: {} };
+    const { root, ticketsPath, wikiDir } = setup([ticket(1)]);
+    const calls: string[][] = [];
+
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      // Session run fails (no artifacts written)
+      if (args[0] === "run" && args.some((a) => a.includes(":/out"))) {
+        return { code: 1, stdout: "", stderr: "docker error" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const summary = await runBatch({
+      cfg: cfgWithSvc, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner,
+    });
+    // Errors recorded (session failed) but teardown still ran
+    expect(summary.errors).toBeGreaterThan(0);
+    const svcRmFs = calls.filter((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("-svc-db")));
+    const networkRms = calls.filter((a) => a[0] === "network" && a[1] === "rm");
+    // teardown should have been called (once per arm)
+    expect(svcRmFs.length).toBeGreaterThanOrEqual(1);
+    expect(networkRms.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("records the arm as error and continues the batch when startSidecars throws", async () => {
+    const cfgWithSvc: RepoConfig = { ...CFG, services: [DB_SVC], container_env: {} };
+    const { root, ticketsPath, wikiDir } = setup([ticket(1), ticket(2)]);
+    const calls: string[][] = [];
+    let networkCreates = 0;
+
+    // The readiness probe path is the throw source; here we make `network create`
+    // throw (rejected promise) for the FIRST arm only, then succeed afterward — proving
+    // the batch continues to subsequent arms after an isolated infra failure.
+    const runner: Runner = async (_cmd, args) => {
+      calls.push([...args]);
+      if (args[0] === "network" && args[1] === "create") {
+        networkCreates += 1;
+        if (networkCreates === 1) throw new Error("docker network create boom");
+      }
+      if (args[0] === "run" && args.some((a) => a.includes(":/out"))) {
+        const outDir = String(args.find((a) => a.includes(":/out"))).split(":")[0];
+        writeFileSync(join(String(outDir), "result.json"), JSON.stringify({ result: "ok", total_cost_usd: 0.1, session_id: "s" }));
+        writeFileSync(join(String(outDir), "stderr.log"), "");
+        writeFileSync(join(String(outDir), "exit_code"), "0");
+        writeFileSync(join(String(outDir), "diff.patch"), "");
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const summary = await runBatch({
+      cfg: cfgWithSvc, ticketsPath, runsRoot: join(root, "runs"), bareDir: "/b", wikiDir,
+      image: "img", model: "m", maxTurns: 80, batch: 5, timeoutSec: 60, runner,
+    });
+
+    // First arm errored; the batch did NOT abort — later arms ran.
+    expect(summary.errors).toBe(1);
+    expect(summary.ran).toBeGreaterThan(0);
+
+    // Read the raw persisted state: `error` is a TRANSIENT status that loadState
+    // reverts to `pending` (for resume), so assert against the on-disk JSON.
+    const raw = JSON.parse(readFileSync(join(root, "runs", "demo", "state.json"), "utf8"));
+    expect(raw.runs[runKey(1, "baseline")].status).toBe("error");
+    expect(raw.runs[runKey(1, "baseline")].detail).toContain("boom");
+    // The other arm of the same ticket still ran (batch continued).
+    expect(raw.runs[runKey(1, "wiki")].status).toBe("ran");
+
+    // Teardown still ran for the failed arm (finally block fired despite the throw).
+    const baselineSvcRm = calls.filter((a) => a[0] === "rm" && a.includes("-f") && a.some((x) => x.includes("baseline-svc-db")));
+    expect(baselineSvcRm.length).toBeGreaterThanOrEqual(1);
   });
 });
 

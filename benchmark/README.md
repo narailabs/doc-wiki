@@ -7,13 +7,17 @@ Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). Numbers: `RESULTS.m
 ## One-time setup
 
 1. `claude setup-token` → export the printed token as `CLAUDE_CODE_OAUTH_TOKEN` (draws on your Claude subscription; never commit it).
-2. Build the image: `docker build -t docwiki-bench-vitest --build-arg TOOLCHAIN=node:22 benchmark/harness/docker/`
+2. Build the image: `npm run benchmark -- build-image --repo vitest` (tags `docwiki-bench-<repo>`; reads `toolchain` and bakes any `system_packages` into the image via `EXTRA_APT` automatically — e.g. saleor's `libpq-dev`).
+   - All images include `uv` (installed system-wide), so Python repos can provision their own Python at session time via `uv sync --locked` without root.
 3. Cache a bare clone: `git clone --bare https://github.com/vitest-dev/vitest.git benchmark/wiki-cache/vitest.git`
+
+**Service-backed repos** (e.g. saleor with Postgres + valkey/redis): the harness automatically starts the configured sidecars on a per-run private docker network before each session/grade container, injects `DATABASE_URL`/`CACHE_URL` (and `BENCH_ALLOW_PRIVATE_NET=1`) via environment variables, and tears them down in a `finally` block after each run. No extra setup is required beyond ensuring docker is running; the sidecar config lives entirely in `benchmark/repos/<repo>.yaml`.
 
 ## Pipeline (pilot: vitest)
 
 | step | command |
 |---|---|
+| build image | `npm run benchmark -- build-image --repo vitest` |
 | mine tickets | `npm run benchmark -- mine --repo vitest --target 30` |
 | set `wiki_commit` | parent of the oldest `base_commit` in `benchmark/tickets/vitest.json` → `benchmark/repos/vitest.yaml` |
 | build wiki overlay | `npm run benchmark -- build-wiki --repo vitest --plugin-dir .` |

@@ -79,6 +79,31 @@ describe("docker argv builders", () => {
     expect(args).toContain("/a b/c.git:/bare:ro");
     expect(args).toContain("/o ut/dir:/out");
   });
+
+  it("session args include --network when network is set", () => {
+    const args = sessionRunArgs({ ...SPEC, network: "bench-vitest-17-wiki-net" });
+    const i = args.indexOf("--network");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-vitest-17-wiki-net");
+  });
+
+  it("session args omit --network when network is undefined", () => {
+    const args = sessionRunArgs({ ...SPEC, network: undefined });
+    expect(args).not.toContain("--network");
+  });
+
+  it("session args include extraEnv as -e KEY=VALUE pairs", () => {
+    const args = sessionRunArgs({ ...SPEC, extraEnv: { DATABASE_URL: "postgres://db:5432/saleor", BENCH_ALLOW_PRIVATE_NET: "1" } });
+    expect(args).toContain("-e");
+    expect(args).toContain("DATABASE_URL=postgres://db:5432/saleor");
+    expect(args).toContain("BENCH_ALLOW_PRIVATE_NET=1");
+  });
+
+  it("session args omit extraEnv pairs when extraEnv is undefined", () => {
+    const args = sessionRunArgs({ ...SPEC, extraEnv: undefined });
+    expect(args.join(" ")).not.toContain("DATABASE_URL");
+    expect(args.join(" ")).not.toContain("BENCH_ALLOW_PRIVATE_NET");
+  });
 });
 
 describe("gradeRunArgs run files", () => {
@@ -89,5 +114,96 @@ describe("gradeRunArgs run files", () => {
     };
     expect(gradeRunArgs({ ...base, runFiles: ["test/a.test.ts"] })).toContain("BENCH_RUN_FILES=test/a.test.ts");
     expect(gradeRunArgs(base)).toContain("BENCH_RUN_FILES=test/a.test.ts test/helper.ts");
+  });
+});
+
+describe("gradeRunArgs network + extraEnv", () => {
+  const BASE_GRADE = {
+    image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+    testFiles: ["test/a.test.ts"], testCommand: "t {test_files}", retries: 0,
+  };
+
+  it("includes --network when set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, network: "bench-saleor-7-wiki-net" });
+    const i = args.indexOf("--network");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-saleor-7-wiki-net");
+  });
+
+  it("omits --network when undefined", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, network: undefined });
+    expect(args).not.toContain("--network");
+  });
+
+  it("includes extraEnv as -e KEY=VALUE pairs", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, extraEnv: { DATABASE_URL: "postgres://db/saleor", BENCH_ALLOW_PRIVATE_NET: "1" } });
+    expect(args).toContain("DATABASE_URL=postgres://db/saleor");
+    expect(args).toContain("BENCH_ALLOW_PRIVATE_NET=1");
+  });
+
+  it("image + grade mode are always last two elements", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, network: "mynet", extraEnv: { FOO: "bar" } });
+    expect(args[args.length - 2]).toBe("img");
+    expect(args[args.length - 1]).toBe("grade");
+  });
+});
+
+describe("gradeRunArgs mode", () => {
+  const BASE_GRADE = {
+    image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+    testFiles: ["test/a.test.ts"], testCommand: "t {test_files}", retries: 0,
+  };
+
+  it("emits -e BENCH_GRADE_MODE=calibrate-base when mode is set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, mode: "calibrate-base" });
+    expect(args).toContain("BENCH_GRADE_MODE=calibrate-base");
+  });
+
+  it("emits -e BENCH_GRADE_MODE=calibrate-fix when mode is set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, mode: "calibrate-fix" });
+    expect(args).toContain("BENCH_GRADE_MODE=calibrate-fix");
+  });
+
+  it("omits BENCH_GRADE_MODE when mode is unset (grade.sh defaults to grade)", () => {
+    const args = gradeRunArgs(BASE_GRADE);
+    expect(args.join(" ")).not.toContain("BENCH_GRADE_MODE");
+  });
+});
+
+describe("gradeRunArgs containerName", () => {
+  const BASE_GRADE = {
+    image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+    testFiles: ["test/a.test.ts"], testCommand: "t {test_files}", retries: 0,
+  };
+
+  it("emits --name <containerName> as adjacent elements when set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, containerName: "bench-saleor-7-wiki-grade-run" });
+    const i = args.indexOf("--name");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-saleor-7-wiki-grade-run");
+  });
+
+  it("omits --name when containerName is unset", () => {
+    const args = gradeRunArgs(BASE_GRADE);
+    expect(args).not.toContain("--name");
+  });
+});
+
+describe("buildImageArgs extraApt", () => {
+  it("omits EXTRA_APT build-arg when extraApt is empty/undefined", () => {
+    expect(buildImageArgs("tag", "node:22", "ctx")).toEqual([
+      "build", "-t", "tag", "--build-arg", "TOOLCHAIN=node:22", "ctx",
+    ]);
+    expect(buildImageArgs("tag", "node:22", "ctx", [])).toEqual([
+      "build", "-t", "tag", "--build-arg", "TOOLCHAIN=node:22", "ctx",
+    ]);
+  });
+
+  it("adds EXTRA_APT build-arg with space-joined packages", () => {
+    expect(buildImageArgs("tag", "node:22", "ctx", ["libpq-dev", "python3"])).toEqual([
+      "build", "-t", "tag", "--build-arg", "TOOLCHAIN=node:22",
+      "--build-arg", "EXTRA_APT=libpq-dev python3",
+      "ctx",
+    ]);
   });
 });

@@ -11,5 +11,6 @@ describe("cli dispatch", () => {
     expect(await dispatch(["calibrate", "--help"])).toBe(0);
     expect(await dispatch(["report", "--help"])).toBe(0);
     expect(await dispatch(["build-wiki", "--help"])).toBe(0);
+    expect(await dispatch(["build-image", "--help"])).toBe(0);
   });
 });

@@ -75,3 +75,79 @@ describe("runnable-test config fields", () => {
     expect(() => loadRepoConfig(writeCfg(`${VALID}run_patterns: [{a: 1}]\n`))).toThrow(/run_patterns/);
   });
 });
+
+describe("services / container_env / system_packages fields", () => {
+  it("defaults all three to empty when absent", () => {
+    const cfg = loadRepoConfig(writeCfg(VALID));
+    expect(cfg.services).toEqual([]);
+    expect(cfg.container_env).toEqual({});
+    expect(cfg.system_packages).toEqual([]);
+  });
+
+  it("parses a structured services list", () => {
+    const yaml = `${VALID}
+services:
+  - name: db
+    image: postgres:15-alpine
+    env:
+      POSTGRES_USER: saleor
+      POSTGRES_PASSWORD: saleor
+      POSTGRES_DB: saleor
+    ready: "pg_isready -U saleor"
+  - name: cache
+    image: valkey/valkey:8.1-alpine
+`;
+    const cfg = loadRepoConfig(writeCfg(yaml));
+    expect(cfg.services).toHaveLength(2);
+    expect(cfg.services[0]).toEqual({
+      name: "db",
+      image: "postgres:15-alpine",
+      env: { POSTGRES_USER: "saleor", POSTGRES_PASSWORD: "saleor", POSTGRES_DB: "saleor" },
+      ready: "pg_isready -U saleor",
+    });
+    expect(cfg.services[1]).toEqual({
+      name: "cache",
+      image: "valkey/valkey:8.1-alpine",
+      env: {},
+      ready: undefined,
+    });
+  });
+
+  it("rejects bare-string services entries", () => {
+    const yaml = `${VALID}services:\n  - postgres:15-alpine\n`;
+    expect(() => loadRepoConfig(writeCfg(yaml))).toThrow(/services must be a list of \{name, image\} objects/);
+  });
+
+  it("rejects a service missing name or image", () => {
+    const missingName = `${VALID}services:\n  - image: postgres:15-alpine\n`;
+    expect(() => loadRepoConfig(writeCfg(missingName))).toThrow(/name/);
+    const missingImage = `${VALID}services:\n  - name: db\n`;
+    expect(() => loadRepoConfig(writeCfg(missingImage))).toThrow(/image/);
+  });
+
+  it("parses container_env and system_packages", () => {
+    const yaml = `${VALID}
+container_env:
+  DATABASE_URL: "postgres://saleor:saleor@db:5432/saleor"
+  CACHE_URL: "redis://cache:6379/0"
+system_packages:
+  - libpq-dev
+`;
+    const cfg = loadRepoConfig(writeCfg(yaml));
+    expect(cfg.container_env).toEqual({
+      DATABASE_URL: "postgres://saleor:saleor@db:5432/saleor",
+      CACHE_URL: "redis://cache:6379/0",
+    });
+    expect(cfg.system_packages).toEqual(["libpq-dev"]);
+  });
+
+  it("rejects non-string system_packages entries", () => {
+    const yaml = `${VALID}system_packages:\n  - 123\n`;
+    expect(() => loadRepoConfig(writeCfg(yaml))).toThrow(/system_packages/);
+  });
+
+  it("accepts services: [] (empty list)", () => {
+    const cfg = loadRepoConfig(writeCfg(`${VALID}services: []\n`));
+    expect(cfg.services).toEqual([]);
+  });
+});

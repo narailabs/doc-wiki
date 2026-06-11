@@ -53,7 +53,11 @@ if [ -d /wiki ]; then
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
-[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo /usr/local/bin/init-firewall.sh # entrypoint runs as non-root; iptables needs root (scoped NOPASSWD rule)
+# Pass the private-net allow flag as a POSITIONAL ARG, not an env var: the scoped
+# NOPASSWD sudoers rule permits args but not SETENV, so `sudo VAR=x init-firewall.sh`
+# would exit 1 ("not allowed to set the following environment variables") and abort
+# the container under `set -e`. A positional arg needs no sudoers change.
+[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo /usr/local/bin/init-firewall.sh "${BENCH_ALLOW_PRIVATE_NET:-0}"
 
 set +e
 claude -p "$(cat /out/prompt.txt)" \

@@ -5,6 +5,7 @@ import { loadState, nextPairs, runKey, saveState, setRun } from "./bench_checkpo
 import { sessionRunArgs } from "./docker_args.js";
 import { realRunner } from "./exec.js";
 import { loadRepoConfig } from "./repo_config.js";
+import { networkName, serviceContainerName, startSidecars, teardownSidecars } from "./services.js";
 import { buildPrompt, classifySession } from "./session.js";
 function readOut(outDir, name) {
     const p = join(outDir, name);
@@ -57,44 +58,84 @@ export async function runBatch(opts) {
             const containerName = `bench-${opts.cfg.id}-${item.issue}-${arm}`;
             // Clear stale crash leftovers and prevent --name collisions; result ignored.
             await opts.runner("docker", ["rm", "-f", containerName]);
-            const dockerArgs = sessionRunArgs({
-                image: opts.image,
-                name: containerName,
-                outDir,
-                bareDir: opts.bareDir,
-                wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
-                baseCommit: ticket.base_commit,
-                model: opts.model,
-                maxTurns: opts.maxTurns,
-                install: opts.cfg.install,
-                timeoutSec: opts.timeoutSec,
-            });
-            const exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
-            // Host-side timeout kills our docker CLI process, not the container —
-            // reap it so it can't keep burning quota in the background.
-            if (exec.code !== 0)
-                await opts.runner("docker", ["rm", "-f", containerName]);
-            const result = classifySession(readOut(outDir, "result.json"), exec.code !== 0 ? exec.code : Number(readOut(outDir, "exit_code").trim() || "0"), readOut(outDir, "stderr.log") + exec.stderr);
-            const finished = new Date().toISOString();
-            if (result.kind === "ok") {
-                setRun(state, item.issue, arm, {
-                    status: "ran", started_at: state.runs[runKey(item.issue, arm)]?.started_at,
-                    finished_at: finished, cost_usd: result.costUsd, session_id: result.sessionId,
-                });
-                summary.ran += 1;
+            const hasSidecars = opts.cfg.services.length > 0;
+            const net = hasSidecars ? networkName(containerName) : undefined;
+            // Pre-clean stale sidecars + network from a prior crashed run that skipped its
+            // finally (e.g. SIGKILL): otherwise a leaked --name or network collides here.
+            if (hasSidecars && net !== undefined) {
+                for (const svc of opts.cfg.services) {
+                    await opts.runner("docker", ["rm", "-f", serviceContainerName(containerName, svc)]);
+                }
+                await opts.runner("docker", ["network", "rm", net]);
             }
-            else if (result.kind === "rate-limited") {
-                setRun(state, item.issue, arm, { status: "rate-limited", finished_at: finished, detail: result.detail });
-                saveState(stateFile, state);
-                summary.rateLimited += 1;
-                process.stderr.write(`rate limit hit (${result.detail ?? ""}) — stopping batch; resume with the same command\n`);
-                return summary;
+            let rateLimited = false;
+            try {
+                let exec = { code: 0, stdout: "", stderr: "" };
+                try {
+                    if (hasSidecars && net !== undefined) {
+                        await startSidecars(opts.runner, net, containerName, opts.cfg.services);
+                    }
+                    const extraEnv = {
+                        ...opts.cfg.container_env,
+                        ...(hasSidecars ? { BENCH_ALLOW_PRIVATE_NET: "1" } : {}),
+                    };
+                    const dockerArgs = sessionRunArgs({
+                        image: opts.image,
+                        name: containerName,
+                        outDir,
+                        bareDir: opts.bareDir,
+                        wikiDir: arm === "wiki" ? opts.wikiDir : undefined,
+                        baseCommit: ticket.base_commit,
+                        model: opts.model,
+                        maxTurns: opts.maxTurns,
+                        install: opts.cfg.install,
+                        timeoutSec: opts.timeoutSec,
+                        network: net,
+                        extraEnv: Object.keys(extraEnv).length > 0 ? extraEnv : undefined,
+                    });
+                    exec = await opts.runner("docker", dockerArgs, { timeoutMs: opts.timeoutSec * 1000 });
+                    // Host-side timeout kills our docker CLI process, not the container —
+                    // reap it so it can't keep burning quota in the background.
+                    if (exec.code !== 0)
+                        await opts.runner("docker", ["rm", "-f", containerName]);
+                }
+                finally {
+                    if (hasSidecars && net !== undefined) {
+                        await teardownSidecars(opts.runner, net, containerName, opts.cfg.services);
+                    }
+                }
+                const result = classifySession(readOut(outDir, "result.json"), exec.code !== 0 ? exec.code : Number(readOut(outDir, "exit_code").trim() || "0"), readOut(outDir, "stderr.log") + exec.stderr);
+                const finished = new Date().toISOString();
+                if (result.kind === "ok") {
+                    setRun(state, item.issue, arm, {
+                        status: "ran", started_at: state.runs[runKey(item.issue, arm)]?.started_at,
+                        finished_at: finished, cost_usd: result.costUsd, session_id: result.sessionId,
+                    });
+                    summary.ran += 1;
+                }
+                else if (result.kind === "rate-limited") {
+                    setRun(state, item.issue, arm, { status: "rate-limited", finished_at: finished, detail: result.detail });
+                    saveState(stateFile, state);
+                    summary.rateLimited += 1;
+                    process.stderr.write(`rate limit hit (${result.detail ?? ""}) — stopping batch; resume with the same command\n`);
+                    rateLimited = true;
+                }
+                else {
+                    setRun(state, item.issue, arm, { status: "error", finished_at: finished, detail: result.detail });
+                    summary.errors += 1;
+                }
             }
-            else {
-                setRun(state, item.issue, arm, { status: "error", finished_at: finished, detail: result.detail });
+            catch (err) {
+                // startSidecars timeout / docker throw / any infra failure: record this arm as
+                // error and continue — never leave it stuck at `running` or abort the batch.
+                const message = err instanceof Error ? err.message : String(err);
+                setRun(state, item.issue, arm, { status: "error", finished_at: new Date().toISOString(), detail: message });
                 summary.errors += 1;
+                process.stderr.write(`${item.issue}:${arm}: error — ${message}\n`);
             }
             saveState(stateFile, state);
+            if (rateLimited)
+                return summary;
         }
     }
     return summary;

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { load } from "js-yaml";
-import type { RepoConfig } from "./types.js";
+import type { RepoConfig, ServiceSpec } from "./types.js";
 
 function isoDate(v: unknown): string {
   // js-yaml's default schema parses unquoted YAML timestamps into Date objects.
@@ -59,6 +59,57 @@ export function loadRepoConfig(path: string): RepoConfig {
   const runPatterns = optionalPatternList("run_patterns");
   const excludeTestPaths = optionalPatternList("exclude_test_paths");
 
+  // Parse services: must be a list of {name, image} objects, NOT bare strings.
+  const rawServices = cfg.services;
+  let services: ServiceSpec[] = [];
+  if (rawServices !== undefined && rawServices !== null) {
+    if (!Array.isArray(rawServices)) throw new Error(`${path}: services must be a list of {name, image} objects`);
+    for (const svc of rawServices) {
+      if (typeof svc === "string") {
+        throw new Error(`${path}: services must be a list of {name, image} objects (got a bare string "${svc}")`);
+      }
+      if (typeof svc !== "object" || svc === null) {
+        throw new Error(`${path}: services must be a list of {name, image} objects`);
+      }
+      const s = svc as Record<string, unknown>;
+      if (typeof s.name !== "string" || s.name === "") throw new Error(`${path}: each service must have a string "name"`);
+      if (typeof s.image !== "string" || s.image === "") throw new Error(`${path}: each service must have a string "image"`);
+      const env: Record<string, string> = {};
+      if (s.env !== undefined && s.env !== null) {
+        if (typeof s.env !== "object" || Array.isArray(s.env)) {
+          throw new Error(`${path}: service "${s.name}" env must be a string→string map`);
+        }
+        for (const [k, v] of Object.entries(s.env as Record<string, unknown>)) {
+          if (typeof v !== "string") throw new Error(`${path}: service "${s.name}" env["${k}"] must be a string`);
+          env[k] = v;
+        }
+      }
+      const ready = s.ready === undefined ? undefined : String(s.ready);
+      services.push({ name: s.name, image: s.image, env, ready });
+    }
+  }
+
+  // Parse container_env: optional string→string map.
+  const container_env: Record<string, string> = {};
+  if (cfg.container_env !== undefined && cfg.container_env !== null) {
+    if (typeof cfg.container_env !== "object" || Array.isArray(cfg.container_env)) {
+      throw new Error(`${path}: container_env must be a string→string map`);
+    }
+    for (const [k, v] of Object.entries(cfg.container_env as Record<string, unknown>)) {
+      if (typeof v !== "string") throw new Error(`${path}: container_env["${k}"] must be a string`);
+      container_env[k] = v;
+    }
+  }
+
+  // Parse system_packages: optional list of strings.
+  const system_packages: string[] = [];
+  if (cfg.system_packages !== undefined && cfg.system_packages !== null) {
+    if (!Array.isArray(cfg.system_packages) || !cfg.system_packages.every((e) => typeof e === "string")) {
+      throw new Error(`${path}: system_packages must be a list of strings`);
+    }
+    system_packages.push(...cfg.system_packages.map(String));
+  }
+
   return {
     id: String(cfg.id),
     github: String(cfg.github),
@@ -74,6 +125,8 @@ export function loadRepoConfig(path: string): RepoConfig {
     ticket_after: ticketAfter,
     wiki_commit: cfg.wiki_commit === undefined ? "" : String(cfg.wiki_commit),
     toolchain: cfg.toolchain.map(String),
-    services: Array.isArray(cfg.services) ? cfg.services.map(String) : [],
+    services,
+    container_env,
+    system_packages,
   };
 }
