@@ -567,6 +567,68 @@ export function renderServiceDependencies(graph, inventory) {
         extCrossLink,
     ].join("\n");
 }
+// ── Content predicates ──────────────────────────────────────────────
+/**
+ * Returns true when there is enough data to emit a meaningful service-map or
+ * service-dependencies page: either ≥2 real (non-synthetic) services in the
+ * graph, OR ≥1 calls edge between two real services. A service map listing
+ * two or more real services is true information worth emitting even before any
+ * call edges are detected.
+ */
+export function hasServiceTopology(graph) {
+    const serviceIds = new Set(graph.services.map((s) => s.id));
+    // ≥2 real (non-synthetic) services is enough — the service list alone is
+    // genuine, true information.
+    const realServiceCount = graph.services.filter((s) => !isSynthetic(s.id)).length;
+    if (realServiceCount >= 2)
+        return true;
+    // Otherwise require at least one direct calls edge between two real services.
+    return graph.edges.some((e) => e.kind === "calls" &&
+        serviceIds.has(e.from_service) &&
+        serviceIds.has(e.to_service) &&
+        !isSynthetic(e.from_service) &&
+        !isSynthetic(e.to_service));
+}
+/**
+ * Returns true when the inventory has ≥1 HTTP client callsite across any
+ * service — i.e. there is something substantive to show in client-registry.
+ */
+export function hasClientData(graph) {
+    return graph.edges.some((e) => e.kind === "calls" &&
+        !isSynthetic(e.from_service) &&
+        !isSynthetic(e.to_service));
+}
+/**
+ * Returns true when there is ≥1 produces or consumes edge involving a
+ * `queue:` synthetic node — i.e. there are actual queues to register.
+ */
+export function hasQueueData(graph) {
+    return graph.edges.some((e) => (e.kind === "produces" && e.to_service.startsWith("queue:")) ||
+        (e.kind === "consumes" && e.from_service.startsWith("queue:")));
+}
+/**
+ * Returns true when ≥1 service in the inventory has ORM entities — i.e.
+ * there are DB traces worth documenting.
+ */
+export function hasDbTraces(inventory) {
+    return (inventory.services ?? []).some((svc) => (svc.orm_entities ?? []).length > 0);
+}
+/**
+ * Returns true when ≥1 library node in the graph has `depends_on` edges
+ * from two or more different (non-synthetic) services — i.e. there are
+ * genuinely *shared* libraries.
+ */
+export function hasSharedLibraries(graph) {
+    const consumersPerLib = new Map();
+    for (const e of graph.edges) {
+        if (e.kind !== "depends_on" || isSynthetic(e.from_service))
+            continue;
+        const set = consumersPerLib.get(e.to_service) ?? new Set();
+        set.add(e.from_service);
+        consumersPerLib.set(e.to_service, set);
+    }
+    return [...consumersPerLib.values()].some((consumers) => consumers.size >= 2);
+}
 /**
  * Wrap a rendered body with atlas YAML frontmatter.
  * `atlas_facet: architecture` → default `audience: contributor` (compilation.md table).
@@ -591,31 +653,55 @@ function _withFrontmatter(title, body, sources, atlasRunId, slug) {
     return fm + body.trimStart() + "\n";
 }
 /**
- * Render + write all six cross-service pages under `<wikiRoot>/wiki/`.
- * Returns the absolute paths written (deterministic order).
+ * Render + write cross-service pages under `<wikiRoot>/wiki/`.
+ * Only pages with substantive content are emitted — pages whose predicate
+ * returns false are silently skipped (no file written, not included in the
+ * returned array). Returns the absolute paths actually written, in
+ * deterministic order.
+ *
+ * When no page has content (e.g. a plain monorepo with no cross-service
+ * structure), the returned array is empty and nothing is written to disk.
  */
 export function writeCrossServicePages(wikiRoot, inventory, graph) {
     const outDir = path.join(wikiRoot, "wiki");
-    fs.mkdirSync(outDir, { recursive: true });
     // Collect unique evidence files from the graph edges as source provenance.
     const evidence = [
         ...new Set(graph.edges
             .map((e) => e.evidence_file ?? "")
             .filter((f) => f.length > 0)),
     ].sort();
+    const serviceTopology = hasServiceTopology(graph);
     const pages = [
-        { slug: "service-map", title: "Service Map", render: () => renderServiceMap(graph, inventory) },
-        { slug: "service-dependencies", title: "Service Dependencies", render: () => renderServiceDependencies(graph, inventory) },
-        { slug: "client-registry", title: "Service Client Registry", render: () => renderClientRegistry(graph, inventory) },
-        { slug: "queue-registry", title: "Message Queue Registry", render: () => renderQueueRegistry(graph, inventory) },
-        { slug: "database-traces", title: "Database Traces", render: () => renderDbTraces(inventory) },
-        { slug: "shared-libraries", title: "Shared Libraries", render: () => renderSharedLibraryMatrix(graph, inventory) },
+        { slug: "service-map", title: "Service Map", hasContent: serviceTopology, render: () => renderServiceMap(graph, inventory) },
+        { slug: "service-dependencies", title: "Service Dependencies", hasContent: serviceTopology, render: () => renderServiceDependencies(graph, inventory) },
+        { slug: "client-registry", title: "Service Client Registry", hasContent: hasClientData(graph), render: () => renderClientRegistry(graph, inventory) },
+        { slug: "queue-registry", title: "Message Queue Registry", hasContent: hasQueueData(graph), render: () => renderQueueRegistry(graph, inventory) },
+        { slug: "database-traces", title: "Database Traces", hasContent: hasDbTraces(inventory), render: () => renderDbTraces(inventory) },
+        { slug: "shared-libraries", title: "Shared Libraries", hasContent: hasSharedLibraries(graph), render: () => renderSharedLibraryMatrix(graph, inventory) },
     ];
+    // Write pages that have real content; DELETE any stale page a prior run left behind
+    // (e.g. a refresh where the graph no longer has queue edges must remove the old
+    // queue-registry.md, never leave outdated cross-service data exposed in the wiki).
+    if (pages.some((pg) => pg.hasContent))
+        fs.mkdirSync(outDir, { recursive: true });
     const written = [];
+    const removed = [];
     for (const pg of pages) {
         const target = path.join(outDir, `${pg.slug}.md`);
-        fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
-        written.push(target);
+        if (pg.hasContent) {
+            fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
+            written.push(target);
+        }
+        else if (fs.existsSync(target)) {
+            fs.rmSync(target);
+            removed.push(target);
+        }
+    }
+    if (written.length === 0) {
+        process.stderr.write("[cross_service_pages] no cross-service structure detected; no pages written\n");
+    }
+    if (removed.length > 0) {
+        process.stderr.write(`[cross_service_pages] removed ${removed.length} stale page(s): ${removed.map((p) => path.basename(p)).join(", ")}\n`);
     }
     return written;
 }
