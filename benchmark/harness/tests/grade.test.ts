@@ -245,6 +245,42 @@ describe("calibrateAll sidecar routing (fake runner, no docker)", () => {
     });
   });
 
+  it("HAS services: pre-cleans stale calib container + sidecars + network BEFORE network create; names the calib run", async () => {
+    const cfg = baseCfg({ services: [DB] });
+    const dir = mkdtempSync(join(tmpdir(), "benchcal-"));
+    const ticketsPath = join(dir, "saleor.json");
+    writeFileSync(ticketsPath, JSON.stringify(ticketsWith()));
+    const calls: { cmd: string; args: string[] }[] = [];
+
+    await calibrateAll(cfg, ticketsPath, "/bare.git", { local: false, image: "img", runner: recordingRunner(calls) });
+
+    const net = "bench-saleor-7-calib-net";
+    const svc = "bench-saleor-7-calib-svc-db";
+    const calibRun = "bench-saleor-7-calib-run";
+    const docker = calls.filter((c) => c.cmd === "docker").map((c) => c.args);
+
+    const idxStaleContainer = docker.findIndex((a) => a[0] === "rm" && a[1] === "-f" && a[2] === calibRun);
+    const idxStaleRm = docker.findIndex((a) => a[0] === "rm" && a[1] === "-f" && a[2] === svc);
+    const idxStaleNetRm = docker.findIndex((a) => a[0] === "network" && a[1] === "rm" && a[2] === net);
+    const idxNetCreate = docker.findIndex((a) => a[0] === "network" && a[1] === "create" && a[2] === net);
+
+    expect(idxStaleContainer).toBeGreaterThanOrEqual(0);
+    expect(idxStaleRm).toBeGreaterThanOrEqual(0);
+    expect(idxStaleNetRm).toBeGreaterThanOrEqual(0);
+    expect(idxNetCreate).toBeGreaterThanOrEqual(0);
+    expect(idxStaleContainer).toBeLessThan(idxNetCreate);
+    expect(idxStaleRm).toBeLessThan(idxNetCreate);
+    expect(idxStaleNetRm).toBeLessThan(idxNetCreate);
+
+    // Both calibrate grade runs carry the deterministic --name so the next attempt can reap them.
+    const gradeRuns = docker.filter((a) => a[0] === "run" && a[a.length - 1] === "grade");
+    expect(gradeRuns).toHaveLength(2);
+    for (const gr of gradeRuns) {
+      expect(gr).toContain("--name");
+      expect(gr[gr.indexOf("--name") + 1]).toBe(calibRun);
+    }
+  });
+
   it("NO services: still uses host grade.sh, no docker run, no network", async () => {
     const cfg = baseCfg({ services: [] });
     const dir = mkdtempSync(join(tmpdir(), "benchcal-"));
@@ -342,18 +378,28 @@ describe("gradeAll sidecar pre-clean (fake runner, no docker)", () => {
 
     const net = "bench-saleor-7-wiki-grade-net";
     const svc = "bench-saleor-7-wiki-grade-svc-db";
+    const gradeRun = "bench-saleor-7-wiki-grade-run";
     const docker = calls.filter((c) => c.cmd === "docker").map((c) => c.args);
 
+    const idxStaleContainer = docker.findIndex((a) => a[0] === "rm" && a[1] === "-f" && a[2] === gradeRun);
     const idxStaleRm = docker.findIndex((a) => a[0] === "rm" && a[1] === "-f" && a[2] === svc);
     const idxStaleNetRm = docker.findIndex((a) => a[0] === "network" && a[1] === "rm" && a[2] === net);
     const idxNetCreate = docker.findIndex((a) => a[0] === "network" && a[1] === "create" && a[2] === net);
 
-    // Pre-clean rm + network rm both happen, and BEFORE the network create.
+    // Pre-clean reaps the grade CONTAINER + sidecar + network, all BEFORE the network create.
+    expect(idxStaleContainer).toBeGreaterThanOrEqual(0);
     expect(idxStaleRm).toBeGreaterThanOrEqual(0);
     expect(idxStaleNetRm).toBeGreaterThanOrEqual(0);
     expect(idxNetCreate).toBeGreaterThanOrEqual(0);
+    expect(idxStaleContainer).toBeLessThan(idxNetCreate);
     expect(idxStaleRm).toBeLessThan(idxNetCreate);
     expect(idxStaleNetRm).toBeLessThan(idxNetCreate);
+
+    // The grade run itself carries the deterministic --name so the NEXT run can reap it.
+    const gradeRunCall = docker.find((a) => a[0] === "run" && a[a.length - 1] === "grade");
+    expect(gradeRunCall).toBeDefined();
+    expect(gradeRunCall).toContain("--name");
+    expect(gradeRunCall?.[gradeRunCall.indexOf("--name") + 1]).toBe(gradeRun);
   });
 
   it("no pre-clean for a service-less config", async () => {

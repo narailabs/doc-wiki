@@ -18,6 +18,8 @@ export function sessionRunArgs(s) {
 }
 export function gradeRunArgs(g) {
     const args = ["run", "--rm"];
+    if (g.containerName !== undefined)
+        args.push("--name", g.containerName);
     if (g.network !== undefined)
         args.push("--network", g.network);
     args.push("-v", `${g.bareDir}:/bare:ro`, "-v", `${g.outDir}:/out`, "-e", `BENCH_BASE_COMMIT=${g.baseCommit}`, "-e", `BENCH_FIX_COMMIT=${g.fixCommit}`, "-e", `BENCH_TEST_FILES=${g.testFiles.join(" ")}`, "-e", `BENCH_RUN_FILES=${(g.runFiles ?? g.testFiles).join(" ")}`, "-e", `BENCH_TEST_COMMAND=${g.testCommand}`, "-e", `BENCH_RETRIES=${g.retries}`);

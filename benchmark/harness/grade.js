@@ -47,6 +47,16 @@ async function gradeRunContainer(spec, net, extraEnv, runner) {
     }));
     return decideGrade(r.code);
 }
+/** Best-effort reap of a leaked run container + its sidecars + network from a prior SIGKILL'd process,
+ * BEFORE re-creating any of them. Removing the run container first detaches it so `network rm` succeeds.
+ * Result of every call is ignored (realRunner never rejects). Mirrors run_ticket.ts runBatch's pre-clean. */
+async function preCleanContainerNet(runner, containerName, net, prefix, services) {
+    await runner("docker", ["rm", "-f", containerName]);
+    for (const svc of services) {
+        await runner("docker", ["rm", "-f", serviceContainerName(prefix, svc)]);
+    }
+    await runner("docker", ["network", "rm", net]);
+}
 /** Calibrate every un-calibrated ticket; failures get `excluded` set. Mutates + rewrites the tickets file after every ticket (each costs a clone+install+2 test runs — a crash loses at most one). */
 export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
     const file = JSON.parse(readFileSync(ticketsPath, "utf8"));
@@ -74,14 +84,20 @@ export async function calibrateAll(cfg, ticketsPath, bareDir, opts) {
                 if (hasSidecars) {
                     // Start sidecars ONCE per ticket, wrapping BOTH the base and fix runs; teardown in finally.
                     const prefix = `bench-${cfg.id}-${t.issue}-calib`;
+                    const calibContainer = `${prefix}-run`;
                     const net = networkName(prefix);
                     const extraEnv = { ...cfg.container_env, BENCH_ALLOW_PRIVATE_NET: "1" };
                     const containerSpec = {
                         image: opts.image, outDir: bareDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
                         testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
                         testCommand: installPrefix + cfg.test_command, retries: 0,
+                        containerName: calibContainer,
                     };
                     try {
+                        // Pre-clean a stale calib container + sidecars + network leaked by a prior calibration
+                        // killed before its finally teardown — otherwise startSidecars throws on the existing
+                        // network and the per-ticket catch drops this ticket as `calibration-error` forever.
+                        await preCleanContainerNet(opts.runner, calibContainer, net, prefix, cfg.services);
                         await startSidecars(opts.runner, net, prefix, cfg.services);
                         failsOnBase = (await gradeRunContainer({ ...containerSpec, mode: "calibrate-base" }, net, extraEnv, opts.runner)).outcome === "passed";
                         passesOnFix = failsOnBase && (await gradeRunContainer({ ...containerSpec, mode: "calibrate-fix" }, net, extraEnv, opts.runner)).outcome === "passed";
@@ -157,18 +173,17 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
             else {
                 const hasSidecars = cfg.services.length > 0;
                 const gradePrefix = `bench-${cfg.id}-${t.issue}-${String(arm)}-grade`;
+                const gradeContainer = `${gradePrefix}-run`;
                 const net = hasSidecars ? networkName(gradePrefix) : undefined;
                 try {
                     if (hasSidecars && net !== undefined) {
-                        // Pre-clean stale sidecars + network from a prior grade process that was killed
-                        // (e.g. SIGKILL) after startSidecars but before its finally teardown: otherwise
-                        // `docker network create` collides and (with the new exit-code checks) throws,
+                        // Pre-clean stale grade container + sidecars + network from a prior grade process
+                        // killed (e.g. SIGKILL) after creation but before its finally teardown: otherwise
+                        // the leaked --rm container stays attached to the network → `docker network rm`
+                        // fails → `docker network create` collides and (with the exit-code checks) throws,
                         // stranding this arm as `error` since gradeAll only re-processes `ran` records.
                         // Mirrors run_ticket.ts runBatch's pre-clean; result ignored (best-effort).
-                        for (const svc of cfg.services) {
-                            await opts.runner("docker", ["rm", "-f", serviceContainerName(gradePrefix, svc)]);
-                        }
-                        await opts.runner("docker", ["network", "rm", net]);
+                        await preCleanContainerNet(opts.runner, gradeContainer, net, gradePrefix, cfg.services);
                         await startSidecars(opts.runner, net, gradePrefix, cfg.services);
                     }
                     const extraEnv = {
@@ -179,6 +194,7 @@ export async function gradeAll(cfg, ticketsPath, runsRoot, bareDir, opts) {
                         image: opts.image, outDir, bareDir, baseCommit: t.base_commit, fixCommit: t.fix_commit,
                         testFiles: t.test_files, runFiles: t.run_files ?? t.test_files,
                         testCommand: installPrefix + cfg.test_command, retries: cfg.test_retries,
+                        containerName: hasSidecars ? gradeContainer : undefined,
                     }, net, extraEnv, opts.runner);
                 }
                 finally {

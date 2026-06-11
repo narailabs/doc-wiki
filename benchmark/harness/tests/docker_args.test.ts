@@ -170,6 +170,25 @@ describe("gradeRunArgs mode", () => {
   });
 });
 
+describe("gradeRunArgs containerName", () => {
+  const BASE_GRADE = {
+    image: "img", outDir: "/o", bareDir: "/b", baseCommit: "x", fixCommit: "y",
+    testFiles: ["test/a.test.ts"], testCommand: "t {test_files}", retries: 0,
+  };
+
+  it("emits --name <containerName> as adjacent elements when set", () => {
+    const args = gradeRunArgs({ ...BASE_GRADE, containerName: "bench-saleor-7-wiki-grade-run" });
+    const i = args.indexOf("--name");
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe("bench-saleor-7-wiki-grade-run");
+  });
+
+  it("omits --name when containerName is unset", () => {
+    const args = gradeRunArgs(BASE_GRADE);
+    expect(args).not.toContain("--name");
+  });
+});
+
 describe("buildImageArgs extraApt", () => {
   it("omits EXTRA_APT build-arg when extraApt is empty/undefined", () => {
     expect(buildImageArgs("tag", "node:22", "ctx")).toEqual([

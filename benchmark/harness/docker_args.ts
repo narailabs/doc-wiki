@@ -51,12 +51,14 @@ export interface GradeSpec {
   testCommand: string;
   retries: number;
   mode?: "grade" | "calibrate-base" | "calibrate-fix"; // BENCH_GRADE_MODE; omitted → grade.sh defaults to "grade"
+  containerName?: string; // deterministic --name so a SIGKILL'd run can be reaped by pre-clean before re-create
   network?: string; // docker network to join (for sidecar connectivity)
   extraEnv?: Record<string, string>; // additional -e KEY=VALUE pairs injected into the container
 }
 
 export function gradeRunArgs(g: GradeSpec): string[] {
   const args = ["run", "--rm"];
+  if (g.containerName !== undefined) args.push("--name", g.containerName);
   if (g.network !== undefined) args.push("--network", g.network);
   args.push(
     "-v", `${g.bareDir}:/bare:ro`,
