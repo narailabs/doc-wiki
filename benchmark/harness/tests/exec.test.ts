@@ -20,3 +20,19 @@ describe("realRunner error mapping", () => {
     expect(r.code).toBe(1);
   });
 });
+
+describe("realRunner timeout", () => {
+  it("enforces timeoutMs with SIGKILL even when the child ignores SIGTERM", async () => {
+    // Without killSignal: "SIGKILL" the default SIGTERM is ignored by this child and the
+    // await blocks for its full 8s lifetime instead of the 400ms deadline (bug #108 shape:
+    // docker CLI proxying TERM to a container whose PID1 defers it).
+    const t0 = Date.now();
+    const r = await realRunner(
+      "node",
+      ["-e", 'process.on("SIGTERM", () => {}); setTimeout(() => {}, 8000);'],
+      { timeoutMs: 400 },
+    );
+    expect(Date.now() - t0).toBeLessThan(4000);
+    expect(r.code).not.toBe(0);
+  });
+});
