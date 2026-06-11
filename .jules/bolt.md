@@ -12,3 +12,13 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-23 - Hoisting Regex Optimization
+
+**Learning:** Instantiating a regular expression inside a tight loop that processes lines of a large file (like log parsers) incurs unnecessary overhead for memory and initialization.
+**Action:** Hoist the regular expression outside the parsing loop into a module-level constant and use  instead of  for slightly better performance.
+
+## 2026-06-11 - Hoisting Regex Optimization
+
+**Learning:** Instantiating a regular expression inside a tight loop that processes lines of a large file (like log parsers) incurs unnecessary overhead for memory and initialization.
+**Action:** Hoist the regular expression outside the parsing loop into a module-level constant and use `.exec()` instead of `.match()` for slightly better performance.
