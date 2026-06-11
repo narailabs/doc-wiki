@@ -33,6 +33,7 @@ services:
   - name: cache
     image: valkey/valkey:8.1-alpine
     env: {}
+    ready: "redis-cli ping"
 container_env:
   DATABASE_URL: "postgres://saleor:saleor@db:5432/saleor"
   CACHE_URL: "redis://cache:6379/0"

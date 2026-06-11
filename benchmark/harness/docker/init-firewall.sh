@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Lock egress to Anthropic endpoints only. Requires --cap-add=NET_ADMIN.
+# Arg 1 (optional): "1" to also allow RFC1918 private nets (for local sidecars);
+# anything else (or absent) keeps private nets blocked. Passed positionally so the
+# scoped NOPASSWD sudoers rule needs no SETENV permission.
 set -euo pipefail
+
+ALLOW_PRIVATE="${1:-0}"
 
 ALLOWED_DOMAINS=(api.anthropic.com claude.ai statsig.anthropic.com)
 
@@ -22,7 +27,7 @@ done
 # Allow RFC1918 private ranges when sidecars are present so the agent can reach
 # local DB/cache containers on the docker network, while public internet (incl.
 # github → the fix) stays REJECTed — contamination guarantee preserved.
-if [ "${BENCH_ALLOW_PRIVATE_NET:-0}" = "1" ]; then
+if [ "$ALLOW_PRIVATE" = "1" ]; then
   for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
     iptables -A OUTPUT -d "$cidr" -p tcp -j ACCEPT
   done

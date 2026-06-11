@@ -53,9 +53,11 @@ if [ -d /wiki ]; then
 fi
 
 # From here on: Anthropic-only egress. The session cannot look up the real fix.
-# Pass BENCH_ALLOW_PRIVATE_NET explicitly so sudo does not strip it (sudoers env_keep
-# is not configured for this var; explicit env= assignment is the portable path).
-[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo BENCH_ALLOW_PRIVATE_NET="${BENCH_ALLOW_PRIVATE_NET:-0}" /usr/local/bin/init-firewall.sh
+# Pass the private-net allow flag as a POSITIONAL ARG, not an env var: the scoped
+# NOPASSWD sudoers rule permits args but not SETENV, so `sudo VAR=x init-firewall.sh`
+# would exit 1 ("not allowed to set the following environment variables") and abort
+# the container under `set -e`. A positional arg needs no sudoers change.
+[ "${BENCH_SKIP_FIREWALL:-0}" = "1" ] || sudo /usr/local/bin/init-firewall.sh "${BENCH_ALLOW_PRIVATE_NET:-0}"
 
 set +e
 claude -p "$(cat /out/prompt.txt)" \
