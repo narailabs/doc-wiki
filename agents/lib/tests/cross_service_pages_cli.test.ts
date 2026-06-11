@@ -103,6 +103,19 @@ describe("writeCrossServicePages", () => {
     cleanupTmpPath(wiki);
   });
 
+  it("deletes a stale page left by a prior run when its data disappears (refresh)", () => {
+    const wiki = makeTmpPath("xs-pages-stale");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    // Simulate a prior run that wrote queue-registry.md; the current graph has no queues.
+    const stale = path.join(wikiDir, "queue-registry.md");
+    fs.writeFileSync(stale, "# Message Queue Registry\n\nold stale content\n");
+    const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
+    expect(written.length).toBe(0);
+    expect(fs.existsSync(stale)).toBe(false); // stale page removed
+    cleanupTmpPath(wiki);
+  });
+
   it("writes only the database-traces page when only DB entities are present", () => {
     const wiki = makeTmpPath("xs-pages-dbonly");
     const inventory = {

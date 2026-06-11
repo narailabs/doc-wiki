@@ -853,21 +853,30 @@ export function writeCrossServicePages(
     { slug: "shared-libraries",     title: "Shared Libraries",        hasContent: hasSharedLibraries(graph), render: () => renderSharedLibraryMatrix(graph, inventory) },
   ];
 
-  const pagesWithContent = pages.filter((pg) => pg.hasContent);
-  if (pagesWithContent.length === 0) {
-    process.stderr.write(
-      "[cross_service_pages] no cross-service structure detected; skipping all six pages\n",
-    );
-    return [];
-  }
-
-  fs.mkdirSync(outDir, { recursive: true });
+  // Write pages that have real content; DELETE any stale page a prior run left behind
+  // (e.g. a refresh where the graph no longer has queue edges must remove the old
+  // queue-registry.md, never leave outdated cross-service data exposed in the wiki).
+  if (pages.some((pg) => pg.hasContent)) fs.mkdirSync(outDir, { recursive: true });
 
   const written: string[] = [];
-  for (const pg of pagesWithContent) {
+  const removed: string[] = [];
+  for (const pg of pages) {
     const target = path.join(outDir, `${pg.slug}.md`);
-    fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
-    written.push(target);
+    if (pg.hasContent) {
+      fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
+      written.push(target);
+    } else if (fs.existsSync(target)) {
+      fs.rmSync(target);
+      removed.push(target);
+    }
+  }
+  if (written.length === 0) {
+    process.stderr.write("[cross_service_pages] no cross-service structure detected; no pages written\n");
+  }
+  if (removed.length > 0) {
+    process.stderr.write(
+      `[cross_service_pages] removed ${removed.length} stale page(s): ${removed.map((p) => path.basename(p)).join(", ")}\n`,
+    );
   }
   return written;
 }
