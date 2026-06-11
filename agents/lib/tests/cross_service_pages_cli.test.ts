@@ -243,4 +243,29 @@ describe("writeCrossServicePages", () => {
     expect(serviceMapBody).not.toContain("client-registry.md");
     cleanupTmpPath(wiki);
   });
+
+  it("does NOT emit topology pages for one service plus a library (a lib is not a service)", () => {
+    const wiki = makeTmpPath("xs-pages-svc-plus-lib");
+    const inventory = {
+      atlas_run_id: RUN_ID,
+      services: [
+        { identity: { id: "svc-a", kind: "service" }, rest_endpoints: [], http_clients: [], queue_endpoints: [], orm_entities: [], external_sources: [], library_deps: [] },
+      ],
+    } as any;
+    const graph = {
+      services: [
+        { id: "svc-a", kind: "service", language: "java", root: "svc-a" },
+        { id: "common-lib", kind: "library", language: "java", root: "shared/common-lib" },
+      ],
+      edges: [], // no calls edges
+      generated_at: "",
+    } as any;
+    const written = writeCrossServicePages(wiki, inventory, graph);
+    // Only one real service (the library doesn't count) and no calls → no scaffolding.
+    expect(written.length).toBe(0);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wiki, "wiki", `${slug}.md`))).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
 });

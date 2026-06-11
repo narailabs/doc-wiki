@@ -577,9 +577,11 @@ export function renderServiceDependencies(graph, inventory) {
  */
 export function hasServiceTopology(graph) {
     const serviceIds = new Set(graph.services.map((s) => s.id));
-    // ≥2 real (non-synthetic) services is enough — the service list alone is
-    // genuine, true information.
-    const realServiceCount = graph.services.filter((s) => !isSynthetic(s.id)).length;
+    // ≥2 real deployable services is enough — the service list alone is genuine,
+    // true information. Count only actual services: exclude synthetic nodes AND
+    // library nodes (a lib is a dependency, not a topology service, so a
+    // 1-service + 1-library graph must NOT emit a service map).
+    const realServiceCount = graph.services.filter((s) => !isSynthetic(s.id) && s.kind !== "library").length;
     if (realServiceCount >= 2)
         return true;
     // Otherwise require at least one direct calls edge between two real services.
