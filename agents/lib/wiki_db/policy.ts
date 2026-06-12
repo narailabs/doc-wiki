@@ -43,17 +43,29 @@ export const OperationType = {
 // -----------------------------------------------------------------------
 
 const _READ_KEYWORDS: ReadonlySet<string> = new Set([
-  "SELECT", "EXPLAIN", "SHOW", "DESCRIBE", "DESC", "WITH",
+  "SELECT",
+  "EXPLAIN",
+  "SHOW",
+  "DESCRIBE",
+  "DESC",
+  "WITH",
 ]);
 const _DML_KEYWORDS: ReadonlySet<string> = new Set([
-  "INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE", "UPSERT",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "REPLACE",
+  "MERGE",
+  "UPSERT",
 ]);
 const _DDL_KEYWORDS: ReadonlySet<string> = new Set([
-  "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME",
+  "CREATE",
+  "DROP",
+  "ALTER",
+  "TRUNCATE",
+  "RENAME",
 ]);
-const _PRIVILEGE_KEYWORDS: ReadonlySet<string> = new Set([
-  "GRANT", "REVOKE",
-]);
+const _PRIVILEGE_KEYWORDS: ReadonlySet<string> = new Set(["GRANT", "REVOKE"]);
 
 /**
  * Classify a SQL string by its leading keyword.
@@ -106,7 +118,10 @@ export type ApprovalMode =
   | "grant_required";
 
 const _VALID_APPROVAL_MODES: ReadonlySet<ApprovalMode> = new Set([
-  "auto", "confirm_once", "confirm_each", "grant_required",
+  "auto",
+  "confirm_once",
+  "confirm_each",
+  "grant_required",
 ]);
 
 /**
@@ -158,8 +173,9 @@ export class Policy {
 
   /** Return true if the SELECT appears to lack a bounding clause. */
   static _isUnboundedSelect(sql: string): boolean {
-    if (!_UNBOUNDED_RE.test(sql)) return false;
-    return !_BOUNDED_KEYWORDS_RE.test(sql);
+    const cleaned = Policy._stripComments(sql);
+    if (!_UNBOUNDED_RE.test(cleaned)) return false;
+    return !_BOUNDED_KEYWORDS_RE.test(cleaned);
   }
 
   // ------------------------------------------------------------------
@@ -180,16 +196,20 @@ export class Policy {
   checkQuery(sql: string, driver?: DatabaseDriver): PolicyResult {
     const stripped = sql.trim();
     if (!stripped) {
-      const result: PolicyResult = { decision: "deny", reason: "Empty SQL statement" };
+      const result: PolicyResult = {
+        decision: "deny",
+        reason: "Empty SQL statement",
+      };
       _emitDeny(result.reason, null);
       return result;
     }
 
     let op: OperationType;
     try {
-      op = driver !== undefined
-        ? driver.classifyOperation(stripped)
-        : this.classifySql(stripped);
+      op =
+        driver !== undefined
+          ? driver.classifyOperation(stripped)
+          : this.classifySql(stripped);
     } catch (exc) {
       const reason = (exc as Error).message;
       _emitDeny(reason, null);
@@ -398,9 +418,7 @@ function _emitPresentOnly(
   // can't leak. Same helper used by audit.logQuery.
   const scrubbed = scrubSqlSecrets(formattedSql);
   const truncated =
-    scrubbed.length > 500
-      ? scrubbed.slice(0, 500) + "\u2026"
-      : scrubbed;
+    scrubbed.length > 500 ? scrubbed.slice(0, 500) + "\u2026" : scrubbed;
   const details: Record<string, unknown> = {
     reason,
     formatted_sql: truncated,

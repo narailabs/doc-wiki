@@ -134,9 +134,10 @@ export class Policy {
     // ------------------------------------------------------------------
     /** Return true if the SELECT appears to lack a bounding clause. */
     static _isUnboundedSelect(sql) {
-        if (!_UNBOUNDED_RE.test(sql))
+        const cleaned = Policy._stripComments(sql);
+        if (!_UNBOUNDED_RE.test(cleaned))
             return false;
-        return !_BOUNDED_KEYWORDS_RE.test(sql);
+        return !_BOUNDED_KEYWORDS_RE.test(cleaned);
     }
     // ------------------------------------------------------------------
     // Decision logic
