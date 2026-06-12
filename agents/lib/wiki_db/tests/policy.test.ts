@@ -7,7 +7,12 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { Decision, grantFromEnv, OperationType, Policy } from "../policy.js";
+import {
+  Decision,
+  grantFromEnv,
+  OperationType,
+  Policy,
+} from "../policy.js";
 
 /** pytest fixture: policy_auto */
 function policyAuto(): Policy {
@@ -213,7 +218,9 @@ describe("TestDecisionLogic", () => {
   // JOIN USING (...) also loses to the tightened regex. Acceptable:
   // escalate is the safe direction and USING without WHERE is rare.
   it("test_join_using_escalates", () => {
-    const result = policyAuto().checkQuery("SELECT * FROM a JOIN b USING (id)");
+    const result = policyAuto().checkQuery(
+      "SELECT * FROM a JOIN b USING (id)",
+    );
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
