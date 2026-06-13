@@ -195,6 +195,14 @@ describe("TestDecisionLogic", () => {
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
+  it("test_unbounded_select_with_comment_synthesized_keyword_escalates", () => {
+    // A comment wedged inside a token must not fuse fragments into a
+    // bounding keyword: `WHE/*x*/RE` is two identifiers (column `WHE`
+    // aliased `RE`), not a `WHERE` clause, so the scan stays unbounded.
+    const result = policyAuto().checkQuery("SELECT WHE/*x*/RE FROM users");
+    expect(result.decision).toBe(Decision.ESCALATE);
+  });
+
   it("test_bounded_select_allowed", () => {
     const result = policyAuto().checkQuery("SELECT * FROM users WHERE id = 1");
     expect(result.decision).toBe(Decision.ALLOW);
