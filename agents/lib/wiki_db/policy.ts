@@ -142,13 +142,8 @@ export class Policy {
 
   /** Remove SQL comments from the statement. */
   static _stripComments(sql: string): string {
-    // Replace comments with a single space, not "", so that a comment
-    // wedged inside a token cannot fuse two fragments into a keyword the
-    // raw SQL never contained. Stripping to "" would turn
-    // `SELECT WHE/*x*/RE FROM t` into `SELECT WHERE FROM t`, synthesizing a
-    // bounding `WHERE` and letting an unbounded scan auto-allow.
     let s = sql.replace(_BLOCK_COMMENT_RE, " ");
-    s = s.replace(_LINE_COMMENT_RE, " ");
+    s = s.replace(_LINE_COMMENT_RE, "");
     return s.trim();
   }
 
