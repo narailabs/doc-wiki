@@ -26,6 +26,7 @@ import { parseFlags } from "./_cli_args.js";
  * `ts` string starts with `dateStr`. Unparseable JSON lines are silently
  * skipped, matching the Python reference's `json.JSONDecodeError` branch.
  */
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 function readEvents(wikiRoot, dateStr) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath)) {
@@ -40,7 +41,7 @@ function readEvents(wikiRoot, dateStr) {
         // Fast-path: skip JSON parse overhead if this line cannot match our date
         if (!line.includes(dateStr))
             continue;
-        const match = line.match(/^{"ts":"([^"\\]+)"/);
+        const match = TS_REGEX.exec(line);
         if (match && match[1] && !match[1].startsWith(dateStr))
             continue;
         let entry;
