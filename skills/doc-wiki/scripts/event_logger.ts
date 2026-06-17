@@ -201,7 +201,7 @@ function _readEvents(
       // leading whitespace. The character class excludes both `"` and `\` so
       // any ts containing a JSON escape (like `\+` for `+`) misses the regex
       // and safely falls through to the slow path for proper decoding.
-      const m = line.match(/^{"ts":"([^"\\]+)"/);
+      const m = TS_REGEX.exec(line);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
         // G-EVENTS-TS-STRICT: when --since is active, drop events whose
@@ -317,6 +317,9 @@ function median(values: readonly number[]): number {
  *   they are housekeeping ops, not content-production ops. Set to `true`
  *   to include them in all totals.
  */
+
+/** Regex to extract the ts field fast path */
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 
 /** Op types that are considered housekeeping and excluded from stats by default. */
 const ARCHIVE_OPS = new Set(["archive", "unarchive"]);
