@@ -61,7 +61,7 @@ Create the directory scaffold, initial configuration, and interactively onboard 
 
 Generate a comprehensive wiki for the entire codebase in one orchestrated pass. A meta-orchestrator over `/doc-wiki:ingest` — discovers topics from multiple signals, batches ingest across topics × facets, synthesizes global aggregation pages, and on existing wikis validates content against current source state via gitlog and semantic checks.
 
-**Synopsis:** `/doc-wiki:atlas [--facets <list>] [--scope <topic>] [--yes] [--dry-run] [--max-cost <usd>] [--since <duration>] [--validate-mode shallow|full] [--resume] [--wiki-root <path>]`
+**Synopsis:** `/doc-wiki:atlas [--facets <list>] [--scope <topic>] [--cross-service | --no-cross-service] [--yes] [--dry-run] [--max-cost <usd>] [--since <duration>] [--validate-mode shallow|full] [--resume] [--wiki-root <path>]`
 
 **Args:**
 
@@ -69,6 +69,8 @@ Generate a comprehensive wiki for the entire codebase in one orchestrated pass. 
 |---|---|---|---|
 | `--facets` | csv | `architecture,data-model,environments,api,operations` | Per-topic facets to generate. **Additive** — never deletes pages outside this set from prior runs. |
 | `--scope` | string | (all topics) | Restrict to one topic for incremental runs |
+| `--cross-service` | flag | AUTO | Force cross-service docs on. Default is AUTO: on when the repo has ≥2 services, off for a monolith. Overrides `ecosystem.cross_service.enabled: false`. |
+| `--no-cross-service` | flag | AUTO | Force cross-service docs off, even with ≥2 services or config `enabled: true`. Highest precedence. |
 | `--yes` | flag | (off) | Skip phase confirmation gates (CI/unattended) |
 | `--dry-run` | flag | (off) | Show planned ingests + cost estimate, write nothing (validation pass still runs read-only) |
 | `--max-cost` | usd | `200.00` | Abort pre-write if estimate exceeds; re-run with explicit higher value to override |
@@ -110,6 +112,13 @@ Each atlas-generated page carries two extra frontmatter fields: `atlas_facet` (e
 
 # Unattended CI run with a larger cost ceiling
 /doc-wiki:atlas --yes --max-cost 500
+
+# Microservices monorepo — cross-service docs are AUTO-on (no flag needed):
+# point --repo-root at the root and atlas maps the whole architecture
+/doc-wiki:atlas
+
+# Opt out of cross-service docs even on a multi-service repo
+/doc-wiki:atlas --no-cross-service
 ```
 
 **See also:** [`SKILL.md` § /doc-wiki:atlas](../skills/doc-wiki/SKILL.md), [`atlas_orchestrator.ts`](../skills/doc-wiki/scripts/atlas_orchestrator.ts), [`atlas_gitlog.ts`](../skills/doc-wiki/scripts/atlas_gitlog.ts), [`atlas_validate.ts`](../skills/doc-wiki/scripts/atlas_validate.ts), [`atlas_synthesize.ts`](../agents/lib/atlas_synthesize.ts).

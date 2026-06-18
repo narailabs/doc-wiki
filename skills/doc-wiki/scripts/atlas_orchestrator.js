@@ -22,7 +22,7 @@
  *
  * Usage as a script:
  *     node atlas_orchestrator.js detect-state    --wiki-root <p>
- *     node atlas_orchestrator.js estimate-cost   --wiki-root <p> --plan '<json>'
+ *     node atlas_orchestrator.js estimate-cost   --wiki-root <p> --plan '<json>' [--run-id <id>] [--cross-service|--no-cross-service]
  *     node atlas_orchestrator.js save-plan       --wiki-root <p> --run-id <id> --plan '<json>'
  *     node atlas_orchestrator.js load-plan       --wiki-root <p> --run-id <id>
  *     node atlas_orchestrator.js per-ingest-avg  --wiki-root <p> [--sample-size <n>]
@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 import { computeHash, checkCache } from "./cache_manager.js";
-import { loadInventory, _readEcosystemCrossServiceEnabled, } from "../../../agents/lib/atlas_inventory.js";
+import { loadInventory, _readEcosystemCrossServiceConfig, resolveCrossService, } from "../../../agents/lib/atlas_inventory.js";
 import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 // ── State detection ────────────────────────────────────────────────
 /**
@@ -266,10 +266,11 @@ export const STATIC_GLOBAL_PAGES = [
     "troubleshooting",
 ];
 /**
- * Names of the 6 cross-service global pages added only when
- * `ecosystem.cross_service.enabled` is true. Kept separate so that cost
- * estimation is accurate for normal atlas runs where cross-service detection
- * is disabled and these pages are never generated.
+ * Names of the 6 cross-service global pages added when cross-service detection
+ * runs — i.e. AUTO (repo has >=2 services), or forced via `--cross-service` /
+ * `ecosystem.cross_service.enabled: true`. Kept separate so that cost
+ * estimation stays accurate for monolith atlas runs where these pages are
+ * never generated.
  */
 export const CROSS_SERVICE_GLOBAL_PAGES = [
     "service-map",
@@ -746,8 +747,13 @@ Deterministic helpers for the /doc-wiki:atlas orchestrator.
 Subcommands:
   detect-state      --wiki-root <p>
                     Stdout: {state, atlas_pages, all_pages, last_run_id}.
-  estimate-cost     --wiki-root <p> --plan '<json>' [--per-ingest-avg-usd <n>]
-                    Stdout: full CostEstimate JSON.
+  estimate-cost     --wiki-root <p> --plan '<json>' [--run-id <id>]
+                    [--cross-service | --no-cross-service] [--per-ingest-avg-usd <n>]
+                    Stdout: full CostEstimate JSON. The 6 cross-service globals
+                    are counted using the same precedence as the run:
+                    --no-cross-service > --cross-service >
+                    ecosystem.cross_service.enabled (true|false) > AUTO (>=2
+                    services, read from the --run-id inventory).
   save-plan         --wiki-root <p> --run-id <id> --plan '<json>'
                     Persist a plan snapshot. Stdout: {saved: true, path}.
   load-plan         --wiki-root <p> --run-id <id>
@@ -771,9 +777,18 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const sub = argv[0];
+    // --cross-service / --no-cross-service are bare flags consumed by
+    // estimate-cost; detect them before parseFlags (which is value-bearing and
+    // would otherwise throw "unrecognized argument" or swallow the next token).
+    // Mirrors the strip-then-parse pattern in atlas_inventory.ts's CLI.
+    const crossServiceFromCli = argv.includes("--cross-service");
+    const noCrossServiceFromCli = argv.includes("--no-cross-service");
+    const flagArgs = argv
+        .slice(1)
+        .filter((a) => a !== "--cross-service" && a !== "--no-cross-service");
     let parsed;
     try {
-        parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+        parsed = parseFlags(flagArgs, FLAG_SPEC);
     }
     catch (e) {
         process.stderr.write(`${e.message}\n`);
@@ -816,7 +831,26 @@ export function main(argv = process.argv.slice(2)) {
         const avg = typeof avgRaw === "string" && avgRaw.length > 0
             ? Number.parseFloat(avgRaw)
             : undefined;
-        const crossServiceEnabled = _readEcosystemCrossServiceEnabled(wikiRoot);
+        // Cross-service: the estimate must reflect whether the 6 cross-service
+        // global pages will actually be generated. The Phase-1b manifest persists
+        // the RESOLVED decision (cross_service_enabled) — once written, it is the
+        // single authoritative source of truth, so read it directly rather than
+        // re-resolving (avoids any drift with Phase 1b/7). Only when no manifest is
+        // available (no --run-id, or it wasn't generated) do we re-resolve via the
+        // same resolver/precedence as a fallback:
+        //   --no-cross-service > --cross-service > config(true/false) > AUTO(>=2 svcs)
+        const runIdRaw = parsed.values["runId"];
+        const inv = typeof runIdRaw === "string" && runIdRaw.length > 0
+            ? loadInventory(wikiRoot, runIdRaw)
+            : null;
+        const crossServiceEnabled = inv
+            ? inv.cross_service_enabled === true // authoritative persisted decision
+            : resolveCrossService({
+                fromCliEnable: crossServiceFromCli,
+                fromCliDisable: noCrossServiceFromCli,
+                config: _readEcosystemCrossServiceConfig(wikiRoot),
+                serviceCount: 0, // no manifest → no discovered count → AUTO off
+            });
         const estimate = estimateCost(wikiRoot, plan, avg, crossServiceEnabled);
         process.stdout.write(JSON.stringify(estimate) + "\n");
         return 0;

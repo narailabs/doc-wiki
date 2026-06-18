@@ -1,6 +1,6 @@
 ---
 description: Generate full application documentation
-argument-hint: '[--facets <list>] [--scope <topic>] [--yes] [--dry-run] [--max-cost <usd>] [--since <duration>] [--validate-mode shallow|full] [--resume] [--wiki-root <path>]'
+argument-hint: '[--facets <list>] [--scope <topic>] [--cross-service] [--no-cross-service] [--yes] [--dry-run] [--max-cost <usd>] [--since <duration>] [--validate-mode shallow|full] [--resume] [--wiki-root <path>]'
 allowed-tools: Skill(doc-wiki)
 ---
 

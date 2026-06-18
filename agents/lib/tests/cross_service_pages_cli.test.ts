@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
-import { writeCrossServicePages } from "../cross_service_pages.js";
+import {
+  writeCrossServicePages,
+  pruneCrossServicePages,
+  CROSS_SERVICE_SLUGS,
+  main as crossServicePagesMain,
+} from "../cross_service_pages.js";
 
 const ALL_SLUGS = [
   "service-map",
@@ -12,6 +17,27 @@ const ALL_SLUGS = [
   "database-traces",
   "shared-libraries",
 ] as const;
+
+/**
+ * Write a doc-wiki-GENERATED cross-service page (carries the ownership marker),
+ * mimicking what a prior atlas run left on disk. Deletion paths must remove
+ * these; user-authored pages (no marker) must be preserved.
+ */
+function writeGeneratedPage(wikiDir: string, slug: string): string {
+  const p = path.join(wikiDir, `${slug}.md`);
+  fs.writeFileSync(
+    p,
+    `---\ntitle: ${slug}\ncross_service_page: ${slug}\ngenerated_by: cross_service_pages\n---\n\n# ${slug}\n\nold generated content\n`,
+  );
+  return p;
+}
+
+/** Write a USER-AUTHORED page sharing a slug name (NO ownership marker). */
+function writeUserPage(wikiDir: string, slug: string): string {
+  const p = path.join(wikiDir, `${slug}.md`);
+  fs.writeFileSync(p, `# ${slug}\n\nhand-written by a human, must be preserved\n`);
+  return p;
+}
 
 const RUN_ID = "2026-06-07T10-00-00";
 
@@ -103,16 +129,100 @@ describe("writeCrossServicePages", () => {
     cleanupTmpPath(wiki);
   });
 
-  it("deletes a stale page left by a prior run when its data disappears (refresh)", () => {
+  // codex P2 (data-loss-by-overwrite): AUTO-on render must NOT clobber a
+  // pre-existing user-authored page that collides on a slug name.
+  it("does NOT overwrite a pre-existing user-authored service-map.md (no marker); warns and skips", () => {
+    const wiki = makeTmpPath("xs-pages-userwrite");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const userPage = writeUserPage(wikiDir, "service-map");
+    const before = fs.readFileSync(userPage, "utf-8");
+
+    const stderr: string[] = [];
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation((c) => { stderr.push(c.toString()); return true; });
+    let written: string[];
+    try {
+      written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    } finally {
+      errSpy.mockRestore();
+    }
+
+    // User page preserved byte-identical, and NOT reported as written.
+    expect(fs.readFileSync(userPage, "utf-8")).toBe(before);
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(false);
+    // A clear warning was emitted.
+    expect(stderr.join("")).toMatch(/service-map\.md.*user-authored.*skipping/i);
+    // The other slugs (no collision) are still written normally.
+    expect(written.some((p) => p.endsWith("service-dependencies.md"))).toBe(true);
+    cleanupTmpPath(wiki);
+  });
+
+  it("DOES overwrite a previously-generated service-map.md (has marker) on refresh", () => {
+    const wiki = makeTmpPath("xs-pages-regenwrite");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const genPage = writeGeneratedPage(wikiDir, "service-map");
+    const before = fs.readFileSync(genPage, "utf-8");
+    expect(before).toContain("old generated content");
+
+    const written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(true);
+    const after = fs.readFileSync(genPage, "utf-8");
+    expect(after).not.toBe(before); // refreshed
+    expect(after).not.toContain("old generated content");
+    expect(after).toContain("cross_service_page: service-map"); // still ours
+    cleanupTmpPath(wiki);
+  });
+
+  it("writes the slug page normally when the file is absent", () => {
+    const wiki = makeTmpPath("xs-pages-absentwrite");
+    const target = path.join(wiki, "wiki", "service-map.md");
+    expect(fs.existsSync(target)).toBe(false);
+    const written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(true);
+    expect(fs.existsSync(target)).toBe(true);
+    expect(fs.readFileSync(target, "utf-8")).toContain("cross_service_page: service-map");
+    cleanupTmpPath(wiki);
+  });
+
+  it("deletes a stale GENERATED page left by a prior run when its data disappears (refresh)", () => {
     const wiki = makeTmpPath("xs-pages-stale");
     const wikiDir = path.join(wiki, "wiki");
     fs.mkdirSync(wikiDir, { recursive: true });
-    // Simulate a prior run that wrote queue-registry.md; the current graph has no queues.
-    const stale = path.join(wikiDir, "queue-registry.md");
-    fs.writeFileSync(stale, "# Message Queue Registry\n\nold stale content\n");
+    // Simulate a prior run that GENERATED queue-registry.md; the current graph has no queues.
+    const stale = writeGeneratedPage(wikiDir, "queue-registry");
     const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
     expect(written.length).toBe(0);
-    expect(fs.existsSync(stale)).toBe(false); // stale page removed
+    expect(fs.existsSync(stale)).toBe(false); // stale generated page removed
+    cleanupTmpPath(wiki);
+  });
+
+  it("prunes ALL SIX stale GENERATED slugs on the empty/no-content path (not just queue-registry)", () => {
+    const wiki = makeTmpPath("xs-pages-stale-all");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    // A prior run generated every cross-service page; the repo is now a monolith.
+    for (const slug of ALL_SLUGS) writeGeneratedPage(wikiDir, slug);
+    const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
+    expect(written.length).toBe(0);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`)), `not pruned: ${slug}`).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("the no-content write path PRESERVES a user-authored file colliding on a slug name", () => {
+    const wiki = makeTmpPath("xs-pages-usercollide");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    // User hand-authored service-map.md (no ownership marker) — must survive a
+    // no-content run (e.g. repo became a monolith).
+    const userPage = writeUserPage(wikiDir, "service-map");
+    const before = fs.readFileSync(userPage, "utf-8");
+    const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
+    expect(written.length).toBe(0);
+    expect(fs.existsSync(userPage)).toBe(true); // preserved
+    expect(fs.readFileSync(userPage, "utf-8")).toBe(before); // untouched
     cleanupTmpPath(wiki);
   });
 
@@ -297,6 +407,147 @@ describe("writeCrossServicePages", () => {
     for (const slug of ALL_SLUGS) {
       expect(fs.existsSync(path.join(wiki, "wiki", `${slug}.md`))).toBe(false);
     }
+    cleanupTmpPath(wiki);
+  });
+});
+
+// ── prune: remove all cross-service pages when cross-service resolves OFF ──
+
+describe("pruneCrossServicePages", () => {
+  it("removes all six GENERATED cross-service pages when present (opt-out / drop below 2 services)", () => {
+    const wiki = makeTmpPath("xs-prune-all");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    for (const slug of ALL_SLUGS) writeGeneratedPage(wikiDir, slug);
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed.length).toBe(6);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`)), `not pruned: ${slug}`).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("is idempotent — no error and removes nothing when no pages exist", () => {
+    const wiki = makeTmpPath("xs-prune-none");
+    fs.mkdirSync(path.join(wiki, "wiki"), { recursive: true });
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed).toEqual([]);
+    cleanupTmpPath(wiki);
+  });
+
+  // codex P2 (data-loss): a user-authored page sharing a slug name must NEVER
+  // be deleted by prune — only doc-wiki-generated pages (with the marker) are.
+  it("does NOT delete a user-authored service-map.md that lacks the ownership marker", () => {
+    const wiki = makeTmpPath("xs-prune-userauthored");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const userPage = writeUserPage(wikiDir, "service-map");
+    const before = fs.readFileSync(userPage, "utf-8");
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed).toEqual([]); // nothing deleted
+    expect(fs.existsSync(userPage)).toBe(true);
+    expect(fs.readFileSync(userPage, "utf-8")).toBe(before); // untouched
+    cleanupTmpPath(wiki);
+  });
+
+  it("with a mix, deletes ONLY the marked (generated) pages and preserves user-authored ones", () => {
+    const wiki = makeTmpPath("xs-prune-mixed");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    // Generated: service-map, client-registry → deleted.
+    writeGeneratedPage(wikiDir, "service-map");
+    writeGeneratedPage(wikiDir, "client-registry");
+    // User-authored colliding slugs: queue-registry, database-traces → preserved.
+    const userQueue = writeUserPage(wikiDir, "queue-registry");
+    const userDb = writeUserPage(wikiDir, "database-traces");
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed.length).toBe(2);
+    expect(removed.some((p) => p.endsWith("service-map.md"))).toBe(true);
+    expect(removed.some((p) => p.endsWith("client-registry.md"))).toBe(true);
+    expect(fs.existsSync(path.join(wikiDir, "service-map.md"))).toBe(false);
+    expect(fs.existsSync(path.join(wikiDir, "client-registry.md"))).toBe(false);
+    expect(fs.existsSync(userQueue)).toBe(true); // user page preserved
+    expect(fs.existsSync(userDb)).toBe(true); // user page preserved
+    cleanupTmpPath(wiki);
+  });
+
+  it("leaves non-cross-service pages (different slug) untouched", () => {
+    const wiki = makeTmpPath("xs-prune-keep");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    writeGeneratedPage(wikiDir, "service-map"); // generated → deleted
+    const keep = path.join(wikiDir, "overview.md"); // unrelated slug → kept
+    fs.writeFileSync(keep, "# Overview\n");
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed.length).toBe(1);
+    expect(fs.existsSync(path.join(wikiDir, "service-map.md"))).toBe(false);
+    expect(fs.existsSync(keep)).toBe(true); // unrelated page preserved
+    cleanupTmpPath(wiki);
+  });
+
+  it("CROSS_SERVICE_SLUGS exposes exactly the six known cross-service slugs", () => {
+    expect([...CROSS_SERVICE_SLUGS].sort()).toEqual([...ALL_SLUGS].sort());
+  });
+});
+
+describe("cross_service_pages.js prune CLI", () => {
+  it("prune subcommand removes the six generated slugs and needs no run-id/inventory/graph", () => {
+    const wiki = makeTmpPath("xs-prune-cli");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    for (const slug of ALL_SLUGS) writeGeneratedPage(wikiDir, slug);
+    const stdout: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const exit = crossServicePagesMain(["prune", "--wiki-root", wiki]);
+      expect(exit).toBe(0);
+      const removed = JSON.parse(stdout.join("").trim()) as string[];
+      expect(removed.length).toBe(6);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`))).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("prune CLI is idempotent (exit 0, empty array) when no pages exist", () => {
+    const wiki = makeTmpPath("xs-prune-cli-none");
+    fs.mkdirSync(path.join(wiki, "wiki"), { recursive: true });
+    const stdout: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const exit = crossServicePagesMain(["prune", "--wiki-root", wiki]);
+      expect(exit).toBe(0);
+      expect(JSON.parse(stdout.join("").trim())).toEqual([]);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("prune CLI preserves a user-authored page sharing a slug name (exit 0, empty array)", () => {
+    const wiki = makeTmpPath("xs-prune-cli-user");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const userPage = writeUserPage(wikiDir, "service-map");
+    const stdout: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const exit = crossServicePagesMain(["prune", "--wiki-root", wiki]);
+      expect(exit).toBe(0);
+      expect(JSON.parse(stdout.join("").trim())).toEqual([]);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+    expect(fs.existsSync(userPage)).toBe(true); // user page preserved
     cleanupTmpPath(wiki);
   });
 });

@@ -95,9 +95,14 @@ ecosystem:
     custom_profiles: []       # zero or more inline RestProfile entries; same shape as agents/lib/rest_profiles/*.yaml
 
   cross_service:
-    enabled: false            # opt-in; off by default. Enables service discovery +
-                              # client/queue/external detection + the 6 cross-service pages.
-                              # Implies REST endpoint detection (the call graph needs endpoints).
+    # OMIT this key for AUTO (recommended): cross-service docs turn on
+    # automatically when the repo has >=2 services, off for a monolith.
+    # Set enabled: true to force-on, false to force-off. Either explicit value
+    # overrides AUTO; the --cross-service / --no-cross-service CLI flags
+    # override config. Enables service discovery + client/queue/external
+    # detection + the 6 cross-service pages; implies REST endpoint detection
+    # (the call graph needs endpoints).
+    # enabled: true
   clients:
     custom_profiles: []       # in-house HTTP-client frameworks (same shape as rest.custom_profiles)
   queues:
@@ -126,7 +131,7 @@ The `ecosystem.database` block configures `wiki-orm-agent`'s cross-validation fl
 
 The `ecosystem.rest` block controls REST-endpoint detection during `/doc-wiki:atlas` Phase 1b. It is **off by default** so the inventory step stays fast on repos that aren't HTTP services. Set `enabled: true` to opt in. The flag is read automatically by `atlas_inventory.js generate`, so the orchestrator doesn't have to know whether to pass `--enable-rest` — see [`atlas.md` § Phase 1b](atlas.md#phase-1b--inventory-the-repo). Override at the CLI with `--enable-rest` when needed regardless of config.
 
-The `ecosystem.cross_service` block enables cross-service architecture documentation. It is **off by default**. Setting `enabled: true` (or passing `--cross-service` at the CLI) activates three extra steps during `/doc-wiki:atlas`:
+The `ecosystem.cross_service` block controls cross-service architecture documentation. It is **auto-on when the repo has ≥2 services** — a microservices monorepo gets cross-service docs with no flag and no config. A monolith (0/1 service) gets none. Resolution precedence (highest first): `--no-cross-service` (hard suppress) → `--cross-service` (hard force) → `ecosystem.cross_service.enabled: true|false` (explicit override, either value beats AUTO) → **AUTO** (on iff ≥2 real services). Omit the `enabled` key to keep AUTO; set it explicitly only to force a behavior. Even when the step runs, the page renderer self-gates on the detected topology (`hasServiceTopology`), so it never emits empty scaffolding. When active it adds three steps during `/doc-wiki:atlas`:
 
 1. **Phase 1b service discovery** — beyond the standard per-topic inventory, atlas also discovers every service, library, and frontend under the repo root (git submodules + manifest directories). Each is analysed for `http_clients`, `queue_endpoints`, `external_sources` (datasources, cloud-SDK calls, `narai-gather()` callsites), `library_deps`, and `auth_issuer`, detected via the client and queue profile families (`agents/lib/client_profiles/`, `agents/lib/queue_profiles/`). Results are emitted as a `services[]` array in `code-inventory.json`. Because the call graph requires endpoint data, enabling `cross_service` implies `rest.enabled: true` for that run.
 2. **Phase 7 graph build** — after the standard global-page synthesis, atlas runs `node agents/lib/cross_service_edges.js build --wiki-root <w> --run-id <id>`, which emits `outputs/atlas/<id>/service-graph.json`.

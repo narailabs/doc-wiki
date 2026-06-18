@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderServiceMap, renderServiceDependencies, renderClientRegistry, renderQueueRegistry, renderDbTraces, renderSharedLibraryMatrix } from "../cross_service_pages.js";
+import { renderServiceMap, renderServiceDependencies, renderClientRegistry, renderQueueRegistry, renderDbTraces, renderSharedLibraryMatrix, countRealServices, hasServiceTopology } from "../cross_service_pages.js";
+import type { ServiceIdentity } from "../service_discovery.js";
 
 const graph = {
   services: [
@@ -217,5 +218,68 @@ describe("renderServiceMap", () => {
     const cols = row.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
     expect(cols[1]).toContain("payments-module");  // direct target in Direct column
     expect(cols[2]).toBe("—");                    // no transitive targets
+  });
+});
+
+// ── countRealServices: AUTO-detection predicate, mirrors hasServiceTopology ──
+
+function ident(id: string, kind: ServiceIdentity["kind"]): ServiceIdentity {
+  return {
+    id,
+    root: id,
+    aliases: [],
+    kind,
+    identity_source: "dir-name",
+    language: "unknown",
+    manifests: [],
+  };
+}
+
+describe("countRealServices", () => {
+  it("counts non-synthetic, non-library service identities", () => {
+    const ids = [ident("svc-a", "service"), ident("svc-b", "service"), ident("admin-ui", "frontend")];
+    expect(countRealServices(ids)).toBe(3);
+  });
+
+  it("excludes library identities (a lib is a dependency, not a topology service)", () => {
+    const ids = [ident("svc-a", "service"), ident("common-lib", "library")];
+    expect(countRealServices(ids)).toBe(1);
+  });
+
+  it("excludes synthetic-prefixed ids (ext:/queue:/table:/auth:)", () => {
+    const ids = [
+      ident("svc-a", "service"),
+      ident("ext:http:example.com", "service"),
+      ident("queue:events", "service"),
+    ];
+    expect(countRealServices(ids)).toBe(1);
+  });
+
+  it("returns 0 for an empty list (monolith / no services discovered)", () => {
+    expect(countRealServices([])).toBe(0);
+  });
+
+  it("returns 1 for a single-service repo (monolith)", () => {
+    expect(countRealServices([ident("only-svc", "service")])).toBe(1);
+  });
+
+  it("agrees with hasServiceTopology on the ≥2-real-services rule", () => {
+    const two = [ident("svc-a", "service"), ident("svc-b", "service")];
+    const graphTwo = {
+      services: two.map((i) => ({ id: i.id, kind: i.kind, language: i.language, root: i.root })),
+      edges: [],
+      generated_at: "",
+    } as any;
+    expect(countRealServices(two) >= 2).toBe(true);
+    expect(hasServiceTopology(graphTwo)).toBe(true);
+
+    const one = [ident("svc-a", "service"), ident("lib", "library")];
+    const graphOne = {
+      services: one.map((i) => ({ id: i.id, kind: i.kind, language: i.language, root: i.root })),
+      edges: [],
+      generated_at: "",
+    } as any;
+    expect(countRealServices(one) >= 2).toBe(false);
+    expect(hasServiceTopology(graphOne)).toBe(false);
   });
 });

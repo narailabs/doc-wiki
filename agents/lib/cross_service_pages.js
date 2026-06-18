@@ -11,6 +11,7 @@ import { formatGraph, formatErDiagram } from "./mermaid_format.js";
 import { rankInbound, detectCycles, loadServiceGraph } from "./cross_service_edges.js";
 import { loadInventory } from "./atlas_inventory.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
+import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
 // Synthetic-node prefixes that must NOT appear as service topology nodes.
 const SYNTHETIC_PREFIXES = ["ext:", "queue:", "table:", "auth:"];
 function isSynthetic(id) {
@@ -569,6 +570,20 @@ export function renderServiceDependencies(graph, inventory) {
 }
 // ── Content predicates ──────────────────────────────────────────────
 /**
+ * Count the "real" deployable services in a list of discovered identities —
+ * excluding synthetic nodes (`ext:`/`queue:`/`table:`/`auth:`) AND library
+ * nodes (a lib is a dependency, not a topology service). Shares the exact
+ * predicate {@link hasServiceTopology} uses for its node-count check, so the
+ * inventory's cross-service AUTO decision, the page renderer's no-scaffolding
+ * gate, and the orchestrator's cost estimate all agree on what "a service" is.
+ *
+ * `>= 2` is the AUTO threshold: a repo with two or more real services gets
+ * cross-service docs even without the `--cross-service` flag.
+ */
+export function countRealServices(identities) {
+    return identities.filter((i) => !isSynthetic(i.id) && i.kind !== "library").length;
+}
+/**
  * Returns true when there is enough data to emit a meaningful service-map or
  * service-dependencies page: either ≥2 real (non-synthetic) services in the
  * graph, OR ≥1 calls edge between two real services. A service map listing
@@ -629,6 +644,22 @@ export function hasSharedLibraries(graph) {
     }
     return [...consumersPerLib.values()].some((consumers) => consumers.size >= 2);
 }
+// ── D5: write helpers + CLI ─────────────────────────────────────────
+/**
+ * The six wiki slugs owned by the cross-service renderer. Single source of
+ * truth for both {@link writeCrossServicePages} (which writes/prunes per
+ * content predicate) and {@link pruneCrossServicePages} (which removes all six
+ * when cross-service is turned off). Keeping one list prevents a slug being
+ * rendered but never pruned (or vice versa).
+ */
+export const CROSS_SERVICE_SLUGS = [
+    "service-map",
+    "service-dependencies",
+    "client-registry",
+    "queue-registry",
+    "database-traces",
+    "shared-libraries",
+];
 /**
  * Wrap a rendered body with atlas YAML frontmatter.
  * `atlas_facet: architecture` → default `audience: contributor` (compilation.md table).
@@ -653,11 +684,41 @@ function _withFrontmatter(title, body, sources, atlasRunId, slug) {
     return fm + body.trimStart() + "\n";
 }
 /**
+ * True when the markdown file at `absPath` is a doc-wiki-generated cross-service
+ * page — i.e. its frontmatter carries the ownership marker this renderer stamps
+ * (`cross_service_page: <slug>` or `generated_by: cross_service_pages`).
+ *
+ * Used to gate BOTH deletion paths so a *user-authored* page that merely
+ * collides on filename (e.g. someone hand-wrote `wiki/service-map.md`) is never
+ * deleted when cross-service is turned off or a slug loses its data. A missing
+ * file or one without the marker returns false (do not delete).
+ */
+function _isGeneratedCrossServicePage(absPath) {
+    let content;
+    try {
+        content = fs.readFileSync(absPath, "utf-8");
+    }
+    catch {
+        return false; // unreadable / missing → treat as not-ours, don't delete
+    }
+    const { frontmatter } = parseFrontmatter(content);
+    if (!frontmatter)
+        return false;
+    return ("cross_service_page" in frontmatter ||
+        frontmatter["generated_by"] === "cross_service_pages");
+}
+/**
  * Render + write cross-service pages under `<wikiRoot>/wiki/`.
  * Only pages with substantive content are emitted — pages whose predicate
  * returns false are silently skipped (no file written, not included in the
  * returned array). Returns the absolute paths actually written, in
  * deterministic order.
+ *
+ * Ownership-guarded write: a slug page is written only when the target file
+ * does not exist OR is one WE previously generated (carries the marker —
+ * {@link _isGeneratedCrossServicePage}, a refresh of our own output). If the
+ * target exists and is user-authored (no marker), it is left untouched, a
+ * warning is logged, and that path is NOT included in the returned array.
  *
  * When no page has content (e.g. a plain monorepo with no cross-service
  * structure), the returned array is empty and nothing is written to disk.
@@ -686,13 +747,24 @@ export function writeCrossServicePages(wikiRoot, inventory, graph) {
         fs.mkdirSync(outDir, { recursive: true });
     const written = [];
     const removed = [];
+    const skipped = [];
     for (const pg of pages) {
         const target = path.join(outDir, `${pg.slug}.md`);
         if (pg.hasContent) {
+            // Write iff the target doesn't exist OR is a page WE generated (refresh of
+            // our own output). NEVER overwrite a user-authored file that merely shares
+            // the slug name (e.g. a hand-written wiki/service-map.md) — now that
+            // cross-service is AUTO-on at >=2 services, a first run must not clobber it.
+            if (fs.existsSync(target) && !_isGeneratedCrossServicePage(target)) {
+                skipped.push(target);
+                continue;
+            }
             fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
             written.push(target);
         }
-        else if (fs.existsSync(target)) {
+        else if (fs.existsSync(target) && _isGeneratedCrossServicePage(target)) {
+            // Only delete a stale page WE generated — never a user-authored file that
+            // happens to share the slug name (e.g. a hand-written wiki/service-map.md).
             fs.rmSync(target);
             removed.push(target);
         }
@@ -703,7 +775,41 @@ export function writeCrossServicePages(wikiRoot, inventory, graph) {
     if (removed.length > 0) {
         process.stderr.write(`[cross_service_pages] removed ${removed.length} stale page(s): ${removed.map((p) => path.basename(p)).join(", ")}\n`);
     }
+    for (const sk of skipped) {
+        process.stderr.write(`[cross_service_pages] ${path.relative(wikiRoot, sk)} exists and is user-authored — skipping to preserve it; cross-service content for this slug not written\n`);
+    }
     return written;
+}
+/**
+ * Remove the doc-wiki-generated cross-service pages (the {@link CROSS_SERVICE_SLUGS}
+ * slugs) from `<wikiRoot>/wiki/`. Used when cross-service resolves OFF (e.g. the
+ * user passed `--no-cross-service`, or the repo dropped below 2 services) so a
+ * prior run's pages don't linger as stale, misleading content.
+ *
+ * Ownership-guarded: a slug file is deleted ONLY when its frontmatter carries
+ * the renderer's marker ({@link _isGeneratedCrossServicePage}). A user-authored
+ * page that merely shares the slug name (e.g. a hand-written
+ * `wiki/service-map.md`) is left untouched — turning cross-service off must
+ * never destroy user content.
+ *
+ * Unlike {@link writeCrossServicePages}, this does NOT need an inventory or a
+ * service graph. Idempotent: a missing (or unmarked) file is a no-op. Returns
+ * the absolute paths actually removed, in deterministic slug order.
+ */
+export function pruneCrossServicePages(wikiRoot) {
+    const outDir = path.join(wikiRoot, "wiki");
+    const removed = [];
+    for (const slug of CROSS_SERVICE_SLUGS) {
+        const target = path.join(outDir, `${slug}.md`);
+        if (fs.existsSync(target) && _isGeneratedCrossServicePage(target)) {
+            fs.rmSync(target);
+            removed.push(target);
+        }
+    }
+    if (removed.length > 0) {
+        process.stderr.write(`[cross_service_pages] pruned ${removed.length} cross-service page(s) (cross-service off): ${removed.map((p) => path.basename(p)).join(", ")}\n`);
+    }
+    return removed;
 }
 // ── CLI ─────────────────────────────────────────────────────────────
 const _CSP_FLAG_SPEC = {
@@ -711,19 +817,27 @@ const _CSP_FLAG_SPEC = {
     "--run-id": "runId",
 };
 const _CSP_RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
-const _CSP_HELP = `usage: cross_service_pages.js render --wiki-root <p> --run-id <id>
+const _CSP_HELP = `usage: cross_service_pages.js <render|prune> --wiki-root <p> [--run-id <id>]
 
-Write the six cross-service wiki pages from a persisted inventory + service graph.
+render  Write the six cross-service wiki pages from a persisted inventory +
+        service graph (prunes any slug whose data disappeared).
   --wiki-root <p>   Wiki root (where outputs/atlas/<run-id>/ and wiki/ live)
   --run-id <id>     Atlas run id (YYYY-MM-DDTHH-MM-SS)
-Stdout: JSON array of absolute paths written.
+  Stdout: JSON array of absolute paths written.
+
+prune   Remove ALL six cross-service pages from <wiki-root>/wiki/ (used when
+        cross-service resolves OFF, e.g. --no-cross-service or a monolith).
+        Needs no inventory/graph; idempotent.
+  --wiki-root <p>   Wiki root (where wiki/ lives)
+  Stdout: JSON array of absolute paths removed.
 `;
 export function main(argv = process.argv.slice(2)) {
     if (argv.length === 0 || argv[0] === "-h" || argv[0] === "--help") {
         process.stdout.write(_CSP_HELP);
         return 0;
     }
-    if (argv[0] !== "render") {
+    const sub = argv[0];
+    if (sub !== "render" && sub !== "prune") {
         process.stderr.write(`unknown subcommand: ${argv[0]}\n`);
         return 2;
     }
@@ -740,11 +854,17 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const wikiRoot = parsed.values["wikiRoot"];
-    const runId = parsed.values["runId"];
     if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
+    // prune: no inventory/graph/run-id needed — just remove the six slugs.
+    if (sub === "prune") {
+        const removed = pruneCrossServicePages(wikiRoot);
+        process.stdout.write(JSON.stringify(removed) + "\n");
+        return 0;
+    }
+    const runId = parsed.values["runId"];
     if (typeof runId !== "string" || !_CSP_RUN_ID_RE.test(runId)) {
         process.stderr.write("--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n");
         return 2;

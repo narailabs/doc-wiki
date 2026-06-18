@@ -842,6 +842,179 @@ describe("main() estimate-cost — crossServiceEnabled from config (PR #58 revie
   });
 });
 
+// ── estimate-cost AUTO: reflects whether cross-service will actually run ──
+
+describe("main() estimate-cost — cross-service AUTO from inventory (--run-id)", () => {
+  let tmpPath: string;
+  let wikiRoot: string;
+  let stdoutChunks: string[];
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  const RUN_ID = "2026-06-09T12-00-00";
+  const PLAN_ONE_ENTRY = JSON.stringify({
+    topics: ["auth"],
+    facets: ["architecture"],
+    entries: [
+      { topic: "auth", facet: "architecture", sources: [], output: "wiki/auth/architecture.md" },
+    ],
+    created_at: new Date().toISOString(),
+  });
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-orch-cs-auto-");
+    wikiRoot = makeInitializedWiki(tmpPath);
+    stdoutChunks = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdoutChunks.push(chunk.toString());
+      return true;
+    });
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  /**
+   * Build + persist a real inventory for a 2-service repo at the given runId.
+   * `enableCrossService` controls the RESOLVED decision persisted into the
+   * manifest's `cross_service_enabled` (mimicking what Phase 1b's resolver
+   * would write). Defaults to true (the AUTO-on case).
+   */
+  function persistMultiServiceInventory(enableCrossService = true): void {
+    const repo = path.join(tmpPath, "repo");
+    fs.mkdirSync(path.join(repo, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(
+      path.join(repo, "svc-a", "src", "C.java"),
+      '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }',
+    );
+    fs.mkdirSync(path.join(repo, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "svc-b", "package.json"), '{"name":"svc-b"}');
+    const inv = generateInventory(repo, RUN_ID, { enableRest: true, enableCrossService });
+    persistInventory(wikiRoot, inv);
+  }
+
+  /** Build + persist a monolith inventory (no services). */
+  function persistMonolithInventory(): void {
+    const repo = path.join(tmpPath, "repo");
+    fs.mkdirSync(repo, { recursive: true });
+    fs.writeFileSync(path.join(repo, "package.json"), '{"name":"mono"}');
+    const inv = generateInventory(repo, RUN_ID, {});
+    persistInventory(wikiRoot, inv);
+  }
+
+  it("AUTO: includes the 6 cross-service pages (13 globals) when the inventory has ≥2 services", () => {
+    persistMultiServiceInventory();
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(2.60, 5); // 13 × 0.20
+  });
+
+  it("AUTO: excludes cross-service pages (7 globals) for a monolith inventory", () => {
+    persistMonolithInventory();
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5); // 7 × 0.20
+  });
+
+  it("manifest cross_service_enabled:false → 7 globals even with ≥2 services (manifest is authoritative)", () => {
+    // Phase 1b resolved cross-service OFF (e.g. config:false / --no-cross-service)
+    // and persisted that decision; estimate-cost reads the persisted field, NOT
+    // the live service count, so the estimate matches what Phase 7 will render.
+    persistMultiServiceInventory(/* enableCrossService */ false);
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5); // 7 globals — persisted decision wins
+  });
+
+  it("falls back to config-only (7 globals) when --run-id is given but no manifest exists", () => {
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
+  });
+
+  // codex P2: a suppressed run (--no-cross-service / config:false) is recorded
+  // as cross_service_enabled:false in the manifest; estimate-cost reads that and
+  // returns 7 globals even though ≥2 services exist. (Before persistence, this
+  // relied on estimate-cost re-resolving the flag; now the manifest is the
+  // single source of truth — the suppression already lives in it.)
+  it("persisted-OFF manifest → 7 globals even with ≥2 services (suppression source of truth)", () => {
+    persistMultiServiceInventory(/* enableCrossService */ false);
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5); // 7 globals
+  });
+
+  it("persisted-ON manifest → 13 globals (force-on recorded in the manifest)", () => {
+    // Phase 1b resolved cross-service ON (e.g. --cross-service / config:true)
+    // and persisted cross_service_enabled:true — estimate-cost counts the 6.
+    persistMultiServiceInventory(/* enableCrossService */ true);
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(2.60, 5); // 13 globals
+  });
+
+  it("no-manifest fallback: --no-cross-service → 7 globals (re-resolves when nothing persisted)", () => {
+    // No inventory persisted → estimate-cost re-resolves from flags/config.
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+      "--no-cross-service",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
+  });
+});
+
 describe("main() compute-sources subcommand", () => {
   let tmpPath: string;
   let wikiRoot: string;

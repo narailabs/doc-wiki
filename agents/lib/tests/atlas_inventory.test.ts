@@ -24,6 +24,7 @@ import {
   main,
   _readEcosystemRestEnabled,
   _readEcosystemCrossServiceEnabled,
+  resolveCrossService,
   type CodeInventory,
   type RestProfile,
 } from "../atlas_inventory.js";
@@ -1820,6 +1821,284 @@ def health(): pass
     ]);
     expect(exit).toBe(0);
     expect(readManifest(runId).rest_endpoints.length).toBeGreaterThan(0);
+  });
+});
+
+// ── resolveCrossService: the single shared precedence resolver ────────────
+
+describe("resolveCrossService precedence matrix", () => {
+  // Shorthand: build opts with sensible defaults so each case states only the
+  // dimensions it exercises.
+  const r = (o: Partial<Parameters<typeof resolveCrossService>[0]>): boolean =>
+    resolveCrossService({
+      fromCliEnable: false,
+      fromCliDisable: false,
+      config: undefined,
+      serviceCount: 0,
+      ...o,
+    });
+
+  it("--no-cross-service forces OFF, beating config:true (the codex P2 case)", () => {
+    expect(r({ fromCliDisable: true, config: true, serviceCount: 5 })).toBe(false);
+  });
+
+  it("--no-cross-service forces OFF, beating --cross-service (both flags → off)", () => {
+    expect(r({ fromCliDisable: true, fromCliEnable: true, config: true, serviceCount: 5 })).toBe(false);
+  });
+
+  it("--no-cross-service forces OFF even with ≥2 services and no config", () => {
+    expect(r({ fromCliDisable: true, serviceCount: 9 })).toBe(false);
+  });
+
+  it("--cross-service forces ON, beating config:false", () => {
+    expect(r({ fromCliEnable: true, config: false, serviceCount: 0 })).toBe(true);
+  });
+
+  it("--cross-service forces ON even on a monolith (serviceCount 0)", () => {
+    expect(r({ fromCliEnable: true, serviceCount: 0 })).toBe(true);
+  });
+
+  it("config:true (no flags) → ON, ignoring service count", () => {
+    expect(r({ config: true, serviceCount: 0 })).toBe(true);
+  });
+
+  it("config:false (no flags) → OFF, ignoring service count", () => {
+    expect(r({ config: false, serviceCount: 9 })).toBe(false);
+  });
+
+  it("AUTO (config absent, no flags): ON iff ≥2 services", () => {
+    expect(r({ config: undefined, serviceCount: 2 })).toBe(true);
+    expect(r({ config: undefined, serviceCount: 1 })).toBe(false);
+    expect(r({ config: undefined, serviceCount: 0 })).toBe(false);
+  });
+});
+
+// ── cross-service AUTO resolution (default-on when ≥2 services) ────────────
+
+describe("main() cross-service AUTO resolution", () => {
+  let tmpPath: string;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-cs-auto-");
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** A two-service repo (svc-a java + svc-b node) — ≥2 real services. */
+  function writeMultiService(): void {
+    fs.mkdirSync(path.join(tmpPath, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(
+      path.join(tmpPath, "svc-a", "src", "C.java"),
+      '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }',
+    );
+    fs.mkdirSync(path.join(tmpPath, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-b", "package.json"), '{"name":"svc-b"}');
+  }
+
+  /** A single-project monolith — 0/1 real services. */
+  function writeMonolith(): void {
+    fs.writeFileSync(path.join(tmpPath, "package.json"), '{"name":"x"}');
+  }
+
+  function readManifest(runId: string): CodeInventory {
+    const manifest = loadInventory(tmpPath, runId);
+    if (!manifest) throw new Error("manifest not found");
+    return manifest;
+  }
+
+  function run(runId: string, ...extra: string[]): number {
+    return main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+      ...extra,
+    ]);
+  }
+
+  it("AUTO enables cross-service when ≥2 real services are discovered (no flag, no config)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-00";
+    expect(run(runId)).toBe(0);
+    const ids = readManifest(runId).services.map((s) => s.identity.id).sort();
+    expect(ids).toEqual(["svc-a", "svc-b"]);
+  });
+
+  it("AUTO disables cross-service for a monolith (0/1 services)", () => {
+    writeMonolith();
+    const runId = "2026-06-09T00-00-01";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--no-cross-service suppresses even when ≥2 services are present", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-02";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--cross-service forces cross-service even when config disables it", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: false\n",
+    );
+    const runId = "2026-06-09T00-00-03";
+    expect(run(runId, "--cross-service")).toBe(0);
+    const ids = readManifest(runId).services.map((s) => s.identity.id).sort();
+    expect(ids).toEqual(["svc-a", "svc-b"]);
+  });
+
+  it("config enabled:false suppresses cross-service even with ≥2 services", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: false\n",
+    );
+    const runId = "2026-06-09T00-00-04";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("config enabled:true forces cross-service even on a monolith (services may still be empty via no-scaffolding gate downstream)", () => {
+    // On a monolith, discovery finds 0/1 services; config:true still flips the
+    // generate flag on, but there is nothing to populate — services stays [].
+    writeMonolith();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: true\n",
+    );
+    const runId = "2026-06-09T00-00-05";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--no-cross-service beats config enabled:true (hard suppress)", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: true\n",
+    );
+    const runId = "2026-06-09T00-00-06";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  // The resolved decision is PERSISTED into the manifest (the single source of
+  // truth Phase 4/7 read). It must match resolveCrossService across the matrix.
+  it("persists cross_service_enabled matching the resolved decision (AUTO-on, ≥2 services)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-10";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(true);
+  });
+
+  it("persists cross_service_enabled=false for a monolith (AUTO-off)", () => {
+    writeMonolith();
+    const runId = "2026-06-09T00-00-11";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(false);
+  });
+
+  it("persists cross_service_enabled=false under --no-cross-service even with ≥2 services", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-12";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(false);
+  });
+
+  it("persists cross_service_enabled=true under --cross-service even with config false", () => {
+    writeMultiService();
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: false\n");
+    const runId = "2026-06-09T00-00-13";
+    expect(run(runId, "--cross-service")).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(true);
+  });
+
+  it("persists cross_service_enabled honoring config true / false", () => {
+    writeMultiService();
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: false\n");
+    const runIdFalse = "2026-06-09T00-00-14";
+    expect(run(runIdFalse)).toBe(0);
+    expect(readManifest(runIdFalse).cross_service_enabled).toBe(false);
+
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: true\n");
+    const runIdTrue = "2026-06-09T00-00-15";
+    expect(run(runIdTrue)).toBe(0);
+    expect(readManifest(runIdTrue).cross_service_enabled).toBe(true);
+  });
+});
+
+// ── resolved-cross-service printer: deterministic Phase-7 signal ──────────
+
+describe("main() resolved-cross-service printer", () => {
+  let tmpPath: string;
+  let stdout: string[];
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-rcs-");
+    stdout = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  function writeMultiService(): void {
+    fs.mkdirSync(path.join(tmpPath, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "src", "C.java"), '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }');
+    fs.mkdirSync(path.join(tmpPath, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-b", "package.json"), '{"name":"svc-b"}');
+  }
+
+  function gen(runId: string, ...extra: string[]): void {
+    const exit = main(["generate", "--wiki-root", tmpPath, "--repo-root", tmpPath, "--run-id", runId, ...extra]);
+    expect(exit).toBe(0);
+    stdout.length = 0; // discard generate's manifest JSON
+  }
+
+  function printResolved(runId: string): string {
+    const exit = main(["resolved-cross-service", "--wiki-root", tmpPath, "--run-id", runId]);
+    expect(exit).toBe(0);
+    return stdout.join("").trim();
+  }
+
+  it("prints true after an AUTO-on (≥2 services) generate", () => {
+    writeMultiService();
+    const runId = "2026-06-09T01-00-00";
+    gen(runId);
+    expect(printResolved(runId)).toBe("true");
+  });
+
+  it("prints false after a --no-cross-service generate (even with ≥2 services)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T01-00-01";
+    gen(runId, "--no-cross-service");
+    expect(printResolved(runId)).toBe("false");
+  });
+
+  it("prints false when the manifest is missing", () => {
+    expect(printResolved("2026-06-09T01-00-02")).toBe("false");
+  });
+
+  it("requires --run-id (exit 2)", () => {
+    const exit = main(["resolved-cross-service", "--wiki-root", tmpPath]);
+    expect(exit).toBe(2);
   });
 });
 
