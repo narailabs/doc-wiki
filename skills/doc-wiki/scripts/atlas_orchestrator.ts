@@ -40,7 +40,6 @@ import {
   _readEcosystemCrossServiceConfig,
   resolveCrossService,
 } from "../../../agents/lib/atlas_inventory.js";
-import { countRealServices } from "../../../agents/lib/cross_service_pages.js";
 import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -962,26 +961,26 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
         ? Number.parseFloat(avgRaw)
         : undefined;
     // Cross-service: the estimate must reflect whether the 6 cross-service
-    // global pages will actually be generated — using the SAME precedence as
-    // atlas_inventory's resolver so the cost can never disagree with the run:
+    // global pages will actually be generated. The Phase-1b manifest persists
+    // the RESOLVED decision (cross_service_enabled) — once written, it is the
+    // single authoritative source of truth, so read it directly rather than
+    // re-resolving (avoids any drift with Phase 1b/7). Only when no manifest is
+    // available (no --run-id, or it wasn't generated) do we re-resolve via the
+    // same resolver/precedence as a fallback:
     //   --no-cross-service > --cross-service > config(true/false) > AUTO(>=2 svcs)
-    // AUTO reads the discovered service count from the Phase-1b inventory
-    // (loaded via --run-id). Without --run-id or a manifest the count is 0, so
-    // AUTO resolves false — matching the prior config-only fallback.
     const runIdRaw = parsed.values["runId"];
     const inv =
       typeof runIdRaw === "string" && runIdRaw.length > 0
         ? loadInventory(wikiRoot, runIdRaw)
         : null;
-    const serviceCount = inv
-      ? countRealServices((inv.services ?? []).map((s) => s.identity))
-      : 0;
-    const crossServiceEnabled = resolveCrossService({
-      fromCliEnable: crossServiceFromCli,
-      fromCliDisable: noCrossServiceFromCli,
-      config: _readEcosystemCrossServiceConfig(wikiRoot),
-      serviceCount,
-    });
+    const crossServiceEnabled = inv
+      ? inv.cross_service_enabled === true // authoritative persisted decision
+      : resolveCrossService({
+          fromCliEnable: crossServiceFromCli,
+          fromCliDisable: noCrossServiceFromCli,
+          config: _readEcosystemCrossServiceConfig(wikiRoot),
+          serviceCount: 0, // no manifest → no discovered count → AUTO off
+        });
     const estimate = estimateCost(wikiRoot, plan, avg, crossServiceEnabled);
     process.stdout.write(JSON.stringify(estimate) + "\n");
     return 0;

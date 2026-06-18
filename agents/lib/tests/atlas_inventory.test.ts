@@ -1992,6 +1992,114 @@ describe("main() cross-service AUTO resolution", () => {
     expect(run(runId, "--no-cross-service")).toBe(0);
     expect(readManifest(runId).services).toEqual([]);
   });
+
+  // The resolved decision is PERSISTED into the manifest (the single source of
+  // truth Phase 4/7 read). It must match resolveCrossService across the matrix.
+  it("persists cross_service_enabled matching the resolved decision (AUTO-on, ≥2 services)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-10";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(true);
+  });
+
+  it("persists cross_service_enabled=false for a monolith (AUTO-off)", () => {
+    writeMonolith();
+    const runId = "2026-06-09T00-00-11";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(false);
+  });
+
+  it("persists cross_service_enabled=false under --no-cross-service even with ≥2 services", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-12";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(false);
+  });
+
+  it("persists cross_service_enabled=true under --cross-service even with config false", () => {
+    writeMultiService();
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: false\n");
+    const runId = "2026-06-09T00-00-13";
+    expect(run(runId, "--cross-service")).toBe(0);
+    expect(readManifest(runId).cross_service_enabled).toBe(true);
+  });
+
+  it("persists cross_service_enabled honoring config true / false", () => {
+    writeMultiService();
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: false\n");
+    const runIdFalse = "2026-06-09T00-00-14";
+    expect(run(runIdFalse)).toBe(0);
+    expect(readManifest(runIdFalse).cross_service_enabled).toBe(false);
+
+    fs.writeFileSync(path.join(tmpPath, "wiki.config.yaml"), "ecosystem:\n  cross_service:\n    enabled: true\n");
+    const runIdTrue = "2026-06-09T00-00-15";
+    expect(run(runIdTrue)).toBe(0);
+    expect(readManifest(runIdTrue).cross_service_enabled).toBe(true);
+  });
+});
+
+// ── resolved-cross-service printer: deterministic Phase-7 signal ──────────
+
+describe("main() resolved-cross-service printer", () => {
+  let tmpPath: string;
+  let stdout: string[];
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-rcs-");
+    stdout = [];
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  function writeMultiService(): void {
+    fs.mkdirSync(path.join(tmpPath, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "src", "C.java"), '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }');
+    fs.mkdirSync(path.join(tmpPath, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-b", "package.json"), '{"name":"svc-b"}');
+  }
+
+  function gen(runId: string, ...extra: string[]): void {
+    const exit = main(["generate", "--wiki-root", tmpPath, "--repo-root", tmpPath, "--run-id", runId, ...extra]);
+    expect(exit).toBe(0);
+    stdout.length = 0; // discard generate's manifest JSON
+  }
+
+  function printResolved(runId: string): string {
+    const exit = main(["resolved-cross-service", "--wiki-root", tmpPath, "--run-id", runId]);
+    expect(exit).toBe(0);
+    return stdout.join("").trim();
+  }
+
+  it("prints true after an AUTO-on (≥2 services) generate", () => {
+    writeMultiService();
+    const runId = "2026-06-09T01-00-00";
+    gen(runId);
+    expect(printResolved(runId)).toBe("true");
+  });
+
+  it("prints false after a --no-cross-service generate (even with ≥2 services)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T01-00-01";
+    gen(runId, "--no-cross-service");
+    expect(printResolved(runId)).toBe("false");
+  });
+
+  it("prints false when the manifest is missing", () => {
+    expect(printResolved("2026-06-09T01-00-02")).toBe("false");
+  });
+
+  it("requires --run-id (exit 2)", () => {
+    const exit = main(["resolved-cross-service", "--wiki-root", tmpPath]);
+    expect(exit).toBe(2);
+  });
 });
 
 // ── B7b: external_sources bucket + connector cross-reference ──────────────

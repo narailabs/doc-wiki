@@ -161,6 +161,16 @@ export interface CodeInventory {
   code_clients: CodeClientEntry[];
   /** Per-service breakdown. Populated only when `enableCrossService` is true; otherwise `[]`. */
   services: ServiceInventory[];
+  /**
+   * The RESOLVED cross-service decision for this run — the authoritative,
+   * persisted single source of truth that downstream atlas phases (Phase 4
+   * cost estimate, Phase 7 render-vs-prune) read instead of re-deriving from
+   * flags/config/service-count. Equals the `enableCrossService` boolean
+   * `generateInventory` was called with (itself the output of
+   * {@link resolveCrossService}: `--no-cross-service` > `--cross-service` >
+   * config > AUTO ≥2 services). True ⇒ render the six pages; false ⇒ prune them.
+   */
+  cross_service_enabled: boolean;
   stats: InventoryStats;
   /** Free-form per-bucket notes (e.g. "Cargo.toml unparseable; skipped"). */
   notes: string[];
@@ -1917,6 +1927,9 @@ export function generateInventory(
     rest_endpoints,
     code_clients,
     services,
+    // Persist the resolved decision so Phase 4/7 read ONE authoritative value
+    // (in AUTO the CLI flag is empty, so the manifest is the only signal).
+    cross_service_enabled: options.enableCrossService === true,
     stats: {
       files_walked: touched.size,
       files_skipped_for_size: 0,
@@ -1984,6 +1997,12 @@ export function loadInventory(
   // `services` was added in A5; default to [] so old manifests still load.
   if (!Array.isArray(rec["services"])) {
     rec["services"] = [];
+  }
+  // `cross_service_enabled` is the persisted resolved decision; default to
+  // false on pre-field manifests so Phase 7 prunes (never renders) rather than
+  // rendering off a stale/absent signal.
+  if (typeof rec["cross_service_enabled"] !== "boolean") {
+    rec["cross_service_enabled"] = false;
   }
   // `queue_bindings` is optional per-service (added with binding resolution);
   // default to [] so manifests written before it still load + build a graph.
@@ -2171,8 +2190,13 @@ const _RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
 const HELP_TEXT = `usage: atlas_inventory.js generate --wiki-root <p> --repo-root <p> --run-id <id>
                                   [--enable-rest] [--cross-service | --no-cross-service]
                                   [--rest-profiles <csv>] [--rest-profile <name>]
+       atlas_inventory.js resolved-cross-service --wiki-root <p> --run-id <id>
 
-Build the code-inventory manifest for a /doc-wiki:atlas run.
+'generate' builds the code-inventory manifest for a /doc-wiki:atlas run.
+'resolved-cross-service' prints the persisted cross_service_enabled decision
+(true|false) from <wiki-root>/outputs/atlas/<run-id>/code-inventory.json — the
+single source of truth Phase 7 reads to choose render vs prune. Prints 'false'
+when the manifest is missing or the field is absent.
 
 Required:
   --wiki-root <p>      Wiki root (where outputs/atlas/<run-id>/ lives)
@@ -2210,9 +2234,40 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 0;
   }
   const sub = argv[0];
-  if (sub !== "generate") {
+  if (sub !== "generate" && sub !== "resolved-cross-service") {
     process.stderr.write(`unknown subcommand: ${sub}\n`);
     return 2;
+  }
+
+  // resolved-cross-service: read-only printer of the persisted decision so the
+  // SKILL (Phase 7) has a deterministic render-vs-prune signal in AUTO mode
+  // (where the CLI flag is empty). No flags are bare here.
+  if (sub === "resolved-cross-service") {
+    let rcsParsed;
+    try {
+      rcsParsed = parseFlags(argv.slice(1), FLAG_SPEC);
+    } catch (e) {
+      process.stderr.write(`${(e as Error).message}\n`);
+      return 2;
+    }
+    if (rcsParsed.help) {
+      process.stdout.write(HELP_TEXT);
+      return 0;
+    }
+    const rcsWikiRoot = rcsParsed.values["wikiRoot"];
+    const rcsRunId = rcsParsed.values["runId"];
+    if (typeof rcsWikiRoot !== "string" || rcsWikiRoot.length === 0) {
+      process.stderr.write("--wiki-root is required\n");
+      return 2;
+    }
+    if (typeof rcsRunId !== "string" || !_RUN_ID_RE.test(rcsRunId)) {
+      process.stderr.write("--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n");
+      return 2;
+    }
+    const manifest = loadInventory(rcsWikiRoot, rcsRunId);
+    // Missing manifest → false (safe: Phase 7 prunes rather than rendering blind).
+    process.stdout.write(`${manifest?.cross_service_enabled === true}\n`);
+    return 0;
   }
   // --enable-rest, --cross-service, and --no-cross-service are bare flags;
   // detect them before parseFlags consumes the value-bearing args. The CLI
