@@ -1823,6 +1823,127 @@ def health(): pass
   });
 });
 
+// ── cross-service AUTO resolution (default-on when ≥2 services) ────────────
+
+describe("main() cross-service AUTO resolution", () => {
+  let tmpPath: string;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-cs-auto-");
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** A two-service repo (svc-a java + svc-b node) — ≥2 real services. */
+  function writeMultiService(): void {
+    fs.mkdirSync(path.join(tmpPath, "svc-a", "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-a", "pom.xml"), "<project><artifactId>svc-a</artifactId></project>");
+    fs.writeFileSync(
+      path.join(tmpPath, "svc-a", "src", "C.java"),
+      '@RestController class C { @GetMapping("/a/ping") String p(){return "";} }',
+    );
+    fs.mkdirSync(path.join(tmpPath, "svc-b"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "svc-b", "package.json"), '{"name":"svc-b"}');
+  }
+
+  /** A single-project monolith — 0/1 real services. */
+  function writeMonolith(): void {
+    fs.writeFileSync(path.join(tmpPath, "package.json"), '{"name":"x"}');
+  }
+
+  function readManifest(runId: string): CodeInventory {
+    const manifest = loadInventory(tmpPath, runId);
+    if (!manifest) throw new Error("manifest not found");
+    return manifest;
+  }
+
+  function run(runId: string, ...extra: string[]): number {
+    return main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+      ...extra,
+    ]);
+  }
+
+  it("AUTO enables cross-service when ≥2 real services are discovered (no flag, no config)", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-00";
+    expect(run(runId)).toBe(0);
+    const ids = readManifest(runId).services.map((s) => s.identity.id).sort();
+    expect(ids).toEqual(["svc-a", "svc-b"]);
+  });
+
+  it("AUTO disables cross-service for a monolith (0/1 services)", () => {
+    writeMonolith();
+    const runId = "2026-06-09T00-00-01";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--no-cross-service suppresses even when ≥2 services are present", () => {
+    writeMultiService();
+    const runId = "2026-06-09T00-00-02";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--cross-service forces cross-service even when config disables it", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: false\n",
+    );
+    const runId = "2026-06-09T00-00-03";
+    expect(run(runId, "--cross-service")).toBe(0);
+    const ids = readManifest(runId).services.map((s) => s.identity.id).sort();
+    expect(ids).toEqual(["svc-a", "svc-b"]);
+  });
+
+  it("config enabled:false suppresses cross-service even with ≥2 services", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: false\n",
+    );
+    const runId = "2026-06-09T00-00-04";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("config enabled:true forces cross-service even on a monolith (services may still be empty via no-scaffolding gate downstream)", () => {
+    // On a monolith, discovery finds 0/1 services; config:true still flips the
+    // generate flag on, but there is nothing to populate — services stays [].
+    writeMonolith();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: true\n",
+    );
+    const runId = "2026-06-09T00-00-05";
+    expect(run(runId)).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+
+  it("--no-cross-service beats config enabled:true (hard suppress)", () => {
+    writeMultiService();
+    fs.writeFileSync(
+      path.join(tmpPath, "wiki.config.yaml"),
+      "ecosystem:\n  cross_service:\n    enabled: true\n",
+    );
+    const runId = "2026-06-09T00-00-06";
+    expect(run(runId, "--no-cross-service")).toBe(0);
+    expect(readManifest(runId).services).toEqual([]);
+  });
+});
+
 // ── B7b: external_sources bucket + connector cross-reference ──────────────
 
 describe("generateInventory external_sources (B7b)", () => {

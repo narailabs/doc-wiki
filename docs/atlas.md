@@ -107,6 +107,8 @@ The manifest feeds:
 - **Phase 8** gap report, which lists endpoints and code-client callsites without documentation.
 - **`/doc-wiki:lint`**'s `references_inventory` check, which flags page `references:` entries that point to files the manifest never saw.
 
+**Cross-service discovery is AUTO-on.** When the repo has ≥2 services, Phase 1b also discovers every service / library / frontend (git submodules + manifest dirs) and appends a `services[]` array to the manifest — no flag required. This is the microservices headline: point `--repo-root` at a monorepo root and atlas maps the whole architecture, then Phase 7 emits the six cross-service pages (`service-map`, `service-dependencies`, `client-registry`, `queue-registry`, `database-traces`, `shared-libraries`). A monolith (0/1 service) gets none. Resolution precedence: `--no-cross-service` (suppress) > `--cross-service` (force) > `ecosystem.cross_service.enabled: true|false` > AUTO (≥2 services). The page renderer self-gates on the built graph (`hasServiceTopology`), so it never writes empty scaffolding. See [`configuration.md` § ecosystem.cross_service](configuration.md#ecosystem-section).
+
 Driver: [`agents/lib/atlas_inventory.ts`](../agents/lib/atlas_inventory.ts) `generate`.
 
 A missing manifest is non-fatal — every consumer falls back to its pre-inventory behavior, so an interrupted Phase 1b just means Phase 4/6 use heuristic source lists for that run.
@@ -138,7 +140,7 @@ The confirmed list becomes the canonical topic set for the rest of the run.
 Two sub-steps:
 
 1. **Build the plan.** The orchestrator constructs a `Plan` JSON: `{ topics, facets, entries: [{topic, facet, sources, output}], created_at }`. For the manifest-backed facets (`data-model` and `api`), `entry.sources` is populated by `atlas_orchestrator.js compute-sources --wiki-root <p> --run-id <id> --topics <csv>`, which returns a `topic → facet → file[]` map drawn from the Phase 1b inventory. For `architecture`, `environments`, and `operations`, sources come from glob heuristics (`src/<topic>/`, `.env*`/`config/<topic>*`, runbook directories) — the manifest doesn't model them yet.
-2. **Estimate.** `atlas_orchestrator.js estimate-cost --wiki-root <p> --plan '<json>'` rolls a per-ingest average over recent `op: ingest` events in `log/events.jsonl` and multiplies it by the entry count, plus a fixed allowance for Phase 7 globals.
+2. **Estimate.** `atlas_orchestrator.js estimate-cost --wiki-root <p> --run-id <id> --plan '<json>'` rolls a per-ingest average over recent `op: ingest` events in `log/events.jsonl` and multiplies it by the entry count, plus a fixed allowance for Phase 7 globals. Passing `--run-id` lets the estimate reflect cross-service AUTO: when the Phase-1b inventory has ≥2 services, the six cross-service globals are added to the cost (config `ecosystem.cross_service.enabled` still overrides).
 
 If `total_estimated_usd > --max-cost`, the run aborts with a hint to re-invoke at a higher cap. Default `--max-cost` is conservative (see [`commands.md`](commands.md#doc-wikiatlas--full-application-documentation)).
 

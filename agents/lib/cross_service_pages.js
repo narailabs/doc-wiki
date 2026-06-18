@@ -569,6 +569,20 @@ export function renderServiceDependencies(graph, inventory) {
 }
 // ── Content predicates ──────────────────────────────────────────────
 /**
+ * Count the "real" deployable services in a list of discovered identities —
+ * excluding synthetic nodes (`ext:`/`queue:`/`table:`/`auth:`) AND library
+ * nodes (a lib is a dependency, not a topology service). Shares the exact
+ * predicate {@link hasServiceTopology} uses for its node-count check, so the
+ * inventory's cross-service AUTO decision, the page renderer's no-scaffolding
+ * gate, and the orchestrator's cost estimate all agree on what "a service" is.
+ *
+ * `>= 2` is the AUTO threshold: a repo with two or more real services gets
+ * cross-service docs even without the `--cross-service` flag.
+ */
+export function countRealServices(identities) {
+    return identities.filter((i) => !isSynthetic(i.id) && i.kind !== "library").length;
+}
+/**
  * Returns true when there is enough data to emit a meaningful service-map or
  * service-dependencies page: either ≥2 real (non-synthetic) services in the
  * graph, OR ≥1 calls edge between two real services. A service map listing

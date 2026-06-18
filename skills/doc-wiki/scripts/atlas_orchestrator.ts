@@ -37,8 +37,9 @@ import { computeHash, checkCache } from "./cache_manager.js";
 import {
   loadInventory,
   type CodeInventory,
-  _readEcosystemCrossServiceEnabled,
+  _readEcosystemCrossServiceConfig,
 } from "../../../agents/lib/atlas_inventory.js";
+import { countRealServices } from "../../../agents/lib/cross_service_pages.js";
 import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -310,10 +311,11 @@ export const STATIC_GLOBAL_PAGES: readonly string[] = [
 ];
 
 /**
- * Names of the 6 cross-service global pages added only when
- * `ecosystem.cross_service.enabled` is true. Kept separate so that cost
- * estimation is accurate for normal atlas runs where cross-service detection
- * is disabled and these pages are never generated.
+ * Names of the 6 cross-service global pages added when cross-service detection
+ * runs — i.e. AUTO (repo has >=2 services), or forced via `--cross-service` /
+ * `ecosystem.cross_service.enabled: true`. Kept separate so that cost
+ * estimation stays accurate for monolith atlas runs where these pages are
+ * never generated.
  */
 export const CROSS_SERVICE_GLOBAL_PAGES: readonly string[] = [
   "service-map",
@@ -870,8 +872,11 @@ Deterministic helpers for the /doc-wiki:atlas orchestrator.
 Subcommands:
   detect-state      --wiki-root <p>
                     Stdout: {state, atlas_pages, all_pages, last_run_id}.
-  estimate-cost     --wiki-root <p> --plan '<json>' [--per-ingest-avg-usd <n>]
-                    Stdout: full CostEstimate JSON.
+  estimate-cost     --wiki-root <p> --plan '<json>' [--run-id <id>] [--per-ingest-avg-usd <n>]
+                    Stdout: full CostEstimate JSON. With --run-id, the 6 cross-
+                    service globals are counted when the Phase-1b inventory has
+                    >=2 services (AUTO); ecosystem.cross_service.enabled
+                    (true|false) overrides AUTO.
   save-plan         --wiki-root <p> --run-id <id> --plan '<json>'
                     Persist a plan snapshot. Stdout: {saved: true, path}.
   load-plan         --wiki-root <p> --run-id <id>
@@ -944,7 +949,27 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       typeof avgRaw === "string" && avgRaw.length > 0
         ? Number.parseFloat(avgRaw)
         : undefined;
-    const crossServiceEnabled = _readEcosystemCrossServiceEnabled(wikiRoot);
+    // Cross-service AUTO: the estimate should reflect whether the 6 cross-
+    // service global pages will actually be generated. Precedence mirrors
+    // atlas_inventory's resolver — config(true/false) overrides AUTO, AUTO
+    // reads the discovered service count from the Phase-1b inventory.
+    //   1. config enabled:true/false → that value (explicit override)
+    //   2. AUTO: inventory (loaded via --run-id) has >=2 real services
+    //   3. fallback: no --run-id or no manifest → config-only (false when absent)
+    const crossServiceConfig = _readEcosystemCrossServiceConfig(wikiRoot);
+    let crossServiceEnabled: boolean;
+    if (crossServiceConfig !== undefined) {
+      crossServiceEnabled = crossServiceConfig;
+    } else {
+      const runIdRaw = parsed.values["runId"];
+      const inv =
+        typeof runIdRaw === "string" && runIdRaw.length > 0
+          ? loadInventory(wikiRoot, runIdRaw)
+          : null;
+      crossServiceEnabled = inv
+        ? countRealServices((inv.services ?? []).map((s) => s.identity)) >= 2
+        : false;
+    }
     const estimate = estimateCost(wikiRoot, plan, avg, crossServiceEnabled);
     process.stdout.write(JSON.stringify(estimate) + "\n");
     return 0;

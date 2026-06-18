@@ -31,6 +31,7 @@ import { loadAllProfiles, detectOrm } from "./wiki_orm/profiles.js";
 import { extractEntities } from "./wiki_orm/extractor.js";
 import { parseMavenArtifactId, discoverServices } from "./service_discovery.js";
 import type { ServiceIdentity } from "./service_discovery.js";
+import { countRealServices } from "./cross_service_pages.js";
 import { resolveRef, buildResolutionContext } from "./property_resolver.js";
 import type { ResolutionContext } from "./property_resolver.js";
 import { detectExternalSources, type ExternalSourceEntry } from "./external_sources.js";
@@ -2080,11 +2081,28 @@ export function _readEcosystemRestEnabled(wikiRoot: string): boolean {
 
 /**
  * Read `ecosystem.cross_service.enabled` from `wiki.config.yaml` at the wiki
- * root (or the parent's `wiki/` subdir). Returns `false` when the flag is
- * absent or the config is missing/malformed — cross-service detection is
- * opt-in. Mirrors `_readEcosystemRestEnabled`.
+ * root (or the parent's `wiki/` subdir). Returns `true` only when the flag is
+ * explicitly set to `true`; `false` for explicit-false, absent, or malformed.
+ *
+ * NOTE: an absent key no longer means "off" — it means AUTO (cross-service
+ * runs when the repo has >=2 services). Callers that need to distinguish
+ * absent from explicit-false (to honor AUTO) should use the tri-state
+ * {@link _readEcosystemCrossServiceConfig} instead. This boolean wrapper is
+ * kept for the orchestrator's config-only cost-estimate fallback.
  */
 export function _readEcosystemCrossServiceEnabled(wikiRoot: string): boolean {
+  return _readEcosystemCrossServiceConfig(wikiRoot) === true;
+}
+
+/**
+ * Tri-state read of `ecosystem.cross_service.enabled`: `true` / `false` when
+ * the key is explicitly set, `undefined` when absent or the config is
+ * missing/malformed. The `undefined` case signals AUTO — the caller decides
+ * cross-service from the discovered service count rather than from config.
+ */
+export function _readEcosystemCrossServiceConfig(
+  wikiRoot: string,
+): boolean | undefined {
   const candidates = [
     path.join(wikiRoot, "wiki.config.yaml"),
     path.join(wikiRoot, "wiki", "wiki.config.yaml"),
@@ -2106,7 +2124,32 @@ export function _readEcosystemCrossServiceEnabled(wikiRoot: string): boolean {
       // malformed YAML — treat as missing
     }
   }
-  return false;
+  return undefined;
+}
+
+/**
+ * Resolve whether cross-service detection should run, applying the precedence:
+ *
+ *   1. `--no-cross-service`        → false  (hard suppress, beats everything)
+ *   2. `--cross-service`           → true   (hard force)
+ *   3. config `enabled: true`      → true
+ *   4. config `enabled: false`     → false
+ *   5. AUTO (config absent)        → repo has ≥2 real services
+ *
+ * AUTO uses {@link countRealServices} on the discovered identities — the same
+ * non-synthetic / non-library predicate as `hasServiceTopology` — so a
+ * monolith (0/1 service) resolves to false and emits no cross-service docs.
+ */
+export function resolveCrossService(opts: {
+  fromCliEnable: boolean;
+  fromCliDisable: boolean;
+  config: boolean | undefined;
+  serviceCount: number;
+}): boolean {
+  if (opts.fromCliDisable) return false;
+  if (opts.fromCliEnable) return true;
+  if (opts.config !== undefined) return opts.config;
+  return opts.serviceCount >= 2;
 }
 
 // ── CLI ────────────────────────────────────────────────────────────
@@ -2122,7 +2165,7 @@ const FLAG_SPEC = {
 const _RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
 
 const HELP_TEXT = `usage: atlas_inventory.js generate --wiki-root <p> --repo-root <p> --run-id <id>
-                                  [--enable-rest] [--cross-service]
+                                  [--enable-rest] [--cross-service | --no-cross-service]
                                   [--rest-profiles <csv>] [--rest-profile <name>]
 
 Build the code-inventory manifest for a /doc-wiki:atlas run.
@@ -2136,11 +2179,16 @@ Optional:
   --enable-rest                Run REST endpoint detection. If absent,
                                the CLI reads ecosystem.rest.enabled from
                                <wiki-root>/wiki.config.yaml (default false).
-  --cross-service              Run service discovery + per-service inventory
+  --cross-service              Force service discovery + per-service inventory
                                (HTTP clients, queue endpoints, external sources).
-                               Implies REST detection. If absent, the CLI reads
-                               ecosystem.cross_service.enabled from
-                               <wiki-root>/wiki.config.yaml (default false).
+                               Implies REST detection. Default is AUTO: cross-
+                               service runs automatically when the repo has >=2
+                               real services. Precedence:
+                                 --no-cross-service > --cross-service >
+                                 ecosystem.cross_service.enabled (true|false) >
+                                 AUTO (>=2 services).
+  --no-cross-service           Suppress cross-service detection entirely, even
+                               when >=2 services are present or config enables it.
   --rest-profiles <csv>        Comma-separated profile names. Default: all
                                shipped profiles + custom profiles from
                                <wiki-root>/wiki.config.yaml's
@@ -2162,12 +2210,21 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     process.stderr.write(`unknown subcommand: ${sub}\n`);
     return 2;
   }
-  // --enable-rest and --cross-service are bare flags; detect them before
-  // parseFlags consumes the value-bearing args. The CLI flag always wins;
-  // if absent, the config-file flag is consulted after wikiRoot is resolved.
+  // --enable-rest, --cross-service, and --no-cross-service are bare flags;
+  // detect them before parseFlags consumes the value-bearing args. The CLI
+  // flags always win; if absent, the config-file flag (then AUTO) is consulted
+  // after wikiRoot/repoRoot are resolved.
   const enableRestFromCli = argv.includes("--enable-rest");
   const enableCrossServiceFromCli = argv.includes("--cross-service");
-  const flagArgs = argv.slice(1).filter((a) => a !== "--enable-rest" && a !== "--cross-service");
+  const disableCrossServiceFromCli = argv.includes("--no-cross-service");
+  const flagArgs = argv
+    .slice(1)
+    .filter(
+      (a) =>
+        a !== "--enable-rest" &&
+        a !== "--cross-service" &&
+        a !== "--no-cross-service",
+    );
 
   let parsed;
   try {
@@ -2221,8 +2278,25 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
 
   // Resolve the REST-detection flag: CLI > config > default false.
   const enableRest = enableRestFromCli || _readEcosystemRestEnabled(wikiRoot);
-  // Resolve the cross-service flag: CLI > config > default false.
-  const enableCrossService = enableCrossServiceFromCli || _readEcosystemCrossServiceEnabled(wikiRoot);
+  // Resolve cross-service with full precedence:
+  //   --no-cross-service > --cross-service > config(true/false) > AUTO(≥2 svcs)
+  // AUTO only needs the service count, so run discovery here ONLY when neither
+  // a flag nor config decides it — avoids a redundant discoverServices() pass
+  // (generateInventory runs its own when enableCrossService resolves true).
+  const crossServiceConfig = _readEcosystemCrossServiceConfig(wikiRoot);
+  const needsAutoCount =
+    !disableCrossServiceFromCli &&
+    !enableCrossServiceFromCli &&
+    crossServiceConfig === undefined;
+  const autoServiceCount = needsAutoCount
+    ? countRealServices(discoverServices(repoRoot))
+    : 0;
+  const enableCrossService = resolveCrossService({
+    fromCliEnable: enableCrossServiceFromCli,
+    fromCliDisable: disableCrossServiceFromCli,
+    config: crossServiceConfig,
+    serviceCount: autoServiceCount,
+  });
 
   let inventory: CodeInventory;
   try {
