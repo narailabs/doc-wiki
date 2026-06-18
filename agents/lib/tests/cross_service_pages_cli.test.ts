@@ -129,6 +129,62 @@ describe("writeCrossServicePages", () => {
     cleanupTmpPath(wiki);
   });
 
+  // codex P2 (data-loss-by-overwrite): AUTO-on render must NOT clobber a
+  // pre-existing user-authored page that collides on a slug name.
+  it("does NOT overwrite a pre-existing user-authored service-map.md (no marker); warns and skips", () => {
+    const wiki = makeTmpPath("xs-pages-userwrite");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const userPage = writeUserPage(wikiDir, "service-map");
+    const before = fs.readFileSync(userPage, "utf-8");
+
+    const stderr: string[] = [];
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation((c) => { stderr.push(c.toString()); return true; });
+    let written: string[];
+    try {
+      written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    } finally {
+      errSpy.mockRestore();
+    }
+
+    // User page preserved byte-identical, and NOT reported as written.
+    expect(fs.readFileSync(userPage, "utf-8")).toBe(before);
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(false);
+    // A clear warning was emitted.
+    expect(stderr.join("")).toMatch(/service-map\.md.*user-authored.*skipping/i);
+    // The other slugs (no collision) are still written normally.
+    expect(written.some((p) => p.endsWith("service-dependencies.md"))).toBe(true);
+    cleanupTmpPath(wiki);
+  });
+
+  it("DOES overwrite a previously-generated service-map.md (has marker) on refresh", () => {
+    const wiki = makeTmpPath("xs-pages-regenwrite");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    const genPage = writeGeneratedPage(wikiDir, "service-map");
+    const before = fs.readFileSync(genPage, "utf-8");
+    expect(before).toContain("old generated content");
+
+    const written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(true);
+    const after = fs.readFileSync(genPage, "utf-8");
+    expect(after).not.toBe(before); // refreshed
+    expect(after).not.toContain("old generated content");
+    expect(after).toContain("cross_service_page: service-map"); // still ours
+    cleanupTmpPath(wiki);
+  });
+
+  it("writes the slug page normally when the file is absent", () => {
+    const wiki = makeTmpPath("xs-pages-absentwrite");
+    const target = path.join(wiki, "wiki", "service-map.md");
+    expect(fs.existsSync(target)).toBe(false);
+    const written = writeCrossServicePages(wiki, makeFullInventory(), makeFullGraph());
+    expect(written.some((p) => p.endsWith("service-map.md"))).toBe(true);
+    expect(fs.existsSync(target)).toBe(true);
+    expect(fs.readFileSync(target, "utf-8")).toContain("cross_service_page: service-map");
+    cleanupTmpPath(wiki);
+  });
+
   it("deletes a stale GENERATED page left by a prior run when its data disappears (refresh)", () => {
     const wiki = makeTmpPath("xs-pages-stale");
     const wikiDir = path.join(wiki, "wiki");

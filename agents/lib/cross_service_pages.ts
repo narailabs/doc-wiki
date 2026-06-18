@@ -892,6 +892,12 @@ function _isGeneratedCrossServicePage(absPath: string): boolean {
  * returned array). Returns the absolute paths actually written, in
  * deterministic order.
  *
+ * Ownership-guarded write: a slug page is written only when the target file
+ * does not exist OR is one WE previously generated (carries the marker —
+ * {@link _isGeneratedCrossServicePage}, a refresh of our own output). If the
+ * target exists and is user-authored (no marker), it is left untouched, a
+ * warning is logged, and that path is NOT included in the returned array.
+ *
  * When no page has content (e.g. a plain monorepo with no cross-service
  * structure), the returned array is empty and nothing is written to disk.
  */
@@ -929,9 +935,18 @@ export function writeCrossServicePages(
 
   const written: string[] = [];
   const removed: string[] = [];
+  const skipped: string[] = [];
   for (const pg of pages) {
     const target = path.join(outDir, `${pg.slug}.md`);
     if (pg.hasContent) {
+      // Write iff the target doesn't exist OR is a page WE generated (refresh of
+      // our own output). NEVER overwrite a user-authored file that merely shares
+      // the slug name (e.g. a hand-written wiki/service-map.md) — now that
+      // cross-service is AUTO-on at >=2 services, a first run must not clobber it.
+      if (fs.existsSync(target) && !_isGeneratedCrossServicePage(target)) {
+        skipped.push(target);
+        continue;
+      }
       fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
       written.push(target);
     } else if (fs.existsSync(target) && _isGeneratedCrossServicePage(target)) {
@@ -947,6 +962,11 @@ export function writeCrossServicePages(
   if (removed.length > 0) {
     process.stderr.write(
       `[cross_service_pages] removed ${removed.length} stale page(s): ${removed.map((p) => path.basename(p)).join(", ")}\n`,
+    );
+  }
+  for (const sk of skipped) {
+    process.stderr.write(
+      `[cross_service_pages] ${path.relative(wikiRoot, sk)} exists and is user-authored — skipping to preserve it; cross-service content for this slug not written\n`,
     );
   }
   return written;
