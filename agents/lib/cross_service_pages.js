@@ -11,6 +11,7 @@ import { formatGraph, formatErDiagram } from "./mermaid_format.js";
 import { rankInbound, detectCycles, loadServiceGraph } from "./cross_service_edges.js";
 import { loadInventory } from "./atlas_inventory.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
+import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
 // Synthetic-node prefixes that must NOT appear as service topology nodes.
 const SYNTHETIC_PREFIXES = ["ext:", "queue:", "table:", "auth:"];
 function isSynthetic(id) {
@@ -683,6 +684,30 @@ function _withFrontmatter(title, body, sources, atlasRunId, slug) {
     return fm + body.trimStart() + "\n";
 }
 /**
+ * True when the markdown file at `absPath` is a doc-wiki-generated cross-service
+ * page — i.e. its frontmatter carries the ownership marker this renderer stamps
+ * (`cross_service_page: <slug>` or `generated_by: cross_service_pages`).
+ *
+ * Used to gate BOTH deletion paths so a *user-authored* page that merely
+ * collides on filename (e.g. someone hand-wrote `wiki/service-map.md`) is never
+ * deleted when cross-service is turned off or a slug loses its data. A missing
+ * file or one without the marker returns false (do not delete).
+ */
+function _isGeneratedCrossServicePage(absPath) {
+    let content;
+    try {
+        content = fs.readFileSync(absPath, "utf-8");
+    }
+    catch {
+        return false; // unreadable / missing → treat as not-ours, don't delete
+    }
+    const { frontmatter } = parseFrontmatter(content);
+    if (!frontmatter)
+        return false;
+    return ("cross_service_page" in frontmatter ||
+        frontmatter["generated_by"] === "cross_service_pages");
+}
+/**
  * Render + write cross-service pages under `<wikiRoot>/wiki/`.
  * Only pages with substantive content are emitted — pages whose predicate
  * returns false are silently skipped (no file written, not included in the
@@ -722,7 +747,9 @@ export function writeCrossServicePages(wikiRoot, inventory, graph) {
             fs.writeFileSync(target, _withFrontmatter(pg.title, pg.render(), evidence, inventory.atlas_run_id, pg.slug));
             written.push(target);
         }
-        else if (fs.existsSync(target)) {
+        else if (fs.existsSync(target) && _isGeneratedCrossServicePage(target)) {
+            // Only delete a stale page WE generated — never a user-authored file that
+            // happens to share the slug name (e.g. a hand-written wiki/service-map.md).
             fs.rmSync(target);
             removed.push(target);
         }
@@ -736,22 +763,27 @@ export function writeCrossServicePages(wikiRoot, inventory, graph) {
     return written;
 }
 /**
- * Remove every cross-service page (all of {@link CROSS_SERVICE_SLUGS}) from
- * `<wikiRoot>/wiki/`. Used when cross-service resolves OFF (e.g. the user
- * passed `--no-cross-service`, or the repo dropped below 2 services) so a
+ * Remove the doc-wiki-generated cross-service pages (the {@link CROSS_SERVICE_SLUGS}
+ * slugs) from `<wikiRoot>/wiki/`. Used when cross-service resolves OFF (e.g. the
+ * user passed `--no-cross-service`, or the repo dropped below 2 services) so a
  * prior run's pages don't linger as stale, misleading content.
  *
+ * Ownership-guarded: a slug file is deleted ONLY when its frontmatter carries
+ * the renderer's marker ({@link _isGeneratedCrossServicePage}). A user-authored
+ * page that merely shares the slug name (e.g. a hand-written
+ * `wiki/service-map.md`) is left untouched — turning cross-service off must
+ * never destroy user content.
+ *
  * Unlike {@link writeCrossServicePages}, this does NOT need an inventory or a
- * service graph — it deletes the known slugs unconditionally. Idempotent: a
- * missing file is a no-op. Returns the absolute paths actually removed, in
- * deterministic slug order.
+ * service graph. Idempotent: a missing (or unmarked) file is a no-op. Returns
+ * the absolute paths actually removed, in deterministic slug order.
  */
 export function pruneCrossServicePages(wikiRoot) {
     const outDir = path.join(wikiRoot, "wiki");
     const removed = [];
     for (const slug of CROSS_SERVICE_SLUGS) {
         const target = path.join(outDir, `${slug}.md`);
-        if (fs.existsSync(target)) {
+        if (fs.existsSync(target) && _isGeneratedCrossServicePage(target)) {
             fs.rmSync(target);
             removed.push(target);
         }
