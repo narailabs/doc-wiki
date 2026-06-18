@@ -135,6 +135,14 @@ function _eventsPath(wikiRoot: string): string {
  *
  * Returns the full logged entry dict.
  */
+/**
+ * Bolt Performance Optimization:
+ * Hoisting this timestamp extraction regex prevents re-compiling/instantiating
+ * the regex object inside the tight loop reading events.jsonl.
+ * Using RegExp.exec() on a non-global regex is also a fast path compared to String.match().
+ */
+const TS_FAST_PATH_REGEX = /^{"ts":"([^"\\]+)"/;
+
 export function logEvent(
   wikiRoot: string,
   op: string,
@@ -201,7 +209,7 @@ function _readEvents(
       // leading whitespace. The character class excludes both `"` and `\` so
       // any ts containing a JSON escape (like `\+` for `+`) misses the regex
       // and safely falls through to the slow path for proper decoding.
-      const m = line.match(/^{"ts":"([^"\\]+)"/);
+      const m = TS_FAST_PATH_REGEX.exec(line);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
         // G-EVENTS-TS-STRICT: when --since is active, drop events whose
