@@ -1,8 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
-import { writeCrossServicePages } from "../cross_service_pages.js";
+import {
+  writeCrossServicePages,
+  pruneCrossServicePages,
+  CROSS_SERVICE_SLUGS,
+  main as crossServicePagesMain,
+} from "../cross_service_pages.js";
 
 const ALL_SLUGS = [
   "service-map",
@@ -113,6 +118,22 @@ describe("writeCrossServicePages", () => {
     const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
     expect(written.length).toBe(0);
     expect(fs.existsSync(stale)).toBe(false); // stale page removed
+    cleanupTmpPath(wiki);
+  });
+
+  it("prunes ALL SIX stale slugs on the empty/no-content path (not just queue-registry)", () => {
+    const wiki = makeTmpPath("xs-pages-stale-all");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    // A prior run wrote every cross-service page; the repo is now a monolith.
+    for (const slug of ALL_SLUGS) {
+      fs.writeFileSync(path.join(wikiDir, `${slug}.md`), `# ${slug}\n\nstale\n`);
+    }
+    const written = writeCrossServicePages(wiki, makeEmptyInventory(), makeEmptyGraph());
+    expect(written.length).toBe(0);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`)), `not pruned: ${slug}`).toBe(false);
+    }
     cleanupTmpPath(wiki);
   });
 
@@ -296,6 +317,95 @@ describe("writeCrossServicePages", () => {
     expect(written.length).toBe(0);
     for (const slug of ALL_SLUGS) {
       expect(fs.existsSync(path.join(wiki, "wiki", `${slug}.md`))).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+});
+
+// ── prune: remove all cross-service pages when cross-service resolves OFF ──
+
+describe("pruneCrossServicePages", () => {
+  it("removes all six cross-service pages when present (opt-out / drop below 2 services)", () => {
+    const wiki = makeTmpPath("xs-prune-all");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    for (const slug of ALL_SLUGS) {
+      fs.writeFileSync(path.join(wikiDir, `${slug}.md`), `# ${slug}\n\nold cross-service page\n`);
+    }
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed.length).toBe(6);
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`)), `not pruned: ${slug}`).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("is idempotent — no error and removes nothing when no pages exist", () => {
+    const wiki = makeTmpPath("xs-prune-none");
+    fs.mkdirSync(path.join(wiki, "wiki"), { recursive: true });
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed).toEqual([]);
+    cleanupTmpPath(wiki);
+  });
+
+  it("leaves non-cross-service pages untouched", () => {
+    const wiki = makeTmpPath("xs-prune-keep");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    fs.writeFileSync(path.join(wikiDir, "service-map.md"), "# Service Map\n");
+    const keep = path.join(wikiDir, "overview.md");
+    fs.writeFileSync(keep, "# Overview\n");
+    const removed = pruneCrossServicePages(wiki);
+    expect(removed.length).toBe(1);
+    expect(fs.existsSync(path.join(wikiDir, "service-map.md"))).toBe(false);
+    expect(fs.existsSync(keep)).toBe(true); // unrelated page preserved
+    cleanupTmpPath(wiki);
+  });
+
+  it("CROSS_SERVICE_SLUGS exposes exactly the six known cross-service slugs", () => {
+    expect([...CROSS_SERVICE_SLUGS].sort()).toEqual([...ALL_SLUGS].sort());
+  });
+});
+
+describe("cross_service_pages.js prune CLI", () => {
+  it("prune subcommand removes the six slugs and needs no run-id/inventory/graph", () => {
+    const wiki = makeTmpPath("xs-prune-cli");
+    const wikiDir = path.join(wiki, "wiki");
+    fs.mkdirSync(wikiDir, { recursive: true });
+    for (const slug of ALL_SLUGS) {
+      fs.writeFileSync(path.join(wikiDir, `${slug}.md`), `# ${slug}\n`);
+    }
+    const stdout: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const exit = crossServicePagesMain(["prune", "--wiki-root", wiki]);
+      expect(exit).toBe(0);
+      const removed = JSON.parse(stdout.join("").trim()) as string[];
+      expect(removed.length).toBe(6);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+    for (const slug of ALL_SLUGS) {
+      expect(fs.existsSync(path.join(wikiDir, `${slug}.md`))).toBe(false);
+    }
+    cleanupTmpPath(wiki);
+  });
+
+  it("prune CLI is idempotent (exit 0, empty array) when no pages exist", () => {
+    const wiki = makeTmpPath("xs-prune-cli-none");
+    fs.mkdirSync(path.join(wiki, "wiki"), { recursive: true });
+    const stdout: string[] = [];
+    const outSpy = vi.spyOn(process.stdout, "write").mockImplementation((c) => { stdout.push(c.toString()); return true; });
+    const errSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const exit = crossServicePagesMain(["prune", "--wiki-root", wiki]);
+      expect(exit).toBe(0);
+      expect(JSON.parse(stdout.join("").trim())).toEqual([]);
+    } finally {
+      outSpy.mockRestore();
+      errSpy.mockRestore();
     }
     cleanupTmpPath(wiki);
   });

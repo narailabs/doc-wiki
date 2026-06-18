@@ -805,6 +805,22 @@ export function hasSharedLibraries(graph: ServiceGraph): boolean {
 
 // ── D5: write helpers + CLI ─────────────────────────────────────────
 
+/**
+ * The six wiki slugs owned by the cross-service renderer. Single source of
+ * truth for both {@link writeCrossServicePages} (which writes/prunes per
+ * content predicate) and {@link pruneCrossServicePages} (which removes all six
+ * when cross-service is turned off). Keeping one list prevents a slug being
+ * rendered but never pruned (or vice versa).
+ */
+export const CROSS_SERVICE_SLUGS = [
+  "service-map",
+  "service-dependencies",
+  "client-registry",
+  "queue-registry",
+  "database-traces",
+  "shared-libraries",
+] as const;
+
 interface _PageSpec {
   slug: string;
   title: string;
@@ -908,6 +924,35 @@ export function writeCrossServicePages(
   return written;
 }
 
+/**
+ * Remove every cross-service page (all of {@link CROSS_SERVICE_SLUGS}) from
+ * `<wikiRoot>/wiki/`. Used when cross-service resolves OFF (e.g. the user
+ * passed `--no-cross-service`, or the repo dropped below 2 services) so a
+ * prior run's pages don't linger as stale, misleading content.
+ *
+ * Unlike {@link writeCrossServicePages}, this does NOT need an inventory or a
+ * service graph — it deletes the known slugs unconditionally. Idempotent: a
+ * missing file is a no-op. Returns the absolute paths actually removed, in
+ * deterministic slug order.
+ */
+export function pruneCrossServicePages(wikiRoot: string): string[] {
+  const outDir = path.join(wikiRoot, "wiki");
+  const removed: string[] = [];
+  for (const slug of CROSS_SERVICE_SLUGS) {
+    const target = path.join(outDir, `${slug}.md`);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target);
+      removed.push(target);
+    }
+  }
+  if (removed.length > 0) {
+    process.stderr.write(
+      `[cross_service_pages] pruned ${removed.length} cross-service page(s) (cross-service off): ${removed.map((p) => path.basename(p)).join(", ")}\n`,
+    );
+  }
+  return removed;
+}
+
 // ── CLI ─────────────────────────────────────────────────────────────
 
 const _CSP_FLAG_SPEC = {
@@ -917,12 +962,19 @@ const _CSP_FLAG_SPEC = {
 
 const _CSP_RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/;
 
-const _CSP_HELP = `usage: cross_service_pages.js render --wiki-root <p> --run-id <id>
+const _CSP_HELP = `usage: cross_service_pages.js <render|prune> --wiki-root <p> [--run-id <id>]
 
-Write the six cross-service wiki pages from a persisted inventory + service graph.
+render  Write the six cross-service wiki pages from a persisted inventory +
+        service graph (prunes any slug whose data disappeared).
   --wiki-root <p>   Wiki root (where outputs/atlas/<run-id>/ and wiki/ live)
   --run-id <id>     Atlas run id (YYYY-MM-DDTHH-MM-SS)
-Stdout: JSON array of absolute paths written.
+  Stdout: JSON array of absolute paths written.
+
+prune   Remove ALL six cross-service pages from <wiki-root>/wiki/ (used when
+        cross-service resolves OFF, e.g. --no-cross-service or a monolith).
+        Needs no inventory/graph; idempotent.
+  --wiki-root <p>   Wiki root (where wiki/ lives)
+  Stdout: JSON array of absolute paths removed.
 `;
 
 export function main(argv: readonly string[] = process.argv.slice(2)): number {
@@ -930,7 +982,8 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     process.stdout.write(_CSP_HELP);
     return 0;
   }
-  if (argv[0] !== "render") {
+  const sub = argv[0];
+  if (sub !== "render" && sub !== "prune") {
     process.stderr.write(`unknown subcommand: ${argv[0]}\n`);
     return 2;
   }
@@ -946,11 +999,19 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 0;
   }
   const wikiRoot = parsed.values["wikiRoot"];
-  const runId = parsed.values["runId"];
   if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
     process.stderr.write("--wiki-root is required\n");
     return 2;
   }
+
+  // prune: no inventory/graph/run-id needed — just remove the six slugs.
+  if (sub === "prune") {
+    const removed = pruneCrossServicePages(wikiRoot);
+    process.stdout.write(JSON.stringify(removed) + "\n");
+    return 0;
+  }
+
+  const runId = parsed.values["runId"];
   if (typeof runId !== "string" || !_CSP_RUN_ID_RE.test(runId)) {
     process.stderr.write("--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n");
     return 2;
