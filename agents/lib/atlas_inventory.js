@@ -1654,10 +1654,14 @@ export function _readEcosystemRestEnabled(wikiRoot) {
  * explicitly set to `true`; `false` for explicit-false, absent, or malformed.
  *
  * NOTE: an absent key no longer means "off" — it means AUTO (cross-service
- * runs when the repo has >=2 services). Callers that need to distinguish
- * absent from explicit-false (to honor AUTO) should use the tri-state
- * {@link _readEcosystemCrossServiceConfig} instead. This boolean wrapper is
- * kept for the orchestrator's config-only cost-estimate fallback.
+ * runs when the repo has >=2 services), and the CLI flags
+ * (`--cross-service` / `--no-cross-service`) override config. Production
+ * callers that resolve the effective decision must use the tri-state
+ * {@link _readEcosystemCrossServiceConfig} and feed it through
+ * {@link resolveCrossService} (which both the inventory CLI and the
+ * orchestrator's cost estimate do). This collapsed boolean is retained only
+ * as a convenience reader for tests/diagnostics — it cannot distinguish
+ * absent from explicit-false and so must not be used to gate behavior.
  */
 export function _readEcosystemCrossServiceEnabled(wikiRoot) {
     return _readEcosystemCrossServiceConfig(wikiRoot) === true;

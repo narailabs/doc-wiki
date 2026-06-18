@@ -963,6 +963,69 @@ describe("main() estimate-cost — cross-service AUTO from inventory (--run-id)"
     const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
     expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
   });
+
+  // codex P2: --no-cross-service must suppress in the cost estimate too, even
+  // when config enables cross-service. Before the fix this returned 13 globals.
+  it("--no-cross-service overrides config enabled:true → 7 globals (codex P2)", () => {
+    persistMultiServiceInventory();
+    fs.writeFileSync(
+      path.join(wikiRoot, "wiki.config.yaml"),
+      yaml.dump({
+        wiki: { name: "Test Wiki", domain: "testing" },
+        autonomy: { mode: "balanced" },
+        ecosystem: { cross_service: { enabled: true } },
+      }),
+    );
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+      "--no-cross-service",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5); // 7 globals — flag suppresses
+  });
+
+  it("--no-cross-service suppresses AUTO too (≥2 services, no config) → 7 globals", () => {
+    persistMultiServiceInventory();
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+      "--no-cross-service",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(1.40, 5);
+  });
+
+  it("--cross-service forces 13 globals even with config enabled:false and a monolith inventory", () => {
+    persistMonolithInventory();
+    fs.writeFileSync(
+      path.join(wikiRoot, "wiki.config.yaml"),
+      yaml.dump({
+        wiki: { name: "Test Wiki", domain: "testing" },
+        autonomy: { mode: "balanced" },
+        ecosystem: { cross_service: { enabled: false } },
+      }),
+    );
+    const exit = main([
+      "estimate-cost",
+      "--wiki-root", wikiRoot,
+      "--run-id", RUN_ID,
+      "--plan", PLAN_ONE_ENTRY,
+      "--per-ingest-avg-usd", "0.20",
+      "--cross-service",
+    ]);
+    expect(exit).toBe(0);
+    const out = JSON.parse(stdoutChunks.join("").trim()) as { global_cost_usd: number };
+    expect(out.global_cost_usd).toBeCloseTo(2.60, 5); // 13 globals — flag forces
+  });
 });
 
 describe("main() compute-sources subcommand", () => {

@@ -24,6 +24,7 @@ import {
   main,
   _readEcosystemRestEnabled,
   _readEcosystemCrossServiceEnabled,
+  resolveCrossService,
   type CodeInventory,
   type RestProfile,
 } from "../atlas_inventory.js";
@@ -1820,6 +1821,55 @@ def health(): pass
     ]);
     expect(exit).toBe(0);
     expect(readManifest(runId).rest_endpoints.length).toBeGreaterThan(0);
+  });
+});
+
+// ── resolveCrossService: the single shared precedence resolver ────────────
+
+describe("resolveCrossService precedence matrix", () => {
+  // Shorthand: build opts with sensible defaults so each case states only the
+  // dimensions it exercises.
+  const r = (o: Partial<Parameters<typeof resolveCrossService>[0]>): boolean =>
+    resolveCrossService({
+      fromCliEnable: false,
+      fromCliDisable: false,
+      config: undefined,
+      serviceCount: 0,
+      ...o,
+    });
+
+  it("--no-cross-service forces OFF, beating config:true (the codex P2 case)", () => {
+    expect(r({ fromCliDisable: true, config: true, serviceCount: 5 })).toBe(false);
+  });
+
+  it("--no-cross-service forces OFF, beating --cross-service (both flags → off)", () => {
+    expect(r({ fromCliDisable: true, fromCliEnable: true, config: true, serviceCount: 5 })).toBe(false);
+  });
+
+  it("--no-cross-service forces OFF even with ≥2 services and no config", () => {
+    expect(r({ fromCliDisable: true, serviceCount: 9 })).toBe(false);
+  });
+
+  it("--cross-service forces ON, beating config:false", () => {
+    expect(r({ fromCliEnable: true, config: false, serviceCount: 0 })).toBe(true);
+  });
+
+  it("--cross-service forces ON even on a monolith (serviceCount 0)", () => {
+    expect(r({ fromCliEnable: true, serviceCount: 0 })).toBe(true);
+  });
+
+  it("config:true (no flags) → ON, ignoring service count", () => {
+    expect(r({ config: true, serviceCount: 0 })).toBe(true);
+  });
+
+  it("config:false (no flags) → OFF, ignoring service count", () => {
+    expect(r({ config: false, serviceCount: 9 })).toBe(false);
+  });
+
+  it("AUTO (config absent, no flags): ON iff ≥2 services", () => {
+    expect(r({ config: undefined, serviceCount: 2 })).toBe(true);
+    expect(r({ config: undefined, serviceCount: 1 })).toBe(false);
+    expect(r({ config: undefined, serviceCount: 0 })).toBe(false);
   });
 });
 

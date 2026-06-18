@@ -22,7 +22,7 @@
  *
  * Usage as a script:
  *     node atlas_orchestrator.js detect-state    --wiki-root <p>
- *     node atlas_orchestrator.js estimate-cost   --wiki-root <p> --plan '<json>'
+ *     node atlas_orchestrator.js estimate-cost   --wiki-root <p> --plan '<json>' [--run-id <id>] [--cross-service|--no-cross-service]
  *     node atlas_orchestrator.js save-plan       --wiki-root <p> --run-id <id> --plan '<json>'
  *     node atlas_orchestrator.js load-plan       --wiki-root <p> --run-id <id>
  *     node atlas_orchestrator.js per-ingest-avg  --wiki-root <p> [--sample-size <n>]
@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 import { computeHash, checkCache } from "./cache_manager.js";
-import { loadInventory, _readEcosystemCrossServiceConfig, } from "../../../agents/lib/atlas_inventory.js";
+import { loadInventory, _readEcosystemCrossServiceConfig, resolveCrossService, } from "../../../agents/lib/atlas_inventory.js";
 import { countRealServices } from "../../../agents/lib/cross_service_pages.js";
 import { groupManifestByTopicFacet } from "../../../agents/lib/atlas_synthesize.js";
 // ── State detection ────────────────────────────────────────────────
@@ -748,11 +748,13 @@ Deterministic helpers for the /doc-wiki:atlas orchestrator.
 Subcommands:
   detect-state      --wiki-root <p>
                     Stdout: {state, atlas_pages, all_pages, last_run_id}.
-  estimate-cost     --wiki-root <p> --plan '<json>' [--run-id <id>] [--per-ingest-avg-usd <n>]
-                    Stdout: full CostEstimate JSON. With --run-id, the 6 cross-
-                    service globals are counted when the Phase-1b inventory has
-                    >=2 services (AUTO); ecosystem.cross_service.enabled
-                    (true|false) overrides AUTO.
+  estimate-cost     --wiki-root <p> --plan '<json>' [--run-id <id>]
+                    [--cross-service | --no-cross-service] [--per-ingest-avg-usd <n>]
+                    Stdout: full CostEstimate JSON. The 6 cross-service globals
+                    are counted using the same precedence as the run:
+                    --no-cross-service > --cross-service >
+                    ecosystem.cross_service.enabled (true|false) > AUTO (>=2
+                    services, read from the --run-id inventory).
   save-plan         --wiki-root <p> --run-id <id> --plan '<json>'
                     Persist a plan snapshot. Stdout: {saved: true, path}.
   load-plan         --wiki-root <p> --run-id <id>
@@ -776,9 +778,18 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const sub = argv[0];
+    // --cross-service / --no-cross-service are bare flags consumed by
+    // estimate-cost; detect them before parseFlags (which is value-bearing and
+    // would otherwise throw "unrecognized argument" or swallow the next token).
+    // Mirrors the strip-then-parse pattern in atlas_inventory.ts's CLI.
+    const crossServiceFromCli = argv.includes("--cross-service");
+    const noCrossServiceFromCli = argv.includes("--no-cross-service");
+    const flagArgs = argv
+        .slice(1)
+        .filter((a) => a !== "--cross-service" && a !== "--no-cross-service");
     let parsed;
     try {
-        parsed = parseFlags(argv.slice(1), FLAG_SPEC);
+        parsed = parseFlags(flagArgs, FLAG_SPEC);
     }
     catch (e) {
         process.stderr.write(`${e.message}\n`);
@@ -821,27 +832,26 @@ export function main(argv = process.argv.slice(2)) {
         const avg = typeof avgRaw === "string" && avgRaw.length > 0
             ? Number.parseFloat(avgRaw)
             : undefined;
-        // Cross-service AUTO: the estimate should reflect whether the 6 cross-
-        // service global pages will actually be generated. Precedence mirrors
-        // atlas_inventory's resolver — config(true/false) overrides AUTO, AUTO
-        // reads the discovered service count from the Phase-1b inventory.
-        //   1. config enabled:true/false → that value (explicit override)
-        //   2. AUTO: inventory (loaded via --run-id) has >=2 real services
-        //   3. fallback: no --run-id or no manifest → config-only (false when absent)
-        const crossServiceConfig = _readEcosystemCrossServiceConfig(wikiRoot);
-        let crossServiceEnabled;
-        if (crossServiceConfig !== undefined) {
-            crossServiceEnabled = crossServiceConfig;
-        }
-        else {
-            const runIdRaw = parsed.values["runId"];
-            const inv = typeof runIdRaw === "string" && runIdRaw.length > 0
-                ? loadInventory(wikiRoot, runIdRaw)
-                : null;
-            crossServiceEnabled = inv
-                ? countRealServices((inv.services ?? []).map((s) => s.identity)) >= 2
-                : false;
-        }
+        // Cross-service: the estimate must reflect whether the 6 cross-service
+        // global pages will actually be generated — using the SAME precedence as
+        // atlas_inventory's resolver so the cost can never disagree with the run:
+        //   --no-cross-service > --cross-service > config(true/false) > AUTO(>=2 svcs)
+        // AUTO reads the discovered service count from the Phase-1b inventory
+        // (loaded via --run-id). Without --run-id or a manifest the count is 0, so
+        // AUTO resolves false — matching the prior config-only fallback.
+        const runIdRaw = parsed.values["runId"];
+        const inv = typeof runIdRaw === "string" && runIdRaw.length > 0
+            ? loadInventory(wikiRoot, runIdRaw)
+            : null;
+        const serviceCount = inv
+            ? countRealServices((inv.services ?? []).map((s) => s.identity))
+            : 0;
+        const crossServiceEnabled = resolveCrossService({
+            fromCliEnable: crossServiceFromCli,
+            fromCliDisable: noCrossServiceFromCli,
+            config: _readEcosystemCrossServiceConfig(wikiRoot),
+            serviceCount,
+        });
         const estimate = estimateCost(wikiRoot, plan, avg, crossServiceEnabled);
         process.stdout.write(JSON.stringify(estimate) + "\n");
         return 0;
