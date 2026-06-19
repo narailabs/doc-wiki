@@ -119,7 +119,12 @@ export class Policy {
     // ------------------------------------------------------------------
     // SQL classification
     // ------------------------------------------------------------------
-    /** Remove SQL comments from the statement. */
+    /**
+     * Remove SQL comments from the statement.
+     * Note: Block comments are replaced with a space (" ") rather than an empty
+     * string. This ensures that an attacker cannot synthesize a keyword to bypass
+     * checks. For example, `WHE/*x*\/RE` will become `WHE RE` instead of `WHERE`.
+     */
     static _stripComments(sql) {
         let s = sql.replace(_BLOCK_COMMENT_RE, " ");
         s = s.replace(_LINE_COMMENT_RE, "");
