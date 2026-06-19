@@ -35,17 +35,29 @@ export const OperationType = {
 // Keyword -> OperationType mapping
 // -----------------------------------------------------------------------
 const _READ_KEYWORDS = new Set([
-    "SELECT", "EXPLAIN", "SHOW", "DESCRIBE", "DESC", "WITH",
+    "SELECT",
+    "EXPLAIN",
+    "SHOW",
+    "DESCRIBE",
+    "DESC",
+    "WITH",
 ]);
 const _DML_KEYWORDS = new Set([
-    "INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE", "UPSERT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "REPLACE",
+    "MERGE",
+    "UPSERT",
 ]);
 const _DDL_KEYWORDS = new Set([
-    "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME",
+    "CREATE",
+    "DROP",
+    "ALTER",
+    "TRUNCATE",
+    "RENAME",
 ]);
-const _PRIVILEGE_KEYWORDS = new Set([
-    "GRANT", "REVOKE",
-]);
+const _PRIVILEGE_KEYWORDS = new Set(["GRANT", "REVOKE"]);
 /**
  * Classify a SQL string by its leading keyword.
  *
@@ -89,7 +101,10 @@ const _UNBOUNDED_RE = /^\s*SELECT\s+.*\bFROM\s+\w+/is;
 // JOIN USING (…) also falls through to escalate — safe direction.
 const _BOUNDED_KEYWORDS_RE = /\b(WHERE|LIMIT|OFFSET|HAVING|GROUP\s+BY|JOIN\s+\S+\s+ON)\b/i;
 const _VALID_APPROVAL_MODES = new Set([
-    "auto", "confirm_once", "confirm_each", "grant_required",
+    "auto",
+    "confirm_once",
+    "confirm_each",
+    "grant_required",
 ]);
 /**
  * Stateful policy engine that gates SQL execution.
@@ -161,15 +176,19 @@ export class Policy {
     checkQuery(sql, driver) {
         const stripped = sql.trim();
         if (!stripped) {
-            const result = { decision: "deny", reason: "Empty SQL statement" };
+            const result = {
+                decision: "deny",
+                reason: "Empty SQL statement",
+            };
             _emitDeny(result.reason, null);
             return result;
         }
         let op;
         try {
-            op = driver !== undefined
-                ? driver.classifyOperation(stripped)
-                : this.classifySql(stripped);
+            op =
+                driver !== undefined
+                    ? driver.classifyOperation(stripped)
+                    : this.classifySql(stripped);
         }
         catch (exc) {
             const reason = exc.message;
@@ -352,9 +371,7 @@ function _emitPresentOnly(reason, op, formattedSql) {
     // Scrub credentials before truncation so a literal split by truncation
     // can't leak. Same helper used by audit.logQuery.
     const scrubbed = scrubSqlSecrets(formattedSql);
-    const truncated = scrubbed.length > 500
-        ? scrubbed.slice(0, 500) + "\u2026"
-        : scrubbed;
+    const truncated = scrubbed.length > 500 ? scrubbed.slice(0, 500) + "\u2026" : scrubbed;
     const details = {
         reason,
         formatted_sql: truncated,
