@@ -97,6 +97,9 @@ export function classifySqlKeywords(sql: string): OperationType {
 const _LINE_COMMENT_RE = /--[^\n]*/g;
 // Python uses re.DOTALL so `.` matches newlines; in JS use the `s` flag.
 const _BLOCK_COMMENT_RE = /\/\*.*?\*\//gs;
+// MySQL/MariaDB executable comments (`/*! ... */`) run on the server, so they
+// must never be treated as inert when deciding whether a read is unbounded.
+const _EXEC_COMMENT_RE = /\/\*!/;
 
 /**
  * Heuristic: a SELECT is "unbounded" if it reads from a table but has
@@ -178,9 +181,17 @@ export class Policy {
 
   /** Return true if the SELECT appears to lack a bounding clause. */
   static _isUnboundedSelect(sql: string): boolean {
-    const cleaned = Policy._stripComments(sql);
-    if (!_UNBOUNDED_RE.test(cleaned)) return false;
-    return !_BOUNDED_KEYWORDS_RE.test(cleaned);
+    // Fail closed: the regex `_stripComments` is not string-literal-aware, so a
+    // `/* ... */` that opens inside a quoted literal (e.g. `SELECT '/*' ... FROM
+    // users ... '*/'`) gets deleted along with the real `FROM users`, making an
+    // unbounded scan look bounded. MySQL executable comments (`/*! ... */`) are
+    // likewise stripped here but run on the server. So evaluate the heuristic on
+    // BOTH the raw and the comment-stripped text and escalate if either looks
+    // unbounded; always escalate when an executable comment is present.
+    const looksUnbounded = (text: string): boolean =>
+      _UNBOUNDED_RE.test(text) && !_BOUNDED_KEYWORDS_RE.test(text);
+    if (_EXEC_COMMENT_RE.test(sql)) return true;
+    return looksUnbounded(sql) || looksUnbounded(Policy._stripComments(sql));
   }
 
   // ------------------------------------------------------------------
