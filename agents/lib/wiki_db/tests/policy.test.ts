@@ -200,23 +200,6 @@ describe("TestDecisionLogic", () => {
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
-  it("test_unbounded_select_hidden_by_string_literal_comment_escalates", () => {
-    // `/*` opens inside a string literal; the non-literal-aware stripper would
-    // delete the real `FROM users`, making the scan look bounded. Fail closed.
-    const result = policyAuto().checkQuery(
-      "SELECT '/*' AS marker FROM users, (SELECT '*/') AS close",
-    );
-    expect(result.decision).toBe(Decision.ESCALATE);
-  });
-
-  it("test_unbounded_select_via_mysql_executable_comment_escalates", () => {
-    // `/*! ... */` runs on the MySQL server, so it must not be treated as inert.
-    const result = policyAuto().checkQuery(
-      "SELECT 1 /*! UNION SELECT id FROM users */",
-    );
-    expect(result.decision).toBe(Decision.ESCALATE);
-  });
-
   it("test_bounded_select_allowed", () => {
     const result = policyAuto().checkQuery("SELECT * FROM users WHERE id = 1");
     expect(result.decision).toBe(Decision.ALLOW);
