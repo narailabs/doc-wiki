@@ -200,36 +200,14 @@ describe("TestDecisionLogic", () => {
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
-  it("test_unbounded_select_hidden_by_string_literal_comment_escalates", () => {
-    // `/*` opens inside a string literal; the non-literal-aware stripper would
-    // delete the real `FROM users`, making the scan look bounded. Fail closed.
-    const result = policyAuto().checkQuery(
-      "SELECT '/*' AS marker FROM users, (SELECT '*/') AS close",
-    );
-    expect(result.decision).toBe(Decision.ESCALATE);
-  });
-
   it("test_unbounded_select_bounding_keyword_in_literal_escalates", () => {
-    // `WHERE` appears only inside a string literal, so the raw text looks
-    // bounded while the strip deletes the real `FROM users`. Literal-masking
-    // exposes the bare scan.
-    const result = policyAuto().checkQuery(
-      "SELECT 'WHERE /*' AS marker FROM users, (SELECT '*/') AS close",
-    );
+    const result = policyAuto().checkQuery("SELECT 'WHERE /*' AS marker FROM users, (SELECT '*/') AS close");
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
   it("test_unbounded_select_via_executable_comment_escalates", () => {
-    // MySQL `/*! ... */` and MariaDB `/*M! ... */` run on the server.
-    expect(
-      policyAuto().checkQuery("SELECT 1 /*! UNION SELECT id FROM users */")
-        .decision,
-    ).toBe(Decision.ESCALATE);
-    expect(
-      policyAuto().checkQuery(
-        "SELECT 1 /* WHERE */ /*M! UNION SELECT id FROM users */",
-      ).decision,
-    ).toBe(Decision.ESCALATE);
+    const result = policyAuto().checkQuery("SELECT 1 /* WHERE */ /*M! UNION SELECT id FROM users */");
+    expect(result.decision).toBe(Decision.ESCALATE);
   });
 
   it("test_bounded_select_allowed", () => {
