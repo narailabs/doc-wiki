@@ -97,6 +97,40 @@ export function classifySqlKeywords(sql: string): OperationType {
 const _LINE_COMMENT_RE = /--[^\n]*/g;
 // Python uses re.DOTALL so `.` matches newlines; in JS use the `s` flag.
 const _BLOCK_COMMENT_RE = /\/\*.*?\*\//gs;
+// Executable comments run on the server and must never be treated as inert:
+// MySQL uses `/*! ... */`; MariaDB also runs `/*M! ... */` (optional version).
+const _EXEC_COMMENT_RE = /\/\*[A-Za-z]*!/;
+
+/**
+ * Replace the contents of single-, double-, and backtick-quoted string
+ * literals with spaces, keeping the delimiters and overall length. Used by
+ * `_isUnboundedSelect` so a bounding keyword that appears only inside a literal
+ * (e.g. `SELECT 'WHERE /*' ... FROM users`) can't make a full-table scan look
+ * bounded. Handles SQL-standard `''` doubling.
+ */
+function _maskStringLiterals(sql: string): string {
+  const out = sql.split("");
+  let inString: string | null = null;
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+    if (inString !== null) {
+      if (c === inString) {
+        if (i + 1 < sql.length && sql[i + 1] === inString) {
+          out[i] = " ";
+          out[i + 1] = " ";
+          i++; // skip the doubled (escaped) quote
+        } else {
+          inString = null; // keep the closing delimiter
+        }
+      } else {
+        out[i] = " ";
+      }
+    } else if (c === "'" || c === '"' || c === "`") {
+      inString = c;
+    }
+  }
+  return out.join("");
+}
 
 /**
  * Heuristic: a SELECT is "unbounded" if it reads from a table but has
@@ -178,20 +212,27 @@ export class Policy {
 
   /** Return true if the SELECT appears to lack a bounding clause. */
   static _isUnboundedSelect(sql: string): boolean {
-    // MySQL executable comments (/*! ... */) run on MySQL servers. Since our
-    // naive strip drops them, we preemptively escalate to be safe.
-    if (sql.includes("/*!")) return true;
+    // Executable comments (/*! ... */, MariaDB /*M! ... */) run on the server.
+    // Our naive strip drops them, so preemptively escalate to be safe.
+    if (_EXEC_COMMENT_RE.test(sql)) return true;
 
-    // A literal-unaware strip might delete parts of a string literal that look
-    // like comments. We run the heuristics on both raw and stripped versions
-    // and escalate if *either* looks unbounded.
     const isUnbounded = (s: string) => {
       if (!_UNBOUNDED_RE.test(s)) return false;
       return !_BOUNDED_KEYWORDS_RE.test(s);
     };
 
+    // The regex strip is not string-literal-aware, so evaluate the heuristic on
+    // three views and escalate if ANY looks unbounded:
+    //   - raw text: catches a real `FROM` hidden when the strip deletes a
+    //     literal that contains a fake comment (`SELECT '/*' ... FROM users`);
+    //   - comment-stripped: catches a real `FROM` when a comment legitimately
+    //     hides a bounding keyword;
+    //   - literal-masked: catches a bounding keyword that appears only inside a
+    //     string literal (`SELECT 'WHERE /*' ... FROM users`), which would
+    //     otherwise make the raw text look bounded.
     const cleaned = Policy._stripComments(sql);
-    return isUnbounded(sql) || isUnbounded(cleaned);
+    const masked = _maskStringLiterals(sql);
+    return isUnbounded(sql) || isUnbounded(cleaned) || isUnbounded(masked);
   }
 
   // ------------------------------------------------------------------
