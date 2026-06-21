@@ -20,6 +20,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
+// Bolt optimization: Hoist the timestamp extraction regex to the module level
+// to avoid object instantiation overhead in the hot log-parsing loop.
+const TS_EXTRACT_REGEX = /^{"ts":"([^"\\]+)"/;
 // ── Helpers ─────────────────────────────────────────────────────────
 /**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
@@ -40,7 +43,7 @@ function readEvents(wikiRoot, dateStr) {
         // Fast-path: skip JSON parse overhead if this line cannot match our date
         if (!line.includes(dateStr))
             continue;
-        const match = line.match(/^{"ts":"([^"\\]+)"/);
+        const match = TS_EXTRACT_REGEX.exec(line);
         if (match && match[1] && !match[1].startsWith(dateStr))
             continue;
         let entry;
