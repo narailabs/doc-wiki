@@ -191,6 +191,7 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
+  const TS_REGEX = /^{"ts":"([^"\\]+)"/;
   for (const rawLine of raw.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
@@ -201,7 +202,7 @@ function _readEvents(
       // leading whitespace. The character class excludes both `"` and `\` so
       // any ts containing a JSON escape (like `\+` for `+`) misses the regex
       // and safely falls through to the slow path for proper decoding.
-      const m = line.match(/^{"ts":"([^"\\]+)"/);
+      const m = TS_REGEX.exec(line);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
         // G-EVENTS-TS-STRICT: when --since is active, drop events whose
