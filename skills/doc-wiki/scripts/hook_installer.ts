@@ -41,6 +41,13 @@ function securityCheckPath(): string {
   return path.join(here, "security_check.js");
 }
 
+
+function escapeShellArg(arg: string): string {
+  // Wrap string in single quotes and escape any internal single quotes.
+  // E.g., foo'bar -> 'foo'\''bar'
+  return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
+
 // ── Deep merge helper ──────────────────────────────────────────────────
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -162,7 +169,7 @@ function writeJsonIfChanged(filePath: string, contents: Json): boolean {
  */
 function claudeCodeHookEntries(wikiRoot: string): Json {
   const cmd = (flag: string) =>
-    `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
   return [
     {
       matcher: "WebFetch",
@@ -205,7 +212,7 @@ export function installClaudeCodeHooks(wikiRoot: string): InstallResult {
 
 function codexHookEntries(wikiRoot: string): Json {
   const cmd = (flag: string) =>
-    `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
   return [
     { matcher: "WebFetch", command: cmd("--tool-input-url") },
     { matcher: "WebSearch", command: cmd("--tool-input-url") },
@@ -232,7 +239,7 @@ export function installCodexHooks(wikiRoot: string): InstallResult {
 
 function cursorHookEntries(wikiRoot: string): Json {
   const cmd = (flag: string) =>
-    `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
   return [
     { matcher: "WebFetch", command: cmd("--tool-input-url") },
     { matcher: "WebSearch", command: cmd("--tool-input-url") },
@@ -274,10 +281,10 @@ function aiderManagedBlock(wikiRoot: string): string {
     `pre_tool_use() {`,
     `  case "$TOOL_NAME" in`,
     `    WebFetch|WebSearch)`,
-    `      node "${sc}" --tool-input-url --wiki-root "${wikiRoot}" || return 1`,
+    `      node ${escapeShellArg(sc)} --tool-input-url --wiki-root ${escapeShellArg(wikiRoot)} || return 1`,
     `      ;;`,
     `    Write|Edit|MultiEdit)`,
-    `      node "${sc}" --tool-input-path --wiki-root "${wikiRoot}" || return 1`,
+    `      node ${escapeShellArg(sc)} --tool-input-path --wiki-root ${escapeShellArg(wikiRoot)} || return 1`,
     `      ;;`,
     `  esac`,
     `}`,

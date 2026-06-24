@@ -33,6 +33,11 @@ function securityCheckPath() {
     const here = path.dirname(new URL(import.meta.url).pathname);
     return path.join(here, "security_check.js");
 }
+function escapeShellArg(arg) {
+    // Wrap string in single quotes and escape any internal single quotes.
+    // E.g., foo'bar -> 'foo'\''bar'
+    return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
 /**
  * Deep-merge `incoming` into `base`, preferring existing user keys.
  * For plain objects, missing keys are added and existing keys are left
@@ -144,7 +149,7 @@ function writeJsonIfChanged(filePath, contents) {
  *   - `Write|Edit|MultiEdit` — path-containment check for wiki/raw paths
  */
 function claudeCodeHookEntries(wikiRoot) {
-    const cmd = (flag) => `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    const cmd = (flag) => `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
     return [
         {
             matcher: "WebFetch",
@@ -179,7 +184,7 @@ export function installClaudeCodeHooks(wikiRoot) {
 }
 // ── Codex installer ────────────────────────────────────────────────────
 function codexHookEntries(wikiRoot) {
-    const cmd = (flag) => `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    const cmd = (flag) => `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
     return [
         { matcher: "WebFetch", command: cmd("--tool-input-url") },
         { matcher: "WebSearch", command: cmd("--tool-input-url") },
@@ -198,7 +203,7 @@ export function installCodexHooks(wikiRoot) {
 }
 // ── Cursor installer ───────────────────────────────────────────────────
 function cursorHookEntries(wikiRoot) {
-    const cmd = (flag) => `node "${securityCheckPath()}" ${flag} --wiki-root "${wikiRoot}"`;
+    const cmd = (flag) => `node ${escapeShellArg(securityCheckPath())} ${flag} --wiki-root ${escapeShellArg(wikiRoot)}`;
     return [
         { matcher: "WebFetch", command: cmd("--tool-input-url") },
         { matcher: "WebSearch", command: cmd("--tool-input-url") },
@@ -232,10 +237,10 @@ function aiderManagedBlock(wikiRoot) {
         `pre_tool_use() {`,
         `  case "$TOOL_NAME" in`,
         `    WebFetch|WebSearch)`,
-        `      node "${sc}" --tool-input-url --wiki-root "${wikiRoot}" || return 1`,
+        `      node ${escapeShellArg(sc)} --tool-input-url --wiki-root ${escapeShellArg(wikiRoot)} || return 1`,
         `      ;;`,
         `    Write|Edit|MultiEdit)`,
-        `      node "${sc}" --tool-input-path --wiki-root "${wikiRoot}" || return 1`,
+        `      node ${escapeShellArg(sc)} --tool-input-path --wiki-root ${escapeShellArg(wikiRoot)} || return 1`,
         `      ;;`,
         `  esac`,
         `}`,
