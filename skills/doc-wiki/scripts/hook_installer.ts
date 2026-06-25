@@ -126,79 +126,6 @@ function arrayContainsEntry(arr: Json[], item: Json): boolean {
   return false;
 }
 
-/**
- * True when `command` is a doc-wiki–managed hook command — one that
- * invokes our `security_check.js` guard with `--wiki-root`. Used to
- * distinguish our own entries (safe to refresh) from user-authored hooks
- * (must never be touched).
- */
-function isManagedHookCommand(command: Json | undefined): command is string {
-  return (
-    typeof command === "string" &&
-    command.includes("security_check.js") &&
-    command.includes("--wiki-root")
-  );
-}
-
-/**
- * Refresh the stored command of any pre-existing doc-wiki–managed entry
- * in `target` to match the freshly-built `incoming` entry with the same
- * matcher. `deepMergePreferExisting` skips an incoming entry whenever its
- * matcher already exists, so an install created before a security fix
- * keeps its outdated (e.g. unescaped, injectable) command string. This
- * pass upgrades those in place. Entries whose command does not invoke our
- * `security_check.js` are user-authored and left untouched.
- *
- * Handles both hook shapes:
- *   - Claude Code:   `{ matcher, hooks: [{ type, command }] }`
- *   - Codex/Cursor:  `{ matcher, command }`
- */
-function refreshManagedEntries(target: Json | undefined, incoming: Json): void {
-  if (!Array.isArray(target) || !Array.isArray(incoming)) return;
-  for (const existing of target) {
-    if (existing === null || typeof existing !== "object" || Array.isArray(existing)) {
-      continue;
-    }
-    const entry = existing as { [k: string]: Json };
-    const matcher = entry["matcher"];
-    if (typeof matcher !== "string") continue;
-    const fresh = incoming.find(
-      (i) =>
-        i !== null &&
-        typeof i === "object" &&
-        !Array.isArray(i) &&
-        (i as { [k: string]: Json })["matcher"] === matcher,
-    ) as { [k: string]: Json } | undefined;
-    if (!fresh) continue;
-
-    // Codex/Cursor shape: top-level command.
-    if (isManagedHookCommand(entry["command"]) && typeof fresh["command"] === "string") {
-      entry["command"] = fresh["command"];
-    }
-
-    // Claude Code shape: nested hooks[].command.
-    if (Array.isArray(entry["hooks"]) && Array.isArray(fresh["hooks"])) {
-      const freshCmd = (fresh["hooks"] as Json[])
-        .map((h) =>
-          h !== null && typeof h === "object" && !Array.isArray(h)
-            ? (h as { [k: string]: Json })["command"]
-            : undefined,
-        )
-        .find((c): c is string => typeof c === "string");
-      if (typeof freshCmd === "string") {
-        for (const h of entry["hooks"] as Json[]) {
-          if (h !== null && typeof h === "object" && !Array.isArray(h)) {
-            const hook = h as { [k: string]: Json };
-            if (isManagedHookCommand(hook["command"])) {
-              hook["command"] = freshCmd;
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
 // ── JSON file I/O ──────────────────────────────────────────────────────
 
 function readJsonFile(filePath: string): Json | null {
@@ -276,16 +203,7 @@ export function installClaudeCodeHooks(wikiRoot: string): InstallResult {
     },
   };
 
-  const merged = deepMergePreferExisting(existing, incoming) as {
-    [k: string]: Json;
-  };
-  const hooks = merged["hooks"];
-  if (hooks !== null && typeof hooks === "object" && !Array.isArray(hooks)) {
-    refreshManagedEntries(
-      (hooks as { [k: string]: Json })["PreToolUse"],
-      claudeCodeHookEntries(wikiRoot),
-    );
-  }
+  const merged = deepMergePreferExisting(existing, incoming);
   const installed = writeJsonIfChanged(settingsPath, merged);
   return { installed, settingsPath };
 }
@@ -312,10 +230,7 @@ export function installCodexHooks(wikiRoot: string): InstallResult {
     preToolUse: codexHookEntries(wikiRoot),
   };
 
-  const merged = deepMergePreferExisting(existing, incoming) as {
-    [k: string]: Json;
-  };
-  refreshManagedEntries(merged["preToolUse"], codexHookEntries(wikiRoot));
+  const merged = deepMergePreferExisting(existing, incoming);
   const installed = writeJsonIfChanged(settingsPath, merged);
   return { installed, settingsPath };
 }
@@ -342,10 +257,7 @@ export function installCursorHooks(wikiRoot: string): InstallResult {
     preToolUse: cursorHookEntries(wikiRoot),
   };
 
-  const merged = deepMergePreferExisting(existing, incoming) as {
-    [k: string]: Json;
-  };
-  refreshManagedEntries(merged["preToolUse"], cursorHookEntries(wikiRoot));
+  const merged = deepMergePreferExisting(existing, incoming);
   const installed = writeJsonIfChanged(settingsPath, merged);
   return { installed, settingsPath };
 }
