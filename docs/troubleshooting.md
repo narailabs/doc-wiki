@@ -6,7 +6,7 @@ Common failures, diagnostics, and fixes. If you hit something not listed here, p
 
 **Symptom:** `npm install` fails with `Unsupported engine` or `error code EBADENGINE`. Or, after install, `npm run build` works but a script throws something like `Error: Cannot find module 'better-sqlite3'` at runtime.
 
-**Cause:** doc-wiki pins `engines.node` to `>=20.0.0 <21.0.0` in [`package.json`](../package.json). Several native dependencies (`better-sqlite3`, `pdfjs-dist`, `mongodb`, `@aws-sdk/client-*`) ship prebuilt binaries that target Node 20 and won't load on Node 21+.
+**Cause:** doc-wiki pins `engines.node` to `>=20.10.0 <21.0.0` in [`package.json`](../package.json). Several native dependencies (`better-sqlite3`, `pdfjs-dist`, `mongodb`, `@aws-sdk/client-*`) ship prebuilt binaries that target Node 20 and won't load on Node 21+.
 
 **Fix:**
 

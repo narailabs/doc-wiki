@@ -4,7 +4,7 @@ Thanks for your interest. This is a small, opinionated tool — contributions th
 
 ## Prerequisites
 
-- **Node 20.x** — `package.json` caps the runtime at `>=20.0.0 <21.0.0`. Node 21+ is unsupported until upstream deps catch up.
+- **Node 20.x** — `package.json` caps the runtime at `>=20.10.0 <21.0.0`. Node 21+ is unsupported until upstream deps catch up.
 - A working `git` and `npm`.
 - For schema-cross-validation work: a database the policy gate accepts (typically dev SQLite).
 
