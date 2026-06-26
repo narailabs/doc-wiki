@@ -204,6 +204,42 @@ describe("assembleIntegrationsInputs", () => {
     expect(bundle.text).not.toContain("external-mentions");
   });
 
+  it("does NOT flag the bare word `linear` (too common a word for free-text scan)", () => {
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/perf/architecture.md",
+      "architecture",
+      "Retries use linear backoff and the scan is linear in input size.",
+    );
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    // The bare word "linear" must not produce a false-positive
+    // external-mention row; only the unambiguous "linear.app" token does.
+    expect(bundle.text).not.toContain("external-mentions");
+  });
+
+  it("DOES flag a genuine linear.app URL mention", () => {
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/eng/architecture.md",
+      "architecture",
+      "Issues are tracked at https://linear.app/acme/issue/ENG-1.",
+    );
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    expect(bundle.text).toContain("external-mentions in wiki/eng/architecture.md");
+    expect(bundle.text.toLowerCase()).toContain("linear.app");
+  });
+
+  it("DOES flag a linear:// scheme mention", () => {
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/eng/architecture.md",
+      "architecture",
+      "Tickets are referenced as linear://acme/ENG-1 in code comments.",
+    );
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    expect(bundle.text).toContain("external-mentions in wiki/eng/architecture.md");
+  });
+
   it("notes when no api pages exist", () => {
     const bundle = assembleIntegrationsInputs(wikiRoot);
     expect(bundle.notes.some((n) => n.includes("no api.md pages found"))).toBe(true);

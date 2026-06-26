@@ -1,18 +1,20 @@
 # Connectors
 
-doc-wiki itself doesn't talk to GitHub, Jira, Confluence, Notion, AWS, GCP, or your databases. External-source fetching is delegated to a single dependency — [`narai-primitives`](https://github.com/narailabs/narai-primitives) — which ships a planner-dispatcher (`gather()`) and seven read-only built-in connectors. This doc is your guide to **which connector fetches what, what credentials it needs, and how to invoke it**.
+doc-wiki itself doesn't talk to GitHub, GitLab, Jira, Confluence, Notion, Linear, AWS, GCP, or your databases. External-source fetching is delegated to a single dependency — [`narai-primitives`](https://github.com/narailabs/narai-primitives) — which ships a planner-dispatcher (`gather()`) and nine built-in connectors, which doc-wiki uses read-only. This doc is your guide to **which connector fetches what, what credentials it needs, and how to invoke it**.
 
 For the credential-reference grammar (`env:` / `keychain:` / `file:` / `cloud:`) and YAML schema, see [`configuration.md`](configuration.md). For internals — the `gather()` API, toolkit helpers, error codes, contributing a new built-in connector — see [`internals/connectors-api.md`](internals/connectors-api.md).
 
 ## Table of contents
 
 - [How connectors plug into doc-wiki](#how-connectors-plug-into-doc-wiki)
-- [The seven built-in connectors](#the-seven-built-in-connectors)
+- [The nine built-in connectors](#the-nine-built-in-connectors)
   - [`db`](#db)
   - [`github`](#github)
+  - [`gitlab`](#gitlab)
   - [`jira`](#jira)
   - [`confluence`](#confluence)
   - [`notion`](#notion)
+  - [`linear`](#linear)
   - [`aws`](#aws)
   - [`gcp`](#gcp)
 - [Credential reference grammar](#credential-reference-grammar)
@@ -30,9 +32,9 @@ Every `/doc-wiki:ingest <source>` runs a 13-step pipeline; step 7 calls `gather(
 
 You configure connectors **once** (in `~/.connectors/config.yaml`); from then on, every `/doc-wiki:ingest` and every `/doc-wiki:query` that needs external context can use them. Credentials are **lazy** — the secret is only read when a connector actually runs, and only inside the connector's subprocess. doc-wiki never sees the cleartext value.
 
-All seven connectors are **read-only**. The `db` connector additionally ships with a guard-rail policy gate (`ALLOW` / `DENY` / `ESCALATE` / `PRESENT_ONLY`) — see [`db`](#db) below.
+doc-wiki uses all nine connectors **read-only** — even where the underlying connector (e.g. `gitlab`, `linear`) also exposes write actions, doc-wiki only ever invokes their read endpoints. The `db` connector additionally ships with a guard-rail policy gate (`ALLOW` / `DENY` / `ESCALATE` / `PRESENT_ONLY`) — see [`db`](#db) below.
 
-## The seven built-in connectors
+## The nine built-in connectors
 
 A consolidated reference. Each connector has its own block under `connectors:` in `~/.connectors/config.yaml`. The starter is at [`.connectors/config.example.yaml`](../.connectors/config.example.yaml) — copy it, uncomment the connectors you want, fill in credential refs.
 
@@ -40,9 +42,11 @@ A consolidated reference. Each connector has its own block under `connectors:` i
 |---|---|---|
 | [`db`](#db) | SQL + NoSQL drivers | Schema introspection, read-only queries with policy gate |
 | [`github`](#github) | GitHub REST API | Repo info, code search, issues, PRs, file contents, releases |
+| [`gitlab`](#gitlab) | GitLab REST API (`/api/v4`) | Project info, code search, issues, merge requests, notes, releases, CI pipelines |
 | [`jira`](#jira) | Jira Cloud REST | Issue search by JQL, metadata, comments, sprint info |
 | [`confluence`](#confluence) | Confluence Cloud REST | Page content, space search, CQL queries, attachments |
 | [`notion`](#notion) | Notion API | Database query, page content, search, property listings |
+| [`linear`](#linear) | Linear GraphQL API | Issues, comments, attachments |
 | [`aws`](#aws) | AWS SDK v3 | CloudWatch metrics, Lambda info, RDS, S3, DynamoDB, STS identity |
 | [`gcp`](#gcp) | `gcloud` + `bq` CLIs | Cloud Logging, Compute Engine, BigQuery, GCS, IAM bindings |
 
@@ -133,6 +137,32 @@ npx narai github search_code --params '{"owner":"narailabs","repo":"doc-wiki","q
 
 **Notable safeguards:** `get_file` rejects paths containing `..` (path traversal prevention). All actions paginate up to 1000 results.
 
+### `gitlab`
+
+**Wraps:** GitLab REST API (`/api/v4`). Works against `gitlab.com` and self-hosted GitLab (≥ 12.x).
+
+**CLI:** `gitlab-agent-connector`.
+
+**Credentials:**
+
+```yaml
+connectors:
+  gitlab:
+    enabled: true
+    skill: gitlab-agent-connector
+    token: env:GITLAB_TOKEN           # PAT — `read_api` scope is sufficient for doc-wiki
+    # host: env:GITLAB_HOST           # self-hosted base URL, e.g. https://gitlab.example.com (default https://gitlab.com)
+    # namespace: env:GITLAB_NAMESPACE # default group/user namespace
+```
+
+**Actions (read):** project info, code search, issues, merge requests, notes, releases, and CI pipelines. (The connector also exposes write/admin actions behind its policy gate; doc-wiki only invokes reads.)
+
+**Token scope:** doc-wiki only calls read actions, so a PAT with the read-only **`read_api`** scope is sufficient — prefer it over full `api` to keep the blast radius small. Use `api` only if you also drive the connector's write/admin actions from another tool. A token lacking the scope an endpoint needs returns `AUTH_ERROR` with a scope hint.
+
+**Self-hosted:** set `GITLAB_HOST` (or `gitlab.host` in config) to your instance base URL — the connector appends `/api/v4/` to all requests.
+
+> **URL classification of self-hosted hosts.** Only `gitlab.com` / `*.gitlab.com` URLs are auto-classified as GitLab sources — the same way the `github` connector covers only `github.com`, not GitHub Enterprise hosts. Setting `GITLAB_HOST` changes where the *connector fetches from* once it is invoked, but a self-hosted host appearing in a URL (e.g. `gitlab.example.com`) is **not** auto-recognized for `/doc-wiki:ingest` source hints or cross-link classification.
+
 ### `jira`
 
 **Wraps:** Jira Cloud REST API.
@@ -197,6 +227,26 @@ connectors:
 
 **Actions:** Database query, page content retrieval, search pages, list database properties.
 
+### `linear`
+
+**Wraps:** Linear GraphQL API (`https://api.linear.app/graphql`).
+
+**CLI:** `linear-agent-connector`.
+
+**Credentials:**
+
+```yaml
+connectors:
+  linear:
+    enabled: true
+    skill: linear-agent-connector
+    api_key: env:LINEAR_API_KEY     # personal API key (Linear → Settings → API)
+```
+
+**Actions (read):** issues, comments, and attachments. (The connector also exposes write actions; doc-wiki only invokes reads.)
+
+**Note:** Linear's authorization header carries the key **without** a `Bearer` prefix — this is Linear-specific. The connector handles it for you.
+
 ### `aws`
 
 **Wraps:** AWS SDK v3 (CloudWatch metrics, Lambda info, RDS instances, S3 buckets, DynamoDB tables, STS identity).
@@ -253,7 +303,7 @@ For resolution order (user-global → per-repo overlay → environments → cons
 
 ## Adding a custom local connector
 
-For a SaaS / API / CLI that isn't in the seven built-ins, use the `/create-connector` skill (installed alongside `narai-primitives`):
+For a SaaS / API / CLI that isn't in the nine built-ins, use the `/create-connector` skill (installed alongside `narai-primitives`):
 
 ```text
 /create-connector

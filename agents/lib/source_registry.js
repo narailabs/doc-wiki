@@ -87,6 +87,23 @@ const BUILTIN_PATTERNS = [
         label: "AWS",
     },
     {
+        id: "gitlab",
+        type: "source",
+        source_schemes: ["gitlab://"],
+        source_url_patterns: [
+            { hostname: "gitlab.com" },
+            { hostname: "*.gitlab.com" },
+        ],
+        label: "GitLab",
+    },
+    {
+        id: "linear",
+        type: "source",
+        source_schemes: ["linear://"],
+        source_url_patterns: [{ hostname: "linear.app" }],
+        label: "Linear",
+    },
+    {
         id: "db",
         type: "database",
         source_schemes: ["db://"],

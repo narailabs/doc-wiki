@@ -25,7 +25,7 @@ If you only want the install + setup + first-query path, [`README.md`](../README
 
 ## 0. Prerequisites
 
-- **Node 20.x.** Run `node --version`. Node 21+ isn't supported because some upstream dependencies (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries. Use `nvm install 20` if needed.
+- **Node 20.10.0 or newer (20.x only).** Run `node --version`. Node 21+ isn't supported because some upstream dependencies (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries, and `narai-primitives` requires `>=20.10.0`. Use `nvm install 20` if needed.
 - **Claude Code, Codex, Gemini, Cursor, or Aider.** All five route into the same orchestrator skill via the wrappers shipped at the repo root.
 - **Optional:** credentials for any external service you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, a database). You can skip these now — `/doc-wiki:init` Phase 2 (Onboarding) will prompt for them — and most of this tutorial works with local files only.
 

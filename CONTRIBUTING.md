@@ -4,7 +4,7 @@ Thanks for your interest. This is a small, opinionated tool — contributions th
 
 ## Prerequisites
 
-- **Node 20.x** — `package.json` caps the runtime at `>=20.0.0 <21.0.0`. Node 21+ is unsupported until upstream deps catch up.
+- **Node 20.x** — `package.json` caps the runtime at `>=20.10.0 <21.0.0`. Node 21+ is unsupported until upstream deps catch up.
 - A working `git` and `npm`.
 - For schema-cross-validation work: a database the policy gate accepts (typically dev SQLite).
 
@@ -48,7 +48,7 @@ Read [`docs/internals/architecture.md`](docs/internals/architecture.md) for the 
 - **Shared libraries** live at `agents/lib/` — `wiki_db`, `wiki_orm`, plus standalone modules.
 - **Reference docs** live at `skills/doc-wiki/references/` — autonomy, code-locality, compilation, operations, quality.
 
-External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the seven bundled connectors. See [`docs/connectors.md`](docs/connectors.md) for the user-facing reference, [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) for the API.
+External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the nine bundled connectors. See [`docs/connectors.md`](docs/connectors.md) for the user-facing reference, [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) for the API.
 
 ## Common contributions
 
