@@ -343,9 +343,19 @@ export function assembleDeployInputs(repoRoot) {
  * integrations that aren't bundled connectors but are still worth
  * surfacing in the synthesized integrations page.
  *
- * The `db` connector is filtered out — it's a database connector, not an
- * external service in the sense the integrations page covers.
+ * Some connector ids are excluded from this free-text scan:
+ *  - `db` is a database connector, not an external service in the sense
+ *    the integrations page covers.
+ *  - `linear` is an extremely common technical word ("linear time",
+ *    "linear backoff", "nonlinear"); substring-matching it against
+ *    architecture prose produces false-positive integration mentions.
+ *    The Linear connector is still matched precisely by URL/scheme
+ *    (`linear.app` / `linear://`) via `source_registry`.
  */
+const _KEYWORD_SCAN_EXCLUDED_IDS = new Set([
+    "db",
+    "linear",
+]);
 const _COMMON_SAAS_KEYWORDS = [
     "stripe",
     "datadog",
@@ -356,7 +366,7 @@ const _COMMON_SAAS_KEYWORDS = [
     "sendgrid",
 ];
 function _getIntegrationKeywords() {
-    const fromRegistry = builtinConnectorIds().filter((id) => id !== "db");
+    const fromRegistry = builtinConnectorIds().filter((id) => !_KEYWORD_SCAN_EXCLUDED_IDS.has(id));
     return [...new Set([...fromRegistry, ..._COMMON_SAAS_KEYWORDS])];
 }
 // ── Commands bundle ────────────────────────────────────────────────

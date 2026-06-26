@@ -204,6 +204,19 @@ describe("assembleIntegrationsInputs", () => {
     expect(bundle.text).not.toContain("external-mentions");
   });
 
+  it("does NOT flag the `linear` keyword (too common a word for free-text scan)", () => {
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/perf/architecture.md",
+      "architecture",
+      "Retries use linear backoff and the scan is linear in input size.",
+    );
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    // "linear" must not produce a false-positive external-mention row;
+    // the Linear connector is matched precisely by URL/scheme instead.
+    expect(bundle.text).not.toContain("external-mentions");
+  });
+
   it("notes when no api pages exist", () => {
     const bundle = assembleIntegrationsInputs(wikiRoot);
     expect(bundle.notes.some((n) => n.includes("no api.md pages found"))).toBe(true);

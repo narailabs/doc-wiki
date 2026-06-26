@@ -159,6 +159,8 @@ connectors:
 
 **Self-hosted:** set `GITLAB_HOST` (or `gitlab.host` in config) to your instance base URL — the connector appends `/api/v4/` to all requests. A token without `api` scope returns `AUTH_ERROR` with a scope hint.
 
+> **URL classification of self-hosted hosts.** The built-in source pattern only auto-classifies `gitlab.com` / `*.gitlab.com` URLs (the same way the `github` connector only auto-classifies `github.com`, not GitHub Enterprise hosts). Setting `GITLAB_HOST` changes where the *connector fetches from* once invoked, but it does not teach `source_registry` to recognize an arbitrary self-hosted host. To get `/doc-wiki:ingest` hints and cross-link classification for a self-hosted host (e.g. `gitlab.example.com`), add a custom source pattern for it via `ecosystem.agents.custom` — see [Adding a custom local connector](#adding-a-custom-local-connector).
+
 ### `jira`
 
 **Wraps:** Jira Cloud REST API.
