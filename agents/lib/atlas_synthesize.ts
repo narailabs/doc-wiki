@@ -399,14 +399,15 @@ export function assembleDeployInputs(repoRoot: string): SynthesisBundle {
  * external service in the sense the integrations page covers.
  *
  * Some connector ids whose bare name is too ambiguous for a substring
- * scan are mapped to a more specific, unambiguous token. `linear` is an
+ * scan are mapped to more specific, unambiguous tokens. `linear` is an
  * extremely common technical word ("linear time", "linear backoff",
- * "nonlinear"), so it's scanned as `linear.app` instead — that still
- * catches genuine Linear URLs in architecture pages while avoiding
+ * "nonlinear"), so it's scanned as its source signals `linear.app` and
+ * `linear://` instead — those still catch genuine Linear URLs and
+ * `linear://` scheme mentions in architecture pages while avoiding
  * false-positive integration mentions from ordinary prose.
  */
-const _KEYWORD_OVERRIDES: Readonly<Record<string, string>> = {
-  linear: "linear.app",
+const _KEYWORD_OVERRIDES: Readonly<Record<string, readonly string[]>> = {
+  linear: ["linear.app", "linear://"],
 };
 
 const _COMMON_SAAS_KEYWORDS: readonly string[] = [
@@ -422,7 +423,7 @@ const _COMMON_SAAS_KEYWORDS: readonly string[] = [
 function _getIntegrationKeywords(): string[] {
   const fromRegistry = builtinConnectorIds()
     .filter((id) => id !== "db")
-    .map((id) => _KEYWORD_OVERRIDES[id] ?? id);
+    .flatMap((id) => _KEYWORD_OVERRIDES[id] ?? [id]);
   return [...new Set([...fromRegistry, ..._COMMON_SAAS_KEYWORDS])];
 }
 

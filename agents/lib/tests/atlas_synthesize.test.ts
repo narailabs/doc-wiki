@@ -229,6 +229,17 @@ describe("assembleIntegrationsInputs", () => {
     expect(bundle.text.toLowerCase()).toContain("linear.app");
   });
 
+  it("DOES flag a linear:// scheme mention", () => {
+    writeAtlasPage(
+      wikiRoot,
+      "wiki/eng/architecture.md",
+      "architecture",
+      "Tickets are referenced as linear://acme/ENG-1 in code comments.",
+    );
+    const bundle = assembleIntegrationsInputs(wikiRoot);
+    expect(bundle.text).toContain("external-mentions in wiki/eng/architecture.md");
+  });
+
   it("notes when no api pages exist", () => {
     const bundle = assembleIntegrationsInputs(wikiRoot);
     expect(bundle.notes.some((n) => n.includes("no api.md pages found"))).toBe(true);
