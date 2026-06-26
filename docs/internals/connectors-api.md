@@ -1,6 +1,6 @@
 # `narai-primitives` API reference
 
-Internals reference for the connector framework that doc-wiki delegates to. **This is contributor / integrator territory** — if you only want to *use* the seven built-in connectors with doc-wiki, read [`../connectors.md`](../connectors.md) instead.
+Internals reference for the connector framework that doc-wiki delegates to. **This is contributor / integrator territory** — if you only want to *use* the nine built-in connectors with doc-wiki, read [`../connectors.md`](../connectors.md) instead.
 
 This doc covers:
 
@@ -283,7 +283,7 @@ This is invariant **#4** in [the architecture contracts](architecture.md#archite
 
 ## Wiki-side decoration: `mermaid_augment.ts`
 
-After `gather()` returns, doc-wiki runs the results through [`mermaid_augment.ts`](../../agents/lib/mermaid_augment.ts). This is the single decoration site for all 7 connectors — it inspects each `DispatchResult.envelope`, recognizes connector-specific shapes (Jira issues, GitHub PRs, schema info from `db`, etc.), and adds a `mermaid: { type, title, code }` field with a wiki-ready Mermaid block.
+After `gather()` returns, doc-wiki runs the results through [`mermaid_augment.ts`](../../agents/lib/mermaid_augment.ts). This is the single decoration site for the 7 structural connectors (aws, gcp, jira, confluence, notion, github, db) — it inspects each `DispatchResult.envelope`, recognizes connector-specific shapes (Jira issues, GitHub PRs, schema info from `db`, etc.), and adds a `mermaid: { type, title, code }` field with a wiki-ready Mermaid block.
 
 The wiki page compilation step then splices these blocks into the page (idempotently, via `mermaid_inject.ts`'s `<!-- wiki-mermaid: <title> start/end -->` markers).
 

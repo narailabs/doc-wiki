@@ -30,6 +30,13 @@ connectors:
   #   skill: github-agent-connector
   #   token: env:GITHUB_TOKEN
 
+  # gitlab:
+  #   enabled: true
+  #   skill: gitlab-agent-connector
+  #   token: env:GITLAB_TOKEN            # personal access token with `api` scope
+  #   # host: env:GITLAB_HOST            # self-hosted base URL (default https://gitlab.com)
+  #   # namespace: env:GITLAB_NAMESPACE  # default group/user namespace
+
   # jira:
   #   enabled: true
   #   skill: jira-agent-connector
@@ -48,6 +55,11 @@ connectors:
   #   enabled: true
   #   skill: notion-agent-connector
   #   token: env:NOTION_TOKEN
+
+  # linear:
+  #   enabled: true
+  #   skill: linear-agent-connector
+  #   api_key: env:LINEAR_API_KEY    # personal API key (Linear → Settings → API)
 
   # aws:
   #   enabled: true

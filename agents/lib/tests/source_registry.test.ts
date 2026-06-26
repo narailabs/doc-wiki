@@ -189,7 +189,7 @@ describe("lookupBySource", () => {
 describe("initRegistry — builtin patterns", () => {
   afterEach(() => clearRegistry());
 
-  it("populates registry with the 7 builtin connectors", () => {
+  it("populates registry with the 9 builtin connectors", () => {
     initRegistry();
     const agents = listAgents();
     const names = agents.map((a) => a.name).sort();
@@ -199,7 +199,9 @@ describe("initRegistry — builtin patterns", () => {
       "wiki-db-agent",
       "wiki-gcp-agent",
       "wiki-github-agent",
+      "wiki-gitlab-agent",
       "wiki-jira-agent",
+      "wiki-linear-agent",
       "wiki-notion-agent",
     ]);
   });
@@ -209,6 +211,8 @@ describe("initRegistry — builtin patterns", () => {
     expect(lookupBySource("jira://AUTH-1")?.name).toBe("wiki-jira-agent");
     expect(lookupBySource("db://dev/users")?.name).toBe("wiki-db-agent");
     expect(lookupBySource("https://github.com/org/repo")?.name).toBe("wiki-github-agent");
+    expect(lookupBySource("https://gitlab.com/org/repo")?.name).toBe("wiki-gitlab-agent");
+    expect(lookupBySource("https://linear.app/acme/issue/ENG-1")?.name).toBe("wiki-linear-agent");
     expect(lookupBySource("https://co.atlassian.net/browse/T-1")?.name).toBe("wiki-jira-agent");
     expect(lookupBySource("https://co.atlassian.net/wiki/spaces/X")?.name).toBe("wiki-confluence-agent");
   });
@@ -279,10 +283,10 @@ describe("registeredAgentIds", () => {
     expect(ids.has("db")).toBe(true);
   });
 
-  it("returns the 7 builtin connector IDs after init", () => {
+  it("returns the 9 builtin connector IDs after init", () => {
     initRegistry();
     const ids = registeredAgentIds();
-    expect(ids).toEqual(new Set(["jira", "confluence", "github", "notion", "gcp", "aws", "db"]));
+    expect(ids).toEqual(new Set(["jira", "confluence", "github", "gitlab", "notion", "linear", "gcp", "aws", "db"]));
   });
 });
 

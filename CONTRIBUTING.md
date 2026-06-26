@@ -48,7 +48,7 @@ Read [`docs/internals/architecture.md`](docs/internals/architecture.md) for the 
 - **Shared libraries** live at `agents/lib/` — `wiki_db`, `wiki_orm`, plus standalone modules.
 - **Reference docs** live at `skills/doc-wiki/references/` — autonomy, code-locality, compilation, operations, quality.
 
-External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the seven bundled connectors. See [`docs/connectors.md`](docs/connectors.md) for the user-facing reference, [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) for the API.
+External-source fetching does **not** live in doc-wiki. It is delegated to `narai-primitives`'s `gather()` planner, which dispatches one of the nine bundled connectors. See [`docs/connectors.md`](docs/connectors.md) for the user-facing reference, [`docs/internals/connectors-api.md`](docs/internals/connectors-api.md) for the API.
 
 ## Common contributions
 

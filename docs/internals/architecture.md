@@ -54,7 +54,7 @@ flowchart TB
         Agents["Sub-agents<br/>(agents/)<br/>orm · mermaid · claude-md · readme"]
         Libs["Shared libraries<br/>(agents/lib/)<br/>wiki_db · wiki_orm · mermaid_augment"]
         Gather["gather() from narai-primitives<br/>(planner + parallel dispatcher)"]
-        Connectors["7 connectors<br/>db · github · jira · confluence<br/>notion · aws · gcp"]
+        Connectors["9 connectors<br/>db · github · gitlab · jira · confluence<br/>notion · linear · aws · gcp"]
         Gather --> Connectors
     end
     Storage[("wiki/, raw/, graph/<br/>log/, .wiki-cache/")]
@@ -209,11 +209,11 @@ Four standalone modules at the same path:
 
 ### 3d. `gather()` from `narai-primitives`
 
-External-source fetching does not live in doc-wiki at all. It is delegated to `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — a planner + parallel-dispatcher that takes a natural-language prompt and returns context from any subset of seven enabled connectors (`db`, `github`, `jira`, `confluence`, `notion`, `aws`, `gcp`).
+External-source fetching does not live in doc-wiki at all. It is delegated to `gather()` from [`narai-primitives`](https://github.com/narailabs/narai-primitives) — a planner + parallel-dispatcher that takes a natural-language prompt and returns context from any subset of nine enabled connectors (`db`, `github`, `gitlab`, `jira`, `confluence`, `notion`, `linear`, `aws`, `gcp`).
 
 doc-wiki calls `gather()` exactly once per `/doc-wiki:ingest`, in step 7 of the pipeline. The hub plans which connectors to invoke, spawns each as a child process, and returns a `DispatchResult[]` where each entry carries either an `envelope` (success) or a structured `error` (failure). The wiki then runs `applyMermaid()` on the results to add wiki-specific Mermaid blocks before compiling the final page.
 
-For the full `gather()` API, the `DispatchResult` envelope shape, and the seven connectors, see [`connectors.md`](../connectors.md).
+For the full `gather()` API, the `DispatchResult` envelope shape, and the nine connectors, see [`connectors.md`](../connectors.md).
 
 ## Diagram 2: `/doc-wiki:ingest` pipeline
 
@@ -266,7 +266,7 @@ A few subtle behaviors worth knowing:
 - **Cache key includes config version.** Bumping `cache_manager.ts`'s version constant invalidates the entire cache — used when extraction logic changes.
 - **Mermaid injection is idempotent.** `mermaid_inject.ts` wraps each block in `<!-- wiki-mermaid: <title> start/end -->`; re-ingest replaces in place.
 - **Errors from `gather()` are non-fatal.** Each connector failure surfaces as a `DispatchResult.error`; the wiki page still compiles with whatever envelopes succeeded.
-- **`applyMermaid` is the single decoration site.** All 7 connectors flow through it. If you need wiki-side Mermaid behavior for a new connector, add it to `mermaid_augment.ts` — never to a connector wrapper.
+- **`applyMermaid` is the single decoration site.** All connector results flow through it; it adds Mermaid for the 7 structural connectors (aws, gcp, jira, confluence, notion, github, db) and passes the rest through unchanged. If you need wiki-side Mermaid behavior for a new connector, add it to `mermaid_augment.ts` — never to a connector wrapper.
 
 ## Diagram 3: `gather()` internals
 

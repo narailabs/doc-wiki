@@ -84,7 +84,7 @@ doc-wiki is Apache-2.0 licensed and will stay that way. No relicensing, no rug-p
 
 ## Prerequisites
 
-- **Node 20.x.** Node 21+ isn't supported because some upstream deps (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries. Check with `node --version`; install via `nvm install 20` if needed.
+- **Node 20.10.0 or newer (20.x only).** Node 21+ isn't supported because some upstream deps (`better-sqlite3`, `pdfjs-dist`) haven't shipped Node-21 binaries, and `narai-primitives` requires `>=20.10.0`. Check with `node --version`; install via `nvm install 20` if needed.
 - **Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider** to invoke the slash commands. doc-wiki ships wrappers for each — see [Multi-platform wrappers](#multi-platform-wrappers).
 - **Optional:** credentials for any external services you want doc-wiki to read from (Jira, Confluence, GitHub, Notion, AWS, GCP, or a database). You can skip these now — `/doc-wiki:init` Phase 3 (Onboarding) will walk you through them.
 
@@ -295,7 +295,7 @@ Full diagnostics: [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 - **7 slash commands** — `/doc-wiki:init`, `:atlas`, `:ingest`, `:query`, `:lint`, `:edit`, `:stats`. See [`docs/commands.md`](docs/commands.md).
 - **3 sub-agents** — `wiki-orm-agent` (entity-to-table mapping), `wiki-mermaid-agent` (deterministic diagram generation), `wiki-claude-md-agent` (`CLAUDE.md` maintenance with managed sections).
-- **7 connectors via `narai-primitives`** — `db` / `github` / `jira` / `confluence` / `notion` / `aws` / `gcp`. All read-only. Credentials resolved inside the connector subprocess via `narai-primitives/credentials` (env var / keychain / file / cloud secret).
+- **9 connectors via `narai-primitives`** — `db` / `github` / `gitlab` / `jira` / `confluence` / `notion` / `linear` / `aws` / `gcp`. Used read-only. Credentials resolved inside the connector subprocess via `narai-primitives/credentials` (env var / keychain / file / cloud secret).
 - **4 autonomy modes** — `conservative` / `balanced` / `autonomous` / `auto`, with per-category overrides for fine-grained control.
 - **18 REST framework profiles** — atlas auto-detects HTTP endpoints from Express, FastAPI, Django, Spring, Rails, ASP.NET, and 12 more. Custom profiles via inline YAML.
 - **934 vitest tests** (5 skipped, gated behind `TEST_LIVE_*` env vars).
@@ -321,7 +321,7 @@ Documentation under [`docs/`](docs/) is organized by audience:
 |---|---|
 | [`docs/commands.md`](docs/commands.md) | Every `/doc-wiki:*` command — args, examples |
 | [`docs/configuration.md`](docs/configuration.md) | `wiki.config.yaml` and `.connectors/config.yaml` schemas, credential grammar |
-| [`docs/connectors.md`](docs/connectors.md) | The 7 built-in connectors and credentials |
+| [`docs/connectors.md`](docs/connectors.md) | The 9 built-in connectors and credentials |
 | [`docs/atlas.md`](docs/atlas.md) | The eight-phase `/doc-wiki:atlas` walkthrough |
 | [`docs/autonomy-modes.md`](docs/autonomy-modes.md) | When to pick conservative / balanced / autonomous / auto |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Common failures and fixes |
