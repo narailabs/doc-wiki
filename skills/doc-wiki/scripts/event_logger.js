@@ -19,6 +19,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+// Used to extract timestamp safely and quickly without full JSON.parse
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 // ── Timestamp helpers ───────────────────────────────────────────────
 /**
  * Produce a Python-compatible `datetime.now(timezone.utc).isoformat()`
@@ -156,7 +158,7 @@ function _readEvents(wikiRoot, since = null) {
             // leading whitespace. The character class excludes both `"` and `\` so
             // any ts containing a JSON escape (like `\+` for `+`) misses the regex
             // and safely falls through to the slow path for proper decoding.
-            const m = line.match(/^{"ts":"([^"\\]+)"/);
+            const m = TS_REGEX.exec(line);
             if (m) {
                 const entryMs = parsePythonIsoformat(m[1]);
                 // G-EVENTS-TS-STRICT: when --since is active, drop events whose
