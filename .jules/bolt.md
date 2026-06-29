@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-05-23 - Hoisting Regex Literals and using exec()
+
+**Learning:** When regexes are constructed directly inside hot loops (e.g., `line.match(/^{"ts":"([^"\\]+)"/)`), per-iteration compilation and instantiation overhead impacts parsing performance on large inputs (like big log files). Further, `String.prototype.match()` may trigger more allocations than `RegExp.prototype.exec()` when iterating over captured groups.
+**Action:** Hoist the regex literal to a module-level constant (e.g., `const TS_REGEX = /^{"ts":"([^"\\]+)"/;`) outside the loop and use `TS_REGEX.exec(line)` to extract captures efficiently in hot paths without the overhead.
