@@ -2,7 +2,7 @@
 
 Reproducible measurement of Claude Code's ticket-fix pass rate, baseline vs with a doc-wiki wiki.
 Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](../docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
-Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). Numbers: `RESULTS.md` (generated; committed when pilot runs complete).
+Methodology and caveats: [`METHODOLOGY.md`](METHODOLOGY.md). **Published numbers: [`RESULTS.md`](RESULTS.md)** — four configurations, 92 valid pairs, and a null result we publish in full: no measured autonomous pass-rate lift from the wiki in the single-repo OSS regime. Per-configuration generated reports sit alongside it (`RESULTS-<config>.md`).
 
 ## One-time setup
 

@@ -1,0 +1,983 @@
+{
+  "schema_version": 1,
+  "repo": "saleor-schema",
+  "mined_at": "2026-06-18T00:00:00Z",
+  "tickets": [
+    {
+      "issue": 19166,
+      "issue_url": "https://github.com/saleor/saleor/pull/19166",
+      "title": "Apps can be granted the MANAGE_APPS permission, allowing them to escalate beyond their initial permission scope",
+      "body": "Previously there was only partial protection against granting app a MANAGE_APPS permission.\r\n\r\nApps should not have one, because in such case it can leak of the initial permission scope.\r\n\r\nThis PR targets missing spots: commands, human/admin mutations as well\r\n\r\nNo port - this *may* be a breaking change. Users that have such apps in existing env, will not be able to reinstall them, hence I introduce it to 3.24\r\n\r\nMigration guide https://github.com/saleor/saleor-docs/pull/1785\r\n\r\n- [x] Migration - in 3.24 remove permission from apps\r\n- [x] Raise error when trying to issue token of such an app\r\n",
+      "body_sanitized": "Apps must never hold the MANAGE_APPS permission. If an app is granted MANAGE_APPS, it can be used to leak/escalate beyond the app's initial permission scope, since MANAGE_APPS would let it manage (and thus widen the permissions of) apps.\n\nCurrently there is only partial protection against granting an app the MANAGE_APPS permission. Some code paths still allow it to be assigned. The gaps span multiple entry points, including commands and human/admin (staff) mutations.\n\nExpected behavior: across all paths where app permissions can be set or modified (commands and human/admin mutations alike), it should not be possible to grant an app the MANAGE_APPS permission.\n\nNote: This is potentially a breaking change. Users who currently have apps with MANAGE_APPS in an existing environment will no longer be able to reinstall those apps.",
+      "fix_pr": 19166,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/19166",
+      "base_commit": "10ad1e201bb4b7bb297cb63beaadddbbd5e777c8",
+      "fix_commit": "4eb59810a269e068cd526eaeec6b2256e63b545e",
+      "src_files": [
+        "saleor/app/management/commands/utils.py",
+        "saleor/app/manifest_validations.py",
+        "saleor/app/migrations/0039_remove_manage_apps_permission.py",
+        "saleor/graphql/app/mutations/app_create.py",
+        "saleor/graphql/app/mutations/app_install.py",
+        "saleor/graphql/app/mutations/app_update.py",
+        "saleor/graphql/app/resolvers.py",
+        "saleor/graphql/app/utils.py"
+      ],
+      "test_files": [
+        "saleor/app/tests/test_app_commands.py",
+        "saleor/app/tests/test_manifest_validations.py",
+        "saleor/graphql/app/tests/mutations/test_app_create.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/mutations/test_app_install.py",
+        "saleor/graphql/app/tests/mutations/test_app_update.py",
+        "saleor/graphql/app/tests/queries/test_app.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_apps.py",
+        "saleor/graphql/app/tests/test_utils.py"
+      ],
+      "run_files": [
+        "saleor/app/tests/test_app_commands.py",
+        "saleor/app/tests/test_manifest_validations.py",
+        "saleor/graphql/app/tests/mutations/test_app_create.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/mutations/test_app_install.py",
+        "saleor/graphql/app/tests/mutations/test_app_update.py",
+        "saleor/graphql/app/tests/queries/test_app.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_apps.py",
+        "saleor/graphql/app/tests/test_utils.py"
+      ],
+      "changed_lines": 99,
+      "source": "pr",
+      "merged_at": "2026-05-08",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Prevent granting MANAGE_APPS to app",
+      "body_sanitized_pr": "Previously there was only partial protection against granting app a MANAGE_APPS permission.\n\nApps should not have one, because in such case it can leak of the initial permission scope.\n\nThis PR targets missing spots: commands, human/admin mutations as well\n\nNo port - this *may* be a breaking change. Users that have such apps in existing env, will not be able to reinstall them, hence I introduce it to 3.24\n\nMigration guide [link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18950,
+      "issue_url": "https://github.com/saleor/saleor/pull/18950",
+      "title": "Checkouts upgraded from versions older than 3.22 have no CheckoutDelivery record for their shipping method",
+      "body": "I want to merge this change because it adds additional `CheckoutDelivery` propagation. \r\n3.22 already have the approach to mirror any delivery assignment to `CheckoutDelivery`, but in terms of \"jump\" from older version than 3.22, we will try to re-assign the shipping method as `CheckoutDelivery`. \r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Since 3.22, any delivery assignment on a checkout is reflected as a corresponding `CheckoutDelivery` record. However, checkouts that already had a shipping method assigned before upgrading to 3.22 from an older version do not get a `CheckoutDelivery` record for that existing shipping method.\n\nWhen upgrading directly to 3.22 (or later) from a version older than 3.22, existing checkouts that have a shipping method set should also have that shipping method represented as a `CheckoutDelivery`, so that pre-existing delivery assignments are consistent with checkouts created or modified on 3.22+.",
+      "fix_pr": 18950,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18950",
+      "base_commit": "114553593e43db990a55bad6c40b69dcaa51e3d6",
+      "fix_commit": "62d3b3174beea60d6d35c9c1003a668d41cea4dc",
+      "src_files": [
+        "saleor/celeryconf.py",
+        "saleor/checkout/migrations/0093_propagate_checkout_delivery.py",
+        "saleor/checkout/migrations/tasks/saleor3_23.py"
+      ],
+      "test_files": [
+        "saleor/checkout/tests/test_migrations_tasks.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_migrations_tasks.py"
+      ],
+      "changed_lines": 129,
+      "source": "pr",
+      "merged_at": "2026-03-23",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Migrate shipping methods to checkout deliveries",
+      "body_sanitized_pr": "I want to merge this change because it adds additional `CheckoutDelivery` propagation.\n3.22 already have the approach to mirror any delivery assignment to `CheckoutDelivery`, but in terms of \"jump\" from older version than 3.22, we will try to re-assign the shipping method as `CheckoutDelivery`.",
+      "detainted": true
+    },
+    {
+      "issue": 18929,
+      "issue_url": "https://github.com/saleor/saleor/pull/18929",
+      "title": "Foreign relation `shipping_methods` on CheckoutDelivery -> Checkout has a misleading name",
+      "body": "I want to merge this change because it changes old name `shipping_methods` for foreign relation CheckoutDelivery -> Checkout. \r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "The foreign relation `shipping_methods` defines the link from `CheckoutDelivery` to `Checkout`.\n\nThe name `shipping_methods` is outdated and no longer reflects what the relation actually represents on the `CheckoutDelivery` model. This makes the relation confusing to work with, since its name does not correspond to the entity it relates.\n\nThe relation should be given a name that accurately reflects what it models on `CheckoutDelivery`.",
+      "fix_pr": 18929,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18929",
+      "base_commit": "fd463c8aae38b120f3d984fa881c1c7c61817591",
+      "fix_commit": "333febd3522379220788fabac4c716f426ccd76d",
+      "src_files": [
+        "saleor/checkout/migrations/0092_alter_checkoutdelivery_checkout.py",
+        "saleor/checkout/models.py"
+      ],
+      "test_files": [
+        "saleor/checkout/tests/fixtures/checkout.py",
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/checkout/tests/test_checkouts_query.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_delivery_context.py",
+        "saleor/graphql/checkout/tests/test_checkouts_query.py"
+      ],
+      "changed_lines": 24,
+      "source": "pr",
+      "merged_at": "2026-03-19",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Rename foreign relation shipping-methods  to deliveries",
+      "body_sanitized_pr": "I want to merge this change because it changes old name `shipping_methods` for foreign relation CheckoutDelivery -> Checkout.",
+      "detainted": true
+    },
+    {
+      "issue": 18949,
+      "issue_url": "https://github.com/saleor/saleor/pull/18949",
+      "title": "transactions query cannot be sorted or filtered by createdAt, modifiedAt, or events data",
+      "body": "- Extend `transactions` query with sorting options\r\n- Extend `transactions` where filters;\r\n  - allow filtering by  `createdAt`, `modifiedAt` and `events` data\r\n\r\n| Filter | Dalibo Link |                                                                                                                                                                                                                                                                                                                       \r\n| --- | --- |                                                                                                                                                                                                                                                                                                                                  \r\n| `created_at` range | https://explain.dalibo.com/plan/5188d3e13dg40e7b |                                                                                                                                                                                                                                                                      \r\n| `modified_at` range | https://explain.dalibo.com/plan/5ag84502c3cg023c |                                                                                                                                                                                                                                                                     \r\n| Events by `type` | https://explain.dalibo.com/plan/dddf5057adb71672 |                                                                                                                                                                                                                                                                        \r\n| Events by `created_at` | https://explain.dalibo.com/plan/35fbbe1ec0c4e1c7 |                                                                                                                                                                                                                                                                  \r\n| Events by `type` AND `created_at` | https://explain.dalibo.com/plan/78gfa1cfbd1ah6cg |    \r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "The `transactions` query currently offers no way to sort its results, and its `where` filter does not support filtering on `createdAt`, `modifiedAt`, or on `events` data.\n\nExpected: clients should be able to sort the `transactions` query results, and should be able to filter via the `where` argument by the `createdAt` and `modifiedAt` timestamps as well as by `events` data.\n\nActual: sorting options are unavailable on the query, and these fields cannot be used as `where` filters.",
+      "fix_pr": 18949,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18949",
+      "base_commit": "dfa430ac5cff8a58303f5e0e2317da07123225dc",
+      "fix_commit": "8116df6e0d927d5d14e7f00015cf11c35cf9280a",
+      "src_files": [
+        "saleor/graphql/payment/filters.py",
+        "saleor/graphql/payment/schema.py",
+        "saleor/graphql/payment/sorters.py",
+        "saleor/payment/migrations/0072_transaction_date_indexes.py",
+        "saleor/payment/models.py"
+      ],
+      "test_files": [
+        "saleor/graphql/payment/tests/queries/test_transactions_sorting.py",
+        "saleor/graphql/payment/tests/queries/test_transactions_where.py"
+      ],
+      "run_files": [
+        "saleor/graphql/payment/tests/queries/test_transactions_sorting.py",
+        "saleor/graphql/payment/tests/queries/test_transactions_where.py"
+      ],
+      "changed_lines": 176,
+      "source": "pr",
+      "merged_at": "2026-03-19",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Extend transactions sorting and filtering",
+      "body_sanitized_pr": "- Extend `transactions` query with sorting options\n- Extend `transactions` where filters;\n  - allow filtering by  `createdAt`, `modifiedAt` and `events` data\n\n| Filter | Dalibo Link |\n| --- | --- |\n| `created_at` range | https://explain.dalibo.com/plan/5188d3e13dg40e7b |\n| `modified_at` range | https://explain.dalibo.com/plan/5ag84502c3cg023c |\n| Events by `type` | https://explain.dalibo.com/plan/[sha-removed] |\n| Events by `created_at` | https://explain.dalibo.com/plan/[sha-removed] |\n| Events by `type` AND `created_at` | https://explain.dalibo.com/plan/78gfa1cfbd1ah6cg |",
+      "detainted": true
+    },
+    {
+      "issue": 18931,
+      "issue_url": "https://github.com/saleor/saleor/pull/18931",
+      "title": "Gift card events are not recorded when a gift card is used as a payment method or refunded",
+      "body": "Add gift card events when gift card is used as payment method or refunded.\r\n\r\nDashboard changes https://github.com/saleor/saleor-dashboard/pull/6419\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Gift card events are not created for the lifecycle actions that occur when a gift card is used during checkout/payment. Specifically, no event is recorded when a gift card is used as a payment method, and no event is recorded when a gift card is refunded.\n\nThese actions should produce proper gift card events so that the gift card's history accurately reflects when its balance was applied to a payment and when funds were returned to it via a refund.\n\nExpected: using a gift card as a payment method, and refunding to a gift card, each generate a corresponding gift card event capturing the action.\n\nActual: these actions occur without any associated gift card event being recorded.",
+      "fix_pr": 18931,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18931",
+      "base_commit": "696e4ff9b38335befbd9b2e5c046330543d8b080",
+      "fix_commit": "bf22f8edf9742cdcc0ad3c262e8dfb54bb522173",
+      "src_files": [
+        "saleor/giftcard/__init__.py",
+        "saleor/giftcard/events.py",
+        "saleor/giftcard/gateway.py",
+        "saleor/giftcard/migrations/0024_alter_giftcardevent_type.py",
+        "saleor/graphql/giftcard/types.py",
+        "saleor/graphql/payment/mutations/transaction/transaction_request_action.py",
+        "saleor/graphql/payment/mutations/transaction/transaction_request_refund_for_granted_refund.py",
+        "saleor/order/actions.py"
+      ],
+      "test_files": [
+        "saleor/giftcard/tests/test_gateway.py",
+        "saleor/graphql/payment/tests/mutations/test_transaction_request_action.py",
+        "saleor/order/tests/test_order_actions.py"
+      ],
+      "run_files": [
+        "saleor/giftcard/tests/test_gateway.py",
+        "saleor/graphql/payment/tests/mutations/test_transaction_request_action.py",
+        "saleor/order/tests/test_order_actions.py"
+      ],
+      "changed_lines": 138,
+      "source": "pr",
+      "merged_at": "2026-03-18",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Add proper gift card events when gift card is used as a payment method",
+      "body_sanitized_pr": "Add gift card events when gift card is used as payment method or refunded.\n\nDashboard changes [link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18915,
+      "issue_url": "https://github.com/saleor/saleor/pull/18915",
+      "title": "Gift card payments are not represented in a TransactionItem's paymentMethodDetails",
+      "body": "When a gift card is used as a payment method via the Transaction API, the TransactionItem now populates paymentMethodDetails with the new SaleorGiftcardPaymentMethodDetails type, which includes the last 4 characters of the gift card code.\r\n\r\nThis type is set internally by Saleor's gift card gateway only — it cannot be set via transactionEventReport, transactionCreate/Update mutations, or webhook responses (transactionInitializeSession / transactionProcessSession).\r\n\r\nChanges:\r\n- Add GIFT_CARD to PaymentMethodType enum\r\n- Add gift_card_display_code field to TransactionItem model\r\n- Add SaleorGiftcardPaymentMethodDetails GraphQL type with code field\r\n- Update PaymentMethodDetails.resolve_type to handle gift card type\r\n- Set payment method details in attach_gift_card_to_transaction()\r\n\r\n\r\nUI\r\n\r\n<img width=\"2356\" height=\"600\" alt=\"image\" src=\"https://github.com/user-attachments/assets/f08b2631-311d-49aa-b8be-cea756986850\" />\r\n\r\nhttps://github.com/saleor/saleor-dashboard/pull/6396",
+      "body_sanitized": "When a gift card is used as a payment method through the Transaction API, the resulting `TransactionItem` does not expose any payment method details describing the gift card. There should be a way to recognize, from a transaction, that it was paid for with a gift card, including the last 4 characters of the gift card code.\n\nExpected behavior:\n- A `TransactionItem` whose payment was made with a gift card should populate `paymentMethodDetails` with a gift-card-specific payment method details type that exposes the last 4 characters of the gift card code.\n- Gift card payment method details are an internal concern of Saleor's gift card gateway. They must only be set internally when a gift card is applied to a transaction — they must not be settable by API clients via `transactionEventReport`, `transactionCreate`/`transactionUpdate` mutations, or webhook responses.",
+      "fix_pr": 18915,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18915",
+      "base_commit": "dc72612ab293b92a9a801625b60e452d932eef74",
+      "fix_commit": "37fbfd1e24cdb645439c003d8e9fa000bcaf85fb",
+      "src_files": [
+        "saleor/giftcard/const.py",
+        "saleor/giftcard/gateway.py",
+        "saleor/graphql/payment/mutations/transaction/shared.py",
+        "saleor/graphql/payment/schema.py",
+        "saleor/graphql/payment/types.py",
+        "saleor/payment/__init__.py",
+        "saleor/payment/migrations/0069_transactionitem_gc_fields.py",
+        "saleor/payment/models.py",
+        "saleor/payment/utils.py",
+        "saleor/webhook/response_schemas/transaction.py"
+      ],
+      "test_files": [
+        "saleor/graphql/payment/tests/mutations/test_transaction_create.py",
+        "saleor/graphql/payment/tests/mutations/test_transaction_initialize.py",
+        "saleor/graphql/payment/tests/queries/test_transaction.py"
+      ],
+      "run_files": [
+        "saleor/graphql/payment/tests/mutations/test_transaction_create.py",
+        "saleor/graphql/payment/tests/mutations/test_transaction_initialize.py",
+        "saleor/graphql/payment/tests/queries/test_transaction.py"
+      ],
+      "changed_lines": 286,
+      "source": "pr",
+      "merged_at": "2026-03-11",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Add SaleorGiftcardPaymentMethodDetails to transaction",
+      "body_sanitized_pr": "When a gift card is used as a payment method via the Transaction API, the TransactionItem now populates paymentMethodDetails with the new SaleorGiftcardPaymentMethodDetails type, which includes the last 4 characters of the gift card code.\n\nThis type is set internally by Saleor's gift card gateway only — it cannot be set via transactionEventReport, transactionCreate/Update mutations, or webhook responses (transactionInitializeSession / transactionProcessSession).\n\nChanges:\n- Add GIFT_CARD to PaymentMethodType enum\n- Add gift_card_display_code field to TransactionItem model\n- Add SaleorGiftcardPaymentMethodDetails GraphQL type with code field\n- Update PaymentMethodDetails.resolve_type to handle gift card type\n- Set payment method details in attach_gift_card_to_transaction()\n\nUI\n\n<img width=\"2356\" height=\"600\" alt=\"image\" src=\"https://github.com/user-attachments/assets/[sha-removed]-311d-49aa-b8be-[sha-removed]\" />\n\n[link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18890,
+      "issue_url": "https://github.com/saleor/saleor/pull/18890",
+      "title": "fix: move all risky usages of set_password()",
+      "body": "This moves all insecure usages of `set_password()` outside of tests which could otherwise be accidentally used for production thus allowing users to bypass password requirements due to lack of validation.\r\n\r\nThis also prefixes the functions' names with `dangerously_[...]` to make it clear that these functions shouldn't be used (or rather: be used carefully).\r\n\r\nThis fixes Semgrep errors like this one:\r\n\r\n    saleor/account/utils.py\r\n    ❯❱ python.django.security.audit.unvalidated-password.unvalidated-password\r\n          ❰❰ Blocking ❱❱\r\n          The password on 'user' is being set without validating the password. Call\r\n          django.contrib.auth.password_validation.validate_password() with validation functions before setting\r\n          the password. See https://docs.djangoproject.com/en/3.0/topics/auth/passwords/ for more information.\r\n          Details: https://sg.run/OPBL\r\n\r\n           ▶▶┆ Autofix ▶ if django.contrib.auth.password_validation.validate_password(credentials[\"password\"],\r\n              user=user): user.set_password(credentials[\"password\"])\r\n          138┆ user.set_password(credentials[\"password\"])\r\n\r\nIn the future we might also want to just fully remove these hardcoded test passwords in favor of random passwords. Likewise for populatedb command.\r\n\r\nThis also removes support for custom `User` models in `./manage.py createsuperuser` command as custom models are currently not supported by our GraphQL mutations thus no one likely is using custom models. This simplifies the changes in this PR as it would be slightly trickier.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation: N/A\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "This moves all insecure usages of `set_password()` outside of tests which could otherwise be accidentally used for production thus allowing users to bypass password requirements due to lack of validation.\n\nThis also prefixes the functions' names with `dangerously_[...]` to make it clear that these functions shouldn't be used (or rather: be used carefully).\n\nThis fixes Semgrep errors like this one:\n\n    saleor/account/utils.py\n    ❯❱ python.django.security.audit.unvalidated-password.unvalidated-password\n          ❰❰ Blocking ❱❱\n          The password on 'user' is being set without validating the password. Call\n          django.contrib.auth.password_validation.validate_password() with validation functions before setting\n          the password. See https://docs.djangoproject.com/en/3.0/topics/auth/passwords/ for more information.\n          Details: https://sg.run/OPBL\n\n           ▶▶┆ Autofix ▶ if django.contrib.auth.password_validation.validate_password(credentials[\"password\"],\n              user=user): user.set_password(credentials[\"password\"])\n          138┆ user.set_password(credentials[\"password\"])\n\nIn the future we might also want to just fully remove these hardcoded test passwords in favor of random passwords. Likewise for populatedb command.\n\nThis also removes support for custom `User` models in `./manage.py createsuperuser` command as custom models are currently not supported by our GraphQL mutations thus no one likely is using custom models. This simplifies the changes in this PR as it would be slightly trickier.",
+      "fix_pr": 18890,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18890",
+      "base_commit": "3cd1430f3164c0c24c1f981023d056446dc2cbaa",
+      "fix_commit": "372d083b8132e415ee6f034b0dc2f0adb8ebe1ec",
+      "src_files": [
+        "saleor/account/management/commands/createsuperuser.py",
+        "saleor/account/models.py",
+        "saleor/account/utils.py",
+        "saleor/core/management/commands/populatedb.py",
+        "saleor/core/utils/random_data.py",
+        "saleor/graphql/account/mutations/account/account_register.py"
+      ],
+      "test_files": [
+        "saleor/account/tests/fixtures/user.py",
+        "saleor/account/tests/test_utils.py",
+        "saleor/core/tests/test_core.py",
+        "saleor/graphql/account/tests/mutations/authentication/test_set_password.py",
+        "saleor/graphql/account/tests/mutations/permission_group/test_permission_group_update.py",
+        "saleor/graphql/account/tests/queries/test_customers_where_filtering.py",
+        "saleor/graphql/account/tests/test_account_utils.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_customer_attach.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_customer_detach.py",
+        "saleor/graphql/csv/tests/queries/test_export_files.py",
+        "saleor/graphql/tests/fixtures.py",
+        "saleor/tests/e2e/conftest.py"
+      ],
+      "run_files": [
+        "saleor/account/tests/test_utils.py",
+        "saleor/core/tests/test_core.py",
+        "saleor/graphql/account/tests/mutations/authentication/test_set_password.py",
+        "saleor/graphql/account/tests/mutations/permission_group/test_permission_group_update.py",
+        "saleor/graphql/account/tests/queries/test_customers_where_filtering.py",
+        "saleor/graphql/account/tests/test_account_utils.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_customer_attach.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_customer_detach.py",
+        "saleor/graphql/csv/tests/queries/test_export_files.py"
+      ],
+      "changed_lines": 134,
+      "source": "pr",
+      "merged_at": "2026-03-05",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": false,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=false passesOnFix=false)"
+    },
+    {
+      "issue": 18843,
+      "issue_url": "https://github.com/saleor/saleor/pull/18843",
+      "title": "Search does not match results when accents differ between query and content",
+      "body": "Support accent-insensitive search:\r\n- build search vectors with removed accents\r\n- remove accent when parsing search value \r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [x] Link to documentation: https://github.com/saleor/saleor-docs/pull/1755\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Search is accent-sensitive: a query and the indexed content must use identical diacritics to match. As a result, searching with an accented term does not return records stored without accents (and vice versa), so users miss relevant results when the accent form of their query differs from how the data was entered.\n\nExpected: search should be accent-insensitive, returning matching records regardless of whether the search value or the stored content includes diacritics.",
+      "fix_pr": 18843,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18843",
+      "base_commit": "8ca163c796ad2c9b5fcce1ae4b361dac067d76d1",
+      "fix_commit": "c29d6428fed110c3d06e9aacee4a941f971fe89b",
+      "src_files": [
+        "saleor/celeryconf.py",
+        "saleor/core/postgres.py",
+        "saleor/core/search.py",
+        "saleor/core/search_tasks.py",
+        "saleor/core/utils/text.py",
+        "saleor/order/migrations/0220_update_order_search_vector.py",
+        "saleor/product/migrations/0203_mark_products_search_index_as_dirty.py",
+        "saleor/product/migrations/tasks/__init__.py",
+        "saleor/product/migrations/tasks/saleor3_23.py"
+      ],
+      "test_files": [
+        "saleor/core/tests/test_search.py",
+        "saleor/core/tests/test_text.py"
+      ],
+      "run_files": [
+        "saleor/core/tests/test_search.py",
+        "saleor/core/tests/test_text.py"
+      ],
+      "changed_lines": 111,
+      "source": "pr",
+      "merged_at": "2026-02-24",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Allow searching without accents",
+      "body_sanitized_pr": "Support accent-insensitive search:\n- build search vectors with removed accents\n- remove accent when parsing search value",
+      "detainted": true
+    },
+    {
+      "issue": 18846,
+      "issue_url": "https://github.com/saleor/saleor/pull/18846",
+      "title": "Address validation strips extra fields not part of a country's standard address format, with no way to keep them",
+      "body": "Port of https://github.com/saleor/saleor/pull/18825\r\n\r\nIntroduce `preserveAllAddressFields` flag that preserves fields that exist in the original address but are not part of the country's standard address format, and are cleared by default.\r\n\r\n- extend `shop` type with `preserveAllAddressFields`\r\n- allow defining the value in `shopSettingsUpdate` mutation\r\n- set default to `False`, so the default behaviour is not changed\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "During address validation, fields that exist on the original address but are not part of the country's standard address format are cleared (dropped). This happens by default, and there is currently no way to keep those extra fields when validating an address.\n\nIn some cases, the extra data carried on an address is meaningful and should survive validation rather than being discarded. Today there is no option to retain it — once an address is validated, any field outside the target country's expected format is lost.\n\nProvide a way for operators to opt into preserving these additional fields so that they are not removed during address validation. The existing default behavior (clearing the extra fields) must remain unchanged for anyone who does not opt in.",
+      "fix_pr": 18846,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18846",
+      "base_commit": "f47392d874ca1f4b3094bdf91db486c6d150c5d7",
+      "fix_commit": "2451f31a6a7938301307904d0ac4a0018bf44746",
+      "src_files": [
+        "saleor/account/i18n.py",
+        "saleor/graphql/account/i18n.py",
+        "saleor/graphql/checkout/mutations/checkout_complete.py",
+        "saleor/graphql/shop/mutations/shop_settings_update.py",
+        "saleor/graphql/shop/types.py",
+        "saleor/site/migrations/0044_sitesettings_preserve_all_address_fields.py",
+        "saleor/site/migrations/0045_merge_20260223_0944.py",
+        "saleor/site/models.py"
+      ],
+      "test_files": [
+        "saleor/account/tests/test_account.py",
+        "saleor/graphql/account/tests/mutations/staff/test_address_create.py",
+        "saleor/graphql/account/tests/test_i18n.py",
+        "saleor/graphql/shop/tests/mutations/test_shop_settings_update.py"
+      ],
+      "run_files": [
+        "saleor/account/tests/test_account.py",
+        "saleor/graphql/account/tests/mutations/staff/test_address_create.py",
+        "saleor/graphql/account/tests/test_i18n.py",
+        "saleor/graphql/shop/tests/mutations/test_shop_settings_update.py"
+      ],
+      "changed_lines": 98,
+      "source": "pr",
+      "merged_at": "2026-02-23",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Allow preserving address extra fields not present in allowed once during address validation",
+      "body_sanitized_pr": "Port of [link-removed]\n\nIntroduce `preserveAllAddressFields` flag that preserves fields that exist in the original address but are not part of the country's standard address format, and are cleared by default.\n\n- extend `shop` type with `preserveAllAddressFields`\n- allow defining the value in `shopSettingsUpdate` mutation\n- set default to `False`, so the default behaviour is not changed",
+      "detainted": true
+    },
+    {
+      "issue": 18789,
+      "issue_url": "https://github.com/saleor/saleor/pull/18789",
+      "title": "Add optional usage telemetry",
+      "body": "For context: https://github.com/saleor/saleor-docs/pull/1745.",
+      "body_sanitized": "There is currently no mechanism for collecting usage telemetry from the application.\n\nAdd support for optional usage telemetry, allowing usage data to be collected when enabled. The telemetry must be optional.",
+      "fix_pr": 18789,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18789",
+      "base_commit": "a371cc2a5c8c6586703165a665a366f6b12f13e6",
+      "fix_commit": "3f4ffe417acbc43c8b1d3761f2ebac894a9d9864",
+      "src_files": [
+        "saleor/__main__.py",
+        "saleor/asgi/__init__.py",
+        "saleor/asgi/usage_telemetry.py",
+        "saleor/settings.py",
+        "saleor/site/migrations/0044_sitesettings_instance_id_and_more.py",
+        "saleor/site/models.py"
+      ],
+      "test_files": [
+        "saleor/asgi/tests/test_usage_telemetry.py"
+      ],
+      "run_files": [
+        "saleor/asgi/tests/test_usage_telemetry.py"
+      ],
+      "changed_lines": 280,
+      "source": "pr",
+      "merged_at": "2026-02-12",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Introduce optional usage telemetry",
+      "body_sanitized_pr": "For context: [link-removed].",
+      "detainted": true
+    },
+    {
+      "issue": 18760,
+      "issue_url": "https://github.com/saleor/saleor/pull/18760",
+      "title": "No top-level query to list payment transactions, and order transactions cannot be filtered by PSP reference",
+      "body": "- Add `transactions` query\r\n  - Apps with `MANAGE_ORDERS`: Can see all transactions\r\n  - Apps with only `HANDLE_PAYMENTS`: Can see only transactions they created\r\n  - Staff users: Can see transactions from orders/checkouts in channels they have access to\r\n  - Supports `where` filter with `ids`, `pspReference`, and `app indentifier` filtering\r\n- Extend permissions for `transaction` query- allow fetching by users with `manage_orders`\r\n- Allow filtering order transactions by psp reference - extend `TransactionFilterInput` with `pspReference`\r\n\r\nPort of https://github.com/saleor/saleor/pull/18759\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "There is no top-level GraphQL query for listing payment transactions, and existing transaction access is too limited.\n\nRequirements:\n\n1. Provide a way to query transactions across the API, with access scoped by permission:\n   - Apps with `MANAGE_ORDERS` can see all transactions.\n   - Apps with only `HANDLE_PAYMENTS` can see only the transactions they created.\n   - Staff users can see transactions belonging to orders/checkouts in channels they have access to.\n   - The query should support filtering by transaction IDs, PSP reference, and the identifier of the app that created the transaction.\n\n2. The existing `transaction` query is too restrictive: users with the `manage_orders` permission cannot fetch a transaction. They should be permitted to do so.\n\n3. Order transactions cannot currently be filtered by PSP reference. Filtering order transactions by PSP reference should be supported.",
+      "fix_pr": 18760,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18760",
+      "base_commit": "932470c5a48a4ef5374c0e0ed649282012a6f5d5",
+      "fix_commit": "4d333d041821ec49a8a1d570e711a9779aef1c66",
+      "src_files": [
+        "saleor/graphql/order/filters.py",
+        "saleor/graphql/payment/filters.py",
+        "saleor/graphql/payment/resolvers.py",
+        "saleor/graphql/payment/schema.py",
+        "saleor/graphql/payment/types.py",
+        "saleor/payment/migrations/0066_transactionitem_psp_reference_idx.py",
+        "saleor/payment/migrations/0067_transactionitem_app_identifier_idx.py",
+        "saleor/payment/migrations/0068_merge_20260206_1216.py",
+        "saleor/payment/models.py"
+      ],
+      "test_files": [
+        "saleor/graphql/order/tests/queries/test_order_with_where.py",
+        "saleor/graphql/payment/tests/queries/test_transaction.py",
+        "saleor/graphql/payment/tests/queries/test_transactions.py",
+        "saleor/graphql/payment/tests/queries/test_transactions_where.py"
+      ],
+      "run_files": [
+        "saleor/graphql/order/tests/queries/test_order_with_where.py",
+        "saleor/graphql/payment/tests/queries/test_transaction.py",
+        "saleor/graphql/payment/tests/queries/test_transactions.py",
+        "saleor/graphql/payment/tests/queries/test_transactions_where.py"
+      ],
+      "changed_lines": 209,
+      "source": "pr",
+      "merged_at": "2026-02-09",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Add `transactions` query and extend order transactions where filter with `pspReference`",
+      "body_sanitized_pr": "- Add `transactions` query\n  - Apps with `MANAGE_ORDERS`: Can see all transactions\n  - Apps with only `HANDLE_PAYMENTS`: Can see only transactions they created\n  - Staff users: Can see transactions from orders/checkouts in channels they have access to\n  - Supports `where` filter with `ids`, `pspReference`, and `app indentifier` filtering\n- Extend permissions for `transaction` query- allow fetching by users with `manage_orders`\n- Allow filtering order transactions by psp reference - extend `TransactionFilterInput` with `pspReference`\n\nPort of [link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18738,
+      "issue_url": "https://github.com/saleor/saleor/pull/18738",
+      "title": "Gift card search does not match on tags or the last 4 characters of the gift card code",
+      "body": "- Allow searching also by tags and last 4 chars of gift card code\r\n- Add migration to mark gift cards search index as dirty \r\n\r\nFixing https://github.com/saleor/saleor/issues/18643\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Searching for gift cards should let users find a gift card by its tags and by the last 4 characters of its code. Currently neither of these is searchable: queries using a gift card's tag values or the trailing 4 characters of a gift card code do not return the matching gift card.\n\nExpected: gift card search returns matches when the search term corresponds to a gift card's tags or to the last 4 characters of the gift card code.\n\nAffected area: gift card search.",
+      "fix_pr": 18738,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18738",
+      "base_commit": "6a44a5b244d710e4dcf3dc8f91b129d37b145cdb",
+      "fix_commit": "332e00b48d206d96ef3127ee1bcee961e670c4ad",
+      "src_files": [
+        "saleor/celeryconf.py",
+        "saleor/giftcard/migrations/0023_mark_gift_cards_search_vector_as_dirty.py",
+        "saleor/giftcard/migrations/tasks/__init__.py",
+        "saleor/giftcard/migrations/tasks/saleor3_22.py",
+        "saleor/giftcard/search.py",
+        "saleor/graphql/giftcard/mutations/gift_card_update.py",
+        "saleor/settings.py"
+      ],
+      "test_files": [
+        "saleor/graphql/giftcard/tests/mutations/test_gift_card_update.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card_search.py"
+      ],
+      "run_files": [
+        "saleor/graphql/giftcard/tests/mutations/test_gift_card_update.py",
+        "saleor/graphql/giftcard/tests/queries/test_gift_card_search.py"
+      ],
+      "changed_lines": 77,
+      "source": "pr",
+      "merged_at": "2026-02-03",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Add tags and last 4 chars to gift card search vector",
+      "body_sanitized_pr": "- Allow searching also by tags and last 4 chars of gift card code\n- Add migration to mark gift cards search index as dirty\n\nFixing [link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18717,
+      "issue_url": "https://github.com/saleor/saleor/pull/18717",
+      "title": "Deprecate `hasVariants` field on `ProductType`",
+      "body": "Deprecate the `hasVariants` field on `ProductType`. This setting is a legacy artifact from the former Simple/Configurable product distinction. Products can have multiple variants regardless of this flag. Previously, it only prevented assigning variant attributes to a product type; this restriction will no longer apply.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "The `hasVariants` field on `ProductType` is a legacy artifact from the former Simple/Configurable product distinction and should be deprecated.\n\nProducts can have multiple variants regardless of this flag, so the setting no longer reflects a meaningful constraint. Currently, the flag only prevents assigning variant attributes to a product type; this restriction should no longer apply.",
+      "fix_pr": 18717,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18717",
+      "base_commit": "a047cef2564d4943e24d05dd301cfdfe912b5ae4",
+      "fix_commit": "a057b4b5adf0e7815fabfc78b8ddd9db37618614",
+      "src_files": [
+        "saleor/graphql/product/bulk_mutations/product_variant_bulk_create.py",
+        "saleor/graphql/product/filters/product_type.py",
+        "saleor/graphql/product/mutations/attributes.py",
+        "saleor/graphql/product/mutations/product_type/product_type_create.py",
+        "saleor/graphql/product/mutations/product_variant/product_variant_create.py",
+        "saleor/graphql/product/mutations/product_variant/product_variant_update.py",
+        "saleor/graphql/product/types/channels.py",
+        "saleor/graphql/product/types/products.py",
+        "saleor/product/models.py",
+        "saleor/product/utils/costs.py"
+      ],
+      "test_files": [
+        "saleor/graphql/product/tests/deprecated/test_product_channel_listing_update.py",
+        "saleor/graphql/product/tests/mutations/test_product_channel_listing_update.py",
+        "saleor/graphql/product/tests/mutations/test_product_variant_create.py",
+        "saleor/graphql/product/tests/queries/test_category_query.py",
+        "saleor/graphql/product/tests/test_attributes.py"
+      ],
+      "run_files": [
+        "saleor/graphql/product/tests/deprecated/test_product_channel_listing_update.py",
+        "saleor/graphql/product/tests/mutations/test_product_channel_listing_update.py",
+        "saleor/graphql/product/tests/mutations/test_product_variant_create.py",
+        "saleor/graphql/product/tests/queries/test_category_query.py",
+        "saleor/graphql/product/tests/test_attributes.py"
+      ],
+      "changed_lines": 180,
+      "source": "pr",
+      "merged_at": "2026-01-30",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Deprecate `hasVariants` field on `ProductType`",
+      "body_sanitized_pr": "Deprecate the `hasVariants` field on `ProductType`. This setting is a legacy artifact from the former Simple/Configurable product distinction. Products can have multiple variants regardless of this flag. Previously, it only prevented assigning variant attributes to a product type; this restriction will no longer apply.",
+      "detainted": true
+    },
+    {
+      "issue": 18728,
+      "issue_url": "https://github.com/saleor/saleor/pull/18728",
+      "title": "Inactive vouchers can be assigned to draft orders when include_draft_order_in_voucher_usage is disabled",
+      "body": "Port of https://github.com/saleor/saleor/pull/18726\r\n\r\nAlways verify that the voucher is active before assigning it to a draft order, regardless of the `include_draft_order_in_voucher_usage` setting.\r\n\r\nCurrently, when `include_draft_order_in_voucher_usage` is set to False, only the used condition is skipped during validation. This behavior may change in the future and requires further discussion.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "When assigning a voucher to a draft order, the voucher's active status is not consistently enforced.\n\nExpected behavior: A voucher should always be verified as active before it can be assigned to a draft order, regardless of the value of the `include_draft_order_in_voucher_usage` setting.\n\nActual behavior: When `include_draft_order_in_voucher_usage` is set to False, the voucher validation skips more than just the usage/used condition — the active check is not enforced in this case, allowing inactive vouchers to be assigned to draft orders.",
+      "fix_pr": 18728,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18728",
+      "base_commit": "18d554f15479dd485c2017c0e6b90efcf937365c",
+      "fix_commit": "a047cef2564d4943e24d05dd301cfdfe912b5ae4",
+      "src_files": [
+        "saleor/discount/models.py",
+        "saleor/discount/utils/voucher.py",
+        "saleor/graphql/order/mutations/draft_order_cleaner.py"
+      ],
+      "test_files": [
+        "saleor/graphql/order/tests/mutations/test_draft_order_create.py",
+        "saleor/graphql/order/tests/mutations/test_draft_order_update.py"
+      ],
+      "run_files": [
+        "saleor/graphql/order/tests/mutations/test_draft_order_create.py",
+        "saleor/graphql/order/tests/mutations/test_draft_order_update.py"
+      ],
+      "changed_lines": 97,
+      "source": "pr",
+      "merged_at": "2026-01-29",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Improve voucher validations in draft orders",
+      "body_sanitized_pr": "Port of [link-removed]\n\nAlways verify that the voucher is active before assigning it to a draft order, regardless of the `include_draft_order_in_voucher_usage` setting.\n\nCurrently, when `include_draft_order_in_voucher_usage` is set to False, only the used condition is skipped during validation. This behavior may change in the future and requires further discussion.",
+      "detainted": true
+    },
+    {
+      "issue": 18651,
+      "issue_url": "https://github.com/saleor/saleor/pull/18651",
+      "title": "Checkout and Order share the same address instances",
+      "body": "Port of https://github.com/saleor/saleor/pull/18647\r\n\r\n- Prepare a copy of checkout addresses in case the checkout is not removed in `OrderFromCheckout` mutation\r\n- Add migration to do not share address instances anymore between `Checkout` and `Order` objects\r\n\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Addresses are shared (the same address instance is referenced) between `Checkout` and `Order` objects. When an order is created from a checkout via the `OrderFromCheckout` mutation, the resulting `Order` ends up pointing at the same address records as the originating `Checkout` rather than having its own independent copies.\n\nThis shared-instance relationship is a problem because:\n- When the checkout is not removed after the order is created, the `Checkout` and the resulting `Order` continue to reference the same address records, so changes to one are reflected in the other.\n- More broadly, `Checkout` and `Order` objects should not share address instances at all.\n\nExpected behavior: an `Order` created from a `Checkout` should have its own independent address records, so that subsequent modifications to the checkout's addresses (or the order's) do not affect the other object.",
+      "fix_pr": 18651,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18651",
+      "base_commit": "cb00e41d9e5cf4c22f8df4058293ee1613cd98cc",
+      "fix_commit": "d3847fa5f5187c625010e866d5ed383515f43318",
+      "src_files": [
+        "saleor/checkout/complete_checkout.py",
+        "saleor/checkout/migrations/0083_fix_shared_address_instances.py",
+        "saleor/checkout/migrations/0087_merge_20251223_1336.py",
+        "saleor/checkout/migrations/tasks/saleor3_21.py"
+      ],
+      "test_files": [
+        "saleor/checkout/tests/test_migrations_tasks.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_migrations_tasks.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py"
+      ],
+      "changed_lines": 98,
+      "source": "pr",
+      "merged_at": "2026-01-08",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Fix shared adress instances",
+      "body_sanitized_pr": "Port of [link-removed]\n\n- Prepare a copy of checkout addresses in case the checkout is not removed in `OrderFromCheckout` mutation\n- Add migration to do not share address instances anymore between `Checkout` and `Order` objects",
+      "detainted": true
+    },
+    {
+      "issue": 18626,
+      "issue_url": "https://github.com/saleor/saleor/pull/18626",
+      "title": "__repr__ of CheckoutLine and CheckoutLineInfo is excessively verbose, making debug logs unreadable",
+      "body": "Before:\r\n\r\n```\r\nCheckoutLineInfo(line=CheckoutLine(variant=<ProductVariant: 12345-EU>\r\n, quantity=1), variant=<ProductVariant: 12345-EU>, product=<saleor.pr\r\noduct.models.Product(pk=12345, name='Test Product')>, product_type=<s\r\naleor.product.models.ProductType(pk=1, name='Product with Variants')>\r\n, collections=[<Collection: Collection 1>, <Collection: Collection 2>\r\n, <Collection: Collection 3>, <Collection: Collection 4>, <Collection\r\n: Collection 5>, <Collection: Collection 6>, <Collection: Collection \r\n7>, <Collection: Collection 8>, <Collection: Collection 9>, <Collecti\r\non: Collection 10>, <Collection: Collection 11>, <Collection: Collect\r\nion 12>, <Collection: Collection 13>, <Collection: Collection 14>, <C\r\nollection: Collection 15>, <Collection: Collection 16>, <Collection: \r\nCollection 17>, <Collection: Collection 18>, <Collection: Collection \r\n19>, <Collection: Collection 20>, <Collection: Collection 21>, <Colle\r\nction: Collection 22>, <Collection: Collection 23>, <Collection: Coll\r\nection 24>, <Collection: Collection 25>, <Collection: Collection 26>,\r\n <Collection: Collection 27>, <Collection: Collection 28>, <Collectio\r\nn: Collection 29>, <Collection: Collection 30>, <Collection: Collecti\r\non 31>, <Collection: Collection 32>, <Collection: Collection 33>, <Co\r\nllection: Collection 34>, <Collection: Collection 35>, <Collection: C\r\nollection 36>, <Collection: Collection 37>, <Collection: Collection 3\r\n8>, <Collection: Collection 39>, <Collection: Collection 40>, <Collec\r\ntion: Colle...\r\n```\r\n\r\nAfter:\r\n\r\n```\r\nCheckoutLineInfo(line=<CheckoutLine: variant=<ProductVariant: 12345-EU\r\n>, quantity=1, total=23.500 EUR>, variant=<ProductVariant: 12345-EU>, \r\nproduct=<Product: pk=12345, name='Test Product'>, product_type=<Produc\r\ntType: pk=1, name='Product with Variants'>, discounts=[], voucher=None\r\n, voucher_code=None>\r\n```\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "The `__repr__` of `CheckoutLineInfo` and `CheckoutLine` is excessively verbose. It expands every related object — variant, product, product_type, and the full collections list — producing hundreds of lines of output for a single line.\n\nThis makes debug logs unreadable when inspecting checkout lines.\n\nExpected: the debug representation of `CheckoutLine` and `CheckoutLineInfo` should be concise.",
+      "fix_pr": 18626,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18626",
+      "base_commit": "bb7e9fbb23dbe57d7af07fe33f8eb227c9241be6",
+      "fix_commit": "71e51650abc5c9a98a72a002d2283df869011789",
+      "src_files": [
+        "saleor/checkout/fetch.py",
+        "saleor/checkout/models.py",
+        "saleor/core/pricing/interface.py",
+        "saleor/product/models.py"
+      ],
+      "test_files": [
+        "saleor/checkout/tests/test_cart.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_cart.py"
+      ],
+      "changed_lines": 20,
+      "source": "pr",
+      "merged_at": "2025-12-16",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Improve the debug representation of CheckoutLine and CheckoutLineInfo",
+      "body_sanitized_pr": "Before:\n\n```\nCheckoutLineInfo(line=CheckoutLine(variant=<ProductVariant: 12345-EU>\n, quantity=1), variant=<ProductVariant: 12345-EU>, product=<saleor.pr\noduct.models.Product(pk=12345, name='Test Product')>, product_type=<s\naleor.product.models.ProductType(pk=1, name='Product with Variants')>\n, collections=[<Collection: Collection 1>, <Collection: Collection 2>\n, <Collection: Collection 3>, <Collection: Collection 4>, <Collection\n: Collection 5>, <Collection: Collection 6>, <Collection: Collection\n7>, <Collection: Collection 8>, <Collection: Collection 9>, <Collecti\non: Collection 10>, <Collection: Collection 11>, <Collection: Collect\nion 12>, <Collection: Collection 13>, <Collection: Collection 14>, <C\nollection: Collection 15>, <Collection: Collection 16>, <Collection:\nCollection 17>, <Collection: Collection 18>, <Collection: Collection\n19>, <Collection: Collection 20>, <Collection: Collection 21>, <Colle\nction: Collection 22>, <Collection: Collection 23>, <Collection: Coll\nection 24>, <Collection: Collection 25>, <Collection: Collection 26>,\n <Collection: Collection 27>, <Collection: Collection 28>, <Collectio\nn: Collection 29>, <Collection: Collection 30>, <Collection: Collecti\non 31>, <Collection: Collection 32>, <Collection: Collection 33>, <Co\nllection: Collection 34>, <Collection: Collection 35>, <Collection: C\nollection 36>, <Collection: Collection 37>, <Collection: Collection 3\n8>, <Collection: Collection 39>, <Collection: Collection 40>, <Collec\ntion: Colle...\n```\n\nAfter:\n\n```\nCheckoutLineInfo(line=<CheckoutLine: variant=<ProductVariant: 12345-EU\n>, quantity=1, total=23.500 EUR>, variant=<ProductVariant: 12345-EU>,\nproduct=<Product: pk=12345, name='Test Product'>, product_type=<Produc\ntType: pk=1, name='Product with Variants'>, discounts=[], voucher=None\n, voucher_code=None>\n```",
+      "detainted": true
+    },
+    {
+      "issue": 18573,
+      "issue_url": "https://github.com/saleor/saleor/pull/18573",
+      "title": "AppExtension configuration still stored in legacy `target`/`http_target_method` fields instead of the new `settings` field",
+      "body": "Replaces #18518\r\n\r\n- [x] Fix tests for migration\r\n- [x] Benchmark migration\r\n\r\n## Summary\r\n\r\nThis PR migrates AppExtension data from the old `target` and `http_target_method` fields to the new `settings` JSON field format. The migration is performed asynchronously using a Celery task to avoid blocking deployments.\r\n\r\n## Changes\r\n\r\n- **Database Migration**: Added migration `0035_app_extensions_mount_target_settings_reshape.py` that triggers a post-migrate signal to enqueue the data migration task\r\n- **Celery Task**: Implemented `fill_app_extension_settings_task` that migrates data in batches of 100 records\r\n- **Data Migration Logic**:\r\n  - For `WIDGET` target: moves `http_target_method` to `settings.widgetTarget.method`\r\n  - For `NEW_TAB` target: moves `http_target_method` to `settings.newTabTarget.method`\r\n  - Preserves existing non-empty settings (only fills empty settings objects)\r\n  - Processes records in batches for performance\r\n- **Model Changes**: Removed enum constraints from `mount` and `target` fields to allow more flexibility\r\n- **Tests**: Added comprehensive test coverage for the migration task\r\n\r\n## Migration Strategy\r\n\r\nThe migration uses a post-migrate signal to enqueue a Celery task, ensuring:\r\n- Non-blocking deployment process\r\n- Batch processing for better performance\r\n- Safe migration that preserves existing settings\r\n- Only migrates AppExtension records with empty settings\r\n\r\n## Test Plan\r\n\r\n- [x] Migration task implemented with Celery\r\n- [x] Tests cover all scenarios (widget, new_tab, skip filled settings)\r\n- [ ] Verify migration runs successfully on staging",
+      "body_sanitized": "AppExtension configuration data is stored in the legacy `target` and `http_target_method` fields, but it should live in the new `settings` JSON field format. Existing AppExtension records need to have their data moved into the `settings` field.\n\nRequirements for the resulting data:\n- Existing non-empty `settings` values must be preserved (not overwritten).\n- For AppExtensions whose target is WIDGET or NEW_TAB, the `http_target_method` value must be mapped into the corresponding shape within `settings`.",
+      "fix_pr": 18573,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18573",
+      "base_commit": "3bf31ab2fefca154d841803c9fc71057938ce5f9",
+      "fix_commit": "bb7e9fbb23dbe57d7af07fe33f8eb227c9241be6",
+      "src_files": [
+        "saleor/app/migrations/0035_app_extensions_mount_target_settings_reshape.py",
+        "saleor/app/migrations/0036_app_extensions_loosen_target.py",
+        "saleor/app/migrations/0037_app_extensions_loosen_mount.py",
+        "saleor/app/migrations/tasks/__init__.py",
+        "saleor/app/migrations/tasks/saleor3_23.py",
+        "saleor/app/models.py",
+        "saleor/celeryconf.py"
+      ],
+      "test_files": [
+        "saleor/app/tests/tasks/__init__.py",
+        "saleor/app/tests/tasks/test_saleor3_23.py"
+      ],
+      "run_files": [
+        "saleor/app/tests/tasks/test_saleor3_23.py"
+      ],
+      "changed_lines": 115,
+      "source": "pr",
+      "merged_at": "2025-12-16",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Migrate AppExtension data to new settings format using Celery task",
+      "body_sanitized_pr": "Replaces #18518\n\n## Summary\n\nThis PR migrates AppExtension data from the old `target` and `http_target_method` fields to the new `settings` JSON field format. The migration is performed asynchronously using a Celery task to avoid blocking deployments.\n\n## Changes\n\n- **Database Migration**: Added migration `0035_app_extensions_mount_target_settings_reshape.py` that triggers a post-migrate signal to enqueue the data migration task\n- **Celery Task**: Implemented `fill_app_extension_settings_task` that migrates data in batches of 100 records\n- **Data Migration Logic**:\n  - For `WIDGET` target: moves `http_target_method` to `settings.widgetTarget.method`\n  - For `NEW_TAB` target: moves `http_target_method` to `settings.newTabTarget.method`\n  - Preserves existing non-empty settings (only fills empty settings objects)\n  - Processes records in batches for performance\n- **Model Changes**: Removed enum constraints from `mount` and `target` fields to allow more flexibility\n- **Tests**: Added comprehensive test coverage for the migration task\n\n## Migration Strategy\n\nThe migration uses a post-migrate signal to enqueue a Celery task, ensuring:\n- Non-blocking deployment process\n- Batch processing for better performance\n- Safe migration that preserves existing settings\n- Only migrates AppExtension records with empty settings\n\n## Test Plan",
+      "detainted": true
+    },
+    {
+      "issue": 18610,
+      "issue_url": "https://github.com/saleor/saleor/pull/18610",
+      "title": "Duplicated gift lines appear on Checkout and Order",
+      "body": "Port of https://github.com/saleor/saleor/pull/18586\r\n\r\nClear duplicated gift lines on Checkout and ORder.\r\nPrevent creating duplicated lines\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "Gift lines can be duplicated on a Checkout and on an Order, so the same gift line appears more than once.\n\nExpected behavior: a given gift line should appear only once on a Checkout or Order. Duplicate gift lines should never be created, and any existing duplicate gift lines that have already been produced should no longer be present.\n\nAffected area: gift lines on Checkout and Order.",
+      "fix_pr": 18610,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18610",
+      "base_commit": "d24336188b88c0ac93712245550cccea856fc00a",
+      "fix_commit": "3bf31ab2fefca154d841803c9fc71057938ce5f9",
+      "src_files": [
+        "saleor/celeryconf.py",
+        "saleor/checkout/migrations/0077_checkout_idx_checkout_created_at.py",
+        "saleor/checkout/migrations/0078_clean_duplicated_gift_lines.py",
+        "saleor/checkout/migrations/0082_merge_20251211_1339.py",
+        "saleor/checkout/migrations/0086_merge_20251212_0956.py",
+        "saleor/checkout/migrations/tasks/saleor3_20.py",
+        "saleor/checkout/models.py",
+        "saleor/discount/utils/promotion.py",
+        "saleor/order/migrations/0198_clean_duplicated_gift_lines.py",
+        "saleor/order/migrations/0207_merge_20251211_1339.py",
+        "saleor/order/migrations/0219_merge_20251212_0955.py",
+        "saleor/order/migrations/tasks/saleor3_20.py"
+      ],
+      "test_files": [
+        "saleor/graphql/checkout/tests/benchmark/test_checkout_mutations.py"
+      ],
+      "run_files": [
+        "saleor/graphql/checkout/tests/benchmark/test_checkout_mutations.py"
+      ],
+      "changed_lines": 279,
+      "source": "pr",
+      "merged_at": "2025-12-15",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Clear and prevent duplicated gift lines",
+      "body_sanitized_pr": "Port of [link-removed]\n\nClear duplicated gift lines on Checkout and ORder.\nPrevent creating duplicated lines",
+      "detainted": true
+    },
+    {
+      "issue": 18578,
+      "issue_url": "https://github.com/saleor/saleor/pull/18578",
+      "title": "Obsolete validation code remains for removed AppExtension fields (mount, target, options)",
+      "body": "## Summary\r\nRemoves obsolete validation code for deprecated AppExtension fields that were removed in #18571. This cleanup removes:\r\n- Manifest validation functions for `mount`, `target`, and `options` fields\r\n- Pydantic validators for extension options (newTabTarget, widgetTarget)\r\n- URL validation logic specific to different target types\r\n- 153 lines of tests for the deleted validation functions\r\n\r\nAdditionally marks the legacy enums (`AppExtensionMount`, `AppExtensionTarget`, `AppExtensionHttpMethod`) as deprecated by renaming them to `Deprecated*` variants, signaling their obsolescence while maintaining backward compatibility in the database layer.\r\n\r\n## Changes\r\n\r\n### Manifest Validations (`manifest_validations.py`)\r\n- Removed `_clean_extension_url_with_only_path` - validated relative URLs for different targets\r\n- Simplified `_clean_extension_url` - now only validates app URL, removed target-specific logic\r\n- Removed validation for POST method extensions with hostname matching\r\n- Removed imports: `PydanticValidationError`, `AppExtensionMount`, `AppExtensionTarget`\r\n- Added `DEFAULT_APP_TARGET` constant for fallback handling\r\n\r\n### Validators (`validators.py`)\r\n- Removed `NewTabTargetOptions` Pydantic model\r\n- Removed `WidgetTargetOptions` Pydantic model\r\n- Removed `AppExtensionOptions` Pydantic model with mutual exclusivity validation\r\n- Removed `validate_POST_or_GET_http_method` validator\r\n- Removed 60 lines of validation code\r\n\r\nThe legacy enums are now marked as deprecated (via naming convention) to signal that while they remain in the database layer for backward compatibility, they should not be used in new code.\r\n",
+      "body_sanitized": "The AppExtension fields `mount`, `target`, and `options` have been removed, but validation code for these deprecated fields still exists. This now-obsolete validation logic is dead code and should be cleaned up.",
+      "fix_pr": 18578,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18578",
+      "base_commit": "68e80f40e6a4f670a2a4b5265cc94db4b0a35cfa",
+      "fix_commit": "b356a525ba2ab918b85b6b617ac4df499e70e247",
+      "src_files": [
+        "saleor/app/installation_utils.py",
+        "saleor/app/manifest_validations.py",
+        "saleor/app/models.py",
+        "saleor/app/types.py",
+        "saleor/app/validators.py",
+        "saleor/graphql/app/resolvers.py",
+        "saleor/graphql/app/types.py"
+      ],
+      "test_files": [
+        "saleor/app/tests/fixtures/app_extension.py",
+        "saleor/app/tests/test_installation_utils.py",
+        "saleor/app/tests/test_validators.py",
+        "saleor/graphql/app/tests/benchmarks/test_app_extensions.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_app_extensions.py"
+      ],
+      "run_files": [
+        "saleor/app/tests/test_installation_utils.py",
+        "saleor/app/tests/test_validators.py",
+        "saleor/graphql/app/tests/benchmarks/test_app_extensions.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_app_extensions.py"
+      ],
+      "changed_lines": 263,
+      "source": "pr",
+      "merged_at": "2025-12-08",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Remove obsolete extension validation for app extensions",
+      "body_sanitized_pr": "## Summary\nRemoves obsolete validation code for deprecated AppExtension fields that were removed in #18571. This cleanup removes:\n- Manifest validation functions for `mount`, `target`, and `options` fields\n- Pydantic validators for extension options (newTabTarget, widgetTarget)\n- URL validation logic specific to different target types\n- 153 lines of tests for the deleted validation functions\n\nAdditionally marks the legacy enums (`AppExtensionMount`, `AppExtensionTarget`, `AppExtensionHttpMethod`) as deprecated by renaming them to `Deprecated*` variants, signaling their obsolescence while maintaining backward compatibility in the database layer.\n\n## Changes\n\n### Manifest Validations (`manifest_validations.py`)\n- Removed `_clean_extension_url_with_only_path` - validated relative URLs for different targets\n- Simplified `_clean_extension_url` - now only validates app URL, removed target-specific logic\n- Removed validation for POST method extensions with hostname matching\n- Removed imports: `PydanticValidationError`, `AppExtensionMount`, `AppExtensionTarget`\n- Added `DEFAULT_APP_TARGET` constant for fallback handling\n\n### Validators (`validators.py`)\n- Removed `NewTabTargetOptions` Pydantic model\n- Removed `WidgetTargetOptions` Pydantic model\n- Removed `AppExtensionOptions` Pydantic model with mutual exclusivity validation\n- Removed `validate_POST_or_GET_http_method` validator\n- Removed 60 lines of validation code\n\nThe legacy enums are now marked as deprecated (via naming convention) to signal that while they remain in the database layer for backward compatibility, they should not be used in new code.",
+      "detainted": true
+    },
+    {
+      "issue": 18543,
+      "issue_url": "https://github.com/saleor/saleor/pull/18543",
+      "title": "`CheckoutComplete` raises `DatabaseError`",
+      "body": "Port of https://github.com/saleor/saleor/pull/18527\r\n\r\nPrevent raising `DatabaseError` in case save is called with `update_fields` on non existing instance.\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "The `CheckoutComplete` mutation can raise a `DatabaseError`. This happens when `save` is called with `update_fields` on a non-existing instance.\n\n`CheckoutComplete` should not raise a `DatabaseError` in this situation.",
+      "fix_pr": 18543,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18543",
+      "base_commit": "ec9c4bac76380ca77ee6d4751ea586c6ad7af847",
+      "fix_commit": "909d452917cdd370b63a970aa6e596285cca71b3",
+      "src_files": [
+        "saleor/checkout/calculations.py",
+        "saleor/checkout/complete_checkout.py",
+        "saleor/checkout/models.py",
+        "saleor/checkout/utils.py",
+        "saleor/graphql/checkout/mutations/checkout_complete.py"
+      ],
+      "test_files": [
+        "saleor/checkout/tests/test_calculations.py",
+        "saleor/graphql/checkout/tests/benchmark/test_checkout_mutations.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py"
+      ],
+      "run_files": [
+        "saleor/checkout/tests/test_calculations.py",
+        "saleor/graphql/checkout/tests/benchmark/test_checkout_mutations.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py"
+      ],
+      "changed_lines": 90,
+      "source": "pr",
+      "merged_at": "2025-11-25",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Prevent raising `DatabaseError` in `CheckoutComplete`",
+      "body_sanitized_pr": "Port of [link-removed]\n\nPrevent raising `DatabaseError` in case save is called with `update_fields` on non existing instance.",
+      "detainted": true
+    },
+    {
+      "issue": 18475,
+      "issue_url": "https://github.com/saleor/saleor/pull/18475",
+      "title": "Fix missing external shipping metadata on the order ",
+      "body": "I want to merge this change because it fixes missing external shipping metadata on the order created from checkout.\r\n\r\nPort https://github.com/saleor/saleor/pull/18434\r\n\r\n⚠️\r\nFrom version 3.23 onwards, we plan to denormalise the shipping method metadata for the built-in shipping method during the order creation process. - Will be done in a separate PR. \r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change because it fixes missing external shipping metadata on the order created from checkout.\n\nPort [link-removed]\n\n⚠️\nFrom version 3.23 onwards, we plan to denormalise the shipping method metadata for the built-in shipping method during the order creation process. - Will be done in a separate PR.",
+      "fix_pr": 18475,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18475",
+      "base_commit": "4fdb3714e3e30c7f20a81bc7cda2340d04f8faab",
+      "fix_commit": "90a3d34a7db5cde02dffb99f8152003588cc76e8",
+      "src_files": [
+        "saleor/checkout/complete_checkout.py",
+        "saleor/graphql/order/types.py",
+        "saleor/order/migrations/0206_order_shipping_method_metadata_and_more.py",
+        "saleor/order/migrations/0218_merge_20251112_1035.py",
+        "saleor/order/models.py",
+        "saleor/webhook/response_schemas/shipping.py",
+        "saleor/webhook/transport/shipping.py"
+      ],
+      "test_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_payment.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py",
+        "saleor/graphql/order/tests/queries/test_order.py",
+        "saleor/webhook/tests/response_schemas/test_shipping.py"
+      ],
+      "run_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_payment.py",
+        "saleor/graphql/checkout/tests/mutations/test_checkout_complete_with_transactions.py",
+        "saleor/graphql/checkout/tests/mutations/test_order_create_from_checkout.py",
+        "saleor/graphql/order/tests/queries/test_order.py",
+        "saleor/webhook/tests/response_schemas/test_shipping.py"
+      ],
+      "changed_lines": 77,
+      "source": "pr",
+      "merged_at": "2025-11-13",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "issue": 18427,
+      "issue_url": "https://github.com/saleor/saleor/pull/18427",
+      "title": "AssignedVariantAttributeValue has no direct relation to the Variant model",
+      "body": "Port of https://github.com/saleor/saleor/pull/18394\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "`AssignedVariantAttributeValue` does not have a direct relation to the `Variant` model. It should be able to directly reference the `Variant` it is associated with.",
+      "fix_pr": 18427,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18427",
+      "base_commit": "533a1a82f6e1cf16e5a60bdabd5050efd391f58a",
+      "fix_commit": "8c015055427da0a944a53cd47c1d9f33bbc28928",
+      "src_files": [
+        "saleor/attribute/migrations/0034_assignedpageattributevalue_page_data_migration.py",
+        "saleor/attribute/migrations/0036_assignedproductattributevalue_product_data_migration.py",
+        "saleor/attribute/migrations/0055_assignedvariantattributevalue_variant.py",
+        "saleor/attribute/models/product_variant.py",
+        "saleor/attribute/utils.py"
+      ],
+      "test_files": [
+        "saleor/attribute/tests/test_utils.py"
+      ],
+      "run_files": [
+        "saleor/attribute/tests/test_utils.py"
+      ],
+      "changed_lines": 132,
+      "source": "pr",
+      "merged_at": "2025-11-06",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": true
+      },
+      "title_pr": "Add a new field on AssignedVariantAttributeValue to store relation to Variant model",
+      "body_sanitized_pr": "Port of [link-removed]",
+      "detainted": true
+    },
+    {
+      "issue": 18422,
+      "issue_url": "https://github.com/saleor/saleor/pull/18422",
+      "title": "Extend checkout external shipping id max length",
+      "body": "I want to merge this change to extend the checkout external shipping ID max length\r\n\r\nPort https://github.com/saleor/saleor/pull/18420\r\n\r\n<!-- Please mention all relevant issue numbers. -->\r\n<!-- GitHub issue number is required for external contributions. -->\r\n\r\n# Impact\r\n\r\n- [ ] New migrations\r\n- [ ] New/Updated API fields or mutations\r\n- [ ] Deprecated API fields or mutations\r\n- [ ] Removed API types, fields, or mutations\r\n\r\n# Docs\r\n\r\n<!-- Docs are stored in a separate repository: https://github.com/saleor/saleor-docs/. -->\r\n<!-- Please provide a link to the PR that updates documentation for your changes. -->\r\n<!-- If changes in docs are not required, please mention that in the description. -->\r\n\r\n- [ ] Link to documentation:\r\n\r\n# Pull Request Checklist\r\n\r\n<!-- Please keep this section. It will make the maintainer's life easier. -->\r\n\r\n- [ ] Privileged queries and mutations are either absent or guarded by proper permission checks\r\n- [ ] Database queries are optimized and the number of queries is constant\r\n- [ ] Database migrations are either absent or optimized for zero downtime\r\n- [ ] The changes are covered by test cases\r\n- [ ] All new fields/inputs/mutations have proper labels added (`ADDED_IN_X`, `PREVIEW_FEATURE`, etc.)\r\n- [ ] All migrations have proper dependencies\r\n- [ ] All indexes are added concurrently in migrations\r\n- [ ] All RunSql and RunPython migrations have revert option defined\r\n",
+      "body_sanitized": "I want to merge this change to extend the checkout external shipping ID max length\n\nPort [link-removed]",
+      "fix_pr": 18422,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18422",
+      "base_commit": "3d23b7612e23cdd157510c3d8e9603a085e451f4",
+      "fix_commit": "a767eea219a9ab4cff4b75ad74fd3d2dcbfe417f",
+      "src_files": [
+        "saleor/checkout/migrations/0080_alter_checkout_external_shipping_method_id.py",
+        "saleor/checkout/migrations/0081_merge_20251103_0924.py",
+        "saleor/checkout/models.py"
+      ],
+      "test_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_delivery_method_update.py"
+      ],
+      "run_files": [
+        "saleor/graphql/checkout/tests/mutations/test_checkout_delivery_method_update.py"
+      ],
+      "changed_lines": 33,
+      "source": "pr",
+      "merged_at": "2025-11-03",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    },
+    {
+      "issue": 18397,
+      "issue_url": "https://github.com/saleor/saleor/pull/18397",
+      "title": "Add new extension fields and deprecate legacy enum-based fields",
+      "body": "Port of https://github.com/saleor/saleor/pull/18396",
+      "body_sanitized": "Port of [link-removed]",
+      "fix_pr": 18397,
+      "fix_pr_url": "https://github.com/saleor/saleor/pull/18397",
+      "base_commit": "032b98afff2026468336882ffc04f235243fc4fc",
+      "fix_commit": "3d23b7612e23cdd157510c3d8e9603a085e451f4",
+      "src_files": [
+        "saleor/app/installation_utils.py",
+        "saleor/app/manifest_validations.py",
+        "saleor/app/migrations/0033_appextension_settings.py",
+        "saleor/app/models.py",
+        "saleor/app/validators.py",
+        "saleor/graphql/app/types.py"
+      ],
+      "test_files": [
+        "saleor/app/tests/test_validators.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_app_extensions.py"
+      ],
+      "run_files": [
+        "saleor/app/tests/test_validators.py",
+        "saleor/graphql/app/tests/mutations/test_app_fetch_manifest.py",
+        "saleor/graphql/app/tests/queries/test_app_extension.py",
+        "saleor/graphql/app/tests/queries/test_app_extensions.py"
+      ],
+      "changed_lines": 114,
+      "source": "pr",
+      "merged_at": "2025-11-03",
+      "calibration": {
+        "paths_stable": true,
+        "tests_fail_on_base": true,
+        "tests_pass_on_fix": false
+      },
+      "excluded": "calibration-failed (stable=true failsOnBase=true passesOnFix=false)"
+    }
+  ]
+}

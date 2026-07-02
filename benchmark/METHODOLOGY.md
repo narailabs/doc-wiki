@@ -19,6 +19,8 @@
 - OSS repos ≠ enterprise codebases. The author's enterprise-codebase experience (the README hero number) is an anecdote, not this benchmark's claim; the benchmark's claim is whatever RESULTS.md says.
 - Ticket discovery uses GitHub's `closingIssuesReferences` (keyword-linked issues only) — PRs that reference an issue solely in free-text prose are not mined, so the candidate pool understates true fix volume. Selection bias is toward well-linked, process-followed fixes.
 - Rebase-merged PRs can make `base_commit` (merge-commit parent) partially contain the fix; the calibration gate excludes them. `merge_parents` on each ticket record flags true merge commits (=2); rebase merges have a single parent and are detectable only via calibration.
-- `--max-turns` (default 80) and container timeout (default 1800s): final pilot values recorded here when calibration completes.
+- `--max-turns` and container timeout: all published runs used the defaults (80 turns, 1800 s). Only `--model` varied between the two saleor configurations (`claude-sonnet-4-6` vs `claude-opus-4-8`).
+- Ticket dedup: the miner's PR-as-ticket fallback admits backport/cherry-pick duplicates of the same underlying bug (on saleor, 25 tickets ≈ 15 unique bugs across 7 backport families). Duplicates make single-run paired comparison noisier than the pair count suggests — a flaked baseline on one family member reads as a "wiki win". RESULTS.md analyzes the affected cells explicitly.
+- Headline rates are computed over **valid pairs** (both arms graded); the per-configuration generated reports also print raw per-arm graded counts, which differ where one arm hit an infrastructure error (e.g. saleor-schema #18543 baseline, dropped from the paired tally).
 
-**Reproduction:** see [README.md](README.md). Total cost and wall-clock for the published runs: recorded in RESULTS.md when the pilot completes.
+**Reproduction:** see [README.md](README.md). Session cost of the published runs is itemized in [RESULTS.md](RESULTS.md) ($212.45 across the four configurations, plus wiki-overlay builds).

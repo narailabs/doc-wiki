@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "repo": "saleor-schema",
+  "runs": {
+    "19166:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T17:46:48.982Z",
+      "finished_at": "2026-06-18T17:54:23.691Z",
+      "cost_usd": 1.1090898500000002,
+      "session_id": "f28635fd-d4db-4ded-90c2-7097724d34bf",
+      "detail": "tests-failed"
+    },
+    "19166:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T17:54:23.692Z",
+      "finished_at": "2026-06-18T18:06:43.171Z",
+      "cost_usd": 1.7438341999999998,
+      "session_id": "8b008c54-0419-4219-9b4f-53f1efc1b72a",
+      "detail": "tests-failed"
+    },
+    "18950:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T18:06:43.172Z",
+      "finished_at": "2026-06-18T18:17:37.758Z",
+      "cost_usd": 1.3023247000000002,
+      "session_id": "df43dfd0-3dd2-4285-9c1d-9c658786037e",
+      "detail": "tests-failed"
+    },
+    "18950:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T18:17:37.758Z",
+      "finished_at": "2026-06-18T18:45:02.573Z",
+      "cost_usd": 2.3226555999999996,
+      "session_id": "c433470d-8fe1-4dcb-b224-1a5a70f9a387",
+      "detail": "tests-failed"
+    },
+    "18929:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-18T18:45:02.574Z",
+      "finished_at": "2026-06-18T18:49:43.295Z",
+      "cost_usd": 0.4890571500000001,
+      "session_id": "9a0cac13-3eef-46c0-ba56-6690476774b1",
+      "detail": "tests-passed"
+    },
+    "18929:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T18:49:43.296Z",
+      "finished_at": "2026-06-18T18:52:56.371Z",
+      "cost_usd": 0.4146685,
+      "session_id": "c59b7b6e-1db8-41de-9e79-95f6be5c847c",
+      "detail": "tests-failed"
+    },
+    "18949:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T19:05:47.423Z",
+      "finished_at": "2026-06-18T19:14:49.021Z",
+      "cost_usd": 1.8046244999999999,
+      "session_id": "a68db560-2ad6-4452-9592-8ba4d9959a40",
+      "detail": "tests-failed"
+    },
+    "18931:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T19:14:49.022Z",
+      "finished_at": "2026-06-18T19:28:08.227Z",
+      "cost_usd": 2.0060504,
+      "session_id": "b910f2d3-8aba-4487-8da1-a9679647485f",
+      "detail": "tests-failed"
+    },
+    "18931:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T19:28:08.228Z",
+      "finished_at": "2026-06-18T19:43:09.892Z",
+      "cost_usd": 2.1563270500000002,
+      "session_id": "c8a30a60-257c-476d-b339-ed3c9611c07b",
+      "detail": "tests-failed"
+    },
+    "18915:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T19:52:13.002Z",
+      "finished_at": "2026-06-18T20:02:55.141Z",
+      "cost_usd": 2.811950000000001,
+      "session_id": "8947bff7-85b2-449d-a13b-48c952872e03",
+      "detail": "tests-failed"
+    },
+    "18843:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:02:55.142Z",
+      "finished_at": "2026-06-18T20:09:16.547Z",
+      "cost_usd": 0.7269592500000001,
+      "session_id": "22ace874-0a2f-4b1c-866a-d9a7dfa5b0fc",
+      "detail": "tests-failed"
+    },
+    "18843:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:09:16.547Z",
+      "finished_at": "2026-06-18T20:19:15.223Z",
+      "cost_usd": 1.3451419000000002,
+      "session_id": "80b8a575-01f8-49d5-9904-77b574dda956",
+      "detail": "tests-failed"
+    },
+    "18846:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:19:15.224Z",
+      "finished_at": "2026-06-18T20:30:56.182Z",
+      "cost_usd": 1.6211443,
+      "session_id": "da86f08a-210d-44b8-8704-04c085a7aea2",
+      "detail": "tests-failed"
+    },
+    "18846:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:30:56.183Z",
+      "finished_at": "2026-06-18T20:40:35.982Z",
+      "cost_usd": 1.5915341999999997,
+      "session_id": "ab64997e-8afc-44e1-9e50-140962456a40",
+      "detail": "tests-failed"
+    },
+    "18789:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:40:35.983Z",
+      "finished_at": "2026-06-18T20:49:40.825Z",
+      "cost_usd": 1.0891769000000002,
+      "session_id": "9fa1ae6f-391a-4ed5-abb7-344d40173407",
+      "detail": "tests-failed"
+    },
+    "18789:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:49:40.826Z",
+      "finished_at": "2026-06-18T20:58:57.137Z",
+      "cost_usd": 1.2409324500000003,
+      "session_id": "95c151fd-b7e8-45fb-bd21-366962f76911",
+      "detail": "tests-failed"
+    },
+    "18760:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T20:58:57.139Z",
+      "finished_at": "2026-06-18T21:11:07.390Z",
+      "cost_usd": 2.26927375,
+      "session_id": "234156a3-fecc-4a47-9a36-3a637f4e9f0a",
+      "detail": "tests-failed"
+    },
+    "18760:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:11:07.392Z",
+      "finished_at": "2026-06-18T21:20:26.019Z",
+      "cost_usd": 1.8483631499999997,
+      "session_id": "21d7332b-f7bb-4ccd-8b18-3d0bab1e12a0",
+      "detail": "tests-failed"
+    },
+    "18738:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:20:26.020Z",
+      "finished_at": "2026-06-18T21:24:57.332Z",
+      "cost_usd": 0.4301720000000001,
+      "session_id": "5a354992-d925-43c1-bdea-9e90992046f1",
+      "detail": "tests-failed"
+    },
+    "18738:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:24:57.333Z",
+      "finished_at": "2026-06-18T21:29:37.282Z",
+      "cost_usd": 0.4387759,
+      "session_id": "45c13801-a0b1-4bb3-9a75-ef1df130d903",
+      "detail": "tests-failed"
+    },
+    "18717:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:29:37.283Z",
+      "finished_at": "2026-06-18T21:38:43.362Z",
+      "cost_usd": 1.0398528999999996,
+      "session_id": "bafbe5a6-c149-4c12-8316-38ea78909268",
+      "detail": "tests-failed"
+    },
+    "18717:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:38:43.363Z",
+      "finished_at": "2026-06-18T21:50:03.017Z",
+      "cost_usd": 1.2454176999999997,
+      "session_id": "ec9033ec-ec06-478d-98ec-0b5afb7beb8f",
+      "detail": "tests-failed"
+    },
+    "18728:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:50:03.018Z",
+      "finished_at": "2026-06-18T21:58:38.410Z",
+      "cost_usd": 1.15064075,
+      "session_id": "cddafd8f-37ac-44f8-8bef-29ccdb61deea",
+      "detail": "tests-failed"
+    },
+    "18728:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T21:58:38.411Z",
+      "finished_at": "2026-06-18T22:07:49.680Z",
+      "cost_usd": 1.2210805999999998,
+      "session_id": "0564fe7c-ed38-493f-acc4-2b505860cd50",
+      "detail": "tests-failed"
+    },
+    "18651:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:07:49.681Z",
+      "finished_at": "2026-06-18T22:14:24.368Z",
+      "cost_usd": 0.8438554999999999,
+      "session_id": "6e640500-40eb-49c0-9f9f-564c2cea46f6",
+      "detail": "tests-failed"
+    },
+    "18651:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:14:24.368Z",
+      "finished_at": "2026-06-18T22:20:37.786Z",
+      "cost_usd": 0.9742153499999999,
+      "session_id": "97736afc-501b-49a5-ae84-5f526226f713",
+      "detail": "tests-failed"
+    },
+    "18626:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:20:37.788Z",
+      "finished_at": "2026-06-18T22:26:12.824Z",
+      "cost_usd": 0.58302,
+      "session_id": "d0c10509-7fa0-4507-8c9a-049c9cd0ebff",
+      "detail": "tests-failed"
+    },
+    "18626:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:26:12.825Z",
+      "finished_at": "2026-06-18T22:30:25.253Z",
+      "cost_usd": 0.48633515000000005,
+      "session_id": "7896e1fc-a6ef-443d-887b-53a2e80e6940",
+      "detail": "tests-failed"
+    },
+    "18573:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:30:25.254Z",
+      "finished_at": "2026-06-18T22:36:31.621Z",
+      "cost_usd": 0.5776817000000001,
+      "session_id": "273250bc-0252-43f6-9f8a-0e90d698cba7",
+      "detail": "tests-failed"
+    },
+    "18573:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:36:31.622Z",
+      "finished_at": "2026-06-18T22:42:08.240Z",
+      "cost_usd": 0.7319445499999999,
+      "session_id": "41e71cdc-5ccf-4d7c-bc42-7719e7e97f15",
+      "detail": "tests-failed"
+    },
+    "18610:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-18T22:42:08.241Z",
+      "finished_at": "2026-06-18T22:51:51.866Z",
+      "cost_usd": 1.2923588499999998,
+      "session_id": "681ee8ff-d198-4793-864b-6976b69ddc63",
+      "detail": "tests-passed"
+    },
+    "18610:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T22:51:51.867Z",
+      "finished_at": "2026-06-18T23:16:21.291Z",
+      "cost_usd": 2.0145014999999997,
+      "session_id": "5899498c-b864-40c8-a120-6e2b66a9c8f9",
+      "detail": "tests-failed"
+    },
+    "18578:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-18T23:16:21.292Z",
+      "finished_at": "2026-06-18T23:27:44.832Z",
+      "cost_usd": 1.63958065,
+      "session_id": "4a7ac762-975d-4b2a-bcd0-1273e5d562d9",
+      "detail": "tests-failed"
+    },
+    "18578:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-18T23:27:44.833Z",
+      "finished_at": "2026-06-18T23:41:52.678Z",
+      "cost_usd": 1.90808995,
+      "session_id": "f47a8c96-bc3d-438b-b147-197777051bf7",
+      "detail": "tests-failed"
+    },
+    "18427:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-19T00:25:59.046Z",
+      "finished_at": "2026-06-19T00:40:26.683Z",
+      "cost_usd": 1.9597587,
+      "session_id": "d5b97b82-8b76-4738-adf9-cc905ab5b5d1",
+      "detail": "tests-passed"
+    },
+    "18427:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-19T00:40:26.685Z",
+      "finished_at": "2026-06-19T00:45:54.650Z",
+      "cost_usd": 0.9960581500000001,
+      "session_id": "82a859a7-7691-440c-96dd-171e2314dc48",
+      "detail": "tests-passed"
+    },
+    "18949:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-19T00:46:33.648Z",
+      "finished_at": "2026-06-19T00:57:17.125Z",
+      "cost_usd": 2.1101678500000003,
+      "session_id": "7fb383d1-db64-4cee-a19f-ee8c08c5f23d",
+      "detail": "tests-passed"
+    },
+    "18915:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-19T00:57:17.128Z",
+      "finished_at": "2026-06-19T01:08:26.798Z",
+      "cost_usd": 2.1843383,
+      "session_id": "1af11abb-edc4-458a-a566-d0763a2ec205",
+      "detail": "tests-failed"
+    },
+    "18543:baseline": {
+      "status": "pending",
+      "finished_at": "2026-06-19T01:34:56.184Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\nUsing CPython 3.12.13\nCreating virtual environment at: .venv\nResolved 238 packages in 0.88ms\n   Building html-to-draftjs==1.0.1\nDownloading pydantic-core (1.8MiB)\nDownloa"
+    },
+    "18543:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-19T01:34:56.186Z",
+      "finished_at": "2026-06-19T01:49:16.089Z",
+      "cost_usd": 2.2641616499999997,
+      "session_id": "5b1c08f8-a7ce-4abe-9df8-358ff1124c24",
+      "detail": "tests-failed"
+    }
+  }
+}

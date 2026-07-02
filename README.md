@@ -1,7 +1,7 @@
 # doc-wiki
 
 <p align="center">
-  <a href="media/demo.mp4"><img src="media/demo-hero.gif" alt="doc-wiki demo — autonomous ticket-fix accuracy from ~10% to ~50% with doc-wiki" width="720"/></a>
+  <a href="media/demo.mp4"><img src="media/demo-hero.gif" alt="doc-wiki demo — a living, ecosystem-aware wiki your coding agent reads" width="720"/></a>
 </p>
 <p align="center">
   <em>60-second demo: <a href="media/demo.mp4">media/demo.mp4</a> · 2-minute product overview: <a href="media/product-explainer.mp4">media/product-explainer.mp4</a> · reproducible benchmark: <a href="benchmark/"><code>benchmark/</code></a></em>
@@ -12,11 +12,11 @@
 </p>
 
 <p align="center">
-  Your coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider — reads an ecosystem-aware wiki of your code (single repo, monolith, or root-of-microservices in submodules) + Jira / Confluence / GitHub / Notion / AWS / GCP + ORM / DB schemas before it touches the diff. On the author's enterprise codebase, autonomous fix-rate climbed from <strong>~10% to ~50%</strong>, with the remaining tickets shipping noticeably faster.
+  Your coding agent — Claude Code, Codex, Antigravity, OpenCode, Gemini, Cursor, or Aider — reads an ecosystem-aware wiki of your code (single repo, monolith, or root-of-microservices in submodules) before it touches the diff. One command, <code>/doc-wiki:atlas</code>, documents the whole codebase: per-topic architecture pages, <strong>ER diagrams derived from your actual ORM models</strong>, a <strong>cross-service map</strong> generated automatically when it sees more than one service, and cited answers via <code>/doc-wiki:query</code>. Jira / Confluence / GitHub / GitLab / Notion / Linear / AWS / GCP and your DB schemas route in through one connector planner — configure credentials once.
 </p>
 
 <p align="center">
-  <sub><em>That's one engineer's result on one large, ecosystem-heavy codebase — an anecdote, not a benchmark. Yours will be different: simpler codebases or richer ecosystem context (more Jira / Confluence / DB schemas to ingest) can push the number higher; thin codebases with little external context to draw on will land lower. A hardened cross-OSS benchmark (V2) ships at <a href="benchmark/"><code>benchmark/</code></a> — pilot numbers pending; run it on your own repo to see yours.</em></sub>
+  <sub><em>Does the wiki make the agent fix more tickets <strong>fully autonomously</strong>? We built a hardened benchmark and measured: four configurations, 92 paired runs on OSS repos — <strong>no measured lift</strong>, and we publish that null in full at <a href="benchmark/RESULTS.md"><code>benchmark/RESULTS.md</code></a>. What doc-wiki demonstrably gives you is the artifact: the map, the diagrams, the history, the cited answers — context you and your agent navigate together. The author's ~10%→~50% experience on a private 500k-LOC enterprise codebase is exactly that: one engineer's anecdote, in a regime (ecosystem-heavy enterprise code, human in the loop) the benchmark doesn't reach. Scales down too: a small single-repo project gets the same wiki, leaner.</em></sub>
 </p>
 
 <p align="center">
@@ -58,11 +58,15 @@ doc-wiki documents the codebase from wherever you run `/doc-wiki:atlas`. Three p
 
 ## Reproducible benchmark
 
-A hardened SWE-bench-style harness ships in [`benchmark/`](benchmark/) (pilot numbers pending) — container-isolated runs with an Anthropic-only egress firewall, sanitized ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
+A hardened SWE-bench-style harness ships in [`benchmark/`](benchmark/) — container-isolated runs with an Anthropic-only egress firewall, sanitized + detainted ticket bodies, training-data contamination floors, and pre-registered test calibration. Design: [`docs/superpowers/specs/2026-06-10-benchmark-harness-design.md`](docs/superpowers/specs/2026-06-10-benchmark-harness-design.md).
 
-An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md). New numbers will be published here when the V2 pilot (vitest-dev/vitest) completes.
+**The published result is a null, and we ship it in full:** across four configurations (vitest and saleor, Sonnet and Opus, including a schema-ticket regime hand-picked to favor the wiki) — 92 valid ticket pairs — the wiki did **not** improve the agent's autonomous ticket-fix pass rate (baseline 57/92 vs wiki 54/92). The per-regime mechanics (an 88% baseline ceiling on one repo, a 21% floor on the schema set, and a backport-duplicate artifact behind the one positive-looking cell) are analyzed in [`benchmark/RESULTS.md`](benchmark/RESULTS.md). What the benchmark does *not* measure — and where doc-wiki actually lives — is human-in-the-loop work on enterprise codebases with cross-service and external-service context. We make no quantitative claim about that regime until there's a benchmark for it.
 
-The "~10% to ~50%" headline on this README is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal.
+Why publish a null against our own tool? Because the alternative — shipping the one favorable-looking cell — is how dev-tool launches lose trust. The harness is the deliverable: re-run it, swap the ticket list, argue with the numbers.
+
+An earlier (V1) run of this benchmark was **withdrawn** on 2026-06-10: its sessions had unrestricted network access, several curated ticket bodies carried root-cause analysis, and there were no training-data contamination controls — together these inflate both arms, so the numbers were not defensible in either direction. The V1 post-mortem stays in [`benchmark/ANALYSIS.md`](benchmark/ANALYSIS.md).
+
+The "~10% to ~50%" figure mentioned above is the author's measurement on a **private 500k-LOC enterprise codebase**, not an OSS benchmark — explicitly anecdotal, and from human-in-the-loop use.
 
 ## Apache 2.0 — forever
 
