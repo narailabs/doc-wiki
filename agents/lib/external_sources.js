@@ -1,13 +1,18 @@
 import * as path from "node:path";
-import { initRegistry, lookupBySource } from "./source_registry.js";
+import { initRegistryFromConfig, lookupBySource } from "./source_registry.js";
 import { walkCodebase } from "./repo_walker.js";
 // ── Registry bootstrap ────────────────────────────────────────────────
 let _registryReady = false;
 function ensureRegistry() {
     if (_registryReady)
         return;
-    initRegistry();
+    // Builtins + `ecosystem.agents.custom` from wiki.config.yaml (cwd-probed).
+    initRegistryFromConfig();
     _registryReady = true;
+}
+/** Reset registry state (test helper). */
+export function _resetRegistry() {
+    _registryReady = false;
 }
 // ── DB-scheme fallback patterns ───────────────────────────────────────
 /**

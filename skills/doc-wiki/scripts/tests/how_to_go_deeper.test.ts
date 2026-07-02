@@ -6,16 +6,18 @@
  * `gather()`. Service-specific CLI hints (e.g. `wiki agent jira`) are
  * gone — they were a vestige of the per-service wrappers.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
   buildHowToGoDeeper,
   classifySource,
+  _resetRegistry,
   type AgentId,
 } from "../how_to_go_deeper.js";
-import { SCRIPTS_DIR } from "./fixtures.js";
+import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
 
 const CLI = path.join(SCRIPTS_DIR, "how_to_go_deeper.js");
 
@@ -226,5 +228,91 @@ describe("how_to_go_deeper CLI", () => {
     const result = runCli(["--sources", JSON.stringify([1, 2, 3])]);
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("array of strings");
+  });
+});
+
+// ── Custom agents from wiki.config.yaml ──────────────────────────────
+
+describe("custom agents from wiki.config.yaml", () => {
+  let tmpDir: string;
+  let prevCwd: string;
+
+  const CUSTOM_CONFIG = [
+    "wiki:",
+    "  name: test-wiki",
+    "ecosystem:",
+    "  agents:",
+    "    custom:",
+    "      - name: kb",
+    '        source_schemes: ["kb://"]',
+    "        invocation_template:",
+    "          label: Knowledge Base",
+    "",
+  ].join("\n");
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath();
+    prevCwd = process.cwd();
+    _resetRegistry();
+  });
+
+  afterEach(() => {
+    process.chdir(prevCwd);
+    _resetRegistry();
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("classifies a custom scheme registered in <cwd>/wiki.config.yaml", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    process.chdir(tmpDir);
+    const out = buildHowToGoDeeper(["kb://article-42"]);
+    expect(out).toContain("**Knowledge Base:**");
+    expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("skips malformed custom entries without failing the run", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      fs.writeFileSync(
+        path.join(tmpDir, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: test-wiki",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          '      - source_schemes: ["broken://"]', // missing name
+          "      - name: kb",
+          '        source_schemes: ["kb://"]',
+          "        invocation_template:",
+          "          label: Knowledge Base",
+          "",
+        ].join("\n"),
+      );
+      process.chdir(tmpDir);
+      const out = buildHowToGoDeeper(["kb://article-42", "jira://AUTH-1"]);
+      expect(out).toContain("**Knowledge Base:**");
+      expect(out).toContain("**Jira:**");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("stays builtins-only when no wiki.config.yaml is present", () => {
+    process.chdir(tmpDir);
+    // Unmatched scheme falls through to the local-path classifier
+    expect(classifySource("kb://article-42")?.agent).toBeUndefined();
+    expect(classifySource("jira://AUTH-1")?.agent).toBe("jira");
+  });
+
+  it("CLI picks up custom agents from the working directory", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    const stdout = execFileSync(
+      "node",
+      [CLI, "--sources", JSON.stringify(["kb://article-42"])],
+      { encoding: "utf-8", cwd: tmpDir },
+    );
+    expect(stdout).toContain("**Knowledge Base:**");
+    expect(stdout).toContain('/doc-wiki:ingest "kb://article-42"');
   });
 });

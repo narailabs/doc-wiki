@@ -5,11 +5,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { makeTmpPath, cleanupTmpPath, writeConfigYaml } from "./fixtures.js";
 
 import {
   classifySource,
   detectExternalSources,
+  _resetRegistry,
   type ExternalSourceEntry,
 } from "../external_sources.js";
 
@@ -275,5 +276,45 @@ describe("detectExternalSources", () => {
     expect(path.isAbsolute(dbEntries[0]!.file)).toBe(false);
     // Should use forward slashes
     expect(dbEntries[0]!.file).not.toContain("\\");
+  });
+});
+
+// ── classifySource — custom agents from wiki.config.yaml ─────────────
+
+describe("classifySource with custom agents", () => {
+  let tmpDir: string;
+  let prevCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("external-sources-custom-");
+    prevCwd = process.cwd();
+    _resetRegistry();
+  });
+
+  afterEach(() => {
+    process.chdir(prevCwd);
+    _resetRegistry();
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("classifies a custom scheme registered in <cwd>/wiki.config.yaml", () => {
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "kb", source_schemes: ["kb://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("kb://article-1")).toBe("kb");
+    // Builtins are unaffected by the custom entry
+    expect(classifySource("jira://AUTH-1")).toBe("jira");
+  });
+
+  it("stays builtins-only when no wiki.config.yaml is present", () => {
+    process.chdir(tmpDir);
+    expect(classifySource("kb://article-1")).toBe("");
+    expect(classifySource("https://github.com/org/repo")).toBe("github");
   });
 });

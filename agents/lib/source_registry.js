@@ -13,8 +13,8 @@
  * internal kb:// scheme).
  *
  * Usage as a library:
- *   import { initRegistry, lookupBySource } from "./source_registry.js";
- *   initRegistry();
+ *   import { initRegistryFromConfig, lookupBySource } from "./source_registry.js";
+ *   initRegistryFromConfig();   // builtins + ecosystem.agents.custom
  *   const agent = lookupBySource("db://dev/users");
  *
  * Usage as a CLI:
@@ -26,6 +26,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
+import { parseConfig } from "./parse_config.js";
 const BUILTIN_PATTERNS = [
     {
         id: "jira",
@@ -283,6 +284,134 @@ function customConfigToManifest(cfg) {
         origin: "custom",
     };
 }
+// ── Custom agents from wiki.config.yaml ───────────────────────────────
+/**
+ * Resolve the wiki.config.yaml to load custom agents from. Explicit path
+ * wins; otherwise probe `<cwd>/wiki.config.yaml` then
+ * `<cwd>/wiki/wiki.config.yaml` — the same locations `atlas_inventory.ts`
+ * probes, with cwd standing in for the wiki root (the classification
+ * scripts run from there). Returns null when no config exists.
+ */
+function resolveWikiConfigPath(configPath) {
+    const candidates = configPath !== undefined
+        ? [configPath]
+        : [
+            path.join(process.cwd(), "wiki.config.yaml"),
+            path.join(process.cwd(), "wiki", "wiki.config.yaml"),
+        ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate))
+            return candidate;
+    }
+    return null;
+}
+function warnCustomAgents(msg) {
+    process.stderr.write(`[source_registry] ${msg}\n`);
+}
+/**
+ * Validate one `ecosystem.agents.custom` entry. Returns null (after a
+ * stderr warning) when the entry is malformed — a bad entry is skipped,
+ * never fatal, so one typo can't take down an ingest run.
+ */
+function validateCustomAgentEntry(entry, index, configPath) {
+    const where = `ecosystem.agents.custom[${index}] in ${configPath}`;
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        warnCustomAgents(`skipping ${where}: expected a mapping, got ${JSON.stringify(entry)}`);
+        return null;
+    }
+    const e = entry;
+    const name = e["name"];
+    if (typeof name !== "string" || name.trim() === "") {
+        warnCustomAgents(`skipping ${where}: "name" (non-empty string) is required`);
+        return null;
+    }
+    const schemes = e["source_schemes"];
+    if (schemes !== undefined &&
+        (!Array.isArray(schemes) || !schemes.every((s) => typeof s === "string"))) {
+        warnCustomAgents(`skipping ${where}: "source_schemes" must be a list of strings`);
+        return null;
+    }
+    const urlPatterns = e["source_url_patterns"];
+    if (urlPatterns !== undefined &&
+        (!Array.isArray(urlPatterns) ||
+            !urlPatterns.every((p) => p !== null &&
+                typeof p === "object" &&
+                !Array.isArray(p) &&
+                typeof p["hostname"] === "string"))) {
+        warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a "hostname" string`);
+        return null;
+    }
+    const invocation = e["invocation_template"];
+    if (invocation !== undefined &&
+        (invocation === null || typeof invocation !== "object" || Array.isArray(invocation))) {
+        warnCustomAgents(`skipping ${where}: "invocation_template" must be a mapping`);
+        return null;
+    }
+    const out = { name };
+    if (typeof e["description"] === "string")
+        out.description = e["description"];
+    if (typeof e["type"] === "string")
+        out.type = e["type"];
+    if (typeof e["model"] === "string")
+        out.model = e["model"];
+    if (schemes !== undefined)
+        out.source_schemes = schemes;
+    if (urlPatterns !== undefined)
+        out.source_url_patterns = urlPatterns;
+    if (invocation !== undefined)
+        out.invocation_template = invocation;
+    return out;
+}
+/**
+ * Load `ecosystem.agents.custom` entries from a wiki.config.yaml.
+ *
+ * Degrades gracefully — this feeds the ingest path, so a broken custom
+ * block must never abort a run:
+ *  - missing config file → `[]` (no wiki config is a normal state)
+ *  - unparseable / invalid config → stderr warning + `[]`
+ *  - malformed entry → stderr warning + that entry skipped
+ */
+export function loadCustomAgentConfigs(configPath) {
+    const resolved = resolveWikiConfigPath(configPath);
+    if (resolved === null)
+        return [];
+    let config;
+    try {
+        config = parseConfig(resolved);
+    }
+    catch (e) {
+        warnCustomAgents(`ignoring custom agents — failed to load ${resolved}: ${e.message}`);
+        return [];
+    }
+    // parseConfig guarantees `ecosystem` is an object; `agents` is passthrough.
+    const ecosystem = config["ecosystem"];
+    const agents = ecosystem["agents"];
+    if (agents === null || agents === undefined || typeof agents !== "object")
+        return [];
+    const custom = agents["custom"];
+    if (custom === undefined || custom === null)
+        return [];
+    if (!Array.isArray(custom)) {
+        warnCustomAgents(`ignoring ecosystem.agents.custom in ${resolved}: expected a list, got ${typeof custom}`);
+        return [];
+    }
+    const out = [];
+    for (let i = 0; i < custom.length; i++) {
+        const validated = validateCustomAgentEntry(custom[i], i, resolved);
+        if (validated !== null)
+            out.push(validated);
+    }
+    return out;
+}
+/**
+ * `initRegistry` with custom agents loaded from `wiki.config.yaml` in one
+ * call. This is the ingest-path bootstrap: `how_to_go_deeper.ts` and
+ * `external_sources.ts` initialize through here so patterns registered
+ * via `ecosystem.agents.custom` actually participate in classification.
+ */
+export function initRegistryFromConfig(configPath) {
+    initRegistry({ customAgents: loadCustomAgentConfigs(configPath) });
+}
 // ── Connector config ──────────────────────────────────────────────────
 /**
  * Read the set of CONFIGURED connector ids from a `.connectors/config.yaml`.
@@ -348,7 +477,7 @@ function resolveConnectorConfigPath(configPath) {
 function cliMain(argv) {
     const cmd = argv[0];
     if (cmd === "list") {
-        initRegistry();
+        initRegistryFromConfig();
         const filter = {};
         const typeFlag = getFlagValue(argv, "--type");
         if (typeFlag)
@@ -363,7 +492,7 @@ function cliMain(argv) {
             process.stderr.write("--source is required\n");
             return 2;
         }
-        initRegistry();
+        initRegistryFromConfig();
         const agent = lookupBySource(source);
         if (agent) {
             process.stdout.write(JSON.stringify(agent, null, 2) + "\n");

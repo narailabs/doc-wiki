@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import {
   lookupBySource,
-  initRegistry,
+  initRegistryFromConfig,
   listAgents,
   type AgentManifest,
 } from "../../../agents/lib/source_registry.js";
@@ -67,7 +67,8 @@ function ensureRegistry(): void {
   if (_initialized) return;
   _initialized = true;
   try {
-    initRegistry();
+    // Builtins + `ecosystem.agents.custom` from wiki.config.yaml (cwd-probed).
+    initRegistryFromConfig();
   } catch {
     // Non-fatal: fall through to no-match for all sources
   }

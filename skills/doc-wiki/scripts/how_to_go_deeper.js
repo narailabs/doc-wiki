@@ -28,7 +28,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
-import { lookupBySource, initRegistry, } from "../../../agents/lib/source_registry.js";
+import { lookupBySource, initRegistryFromConfig, } from "../../../agents/lib/source_registry.js";
 const LOCAL_RAW_PREFIX = "raw/";
 const CODE_EXTS = new Set([
     ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".kt", ".go", ".rs",
@@ -42,7 +42,8 @@ function ensureRegistry() {
         return;
     _initialized = true;
     try {
-        initRegistry();
+        // Builtins + `ecosystem.agents.custom` from wiki.config.yaml (cwd-probed).
+        initRegistryFromConfig();
     }
     catch {
         // Non-fatal: fall through to no-match for all sources

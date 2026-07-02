@@ -1,10 +1,10 @@
 /**
  * Tests for source_registry.ts — the static-pattern source-to-connector registry.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { makeTmpPath, cleanupTmpPath, writeConfigYaml } from "./fixtures.js";
 
 import {
   type AgentManifest,
@@ -16,6 +16,8 @@ import {
   matchHostname,
   clearRegistry,
   initRegistry,
+  initRegistryFromConfig,
+  loadCustomAgentConfigs,
   registeredAgentIds,
   loadConfiguredConnectorIds,
 } from "../source_registry.js";
@@ -342,5 +344,164 @@ describe("loadConfiguredConnectorIds", () => {
     fs.writeFileSync(configPath, "connectors:\n  jira:\n    enabled: false\n  notion:\n    enabled: false\n");
     const ids = loadConfiguredConnectorIds(configPath);
     expect(ids.size).toBe(0);
+  });
+});
+
+// ── loadCustomAgentConfigs ────────────────────────────────────────────
+
+describe("loadCustomAgentConfigs", () => {
+  let tmpDir: string;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("custom-agents-test-");
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpDir);
+  });
+
+  /** Minimal valid wiki.config.yaml with the given custom block. */
+  function configWithCustom(custom: unknown): Record<string, unknown> {
+    return {
+      wiki: { name: "test-wiki" },
+      ecosystem: { agents: { custom } },
+    };
+  }
+
+  it("returns [] when the config file does not exist", () => {
+    const configs = loadCustomAgentConfigs(path.join(tmpDir, "missing.yaml"));
+    expect(configs).toEqual([]);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns [] when ecosystem.agents.custom is absent", () => {
+    const p = writeConfigYaml(tmpDir, { wiki: { name: "test-wiki" } });
+    expect(loadCustomAgentConfigs(p)).toEqual([]);
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  it("loads well-formed custom entries", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      {
+        name: "kb",
+        source_schemes: ["kb://"],
+        invocation_template: { label: "Knowledge Base" },
+      },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.name).toBe("kb");
+    expect(configs[0]?.source_schemes).toEqual(["kb://"]);
+    expect(configs[0]?.invocation_template?.label).toBe("Knowledge Base");
+  });
+
+  it("skips malformed entries with a warning and keeps valid ones", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { source_schemes: ["broken://"] }, // missing name
+      "not-a-mapping",
+      { name: "kb", source_schemes: ["kb://"] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs).toHaveLength(1);
+    expect(configs[0]?.name).toBe("kb");
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("skips entries whose source_url_patterns lack a hostname", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "bad", source_url_patterns: [{ path_prefix: "/x/" }] },
+    ]));
+    expect(loadCustomAgentConfigs(p)).toEqual([]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("warns and returns [] when custom is not a list", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom({ name: "kb" }));
+    expect(loadCustomAgentConfigs(p)).toEqual([]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("warns and returns [] when the config itself fails validation", () => {
+    const p = path.join(tmpDir, "wiki.config.yaml");
+    fs.writeFileSync(p, "autonomy:\n  mode: balanced\n"); // missing wiki.name
+    expect(loadCustomAgentConfigs(p)).toEqual([]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+});
+
+// ── initRegistryFromConfig ────────────────────────────────────────────
+
+describe("initRegistryFromConfig", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("custom-agents-init-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpDir);
+    clearRegistry();
+  });
+
+  it("classifies a custom kb:// scheme alongside builtins", () => {
+    const p = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [
+            {
+              name: "kb",
+              source_schemes: ["kb://"],
+              invocation_template: { label: "Knowledge Base" },
+            },
+          ],
+        },
+      },
+    });
+    initRegistryFromConfig(p);
+    expect(lookupBySource("kb://article-42")?.name).toBe("kb");
+    expect(lookupBySource("kb://article-42")?.origin).toBe("custom");
+    // Builtins are still present
+    expect(lookupBySource("jira://AUTH-1")?.name).toBe("wiki-jira-agent");
+  });
+
+  it("classifies a self-hosted GitLab host via a builtin override", () => {
+    // Exact shape documented in docs/connectors.md § gitlab. Overriding
+    // wiki-gitlab-agent REPLACES the builtin patterns, so the snippet
+    // restates gitlab.com alongside the self-hosted host.
+    const p = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [
+            {
+              name: "wiki-gitlab-agent",
+              source_schemes: ["gitlab://"],
+              source_url_patterns: [
+                { hostname: "gitlab.com" },
+                { hostname: "*.gitlab.com" },
+                { hostname: "gitlab.example.com" },
+              ],
+              invocation_template: { label: "GitLab" },
+            },
+          ],
+        },
+      },
+    });
+    initRegistryFromConfig(p);
+    const selfHosted = lookupBySource("https://gitlab.example.com/group/proj/-/merge_requests/7");
+    expect(selfHosted?.name).toBe("wiki-gitlab-agent");
+    expect(selfHosted?.origin).toBe("custom");
+    // gitlab.com still classifies after the override
+    expect(lookupBySource("https://gitlab.com/org/repo")?.name).toBe("wiki-gitlab-agent");
+  });
+
+  it("falls back to builtins-only when no config exists", () => {
+    initRegistryFromConfig(path.join(tmpDir, "missing.yaml"));
+    expect(listAgents()).toHaveLength(9);
+    expect(lookupBySource("kb://article-42")).toBeNull();
   });
 });
