@@ -1363,8 +1363,12 @@ export function generateInventory(repoRoot, runId, options = {}) {
             // detectExternalSources returns paths relative to the root it is given
             // (svcAbsRoot). Rebase each entry's `file` to repo-relative so that the
             // inService() predicate (which matches against the repo-relative svcRoot)
-            // continues to work unchanged.
-            const svcEntries = detectExternalSources(svcAbsRoot).map((e) => rebaseFile(svcRootPosix, e));
+            // continues to work unchanged. Thread wikiConfigPath so
+            // ecosystem.agents.custom patterns classify even when the wiki root
+            // is not the process cwd.
+            const svcEntries = detectExternalSources(svcAbsRoot, {
+                wikiConfigPath: options.wikiConfigPath,
+            }).map((e) => rebaseFile(svcRootPosix, e));
             allExternal.push(...svcEntries);
         }
         const gatherExternal = code_clients.map((c) => ({

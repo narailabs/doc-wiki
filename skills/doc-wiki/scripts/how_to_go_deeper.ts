@@ -31,6 +31,7 @@ import { parseFlags } from "./_cli_args.js";
 import {
   lookupBySource,
   initRegistryFromConfig,
+  resolveWikiConfigPath,
   listAgents,
   type AgentManifest,
 } from "../../../agents/lib/source_registry.js";
@@ -63,12 +64,18 @@ const CODE_EXTS = new Set([
 
 let _initialized = false;
 
-function ensureRegistry(): void {
+function ensureRegistry(wikiRoot?: string): void {
   if (_initialized) return;
   _initialized = true;
   try {
-    // Builtins + `ecosystem.agents.custom` from wiki.config.yaml (cwd-probed).
-    initRegistryFromConfig();
+    // Builtins + `ecosystem.agents.custom` from wiki.config.yaml. When the
+    // caller passes a wiki root (--wiki-root), its config is used with no
+    // cwd fallback; otherwise cwd is probed. First init wins per process.
+    const configPath =
+      wikiRoot !== undefined
+        ? resolveWikiConfigPath(wikiRoot) ?? path.join(wikiRoot, "wiki.config.yaml")
+        : undefined;
+    initRegistryFromConfig(configPath);
   } catch {
     // Non-fatal: fall through to no-match for all sources
   }
@@ -166,12 +173,15 @@ export function classifySource(source: string): DeepEntry | null {
 
 /**
  * Build the "How to Go Deeper" section for a page. Returns `""` when
- * the page has no external sources worth calling out.
+ * the page has no external sources worth calling out. Pass `wikiRoot`
+ * so `ecosystem.agents.custom` patterns load even when the wiki root
+ * is not the process cwd.
  */
 export function buildHowToGoDeeper(
   sources: readonly string[],
-  options: { enabledAgents?: ReadonlySet<AgentId> } = {},
+  options: { enabledAgents?: ReadonlySet<AgentId>; wikiRoot?: string } = {},
 ): string {
+  ensureRegistry(options.wikiRoot);
   const enabled = options.enabledAgents;
   const bullets: DeepEntry[] = [];
   const seen = new Set<string>();
@@ -209,9 +219,10 @@ export function buildHowToGoDeeper(
 const FLAG_SPEC = {
   "--sources": "sources",
   "--enabled": "enabled",
+  "--wiki-root": "wikiRoot",
 } as const;
 
-const HELP_TEXT = `usage: how_to_go_deeper.js --sources JSON_ARRAY [--enabled csv]
+const HELP_TEXT = `usage: how_to_go_deeper.js --sources JSON_ARRAY [--enabled csv] [--wiki-root DIR]
 
 Emit the "How to Go Deeper" markdown section for a page's sources.
 
@@ -221,6 +232,9 @@ arguments:
   --enabled csv         Comma-separated list of enabled source agents
                         (e.g. jira,github,db). When omitted, all hints
                         are rendered.
+  --wiki-root DIR       Wiki root whose wiki.config.yaml supplies
+                        \`ecosystem.agents.custom\` patterns. When
+                        omitted, the working directory is probed.
 options:
   -h, --help            show this help message and exit
 `;
@@ -271,8 +285,14 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (typeof enabledRaw === "string" && enabledRaw !== "") {
     enabled = parseEnabled(enabledRaw);
   }
+  let wikiRoot: string | undefined;
+  const wikiRootRaw = parsed.values["wikiRoot"];
+  if (typeof wikiRootRaw === "string" && wikiRootRaw !== "") {
+    wikiRoot = wikiRootRaw;
+  }
   const out = buildHowToGoDeeper(sources as string[], {
     enabledAgents: enabled,
+    wikiRoot,
   });
   process.stdout.write(out);
   return 0;

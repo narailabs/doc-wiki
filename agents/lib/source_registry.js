@@ -286,19 +286,17 @@ function customConfigToManifest(cfg) {
 }
 // ── Custom agents from wiki.config.yaml ───────────────────────────────
 /**
- * Resolve the wiki.config.yaml to load custom agents from. Explicit path
- * wins; otherwise probe `<cwd>/wiki.config.yaml` then
- * `<cwd>/wiki/wiki.config.yaml` — the same locations `atlas_inventory.ts`
- * probes, with cwd standing in for the wiki root (the classification
- * scripts run from there). Returns null when no config exists.
+ * Probe a wiki root for its wiki.config.yaml: `<root>/wiki.config.yaml`
+ * then `<root>/wiki/wiki.config.yaml` — the same locations
+ * `atlas_inventory.ts` probes. Defaults to cwd for callers (like the
+ * classification CLIs) invoked without an explicit wiki root. Returns
+ * null when no config exists.
  */
-function resolveWikiConfigPath(configPath) {
-    const candidates = configPath !== undefined
-        ? [configPath]
-        : [
-            path.join(process.cwd(), "wiki.config.yaml"),
-            path.join(process.cwd(), "wiki", "wiki.config.yaml"),
-        ];
+export function resolveWikiConfigPath(root = process.cwd()) {
+    const candidates = [
+        path.join(root, "wiki.config.yaml"),
+        path.join(root, "wiki", "wiki.config.yaml"),
+    ];
     for (const candidate of candidates) {
         if (fs.existsSync(candidate))
             return candidate;
@@ -370,9 +368,17 @@ function validateCustomAgentEntry(entry, index, configPath) {
  *  - missing config file → `[]` (no wiki config is a normal state)
  *  - unparseable / invalid config → stderr warning + `[]`
  *  - malformed entry → stderr warning + that entry skipped
+ *
+ * `configPath` is an explicit wiki.config.yaml file path (callers that
+ * know the wiki root pass `<wikiRoot>/wiki.config.yaml`); when omitted,
+ * cwd is probed via `resolveWikiConfigPath()`.
  */
 export function loadCustomAgentConfigs(configPath) {
-    const resolved = resolveWikiConfigPath(configPath);
+    const resolved = configPath !== undefined
+        ? fs.existsSync(configPath)
+            ? configPath
+            : null
+        : resolveWikiConfigPath();
     if (resolved === null)
         return [];
     let config;

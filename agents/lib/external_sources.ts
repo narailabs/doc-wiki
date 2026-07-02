@@ -47,10 +47,14 @@ export interface ExternalSourceEntry {
 
 let _registryReady = false;
 
-function ensureRegistry(): void {
+/**
+ * Builtins + `ecosystem.agents.custom` from wiki.config.yaml. Callers
+ * that know the wiki root pass `<wikiRoot>/wiki.config.yaml`; otherwise
+ * cwd is probed. First initialization wins for the process lifetime.
+ */
+function ensureRegistry(wikiConfigPath?: string): void {
   if (_registryReady) return;
-  // Builtins + `ecosystem.agents.custom` from wiki.config.yaml (cwd-probed).
-  initRegistryFromConfig();
+  initRegistryFromConfig(wikiConfigPath);
   _registryReady = true;
 }
 
@@ -98,11 +102,15 @@ function isDbScheme(s: string): boolean {
  * 1. Tries `lookupBySource` (source_registry builtins + custom).
  * 2. Falls back to DB-scheme detection for real DB URLs.
  * 3. Returns "" when unclassifiable.
+ *
+ * `wikiConfigPath` (optional) locates the wiki.config.yaml whose
+ * `ecosystem.agents.custom` block feeds the registry; only the first
+ * initialization in the process reads it.
  */
-export function classifySource(s: string): string {
+export function classifySource(s: string, wikiConfigPath?: string): string {
   if (s === "") return "";
 
-  ensureRegistry();
+  ensureRegistry(wikiConfigPath);
 
   const manifest = lookupBySource(s);
   if (manifest !== null) {
@@ -187,8 +195,15 @@ const GCP_PATTERNS = [
  *
  * Walks `repoRoot`, returns repo-relative entries with `configured=false`.
  * Caller sets `configured` in B7b after loading the connector config.
+ * Pass `options.wikiConfigPath` (`<wikiRoot>/wiki.config.yaml`) so
+ * `ecosystem.agents.custom` patterns participate in classification even
+ * when the wiki root is not the process cwd.
  */
-export function detectExternalSources(repoRoot: string): ExternalSourceEntry[] {
+export function detectExternalSources(
+  repoRoot: string,
+  options: { wikiConfigPath?: string } = {},
+): ExternalSourceEntry[] {
+  ensureRegistry(options.wikiConfigPath);
   const entries: ExternalSourceEntry[] = [];
   // Dedup key: "file:line:kind"
   const seen = new Set<string>();

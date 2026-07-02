@@ -317,4 +317,37 @@ describe("classifySource with custom agents", () => {
     expect(classifySource("kb://article-1")).toBe("");
     expect(classifySource("https://github.com/org/repo")).toBe("github");
   });
+
+  it("classifySource accepts an explicit wikiConfigPath outside cwd", () => {
+    const configPath = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "kb", source_schemes: ["kb://"] }],
+        },
+      },
+    });
+    // No chdir — the wiki root differs from the process cwd
+    expect(classifySource("kb://article-1", configPath)).toBe("kb");
+  });
+
+  it("detectExternalSources threads wikiConfigPath into classification", () => {
+    // A custom entry claiming the postgres:// scheme wins over the
+    // DB-scheme fallback, proving the registry saw the config.
+    const configPath = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "pgproxy", source_schemes: ["postgres://"] }],
+        },
+      },
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".env"),
+      "DATABASE_URL=postgres://host:5432/app\n",
+    );
+    const entries = detectExternalSources(tmpDir, { wikiConfigPath: configPath });
+    const dbEntry = entries.find((e) => e.kind === "database");
+    expect(dbEntry?.connector_id).toBe("pgproxy");
+  });
 });

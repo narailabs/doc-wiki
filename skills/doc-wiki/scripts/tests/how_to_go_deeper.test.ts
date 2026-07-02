@@ -305,12 +305,32 @@ describe("custom agents from wiki.config.yaml", () => {
     expect(classifySource("jira://AUTH-1")?.agent).toBe("jira");
   });
 
+  it("buildHowToGoDeeper honors the wikiRoot option when config is not in cwd", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    // No chdir — the wiki root differs from the process cwd
+    const out = buildHowToGoDeeper(["kb://article-42"], { wikiRoot: tmpDir });
+    expect(out).toContain("**Knowledge Base:**");
+    expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
   it("CLI picks up custom agents from the working directory", () => {
     fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
     const stdout = execFileSync(
       "node",
       [CLI, "--sources", JSON.stringify(["kb://article-42"])],
       { encoding: "utf-8", cwd: tmpDir },
+    );
+    expect(stdout).toContain("**Knowledge Base:**");
+    expect(stdout).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("CLI honors --wiki-root when invoked from a different cwd", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    // cwd stays at the repo root — the ingest/atlas invocation pattern
+    const stdout = execFileSync(
+      "node",
+      [CLI, "--sources", JSON.stringify(["kb://article-42"]), "--wiki-root", tmpDir],
+      { encoding: "utf-8" },
     );
     expect(stdout).toContain("**Knowledge Base:**");
     expect(stdout).toContain('/doc-wiki:ingest "kb://article-42"');
