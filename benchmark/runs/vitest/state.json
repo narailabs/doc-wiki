@@ -1,0 +1,433 @@
+{
+  "schema_version": 1,
+  "repo": "vitest",
+  "runs": {
+    "7352:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-10T17:39:56.629Z",
+      "finished_at": "2026-06-10T17:44:45.671Z",
+      "cost_usd": 0.80056085,
+      "session_id": "61454856-7381-4829-9035-52e0145022b4",
+      "detail": "tests-failed"
+    },
+    "7352:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-10T17:44:45.672Z",
+      "finished_at": "2026-06-10T17:51:39.857Z",
+      "cost_usd": 1.1845277999999997,
+      "session_id": "85f54406-c14f-4955-bba4-18890679f73b",
+      "detail": "tests-failed"
+    },
+    "10459:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T05:06:34.863Z",
+      "finished_at": "2026-06-11T05:09:56.669Z",
+      "cost_usd": 0.376549,
+      "session_id": "55654320-f0d5-4051-ba2b-772a3308d57d",
+      "detail": "tests-passed"
+    },
+    "10459:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T05:09:56.670Z",
+      "finished_at": "2026-06-11T05:13:56.441Z",
+      "cost_usd": 0.4965915999999999,
+      "session_id": "ba08bdcc-d479-4171-87dd-1594feec2a5c",
+      "detail": "tests-passed"
+    },
+    "10336:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T05:13:56.442Z",
+      "finished_at": "2026-06-11T05:18:33.359Z",
+      "cost_usd": 0.6765259000000001,
+      "session_id": "c4d0ddc0-ebf5-4dd0-93ce-44a5a86a50f9",
+      "detail": "tests-failed"
+    },
+    "10336:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T05:18:33.359Z",
+      "finished_at": "2026-06-11T05:22:21.153Z",
+      "cost_usd": 0.78222785,
+      "session_id": "a93364d8-d0ac-4029-b9cd-37c2c69ea48d",
+      "detail": "tests-failed"
+    },
+    "10361:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T05:22:21.154Z",
+      "finished_at": "2026-06-11T05:28:30.709Z",
+      "cost_usd": 0.8633146999999999,
+      "session_id": "7c895878-0ac2-490f-b501-36eece128df4",
+      "detail": "tests-passed"
+    },
+    "10361:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T05:28:30.710Z",
+      "finished_at": "2026-06-11T05:39:15.717Z",
+      "cost_usd": 1.1603386000000002,
+      "session_id": "d83bdb97-f701-4dae-8165-aabc1de739d7",
+      "detail": "tests-failed"
+    },
+    "10396:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T05:39:15.718Z",
+      "finished_at": "2026-06-11T05:49:22.190Z",
+      "cost_usd": 1.2057342500000001,
+      "session_id": "fedf9bc0-837e-452a-a461-0d5a75e65e51",
+      "detail": "tests-passed"
+    },
+    "10396:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T05:49:22.191Z",
+      "finished_at": "2026-06-11T05:57:29.039Z",
+      "cost_usd": 1.3021155000000002,
+      "session_id": "412d8bef-5e1b-4b38-8606-52fdf2504215",
+      "detail": "tests-passed"
+    },
+    "10343:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T05:57:29.041Z",
+      "finished_at": "2026-06-11T06:03:57.987Z",
+      "cost_usd": 0.8447553500000001,
+      "session_id": "63a17464-2787-4257-9c48-af0c64ebd3ba",
+      "detail": "tests-failed"
+    },
+    "10343:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T06:03:57.990Z",
+      "finished_at": "2026-06-11T06:15:29.549Z",
+      "cost_usd": 0.9633219000000002,
+      "session_id": "07fc79fd-61f9-4ef9-9a8d-9aa5d7733624",
+      "detail": "tests-failed"
+    },
+    "10326:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T06:15:29.550Z",
+      "finished_at": "2026-06-11T06:26:26.303Z",
+      "cost_usd": 2.1043652500000003,
+      "session_id": "416e18ce-dcd7-4837-9fe2-6b7c7de34e72",
+      "detail": "tests-failed"
+    },
+    "10326:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T08:10:43.792Z",
+      "finished_at": "2026-06-11T08:17:04.245Z",
+      "cost_usd": 1.0622373999999999,
+      "session_id": "70d7088a-0d7b-40d8-b948-9983a29cec2e",
+      "detail": "tests-failed"
+    },
+    "10173:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T06:39:37.917Z",
+      "finished_at": "2026-06-11T06:42:56.914Z",
+      "cost_usd": 0.48833840000000006,
+      "session_id": "20d6b50a-d053-4a9d-b4ec-b889f88e6b1a",
+      "detail": "tests-failed"
+    },
+    "10173:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T06:42:56.915Z",
+      "finished_at": "2026-06-11T06:51:42.930Z",
+      "cost_usd": 0.31242515,
+      "session_id": "ef56c51b-76c9-45a0-bd85-ac66fc096ab4",
+      "detail": "tests-failed"
+    },
+    "10289:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T06:51:42.931Z",
+      "finished_at": "2026-06-11T06:57:25.169Z",
+      "cost_usd": 0.6795003999999998,
+      "session_id": "59bd12a5-f1b0-4621-9010-8d58d4465139",
+      "detail": "tests-passed"
+    },
+    "10289:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T06:57:25.170Z",
+      "finished_at": "2026-06-11T07:05:29.178Z",
+      "cost_usd": 1.0493343000000002,
+      "session_id": "f30372c5-4f84-4162-be33-1e258614c59b",
+      "detail": "tests-passed"
+    },
+    "10164:baseline": {
+      "status": "pending",
+      "finished_at": "2026-06-11T13:38:25.373Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\nUpdating files:  76% (2332/3041)\rUpdating files:  77% (2342/3041)\rUpdating files:  78% (2372/3041)\rUpdating files:  79% (2403/3041)\rUpdating files:  80% (2433/3041)\rUpdat"
+    },
+    "10164:wiki": {
+      "status": "pending",
+      "finished_at": "2026-06-11T13:53:58.417Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\n! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.31.0.tgz\negress locked to: api.anthropic.com claude.ai statsig.anthropic.com\n"
+    },
+    "10242:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T07:43:32.463Z",
+      "finished_at": "2026-06-11T07:50:41.818Z",
+      "cost_usd": 1.1087699,
+      "session_id": "8a675801-d6d3-4b14-8ae3-791d2dbf1f1e",
+      "detail": "tests-failed"
+    },
+    "10242:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T07:50:41.819Z",
+      "finished_at": "2026-06-11T07:56:15.873Z",
+      "cost_usd": 0.9959669999999996,
+      "session_id": "427b17c0-b84e-4a56-9e61-0c3cff6b5fab",
+      "detail": "tests-failed"
+    },
+    "10182:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T08:45:12.518Z",
+      "finished_at": "2026-06-11T08:51:48.230Z",
+      "cost_usd": 1.16975625,
+      "session_id": "104f41bf-4889-4bc9-b77b-7a8ca98a21f7",
+      "detail": "tests-failed"
+    },
+    "10182:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T08:51:48.231Z",
+      "finished_at": "2026-06-11T08:58:45.759Z",
+      "cost_usd": 1.3545430999999999,
+      "session_id": "02a1d9df-3b37-45e7-a333-eb6dceab0724",
+      "detail": "tests-failed"
+    },
+    "10217:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T08:58:45.760Z",
+      "finished_at": "2026-06-11T09:08:09.409Z",
+      "cost_usd": 1.5689516999999997,
+      "session_id": "443476a2-80e9-477a-afda-966b4a75bb2d",
+      "detail": "tests-failed"
+    },
+    "10217:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T09:08:09.410Z",
+      "finished_at": "2026-06-11T09:18:11.792Z",
+      "cost_usd": 1.90421005,
+      "session_id": "e8a30d2e-770e-45ce-a4d2-3c3c36af6782",
+      "detail": "tests-failed"
+    },
+    "10158:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T09:18:11.793Z",
+      "finished_at": "2026-06-11T09:31:16.648Z",
+      "cost_usd": 2.0682964999999993,
+      "session_id": "2c7e21dc-24a5-4736-97a3-93a5db8b0b54",
+      "detail": "tests-failed"
+    },
+    "10158:wiki": {
+      "status": "pending",
+      "finished_at": "2026-06-11T12:48:23.014Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\n! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.31.0.tgz\negress locked to: api.anthropic.com claude.ai statsig.anthropic.com\n"
+    },
+    "10199:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T09:49:21.177Z",
+      "finished_at": "2026-06-11T10:05:11.086Z",
+      "cost_usd": 2.4010564999999993,
+      "session_id": "0916b26f-3c30-4793-a080-eb61b56f9f6b",
+      "detail": "tests-passed"
+    },
+    "10199:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T10:05:11.087Z",
+      "finished_at": "2026-06-11T10:19:49.962Z",
+      "cost_usd": 1.847278,
+      "session_id": "eb302165-96dc-4b47-a21a-e9f5de0e4da5",
+      "detail": "tests-passed"
+    },
+    "10155:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T10:19:49.964Z",
+      "finished_at": "2026-06-11T10:22:45.491Z",
+      "cost_usd": 0.46966110000000005,
+      "session_id": "02b077bd-45f0-4010-9a42-585d49b2b7c6",
+      "detail": "tests-passed"
+    },
+    "10155:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T10:22:45.491Z",
+      "finished_at": "2026-06-11T10:25:33.292Z",
+      "cost_usd": 0.44413260000000004,
+      "session_id": "0b4532aa-c401-4f72-aec4-bca32dff4ca2",
+      "detail": "tests-passed"
+    },
+    "10181:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T10:25:33.293Z",
+      "finished_at": "2026-06-11T10:29:50.513Z",
+      "cost_usd": 0.5889017,
+      "session_id": "9289b74a-d0d5-4c09-aa38-ea23da5c5871",
+      "detail": "tests-passed"
+    },
+    "10181:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T10:29:50.514Z",
+      "finished_at": "2026-06-11T10:33:35.133Z",
+      "cost_usd": 0.4939715,
+      "session_id": "c522848f-fb11-4575-9bbc-99af61b933f4",
+      "detail": "tests-passed"
+    },
+    "10069:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T10:33:35.133Z",
+      "finished_at": "2026-06-11T10:52:24.118Z",
+      "cost_usd": 2.6476138000000002,
+      "session_id": "fae323cf-7b02-4b62-a82a-e90e79a3f317",
+      "detail": "tests-failed"
+    },
+    "10069:wiki": {
+      "status": "pending",
+      "finished_at": "2026-06-11T12:49:16.901Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\n! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.31.0.tgz\negress locked to: api.anthropic.com claude.ai statsig.anthropic.com\n"
+    },
+    "10146:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T11:07:37.891Z",
+      "finished_at": "2026-06-11T11:25:52.284Z",
+      "cost_usd": 3.0695295000000002,
+      "session_id": "4c10f78e-55c5-4019-abc8-3340de8a1d77",
+      "detail": "tests-failed"
+    },
+    "10146:wiki": {
+      "status": "pending",
+      "finished_at": "2026-06-11T13:23:27.440Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\n! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.31.0.tgz\negress locked to: api.anthropic.com claude.ai statsig.anthropic.com\n"
+    },
+    "10141:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T12:09:51.641Z",
+      "finished_at": "2026-06-11T12:13:33.849Z",
+      "cost_usd": 0.52432035,
+      "session_id": "c4df8a24-31be-4e74-8d51-919b6d92b1e2",
+      "detail": "tests-failed"
+    },
+    "10141:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T12:13:33.851Z",
+      "finished_at": "2026-06-11T12:16:09.534Z",
+      "cost_usd": 0.39958509999999997,
+      "session_id": "269e0352-e230-4934-8948-0fda7da6f45b",
+      "detail": "tests-failed"
+    },
+    "10128:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T13:53:58.419Z",
+      "finished_at": "2026-06-11T14:02:31.135Z",
+      "cost_usd": 0.90060215,
+      "session_id": "71a8d3e4-dcc0-49e4-b736-9aaa6c640d34",
+      "detail": "tests-passed"
+    },
+    "10128:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T14:02:31.138Z",
+      "finished_at": "2026-06-11T14:11:19.213Z",
+      "cost_usd": 0.9379460000000001,
+      "session_id": "2e7992f3-795c-45e8-98cb-fbbaa1422bfc",
+      "detail": "tests-passed"
+    },
+    "9927:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T14:11:19.217Z",
+      "finished_at": "2026-06-11T14:26:12.163Z",
+      "cost_usd": 1.5514789999999998,
+      "session_id": "e34e582b-d284-41ad-82d0-6f65e525c1a2",
+      "detail": "tests-passed"
+    },
+    "9927:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T14:26:12.166Z",
+      "finished_at": "2026-06-11T14:45:12.256Z",
+      "cost_usd": 1.5233429000000003,
+      "session_id": "a8c0b350-0cf0-408b-9a29-1e89ba965e8b",
+      "detail": "tests-passed"
+    },
+    "8292:baseline": {
+      "status": "pending",
+      "finished_at": "2026-06-11T15:19:38.421Z",
+      "detail": "unparseable result envelope (exit 137)"
+    },
+    "8292:wiki": {
+      "status": "pending",
+      "finished_at": "2026-06-11T15:34:20.142Z",
+      "detail": "claude exited 1: Cloning into '/work'...\ndone.\n! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.31.0.tgz\negress locked to: api.anthropic.com claude.ai statsig.anthropic.com\n"
+    },
+    "8741:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T15:34:20.144Z",
+      "finished_at": "2026-06-11T15:47:36.551Z",
+      "cost_usd": 1.7393257000000004,
+      "session_id": "f77f3b9a-eb37-4206-a2e4-f38d501301f3",
+      "detail": "tests-failed"
+    },
+    "8741:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T15:47:36.552Z",
+      "finished_at": "2026-06-11T15:59:08.614Z",
+      "cost_usd": 1.1578221500000003,
+      "session_id": "d907b9b4-174b-4274-9bca-2ab4e02b8640",
+      "detail": "tests-failed"
+    },
+    "10027:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T15:59:08.616Z",
+      "finished_at": "2026-06-11T16:05:01.373Z",
+      "cost_usd": 1.1344826500000003,
+      "session_id": "d2a19d53-1fa7-4fe2-831b-0e10252d7be4",
+      "detail": "tests-failed"
+    },
+    "10027:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T16:05:01.375Z",
+      "finished_at": "2026-06-11T16:11:28.373Z",
+      "cost_usd": 1.1246810000000003,
+      "session_id": "0877e0e0-b7d6-4ee7-bd35-99fd4b5426bb",
+      "detail": "tests-failed"
+    },
+    "9899:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:11:28.374Z",
+      "finished_at": "2026-06-11T16:21:40.416Z",
+      "cost_usd": 1.2793858000000005,
+      "session_id": "f03a2e1e-54c5-4a76-8b2a-b66f17dbb4bf",
+      "detail": "tests-passed"
+    },
+    "9899:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:21:40.416Z",
+      "finished_at": "2026-06-11T16:30:06.537Z",
+      "cost_usd": 1.1152422999999998,
+      "session_id": "93d2b6f7-f539-4364-8a13-97554ff40460",
+      "detail": "tests-passed"
+    },
+    "10020:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:30:06.539Z",
+      "finished_at": "2026-06-11T16:35:41.233Z",
+      "cost_usd": 0.6502135999999998,
+      "session_id": "ff6f0ad7-4ef5-4099-9741-07944d94b40d",
+      "detail": "tests-passed"
+    },
+    "10020:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:35:41.235Z",
+      "finished_at": "2026-06-11T16:40:50.674Z",
+      "cost_usd": 0.7651906499999999,
+      "session_id": "e8718b7c-f48f-46b4-89a9-e46dea63f378",
+      "detail": "tests-passed"
+    },
+    "9955:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:40:50.675Z",
+      "finished_at": "2026-06-11T16:50:48.090Z",
+      "cost_usd": 2.1003379000000004,
+      "session_id": "71db04fd-fb26-4415-81b0-cf617cb8171e",
+      "detail": "tests-passed"
+    },
+    "9955:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T16:50:48.091Z",
+      "finished_at": "2026-06-11T16:58:25.924Z",
+      "cost_usd": 1.2281909500000001,
+      "session_id": "e0c567bf-c60e-4d8e-899e-cab6df315f2a",
+      "detail": "tests-passed"
+    }
+  }
+}

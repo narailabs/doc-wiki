@@ -1,4 +1,15 @@
 # Per-run artifacts can be large (transcripts, diffs, clones). Regenerate locally.
-runs/
+# Exception: the four published configurations' state.json checkpoints are
+# committed so `npm run benchmark -- report --repo <id> --out <file>` reproduces
+# each RESULTS-<config>.md from a fresh checkout.
+runs/**
+!runs/vitest/
+!runs/vitest/state.json
+!runs/saleor/
+!runs/saleor/state.json
+!runs/saleor-opus/
+!runs/saleor-opus/state.json
+!runs/saleor-schema/
+!runs/saleor-schema/state.json
 *.tsbuildinfo
 wiki-cache/

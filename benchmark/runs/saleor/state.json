@@ -1,0 +1,406 @@
+{
+  "schema_version": 1,
+  "repo": "saleor",
+  "runs": {
+    "19298:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T22:48:22.870Z",
+      "finished_at": "2026-06-11T22:58:06.353Z",
+      "cost_usd": 1.06613495,
+      "session_id": "cebd1c9f-c671-451c-a3a3-b595109f4077",
+      "detail": "tests-passed"
+    },
+    "19298:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T22:58:06.354Z",
+      "finished_at": "2026-06-11T23:02:56.035Z",
+      "cost_usd": 0.5419115999999999,
+      "session_id": "5c195911-faf4-441b-a3f4-69366d81f49e",
+      "detail": "tests-passed"
+    },
+    "19289:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T23:02:56.036Z",
+      "finished_at": "2026-06-11T23:07:15.237Z",
+      "cost_usd": 0.3526743499999999,
+      "session_id": "db36ae63-f217-4c85-ab4e-2a82e02aabf5",
+      "detail": "tests-passed"
+    },
+    "19289:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T23:07:15.238Z",
+      "finished_at": "2026-06-11T23:11:28.002Z",
+      "cost_usd": 0.4365688000000001,
+      "session_id": "0b0ac437-55db-4314-a7e9-c950921114ab",
+      "detail": "tests-passed"
+    },
+    "19286:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-11T23:11:28.002Z",
+      "finished_at": "2026-06-11T23:18:19.818Z",
+      "cost_usd": 0.59677655,
+      "session_id": "cb88f813-ed44-46f3-a1f0-b57845c06d42",
+      "detail": "tests-failed"
+    },
+    "19286:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T23:18:19.819Z",
+      "finished_at": "2026-06-11T23:35:23.390Z",
+      "cost_usd": 0.6533528000000001,
+      "session_id": "fbb53767-41e2-48f9-bd74-2afd7e9137ef",
+      "detail": "tests-failed"
+    },
+    "19280:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T23:35:23.393Z",
+      "finished_at": "2026-06-11T23:42:36.460Z",
+      "cost_usd": 0.5565853999999999,
+      "session_id": "ce0eb988-c50a-4b84-b520-e7ffcf6d54fd",
+      "detail": "tests-passed"
+    },
+    "19280:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-11T23:42:36.465Z",
+      "finished_at": "2026-06-11T23:48:48.927Z",
+      "cost_usd": 0.48947904999999997,
+      "session_id": "dfbc47b0-fd11-41d4-9322-bf119437927e",
+      "detail": "tests-failed"
+    },
+    "19253:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-11T23:48:48.931Z",
+      "finished_at": "2026-06-11T23:56:01.756Z",
+      "cost_usd": 0.6962842000000002,
+      "session_id": "6a929d5f-9247-4eb9-9364-61b0e5787d9f",
+      "detail": "tests-passed"
+    },
+    "19253:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-11T23:56:01.760Z",
+      "finished_at": "2026-06-12T00:03:43.525Z",
+      "cost_usd": 0.9743439500000003,
+      "session_id": "37183046-9247-49d2-a63f-b8ff868133f1",
+      "detail": "tests-passed"
+    },
+    "19251:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:03:43.527Z",
+      "finished_at": "2026-06-12T00:12:29.863Z",
+      "cost_usd": 1.4044958000000003,
+      "session_id": "09ea31c4-1a9f-4de4-aedc-84584c70096a",
+      "detail": "tests-passed"
+    },
+    "19251:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:12:29.867Z",
+      "finished_at": "2026-06-12T00:19:58.725Z",
+      "cost_usd": 1.1137219000000003,
+      "session_id": "7975b7ce-d259-4b25-893a-bca5f7b5c72c",
+      "detail": "tests-passed"
+    },
+    "19229:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:19:58.726Z",
+      "finished_at": "2026-06-12T00:27:14.488Z",
+      "cost_usd": 0.7729482999999999,
+      "session_id": "32635382-d0db-4741-9bf6-174c6ec24904",
+      "detail": "tests-passed"
+    },
+    "19229:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:27:14.489Z",
+      "finished_at": "2026-06-12T00:36:55.101Z",
+      "cost_usd": 0.94663735,
+      "session_id": "e04ea0b0-21af-4c5b-bac9-8ad67c46687b",
+      "detail": "tests-passed"
+    },
+    "19228:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:36:55.102Z",
+      "finished_at": "2026-06-12T00:46:09.355Z",
+      "cost_usd": 0.7591238499999999,
+      "session_id": "42951277-2cd0-420d-8746-eb9570c699b3",
+      "detail": "tests-passed"
+    },
+    "19228:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T00:46:09.356Z",
+      "finished_at": "2026-06-12T00:55:56.279Z",
+      "cost_usd": 1.0044912499999998,
+      "session_id": "d7c6e4e6-d6b8-4a0d-b005-e72f04d95172",
+      "detail": "tests-passed"
+    },
+    "19179:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-12T00:55:56.280Z",
+      "finished_at": "2026-06-12T01:03:50.032Z",
+      "cost_usd": 0.8761634000000005,
+      "session_id": "144226e7-6883-49ae-b5ea-9ea2b8926387",
+      "detail": "tests-failed"
+    },
+    "19179:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-12T01:03:50.033Z",
+      "finished_at": "2026-06-12T01:07:58.617Z",
+      "cost_usd": 0.43729714999999997,
+      "session_id": "2abf2282-d5b2-409a-8bd2-01bfcc956a55",
+      "detail": "tests-failed"
+    },
+    "19174:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T01:07:58.618Z",
+      "finished_at": "2026-06-12T01:13:46.022Z",
+      "cost_usd": 0.7112582499999999,
+      "session_id": "aa211d67-ed4e-43c9-9a27-7905cd52362f",
+      "detail": "tests-passed"
+    },
+    "19174:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T01:13:46.023Z",
+      "finished_at": "2026-06-12T01:19:22.622Z",
+      "cost_usd": 0.7810014000000001,
+      "session_id": "7e2f4e7b-4da7-4564-a26f-f6619a7e7e29",
+      "detail": "tests-passed"
+    },
+    "19173:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T01:19:22.623Z",
+      "finished_at": "2026-06-12T01:26:26.409Z",
+      "cost_usd": 0.6755373499999999,
+      "session_id": "8450e288-12b7-403f-955d-1d004e8fe84b",
+      "detail": "tests-passed"
+    },
+    "19173:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T01:26:26.410Z",
+      "finished_at": "2026-06-12T01:33:24.168Z",
+      "cost_usd": 0.62786555,
+      "session_id": "44f43f31-0fc8-47a2-be9b-5c682e0cd325",
+      "detail": "tests-passed"
+    },
+    "19114:baseline": {
+      "status": "failed",
+      "started_at": "2026-06-12T01:33:24.170Z",
+      "finished_at": "2026-06-12T01:47:27.480Z",
+      "cost_usd": 1.4584978499999999,
+      "session_id": "77ec0c79-8968-4dfc-ae4c-bc706a53027f",
+      "detail": "tests-failed"
+    },
+    "19114:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-12T01:47:27.481Z",
+      "finished_at": "2026-06-12T01:55:16.433Z",
+      "cost_usd": 1.1685690000000002,
+      "session_id": "1be74670-f371-4c6f-b52e-03ef97c41842",
+      "detail": "tests-failed"
+    },
+    "19123:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T01:55:16.436Z",
+      "finished_at": "2026-06-12T02:03:34.355Z",
+      "cost_usd": 0.8228259499999999,
+      "session_id": "1487805a-c529-4821-98d9-b6f8af60afce",
+      "detail": "tests-passed"
+    },
+    "19123:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T02:03:34.356Z",
+      "finished_at": "2026-06-12T02:08:50.059Z",
+      "cost_usd": 0.5685003499999999,
+      "session_id": "9fc32d8c-a1de-44f4-8774-756176c2aea6",
+      "detail": "tests-passed"
+    },
+    "19122:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T02:08:50.060Z",
+      "finished_at": "2026-06-12T02:17:11.253Z",
+      "cost_usd": 1.0672711999999998,
+      "session_id": "80afaced-1868-4615-a301-acc66529b32b",
+      "detail": "tests-passed"
+    },
+    "19120:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T02:47:17.042Z",
+      "finished_at": "2026-06-12T02:56:36.092Z",
+      "cost_usd": 0.88683815,
+      "session_id": "d2232e2e-cbbd-4e03-b173-5a38687bcb89",
+      "detail": "tests-passed"
+    },
+    "19120:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T02:56:36.092Z",
+      "finished_at": "2026-06-12T03:04:10.559Z",
+      "cost_usd": 0.9472337500000001,
+      "session_id": "bc86012a-bcc5-4ff7-88b6-f6a9ccd7f6ca",
+      "detail": "tests-passed"
+    },
+    "19116:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:04:10.580Z",
+      "finished_at": "2026-06-12T03:14:14.947Z",
+      "cost_usd": 1.4878264499999996,
+      "session_id": "cf6bfc32-fb14-4177-8027-efb3542511ab",
+      "detail": "tests-passed"
+    },
+    "19116:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:14:14.948Z",
+      "finished_at": "2026-06-12T03:22:20.465Z",
+      "cost_usd": 0.9827600000000001,
+      "session_id": "d474c9cc-354f-49d9-a17c-0e5e7c6b97e8",
+      "detail": "tests-passed"
+    },
+    "19111:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:22:20.466Z",
+      "finished_at": "2026-06-12T03:28:57.020Z",
+      "cost_usd": 0.84037155,
+      "session_id": "91bc41f5-b19b-4ccf-a878-723629afc124",
+      "detail": "tests-passed"
+    },
+    "19111:wiki": {
+      "status": "failed",
+      "started_at": "2026-06-12T03:28:57.022Z",
+      "finished_at": "2026-06-12T03:39:09.433Z",
+      "cost_usd": 1.3150153500000001,
+      "session_id": "85453d19-2c9f-4918-823e-6f1902f6b144",
+      "detail": "tests-failed"
+    },
+    "19085:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:39:09.434Z",
+      "finished_at": "2026-06-12T03:44:14.599Z",
+      "cost_usd": 0.5040639,
+      "session_id": "ec7cc1d4-7d20-457d-864c-2f1e5ccb420c",
+      "detail": "tests-passed"
+    },
+    "19085:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:44:14.600Z",
+      "finished_at": "2026-06-12T03:48:00.450Z",
+      "cost_usd": 0.39504739999999994,
+      "session_id": "40ea0287-e342-493b-ac2b-1c105aed190f",
+      "detail": "tests-passed"
+    },
+    "19084:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T03:48:00.450Z",
+      "finished_at": "2026-06-12T04:01:18.131Z",
+      "cost_usd": 2.2824907000000003,
+      "session_id": "e9a9e908-ac5b-4bd3-96ec-3565aa94083e",
+      "detail": "tests-passed"
+    },
+    "19084:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:01:18.134Z",
+      "finished_at": "2026-06-12T04:13:18.340Z",
+      "cost_usd": 1.8250413499999996,
+      "session_id": "c7d9f0da-070e-43b3-81ad-9d489f6f1528",
+      "detail": "tests-passed"
+    },
+    "19083:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:13:18.347Z",
+      "finished_at": "2026-06-12T04:19:03.776Z",
+      "cost_usd": 0.54926965,
+      "session_id": "6e207841-0772-4649-ae6c-3d9662d4938f",
+      "detail": "tests-passed"
+    },
+    "19083:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:19:03.786Z",
+      "finished_at": "2026-06-12T04:23:44.978Z",
+      "cost_usd": 0.4684687,
+      "session_id": "272970f6-6537-41f3-a680-74073ece19c7",
+      "detail": "tests-passed"
+    },
+    "19082:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:23:44.979Z",
+      "finished_at": "2026-06-12T04:32:49.688Z",
+      "cost_usd": 1.5897731000000004,
+      "session_id": "a1e6bb3d-acf0-44f3-83ec-07d2b3226a9d",
+      "detail": "tests-passed"
+    },
+    "19082:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:32:49.689Z",
+      "finished_at": "2026-06-12T04:41:09.474Z",
+      "cost_usd": 1.9479136999999997,
+      "session_id": "3d3ee079-f711-47cf-b5d2-2a1d0cf35f11",
+      "detail": "tests-passed"
+    },
+    "19070:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:41:09.476Z",
+      "finished_at": "2026-06-12T04:46:00.139Z",
+      "cost_usd": 0.5046019,
+      "session_id": "d3828b87-f99e-496e-a31a-ffb94cb797a6",
+      "detail": "tests-passed"
+    },
+    "19070:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T04:46:00.140Z",
+      "finished_at": "2026-06-12T04:50:22.768Z",
+      "cost_usd": 0.4601651,
+      "session_id": "7d452725-e849-4d06-a020-50fc3bdf0209",
+      "detail": "tests-passed"
+    },
+    "19068:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:01:18.199Z",
+      "finished_at": "2026-06-12T05:14:48.159Z",
+      "cost_usd": 2.01516465,
+      "session_id": "ed0aa083-3b6a-43a4-9df5-9e3fe309a589",
+      "detail": "tests-passed"
+    },
+    "19045:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:14:48.160Z",
+      "finished_at": "2026-06-12T05:18:16.103Z",
+      "cost_usd": 0.2601356,
+      "session_id": "55deae23-e0e6-4c55-bd28-5ae398b9aafb",
+      "detail": "tests-passed"
+    },
+    "19045:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:18:16.104Z",
+      "finished_at": "2026-06-12T05:21:49.843Z",
+      "cost_usd": 0.31326190000000004,
+      "session_id": "b5ccc4e2-404a-4517-8aba-be8e302a047c",
+      "detail": "tests-passed"
+    },
+    "19044:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:21:49.844Z",
+      "finished_at": "2026-06-12T05:25:39.242Z",
+      "cost_usd": 0.27837864999999995,
+      "session_id": "a4c9b603-fe86-4b4e-ae5d-790cb1b08d55",
+      "detail": "tests-passed"
+    },
+    "19044:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:25:39.243Z",
+      "finished_at": "2026-06-12T05:29:03.924Z",
+      "cost_usd": 0.38409665000000004,
+      "session_id": "6b88f8d3-a615-4837-bbe2-c344a2ce5ffe",
+      "detail": "tests-passed"
+    },
+    "19122:wiki": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:29:55.583Z",
+      "finished_at": "2026-06-12T05:52:22.018Z",
+      "cost_usd": 3.3985368000000005,
+      "session_id": "a58e748b-65e7-41d1-82bd-f99b21a25c38",
+      "detail": "tests-passed"
+    },
+    "19068:baseline": {
+      "status": "passed",
+      "started_at": "2026-06-12T05:52:22.022Z",
+      "finished_at": "2026-06-12T06:00:14.923Z",
+      "cost_usd": 1.26923645,
+      "session_id": "253b430c-797c-49d0-a739-fd5b488f2f69",
+      "detail": "tests-passed"
+    }
+  }
+}
