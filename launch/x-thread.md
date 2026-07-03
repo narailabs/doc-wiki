@@ -7,18 +7,16 @@
 ```
 I open-sourced doc-wiki today.
 
-It feeds Claude Code a maintained wiki of your code + Jira + Confluence
-+ GitHub + Notion + DB schemas.
+One command turns your codebase into a wiki your coding agent reads —
+ER diagrams from your real ORM models, a cross-service map, cited
+answers over code + Jira + Confluence + DB schemas.
 
-On my own enterprise codebase autonomous ticket-fix accuracy went from
-~10% to ~80%.
+I also benchmarked it and published the null. Apache 2.0 forever. 🧵
 
-Reproducible benchmark in the repo. Apache 2.0 forever. 🧵
-
-[VIDEO — 60-sec failure→fix demo, from media/demo.mp4]
+[VIDEO — 60-sec demo, from media/demo.mp4]
 ```
 
-**Counts:** 273 chars / 280 budget. The thread emoji at the end signals "more below" to the algorithm.
+**Counts:** 276 chars / 280 budget. The thread emoji at the end signals "more below" to the algorithm.
 
 ## Tweet 2 — the why
 
@@ -44,30 +42,37 @@ A maintained, compounding artifact the agent reads instead of
 re-deriving everything from raw sources every turn.
 ```
 
-## Tweet 4 — the 10 commands
+## Tweet 4 — the 8 commands
 
 ```
-Ten slash commands cover the lifecycle:
-/doc-wiki:init      → scaffold
-/doc-wiki:onboard   → detect stack, ORM, DB, services
+Eight slash commands cover the lifecycle:
+/doc-wiki:init      → scaffold + onboard (stack, ORM, DB, services)
 /doc-wiki:atlas     → document the whole codebase
-/doc-wiki:ingest    → add a source (file/URL/ticket)
-/doc-wiki:query     → cited synthesis
-/doc-wiki:promote   → query answer → permanent page
-/doc-wiki:refresh   → keep current
-/doc-wiki:lint, :fix, :stats
+/doc-wiki:ingest    → add a source (file/URL/ticket); --refresh
+/doc-wiki:query     → cited synthesis; --promote to a permanent page
+/doc-wiki:lint, :edit, :unarchive, :stats
 ```
 
 ## Tweet 5 — the benchmark
 
 ```
-The hero number is reproducible. Harness in the repo runs Claude Code
-against 20 real closed issues per repo (Django, Cal.com, Mastodon),
-with and without doc-wiki, scores binary pass/fail on the specific
-test the fix PR added.
+The honest part: I benchmarked whether the wiki lifts fully-autonomous
+ticket-fix rate. 92 ticket pairs, SWE-bench-style, container-isolated,
+egress firewall.
 
-SWE-bench-style. Re-run it yourself.
-github.com/narailabs/doc-wiki/tree/main/benchmark
+It doesn't: baseline 57/92, wiki 54/92. Null published in full —
+re-run it yourself and argue with the data.
+github.com/narailabs/doc-wiki/blob/main/benchmark/RESULTS.md
+```
+
+## Tweet 5b — why use it then (post immediately after 5, same thread)
+
+```
+So why use it? The benchmark measures an agent alone in a box with a
+single OSS repo. Where the wiki earns its keep is you + the agent on
+ecosystem-heavy code: scope from the cross-service map, point the
+agent at the right pages, catch the wrong turn at diff two. The
+artifact is the product.
 ```
 
 ## Tweet 6 — the license

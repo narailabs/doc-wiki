@@ -34,29 +34,37 @@ ingests code + Jira + Confluence + GitHub + Notion + AWS/GCP + ORM/DB
 schemas through one planner and maintains a structured wiki the agent
 reads before touching code.
 
-On my own enterprise codebase (private; 500k LOC, 8 years old, glued to
-Jira / Confluence / 4 databases) autonomous ticket-fix accuracy went
-from ~10% to ~80% after wiring it up. I'm shipping a reproducible
-benchmark in the repo against Django, Cal.com, and Mastodon (SWE-bench-
-style binary pass/fail on the specific test the fix PR added).
+The part I suspect you'll find most interesting: I built a hardened
+SWE-bench-style benchmark (container-isolated, egress firewall,
+sanitized tickets, contamination floors) to test whether the wiki
+lifts the agent's fully-autonomous ticket-fix rate — and it doesn't.
+Four configurations, 92 valid ticket pairs on vitest and Saleor:
+baseline 57/92, wiki 54/92. I'm publishing the null in full at
+benchmark/RESULTS.md, per-run artifacts included, with the regime
+analysis of why (ceiling effects, floor effects, one spurious +3 from
+backport-duplicate variance). My own ~10%→~50% experience on a
+private 500k-LOC enterprise codebase is human-in-the-loop and labeled
+as an anecdote everywhere — the honest position is that the regime
+where I believe the value lives is unbenchmarked, by me or anyone.
 
 Two reasons I'm writing.
 
-(1) Early-access offer: I'd value your hands on it before the public
-launch next week. The repo (Apache 2.0): github.com/narailabs/doc-wiki.
-A 5-minute walkthrough: /doc-wiki:init, /doc-wiki:onboard, /doc-wiki:atlas
---dry-run on any codebase you have open. The manifesto explains the
-framing in more depth than the README:
+(1) Early-access offer: I'd value your hands on the artifact before
+the public launch next week. The repo (Apache 2.0):
+github.com/narailabs/doc-wiki. A 5-minute walkthrough: /doc-wiki:init,
+then /doc-wiki:atlas --dry-run on any codebase you have open. The
+manifesto explains the framing in more depth than the README:
 github.com/narailabs/doc-wiki/blob/main/docs/manifesto.md.
 
-(2) If you wanted to re-run the benchmark on a codebase of your choosing,
-the harness in benchmark/ accepts arbitrary repos via repos.yaml. I'd be
-genuinely curious whether the doc-wiki delta on (say) datasette or
-llm holds, and the methodology is the part I want stress-tested most.
+(2) The methodology is the part I want stress-tested most. The harness
+in benchmark/ takes a repo config (benchmark/repos/<id>.yaml: mine →
+calibrate → run both arms → grade); if you wanted to point it at (say)
+datasette or llm, I'd be genuinely curious whether the null holds
+there too — and I'll publish whatever it says either way.
 
 Not asking for coverage — only for honest reactions and (if the
-methodology is sound) a re-run on a repo you know well. Apache 2.0
-forever, explicit no-relicense commitment in docs/governance.md.
+methodology is sound) a poke at it on a repo you know well. Apache 2.0
+forever, explicit no-relicense commitment in the manifesto.
 
 — rfv (github.com/narailabs)
 ```
@@ -69,5 +77,6 @@ forever, explicit no-relicense commitment in docs/governance.md.
 - **Hit-rate honesty:** ~10–20% chance he responds; ~5–10% chance he writes about it. Even no-response is fine; the email itself isn't lost — it establishes a paper trail.
 - **Don't send the same email to other Simon-tier targets** (Karpathy himself, Jeff Atwood, etc.). Each cold-pitch has to be specific to the recipient.
 - **If he responds positively:** offer a 30-minute walkthrough call within the same week. Move fast.
-- **If he asks "can I see the personal codebase numbers":** politely no (private codebase, NDA risk). Offer the OSS benchmark instead. He'll understand.
+- **If he asks "can I see the personal codebase numbers":** politely no (private codebase, NDA risk). Point at the published OSS null instead — the transparency IS the pitch to Simon. He'll understand.
+- **Never claim an autonomous-accuracy lift.** The published benchmark is null; the only accuracy numbers allowed are the null (cited) and the ~10%→~50% anecdote (qualified: private, human-in-the-loop, unbenchmarked regime).
 - **If he writes a blog post:** thank him in the post comments (not by email). Don't share his post in your launch artifacts; let it travel organically.

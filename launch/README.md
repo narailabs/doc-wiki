@@ -8,11 +8,10 @@ Status fields below: ⬜ not yet · 🟦 ready (you can run it) · 🟨 do this 
 
 | When | What | Where | File | Status |
 |---|---|---|---|---|
-| T-21..T-15 | Build benchmark harness against 1st repo | local | n/a (see `benchmark/PLAN.md`) | 🟦 |
+| T-21..T-15 | Benchmark: built, run (4 configs, 92 pairs), null published in full | `benchmark/RESULTS.md` | n/a | 🟩 |
 | T-21..T-15 | Draft (already drafted, just publish) the manifesto | personal blog / `docs/manifesto.md` | [`../docs/manifesto.md`](../docs/manifesto.md) | 🟩 |
 | T-21..T-15 | Build HN karma — 5–10 thoughtful comments | news.ycombinator.com | n/a | ⬜ |
 | T-21..T-15 | Submit to community marketplace | clau.de/plugin-directory-submission | [`marketplace-submission.md`](marketplace-submission.md) | 🟦 |
-| T-14..T-8 | Complete benchmark across all 3 repos | local | n/a | ⬜ |
 | T-14..T-8 | Cold-email Simon Willison | email | [`cold-email-simonw.md`](cold-email-simonw.md) | 🟦 |
 | T-14..T-8 | Submit to awesome lists | GitHub | [`awesome-list-submissions.md`](awesome-list-submissions.md) | 🟦 |
 | T-7..T-1 | Soft post Anthropic Discord #showcase | Discord | [`discord-anthropic.md`](discord-anthropic.md) | 🟦 |
@@ -59,7 +58,7 @@ Each file has the same shape: one block of paste-ready text, followed by a `## N
 ## Anti-pattern checklist (read before any launch action)
 
 - [ ] Am I cheerleading Anthropic? (Don't.)
-- [ ] Am I claiming an unbenched number? (Don't. The 10→80 number gets the "on my own enterprise codebase" qualifier every time; OSS numbers cite `benchmark/`.)
+- [ ] Am I claiming an autonomous-accuracy lift? (Never. The published benchmark is null — cite `benchmark/RESULTS.md`: 92 pairs, baseline 57 vs wiki 54. The only anecdote allowed is ~10%→~50%, always qualified: private codebase, human in the loop, unbenchmarked regime.)
 - [ ] Am I seeding booster comments from friends? (Don't. HN detects this.)
 - [ ] Have I rested ≥6 hours since drafting this? (Required for cold-email files.)
 - [ ] Is the response window I'm about to commit to realistic? (HN: 24h live. Cold emails: reply within 48h to any response.)

@@ -5,10 +5,10 @@
 ## Title
 
 ```
-I built a Claude Code plugin that lifted my autonomous ticket-fix accuracy from ~10% to ~80% on a real enterprise codebase. Open-sourcing the wiki layer.
+I built a Claude Code plugin that turns your codebase into a wiki the agent reads — ER diagrams from your ORM models, a cross-service map, cited answers. I also benchmarked it and published the null.
 ```
 
-149 chars. Reddit allows 300; long title is fine here, the audience reads it.
+197 chars. Reddit allows 300; long title is fine here, the audience reads it.
 
 ## Subreddit choice
 
@@ -18,11 +18,19 @@ r/ClaudeAI (the larger / general one). For r/ClaudeCode (smaller / more workflow
 
 ```
 TL;DR — Claude Code is great on clean small codebases. On the
-8-year-old enterprise codebases most of us actually work in, it fixes
-maybe 10% of tickets autonomously and quietly breaks things on the
-other 90%. I built a plugin that lifts that to ~80% on my own codebase
-by feeding the agent a maintained wiki over code + Jira + Confluence +
-GitHub + DB schemas. Open-sourced today: github.com/narailabs/doc-wiki.
+8-year-old enterprise codebases most of us actually work in, the
+context it needs lives in Jira threads, Confluence pages, and a DB
+schema that drifted from the ORM models three refactors ago. I built
+a plugin that generates and maintains a wiki over all of that, which
+the agent reads before touching code. Open-sourced today:
+github.com/narailabs/doc-wiki.
+
+Up front, because you'd find it anyway: I benchmarked whether the wiki
+lifts the agent's *fully autonomous* ticket-fix rate — 92 ticket pairs,
+SWE-bench-style, container-isolated — and it doesn't (baseline 57/92,
+wiki 54/92). The full null is published at benchmark/RESULTS.md. What
+the tool gives you is the artifact, and a workflow where you and the
+agent navigate it together.
 
 Apache 2.0 forever, runs in your existing Claude Code session, no SaaS.
 
@@ -43,46 +51,55 @@ new service here?"
 
 **What I built**
 
-doc-wiki is a Claude Code plugin (Apache 2.0). 10 slash commands:
+doc-wiki is a Claude Code plugin (Apache 2.0). 8 slash commands:
 
-- /doc-wiki:init — scaffold
-- /doc-wiki:onboard — detect language, ORM, DB, external services
+- /doc-wiki:init — scaffold + onboarding (detects language, ORM, DB, external services)
 - /doc-wiki:atlas — document the whole codebase in one phased pass
-- /doc-wiki:ingest — add a source (file / URL / Jira ticket / Confluence)
-- /doc-wiki:query — synthesize a cited answer from the wiki
-- /doc-wiki:promote — turn a good query answer into a permanent page
-- /doc-wiki:refresh — keep sources current
-- /doc-wiki:lint, :fix, :stats
+- /doc-wiki:ingest — add a source (file / URL / Jira ticket / Confluence page); --refresh keeps it current
+- /doc-wiki:query — synthesize a cited answer from the wiki; --promote turns a good answer into a permanent page
+- /doc-wiki:lint, :edit, :unarchive, :stats
 
-Output is a structured markdown wiki at `docs/<app>-wiki/`. Claude Code
-reads it via your `CLAUDE.md` before touching code.
+Output is a structured markdown wiki at `docs/<app>-wiki/`: per-topic
+architecture pages, ER diagrams derived from your actual ORM models,
+and — when it detects more than one service (root repo + submodules) —
+an auto-generated cross-service map: service dependencies, client
+registry, queue registry, shared libraries. Claude Code reads it via
+your `CLAUDE.md` before touching code. Works the same on a small
+single-repo project, just leaner.
 
 External services route through one planner (`gather()` from
-narai-primitives) — Jira, Confluence, GitHub, Notion, AWS, GCP, plus
-read-only DB connectors with a policy gate. You configure credentials
-once.
+narai-primitives) — Jira, Confluence, GitHub, GitLab, Notion, Linear,
+AWS, GCP, plus read-only DB connectors with a policy gate. You
+configure credentials once.
 
 ORM cross-validation against the live DB through 7 profiles: Prisma,
 SQLAlchemy, Django, JPA, TypeORM, ActiveRecord, Entity Framework.
 
-**The number**
+**The numbers, honestly**
 
-On my own (private) codebase: ~10% → ~80% autonomous ticket-fix
-accuracy after wiring it up. Anecdotal — explicitly. The number you
-care about is the reproducible one in benchmark/ — Django, Cal.com,
-Mastodon, real closed issues, SWE-bench-style binary pass/fail. Re-run
-it yourself if you want to argue with it.
+I built a hardened benchmark to test the autonomous-accuracy claim:
+four configurations, 92 valid ticket pairs on two OSS repos (vitest,
+Saleor), egress firewall, sanitized tickets, contamination floors.
+Result: no lift — baseline 57/92, wiki 54/92. Published in full at
+benchmark/RESULTS.md, per-run artifacts included, reproducible from a
+fresh checkout.
+
+Separately: on my own private 500k-LOC enterprise codebase, used
+human-in-the-loop (me reading the cross-service map, pointing the
+agent at the right pages), my fix rate went from ~10% to ~50%. That's
+one engineer's anecdote in a regime the benchmark doesn't cover, and
+I label it that way everywhere.
 
 **What I want from you**
 
 Try it on a real-world codebase — gnarly enterprise monolith, root-of-
 microservices submodules, or even a small side project — and tell me
-what works / doesn't. Pop a /doc-wiki:atlas --dry-run, see what it
-estimates. The plugin is at github.com/narailabs/doc-wiki. Manifesto
-+ benchmark linked from the README.
+what the wiki gets right and wrong. Pop a /doc-wiki:atlas --dry-run,
+see what it estimates. The plugin is at github.com/narailabs/doc-wiki.
+Manifesto + benchmark linked from the README.
 
-Built it solo, no funding. Happy to argue methodology, defend numbers,
-hear that I'm wrong.
+Built it solo, no funding. Happy to argue methodology, defend the
+artifact, hear that I'm wrong.
 ```
 
 ---
@@ -95,6 +112,7 @@ hear that I'm wrong.
 - **Don't cross-post.** Posting the same content to r/ClaudeCode the same day will get flagged. The r/ClaudeCode post (separate file, different angle) goes the week before.
 - **If a mod removes it for self-promotion:** message the mods politely, point out that the post is workflow-share with explicit open-source commitment, no commercial element. Most mod teams will reinstate.
 - **DM strategy:** if someone DMs asking how to use it on their codebase, respond. These DMs are the people who become contributors.
+- **Never claim an autonomous-accuracy lift.** The published benchmark is null; the only accuracy numbers allowed are the null (cited) and the ~10%→~50% anecdote (qualified: private codebase, human in the loop, unbenchmarked regime).
 
 ## Cross-channel coordination
 

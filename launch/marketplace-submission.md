@@ -26,10 +26,11 @@ When the form asks for the elevator pitch, paste:
 
 ```
 doc-wiki maintains a living wiki of your codebase + Jira + Confluence
-+ GitHub + Notion + AWS/GCP + ORM/DB schemas — fed to Claude Code as
-context. Lifts autonomous ticket-fix accuracy from ~10% to ~80% on the
-author's enterprise codebase; reproducible benchmark on 3 OSS repos in
-the repo. Apache 2.0 forever.
++ GitHub + GitLab + Notion + Linear + AWS/GCP + ORM/DB schemas — fed
+to Claude Code as context: ER diagrams from your real ORM models, an
+auto-generated cross-service map, cited answers. Benchmarked by the
+authors with the null published in full (benchmark/RESULTS.md).
+Apache 2.0 forever.
 ```
 
 When asked for the "what category does this fit":
