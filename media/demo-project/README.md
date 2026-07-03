@@ -33,8 +33,8 @@ Renders land under `renders/`. Copy the final to `../demo.mp4` to power the READ
 - `media/demo.mp4` — 1920×1080, H.264 — pinned X tweet, Loom outreach
 - `media/demo-hero.gif` — 6s loop of the cross-service-map beat (39.5–45.5s: edges draw in, caption lands), 960 wide, 15 fps — HN thread, README hero. Generate from MP4 with a two-pass palette (single-pass gif quantization tints the dark canvas green):
   ```sh
-  ffmpeg -ss 39.5 -i demo.mp4 -t 6 -vf "fps=15,scale=960:-1,palettegen=stats_mode=diff" palette.png
-  ffmpeg -ss 39.5 -i demo.mp4 -i palette.png -lavfi "fps=15,scale=960:-1[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5" -t 6 demo-hero.gif
+  ffmpeg -ss 39.5 -i ../demo.mp4 -t 6 -vf "fps=15,scale=960:-1,palettegen=stats_mode=diff" palette.png
+  ffmpeg -ss 39.5 -i ../demo.mp4 -i palette.png -lavfi "fps=15,scale=960:-1[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5" -t 6 ../demo-hero.gif
   ```
   Then verify frame-by-frame that no stray numbers appear.
 - `media/demo.webm` — optional, for sites that want VP9

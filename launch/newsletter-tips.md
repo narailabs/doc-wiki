@@ -19,11 +19,16 @@ Hit Ben's Bites and TLDR AI for sure; AI Engineer Weekly if you can find the rig
 Tool: doc-wiki — open-source Claude Code plugin (Apache 2.0)
 URL: github.com/narailabs/doc-wiki
 One-line description: Maintained wiki layer over code + Jira / Confluence
-+ GitHub / Notion / AWS-GCP / ORM-DB schemas — lifts Claude Code's
-autonomous ticket-fix accuracy from ~10% to ~80% on enterprise
-codebases.
++ GitHub / GitLab / Notion / Linear / AWS-GCP / ORM-DB schemas — ER
+diagrams from your real ORM models, an auto-generated cross-service
+map, cited answers your coding agent reads before touching code.
 
 Why it's interesting:
+- The authors benchmarked their own headline claim (does the wiki lift
+  autonomous ticket-fix accuracy?) and published the null in full — 92
+  ticket pairs, SWE-bench-style, container-isolated; baseline 57/92 vs
+  wiki 54/92, at benchmark/RESULTS.md. Rare transparency in a space
+  full of unreproducible demos.
 - Most AI coding tools target clean OSS code; doc-wiki targets the
   8-year-old enterprise monoliths people actually work in — including
   the root-of-microservices case where it documents how the services
@@ -31,9 +36,6 @@ Why it's interesting:
 - The pattern (LLM Wiki) was named by Karpathy in April 2026 (gist:
   https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f);
   doc-wiki is the enterprise-codebase execution.
-- Reproducible benchmark in benchmark/ runs Claude Code against real
-  closed issues from Django/Cal.com/Mastodon with and without doc-wiki.
-  SWE-bench-style binary pass/fail.
 - Apache 2.0 forever — explicit no-relicense commitment.
 
 Show HN landed Tuesday at <HN_LINK>, currently at <N> stars.

@@ -16,11 +16,17 @@ compounding artifact the agent reads instead of re-deriving every
 answer from raw sources. He pointed it at his personal notes; I built
 the enterprise-codebase version.
 
-doc-wiki ingests code + Jira + Confluence + GitHub + Notion + AWS/GCP
-+ ORM/DB schemas, builds a structured wiki, and feeds it to your
-coding agent as context. On my own (private, 500k LOC, 8-year-old)
-enterprise codebase, autonomous ticket-fix accuracy went from ~10% to
-~80%.
+doc-wiki ingests code + Jira + Confluence + GitHub + GitLab + Notion +
+Linear + AWS/GCP + ORM/DB schemas, builds a structured wiki (ER
+diagrams from your real ORM models, an auto-generated cross-service
+map), and feeds it to your coding agent as context.
+
+Numbers, honestly: I benchmarked whether the wiki lifts fully-
+autonomous ticket-fix rate (92 ticket pairs, SWE-bench-style) — it
+doesn't, and the full null is published in the repo at
+benchmark/RESULTS.md. Where it earns its keep for me is human-in-the-
+loop on ecosystem-heavy enterprise code (my own anecdotal fix rate:
+~10% → ~50%, private codebase, labeled as anecdote).
 
 Caveat: today it ships as a Claude Code plugin and the slash commands
 are Claude Code. The underlying skill works on Codex / Gemini / Cursor /

@@ -7,16 +7,16 @@
 ```
 I open-sourced doc-wiki today.
 
-It feeds Claude Code a maintained wiki of your code + Jira + Confluence
-+ GitHub + Notion + DB schemas.
+One command turns your codebase into a wiki your coding agent reads —
+ER diagrams from your ORM models, a cross-service map, cited answers
+over code + Jira + Confluence + DB schemas.
 
-The wiki is the product. The benchmark is public — including where it
-lost. Apache 2.0 forever. 🧵
+I benchmarked it and published the null. Apache 2.0 forever. 🧵
 
-[VIDEO — 60-sec demo: atlas → wiki → ER diagrams → cross-service map → cited answers, from media/demo.mp4]
+[VIDEO — 60-sec demo, from media/demo.mp4]
 ```
 
-**Counts:** ~240 chars / 280 budget. The thread emoji at the end signals "more below" to the algorithm.
+**Counts:** 279/280 (X weighted count; the 🧵 emoji counts as 2). The thread emoji at the end signals "more below" to the algorithm.
 
 ## Tweet 2 — the why
 
@@ -34,40 +34,52 @@ That's the case I built doc-wiki for.
 ```
 The pattern: Karpathy's LLM Wiki
 (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-but pointed at complex enterprise code instead of personal notes
-(scales down to small repos, scales up to root-of-microservices
-submodule layouts).
+pointed at enterprise code instead of personal notes. Works on small
+repos and root-of-microservices layouts too.
 
 A maintained, compounding artifact the agent reads instead of
-re-deriving everything from raw sources every turn.
+re-deriving everything each turn.
 ```
 
-## Tweet 4 — the 10 commands
+**Counts:** 268/280 (URL counts as 23 via t.co).
+
+## Tweet 4 — the 8 commands
 
 ```
-Ten slash commands cover the lifecycle:
-/doc-wiki:init      → scaffold
-/doc-wiki:onboard   → detect stack, ORM, DB, services
-/doc-wiki:atlas     → document the whole codebase
-/doc-wiki:ingest    → add a source (file/URL/ticket)
-/doc-wiki:query     → cited synthesis
-/doc-wiki:promote   → query answer → permanent page
-/doc-wiki:refresh   → keep current
-/doc-wiki:lint, :fix, :stats
+Eight slash commands cover the lifecycle:
+/doc-wiki:init → scaffold + onboard
+/doc-wiki:atlas → document the whole codebase
+/doc-wiki:ingest → add a source; --refresh
+/doc-wiki:query → cited answers; --promote
+/doc-wiki:lint, :edit, :unarchive, :stats
 ```
+
+**Counts:** 251/280.
 
 ## Tweet 5 — the benchmark
 
 ```
-We benchmarked whether the wiki makes Claude Code fix more tickets
-fully autonomously: 92 paired runs on OSS repos, four configurations —
-no measured lift. That null is published in full, re-runnable from a
-fresh checkout.
+The honest part: I benchmarked whether the wiki lifts fully-autonomous
+ticket-fix rate. 92 ticket pairs, SWE-bench-style, container-isolated.
 
-What we ship is the artifact: the map, the diagrams, the cited
-answers. Inspect it and decide.
-github.com/narailabs/doc-wiki/tree/main/benchmark
+It doesn't: baseline 57/92, wiki 54/92. Null published in full —
+re-run it yourself and argue with the data.
+github.com/narailabs/doc-wiki/blob/main/benchmark/RESULTS.md
 ```
+
+**Counts:** 275/280 (URL counts as 23 via t.co).
+
+## Tweet 5b — why use it then (post immediately after 5, same thread)
+
+```
+So why use it? The benchmark measures an agent alone with one OSS
+repo. The wiki earns its keep when you + the agent work
+ecosystem-heavy code: scope from the cross-service map, point at the
+right pages, catch wrong turns at diff two. The artifact is the
+product.
+```
+
+**Counts:** 263/280.
 
 ## Tweet 6 — the license
 

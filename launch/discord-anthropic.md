@@ -13,11 +13,18 @@
 ```
 Hey folks 👋 building a Claude Code plugin called doc-wiki — keeps a
 structured wiki over an entire codebase + Jira / Confluence / GitHub /
-Notion / AWS / GCP / DB schemas, so the agent can work accurately on
-complex enterprise code (and on small repos, and on root-of-
-microservices submodule layouts where it documents how the services
-relate). On my own codebase autonomous ticket-fix rate went from
-~10% → ~80% after wiring it up.
+GitLab / Notion / Linear / AWS / GCP / DB schemas: per-topic
+architecture pages, ER diagrams from your actual ORM models, and an
+auto-generated cross-service map on root-of-microservices submodule
+layouts (works on small repos too, just leaner). The agent reads it
+via CLAUDE.md before touching code.
+
+Honesty first: I benchmarked whether the wiki lifts fully-autonomous
+ticket-fix accuracy (92 ticket pairs, SWE-bench-style, container-
+isolated) and it doesn't — the full null is published in the repo at
+benchmark/RESULTS.md. The value is the artifact + human-in-the-loop
+navigation, and I'd rather you hear that from me than from an HN
+commenter.
 
 Soft-launching publicly next week (Show HN + the usual circuit), but
 wanted to get the Discord's eyes on it first since you'll spot any
@@ -25,7 +32,7 @@ obvious issues fastest.
 
 Repo (Apache 2.0): github.com/narailabs/doc-wiki
 Manifesto: github.com/narailabs/doc-wiki/blob/main/docs/manifesto.md
-Reproducible benchmark in progress: github.com/narailabs/doc-wiki/tree/main/benchmark
+Benchmark (null, published in full): github.com/narailabs/doc-wiki/blob/main/benchmark/RESULTS.md
 
 Looking for: anyone willing to run /doc-wiki:atlas --dry-run on a
 codebase you have open and tell me what the cost estimate / topic
@@ -40,9 +47,10 @@ Show HN went up this morning, Apache 2.0 plugin:
 news.ycombinator.com/item?id=<YOUR_HN_ID>
 
 It feeds Claude Code an ecosystem-aware wiki (code + Jira + Confluence
-+ DB schemas) — autonomous ticket-fix rate on my codebase went from
-~10% → ~80%. Reproducible benchmark in the repo against Django,
-Cal.com, Mastodon.
++ DB schemas): ER diagrams from your ORM models, cross-service map,
+cited answers. We benchmarked the autonomous-accuracy question
+ourselves and published the null in full (92 pairs, baseline 57 vs
+wiki 54) — the HN comment thread has the whole story.
 
 Repo: github.com/narailabs/doc-wiki
 
