@@ -209,8 +209,9 @@ export function lookupBySource(source) {
         }
         return null;
     }
-    // Scheme-based matching
-    const schemeMatch = /^([a-z]+):\/\//i.exec(trimmed);
+    // Scheme-based matching. Scheme grammar per RFC 3986:
+    // ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) — so `s3://`, `kb-v2://` count.
+    const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
     if (schemeMatch !== null) {
         const scheme = `${(schemeMatch[1] ?? "").toLowerCase()}://`;
         for (const agent of _agents.values()) {
@@ -327,6 +328,15 @@ function validateCustomAgentEntry(entry, index, configPath) {
     if (schemes !== undefined &&
         (!Array.isArray(schemes) || !schemes.every((s) => typeof s === "string"))) {
         warnCustomAgents(`skipping ${where}: "source_schemes" must be a list of strings`);
+        return null;
+    }
+    // Each scheme must be a valid URI scheme (RFC 3986) ending in "://" so that
+    // `lookupBySource`'s matcher can actually route it. Reject e.g. "kb" (no
+    // "://") or "my_kb://" (underscore is not a scheme char) rather than
+    // silently registering a connector that can never match.
+    if (Array.isArray(schemes) &&
+        !schemes.every((s) => /^[a-z][a-z0-9+.-]*:\/\/$/i.test(s))) {
+        warnCustomAgents(`skipping ${where}: every "source_schemes" entry must be a URI scheme ending in "://" (e.g. "s3://")`);
         return null;
     }
     const urlPatterns = e["source_url_patterns"];

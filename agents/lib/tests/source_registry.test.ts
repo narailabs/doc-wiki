@@ -20,6 +20,7 @@ import {
   loadCustomAgentConfigs,
   registeredAgentIds,
   loadConfiguredConnectorIds,
+  resolveWikiConfigPath,
 } from "../source_registry.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -185,6 +186,21 @@ describe("lookupBySource", () => {
       origin: "custom",
     }));
     expect(lookupBySource("internal://kb/article-123")?.name).toBe("my-internal-agent");
+  });
+
+  it("matches schemes containing digits, plus, dot, or dash (RFC 3986)", () => {
+    registerAgent(makeManifest({
+      name: "s3-agent",
+      source_schemes: ["s3://"],
+      origin: "custom",
+    }));
+    registerAgent(makeManifest({
+      name: "kb-v2-agent",
+      source_schemes: ["kb-v2://"],
+      origin: "custom",
+    }));
+    expect(lookupBySource("s3://bucket/key.txt")?.name).toBe("s3-agent");
+    expect(lookupBySource("kb-v2://article/1")?.name).toBe("kb-v2-agent");
   });
 });
 
@@ -418,6 +434,17 @@ describe("loadCustomAgentConfigs", () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 
+  it("accepts schemes with digits/plus/dot/dash, rejects malformed ones", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "s3", source_schemes: ["s3://"] },
+      { name: "bad-no-slashes", source_schemes: ["kb"] },
+      { name: "bad-underscore", source_schemes: ["my_kb://"] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["s3"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
   it("warns and returns [] when custom is not a list", () => {
     const p = writeConfigYaml(tmpDir, configWithCustom({ name: "kb" }));
     expect(loadCustomAgentConfigs(p)).toEqual([]);
@@ -503,5 +530,36 @@ describe("initRegistryFromConfig", () => {
     initRegistryFromConfig(path.join(tmpDir, "missing.yaml"));
     expect(listAgents()).toHaveLength(9);
     expect(lookupBySource("kb://article-42")).toBeNull();
+  });
+});
+
+// ── resolveWikiConfigPath ─────────────────────────────────────────────
+
+describe("resolveWikiConfigPath", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("resolve-wiki-config-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("returns <root>/wiki.config.yaml when present", () => {
+    const p = path.join(tmpDir, "wiki.config.yaml");
+    fs.writeFileSync(p, "wiki:\n  name: t\n");
+    expect(resolveWikiConfigPath(tmpDir)).toBe(p);
+  });
+
+  it("falls back to <root>/wiki/wiki.config.yaml when the root copy is missing", () => {
+    fs.mkdirSync(path.join(tmpDir, "wiki"), { recursive: true });
+    const p = path.join(tmpDir, "wiki", "wiki.config.yaml");
+    fs.writeFileSync(p, "wiki:\n  name: t\n");
+    expect(resolveWikiConfigPath(tmpDir)).toBe(p);
+  });
+
+  it("returns null when neither location exists", () => {
+    expect(resolveWikiConfigPath(tmpDir)).toBeNull();
   });
 });

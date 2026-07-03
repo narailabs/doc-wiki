@@ -1824,6 +1824,72 @@ def health(): pass
   });
 });
 
+describe("main() resolves the <wikiRoot>/wiki/ config fallback", () => {
+  let tmpPath: string;
+  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("atlas-inv-main-nested-cfg-");
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    cleanupTmpPath(tmpPath);
+  });
+
+  // A custom REST profile for a framework with NO shipped profile, so the
+  // endpoint is detectable ONLY when the custom_profiles block actually loads.
+  const NESTED_CONFIG = `wiki:
+  name: x
+ecosystem:
+  rest:
+    custom_profiles:
+      - name: quokka
+        language: typescript
+        detection:
+          file_patterns: ["**/*.ts"]
+          markers:
+            - pattern: 'from "quokka-http"'
+        endpoint_extraction:
+          patterns:
+            - regex: "quokka\\\\.(get|post)\\\\(['\\"]([^'\\"]+)"
+              method_group: 1
+              path_group: 2
+`;
+
+  it("loads ecosystem custom_profiles from wiki/wiki.config.yaml, not just the root copy", () => {
+    fs.writeFileSync(
+      path.join(tmpPath, "server.ts"),
+      `import { quokka } from "quokka-http";\nquokka.get("/api/nested-config-loaded", () => {});\n`,
+    );
+    // Config lives ONLY under the nested wiki/ location — the root copy is absent.
+    fs.mkdirSync(path.join(tmpPath, "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(tmpPath, "wiki", "wiki.config.yaml"), NESTED_CONFIG);
+
+    const runId = "2026-07-02T11-00-00";
+    const exit = main([
+      "generate",
+      "--wiki-root", tmpPath,
+      "--repo-root", tmpPath,
+      "--run-id", runId,
+      "--enable-rest",
+    ]);
+    expect(exit).toBe(0);
+
+    const manifest = loadInventory(tmpPath, runId);
+    if (!manifest) throw new Error("manifest not found");
+    // Without the wiki/ fallback the CLI would probe only <root>/wiki.config.yaml
+    // (absent here), the custom profile would never load, and the endpoint would
+    // go undetected.
+    expect(manifest.rest_endpoints.map((e) => e.path)).toContain(
+      "/api/nested-config-loaded",
+    );
+  });
+});
+
 // ── resolveCrossService: the single shared precedence resolver ────────────
 
 describe("resolveCrossService precedence matrix", () => {

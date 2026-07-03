@@ -313,6 +313,27 @@ describe("custom agents from wiki.config.yaml", () => {
     expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
   });
 
+  it("classifies a custom scheme containing a digit (s3://)", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: s3",
+        '        source_schemes: ["s3://"]',
+        "        invocation_template:",
+        "          label: S3 Object",
+        "",
+      ].join("\n"),
+    );
+    const out = buildHowToGoDeeper(["s3://bucket/report.pdf"], { wikiRoot: tmpDir });
+    expect(out).toContain("**S3 Object:**");
+    expect(out).toContain('/doc-wiki:ingest "s3://bucket/report.pdf"');
+  });
+
   it("CLI picks up custom agents from the working directory", () => {
     fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
     const stdout = execFileSync(

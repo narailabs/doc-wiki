@@ -115,8 +115,10 @@ export function classifySource(source) {
         // Unmatched URL — generic external link
         return { label: "External link", hint: `Open <${trimmed}>`, source: trimmed };
     }
-    // Try scheme matching
-    if (/^[a-z]+:\/\//i.test(trimmed)) {
+    // Try scheme matching. RFC 3986 scheme grammar:
+    // ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) — matches lookupBySource so
+    // custom schemes like s3:// or kb-v2:// reach the registry.
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
         const manifest = lookupBySource(trimmed);
         if (manifest !== null) {
             return buildAgentEntry(manifest, trimmed);
