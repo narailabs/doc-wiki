@@ -90,8 +90,8 @@ real wall time."]
 
 ## What we changed in our workflow
 
-[1 paragraph. "After 3 weeks, we made /doc-wiki:refresh part of the
-nightly cron, integrated /doc-wiki:lint --fix into the pre-merge
+[1 paragraph. "After 3 weeks, we made /doc-wiki:ingest --refresh part
+of the nightly cron, integrated /doc-wiki:lint into the pre-merge
 check, and added the wiki references to our CLAUDE.md template for
 new services."]
 

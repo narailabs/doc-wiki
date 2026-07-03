@@ -12,11 +12,12 @@
 
 **Submission text (when prompted for description):**
 ```
-Maintained wiki over code + Jira + Confluence + GitHub + Notion +
-AWS/GCP + ORM/DB schemas, indexed into Claude Code's context. Apache
-2.0 forever. Lifts autonomous ticket-fix accuracy ~10%→~80% on enterprise
-codebases; reproducible benchmark in repo. 10 slash commands cover
-init/onboard/atlas/ingest/query/lint/fix/promote/refresh/stats.
+Maintained wiki over code + Jira + Confluence + GitHub + GitLab +
+Notion + Linear + AWS/GCP + ORM/DB schemas, indexed into Claude Code's
+context: ER diagrams from real ORM models, auto-generated cross-service
+map, cited answers. Apache 2.0 forever. Honest benchmark published in
+full (incl. the null on autonomous accuracy) in benchmark/. 8 slash
+commands cover init/atlas/ingest/query/lint/edit/unarchive/stats.
 ```
 
 **Turnaround:** <2 weeks typical.
@@ -37,9 +38,9 @@ Add doc-wiki: ecosystem-aware wiki for complex enterprise codebases
 Adds doc-wiki under Documentation.
 
 - Repo: github.com/narailabs/doc-wiki (Apache 2.0)
-- 10 /doc-wiki:* slash commands
-- Ingests code + Jira + Confluence + GitHub + Notion + AWS/GCP + ORM/DB schemas
-- Reproducible benchmark in benchmark/
+- 8 /doc-wiki:* slash commands
+- Ingests code + Jira + Confluence + GitHub + GitLab + Notion + Linear + AWS/GCP + ORM/DB schemas
+- Honest benchmark (null on autonomous accuracy, published in full) in benchmark/
 
 Happy to revise to match the list's current shape.
 ```

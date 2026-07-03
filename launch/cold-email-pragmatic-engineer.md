@@ -31,13 +31,21 @@ ecosystem-aware wiki layer the OpenCode / Cline / Continue.dev set
 of model-routing agents don't have.
 
 It feeds Claude (or any agent that can read CLAUDE.md) a maintained
-wiki over code + Jira + Confluence + GitHub + Notion + AWS/GCP + ORM/DB
-schemas. On my own enterprise codebase (private; 500k LOC, 8 years
-old) autonomous ticket-fix accuracy went from ~10% to ~80%. SWE-bench-
-style reproducible benchmark in benchmark/ on three OSS repos (Django,
-Cal.com, Mastodon).
+wiki over code + Jira + Confluence + GitHub + GitLab + Notion + Linear
++ AWS/GCP + ORM/DB schemas: ER diagrams from the real ORM models, an
+auto-generated cross-service map, cited answers.
 
-Three things I think you'd find newsworthy:
+The angle you might actually find newsworthy: I benchmarked my own
+headline claim — does the wiki lift fully-autonomous ticket-fix
+accuracy? — with a hardened SWE-bench-style harness (92 ticket pairs,
+container-isolated, egress firewall) and the answer was no (baseline
+57/92, wiki 54/92). I published the null in full at
+benchmark/RESULTS.md rather than shipping a favorable slice. My own
+~10%→~50% experience on a private 500k-LOC enterprise codebase is
+human-in-the-loop and labeled anecdote everywhere; the regime where I
+believe the value lives is unbenchmarked, by me or anyone.
+
+Three more things worth a look:
 
 (1) The ecosystem-integration story. The dominant Claude Code plugin
 narrative is "skills/prompts/hooks" — Superpowers, Karpathy CLAUDE.md,
@@ -63,7 +71,7 @@ artifact for that.
 Show HN landed Tuesday: news.ycombinator.com/item?id=<YOUR_HN_ID>
 Repo (Apache 2.0): github.com/narailabs/doc-wiki
 Manifesto: github.com/narailabs/doc-wiki/blob/main/docs/manifesto.md
-Reproducible benchmark: github.com/narailabs/doc-wiki/tree/main/benchmark
+Benchmark (null, published in full): github.com/narailabs/doc-wiki/blob/main/benchmark/RESULTS.md
 
 Not pitching coverage. Pitching whether the angle is worth a paragraph
 in your next AI-tooling roundup, or a Q&A if you'd find it useful for

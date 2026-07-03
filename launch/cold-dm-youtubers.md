@@ -15,8 +15,9 @@
 ```
 Hey — built doc-wiki, Apache 2.0 Claude Code plugin that does
 ecosystem-aware context (code + Jira + Confluence + DB schemas as one
-wiki). Hit Show HN Tuesday (link), ~10%→~80% autonomous ticket-fix
-on the author's enterprise codebase, reproducible benchmark in repo.
+wiki). Hit Show HN Tuesday (link). I benchmarked it myself and it did
+not beat the baseline on single-repo OSS — the full null result is
+published in the repo, reproducible from a fresh checkout.
 
 Built a 5-min Loom walkthrough for reviewers: <LOOM_URL>
 
@@ -41,10 +42,14 @@ microservices submodule case, where it documents how the services
 relate to each other; works fine on smaller projects too). The agent
 reads the wiki through `CLAUDE.md` before touching code.
 
-On the author's enterprise codebase (private, 500k LOC, 8 years old),
-autonomous ticket-fix accuracy went from ~10% to ~80% after wiring it
-up. A reproducible benchmark — Django, Cal.com, Mastodon, SWE-bench-
-style — ships in the repo at benchmark/.
+Where I stand on numbers: I benchmarked it myself — SWE-bench-style,
+container-isolated, 92 ticket pairs on vitest and Saleor — and it did
+not improve the autonomous ticket-fix pass rate (baseline 57/92, wiki
+54/92). The full null result ships at benchmark/RESULTS.md and is
+reproducible from a fresh checkout. Separately, and this is one
+engineer's anecdote from human-in-the-loop use on a private 500k-LOC
+enterprise codebase (a regime the benchmark doesn't cover), my own
+fix rate went from ~10% to ~50%.
 
 Why I'm reaching out: your Claude Code coverage is the most useful
 content in the space, and your audience is exactly the people who'd
@@ -72,7 +77,7 @@ Show HN: news.ycombinator.com/item?id=<HN_ID>
 
 ## Notes
 
-- **Customize per creator.** IndyDevDan's audience cares about practical "how to use Claude Code on a real codebase" — emphasize the production angle. AI Jason's audience cares about pattern + LLM theory — lead with the LLM Wiki framing. Matthew Berman's audience is broader AI consumer-curious — emphasize the benchmark number.
+- **Customize per creator.** IndyDevDan's audience cares about practical "how to use Claude Code on a real codebase" — emphasize the production angle. AI Jason's audience cares about pattern + LLM theory — lead with the LLM Wiki framing. Matthew Berman's audience is broader AI consumer-curious — emphasize the published-null benchmark honesty angle.
 - **Send a 30-second self-intro Loom *in the DM*** if Loom is awkward to navigate to. Keep total request weight <2 minutes for them.
 - **Hit-rate:** 25% read, 10% engage, 2-5% actually make a video. IndyDevDan has the highest hit-rate on tight-fit Claude Code content; AI Jason responds when the pattern angle is sharp; Matthew Berman almost never engages on cold DMs but you do it anyway because the reach is asymmetric.
 - **Don't follow up on a single non-response.** Re-engage at 30 days only if you have new traction signal (Pragmatic Engineer mention, Anthropic blog feature, named-enterprise case study).

@@ -10,10 +10,12 @@ enterprise-codebase execution of Karpathy's LLM Wiki pattern. Hit Show
 HN Tuesday (news.ycombinator.com/item?id=<HN_ID>); now at <N> stars.
 
 Why I'm writing: this might be the "wiki layer" angle for whatever
-your Claude Code / agent-tooling episode is in the pipeline. Author
-benchmark shows ~10%→~80% autonomous ticket-fix on a real enterprise
-codebase; reproducible benchmark on Django/Cal.com/Mastodon in the
-repo (SWE-bench-style).
+your Claude Code / agent-tooling episode is in the pipeline — with a
+twist: I benchmarked my own tool (92 ticket pairs, SWE-bench-style,
+container-isolated) and it did NOT lift autonomous ticket-fix rate.
+Published the null in full in the repo. The interesting story is what
+context layers actually do vs what we assume they do — artifact +
+human-in-the-loop vs autonomous magic.
 
 If interesting:
 - Repo: github.com/narailabs/doc-wiki

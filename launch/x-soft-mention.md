@@ -6,10 +6,10 @@
 
 ```
 @bcherny been quietly building a Claude Code plugin called doc-wiki —
-maintained wiki over code + Jira / Confluence / DB schemas, lifts my
-autonomous ticket-fix rate from ~10% to ~80% on a real enterprise
-codebase. Going public next week. Curious if the slash-command surface
-feels right.
+maintained wiki over code + Jira / Confluence / DB schemas (ER
+diagrams from the real ORM models, auto cross-service map). Going
+public next week, benchmark null published in full. Curious if the
+slash-command surface feels right.
 
 github.com/narailabs/doc-wiki
 ```
@@ -22,8 +22,8 @@ Boris regularly RTs plugins he likes; the ask here is for him to *see* the repo 
 @alexalbert__ open-sourced doc-wiki this week — Apache 2.0 Claude Code
 plugin that does ecosystem-aware context (code + Jira + Confluence +
 DB schemas as one wiki). The Karpathy LLM Wiki pattern pointed at
-complex enterprise code (works on small repos too). Reproducible
-benchmark in repo.
+complex enterprise code (works on small repos too). Benchmarked it
+ourselves — null published in full in the repo.
 
 github.com/narailabs/doc-wiki
 ```
@@ -34,9 +34,10 @@ Tagged on a different day than @bcherny tweet so they don't read as a coordinate
 
 ```
 @ClaudeDevs new plugin pre-launch: doc-wiki — keeps a structured wiki
-over code + the entire ecosystem (Jira / Confluence / GitHub / Notion
-/ AWS/GCP / DB schemas). 10 slash commands, Apache 2.0 forever.
-Reproducible benchmark on Django/Cal.com/Mastodon in the repo.
+over code + the entire ecosystem (Jira / Confluence / GitHub / GitLab
+/ Notion / Linear / AWS/GCP / DB schemas). 8 slash commands, Apache
+2.0 forever. We benchmarked it ourselves and published the null in
+the repo.
 
 Show HN going up Tuesday: github.com/narailabs/doc-wiki
 ```

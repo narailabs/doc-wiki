@@ -29,10 +29,13 @@ I built doc-wiki, the Claude Code plugin currently in the community
 marketplace at <COMMUNITY_MARKETPLACE_URL>. Sketch:
 
 - Feeds Claude an ecosystem-aware wiki over code + Jira + Confluence +
-  GitHub + Notion + AWS/GCP + ORM/DB schemas.
-- On the author's enterprise codebase: ~10% → ~80% autonomous ticket-fix
-  accuracy. Reproducible benchmark on Django / Cal.com / Mastodon in
-  benchmark/.
+  GitHub + GitLab + Notion + Linear + AWS/GCP + ORM/DB schemas: ER
+  diagrams from real ORM models, an auto-generated cross-service map,
+  cited answers.
+- We benchmarked our own autonomous-accuracy hypothesis (92 ticket
+  pairs, SWE-bench-style, container-isolated) and published the null
+  in full at benchmark/RESULTS.md — the transparency has been the
+  best-received part of the launch.
 - Apache 2.0 forever, explicit no-relicense commitment, signed releases.
 
 Three signals since launch (date M D):
@@ -57,8 +60,8 @@ roadmap to co-maintainers by Q4).
 pattern feels like the kind of thing Anthropic's blog has covered for
 other plugins (Superpowers, Atomic Agents). If a co-authored or
 spotlight post would be a fit, I'd be glad to write a draft for review
-that covers (a) what doc-wiki is, (b) the reproducible benchmark
-methodology, (c) the standards-track posture. Or — if the timing's off
+that covers (a) what doc-wiki is, (b) the benchmark methodology and
+why we published the null, (c) the standards-track posture. Or — if the timing's off
 — Code with Claude 2027 lightning-talk consideration.
 
 No pressure on either ask. If neither is a fit right now, even a quick
@@ -94,6 +97,6 @@ If no Tier-A signal landed by T+60, postpone the email. Land more signal first.
 - [ ] Simon Willison post live OR equivalent Tier-A signal in hand
 - [ ] ≥1000 GitHub stars
 - [ ] ≥1 merged external contributor PR
-- [ ] benchmark/RESULTS.md populated with real V2 numbers
+- [ ] benchmark/RESULTS.md numbers cited accurately (it's a published null — never imply a lift)
 - [ ] docs/governance.md signed off as accurate (esp. the bus-factor co-maintainer line — do not promise what you can't deliver)
 - [ ] Draft engineering-blog post (~2000 words) sitting in a private gist, ready to share if asked

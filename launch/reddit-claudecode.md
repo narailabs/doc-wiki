@@ -25,10 +25,15 @@ So I built a Claude Code plugin to maintain a structured wiki over the
 codebase + the ecosystem (Jira, Confluence, GitHub, Notion, DB
 schemas), and inject the wiki into Claude's context via `CLAUDE.md`.
 
-After wiring it up, autonomous ticket-fix rate on the same kinds of
-tickets jumped to ~80% in my measurements. (Anecdotal — my codebase is
-private. A reproducible benchmark is in progress against Django,
-Cal.com, and Mastodon — I'll post numbers when they land.)
+Numbers, honestly: I built an SWE-bench-style benchmark to test
+whether the wiki lifts *fully autonomous* ticket-fix rate on OSS
+repos, and it doesn't (92 ticket pairs on vitest + Saleor, baseline
+57/92 vs wiki 54/92 — full null published at benchmark/RESULTS.md in
+the repo). Where it's changed my own work is human-in-the-loop on
+enterprise code: I scope from the cross-service map, point the agent
+at the right pages, and my personal fix rate went from ~10% to ~50%
+used that way. That's an anecdote (private codebase) and I label it
+as one.
 
 I'm soft-launching publicly next week but wanted to get reactions from
 the r/ClaudeCode crowd first, because you're the closest thing to the
@@ -39,7 +44,7 @@ Quick demo: /doc-wiki:init then /doc-wiki:atlas --dry-run on any
 codebase you have open in Claude Code.
 
 Questions I'm specifically asking for feedback on:
-- Does the slash-command surface (10 commands) feel right or bloated?
+- Does the slash-command surface (8 commands) feel right or bloated?
 - ORM/DB cross-validation is in 7 profiles (Prisma/SQLAlchemy/Django/
   JPA/TypeORM/ActiveRecord/Entity Framework). What's missing?
 - Anyone running it on a Rails / Phoenix / Go codebase? Curious how
