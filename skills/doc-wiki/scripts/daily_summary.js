@@ -20,9 +20,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
-// Optimization: Hoisted regex out of loop to avoid instantiation overhead.
-// Using .exec() is generally faster than String.prototype.match() on the hot path.
-const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 // ── Helpers ─────────────────────────────────────────────────────────
 /**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
@@ -43,7 +40,7 @@ function readEvents(wikiRoot, dateStr) {
         // Fast-path: skip JSON parse overhead if this line cannot match our date
         if (!line.includes(dateStr))
             continue;
-        const match = TS_REGEX.exec(line);
+        const match = line.match(/^{"ts":"([^"\\]+)"/);
         if (match && match[1] && !match[1].startsWith(dateStr))
             continue;
         let entry;

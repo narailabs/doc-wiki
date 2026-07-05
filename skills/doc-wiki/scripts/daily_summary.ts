@@ -21,10 +21,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 
-// Optimization: Hoisted regex out of loop to avoid instantiation overhead.
-// Using .exec() is generally faster than String.prototype.match() on the hot path.
-const TS_REGEX = /^{"ts":"([^"\\]+)"/;
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -48,7 +44,7 @@ function readEvents(
 
     // Fast-path: skip JSON parse overhead if this line cannot match our date
     if (!line.includes(dateStr)) continue;
-    const match = TS_REGEX.exec(line);
+    const match = line.match(/^{"ts":"([^"\\]+)"/);
     if (match && match[1] && !match[1].startsWith(dateStr)) continue;
 
     let entry: unknown;
@@ -303,7 +299,9 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export function main(
+  argv: readonly string[] = process.argv.slice(2),
+): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);

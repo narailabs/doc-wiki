@@ -20,10 +20,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Optimization: Hoisted regex out of loop to avoid instantiation overhead.
-// Using .exec() is generally faster than String.prototype.match() on the hot path.
-const TS_REGEX = /^{"ts":"([^"\\]+)"/;
-
 // ── Timestamp helpers ───────────────────────────────────────────────
 
 /**
@@ -205,7 +201,7 @@ function _readEvents(
       // leading whitespace. The character class excludes both `"` and `\` so
       // any ts containing a JSON escape (like `\+` for `+`) misses the regex
       // and safely falls through to the slow path for proper decoding.
-      const m = TS_REGEX.exec(line);
+      const m = line.match(/^{"ts":"([^"\\]+)"/);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
         // G-EVENTS-TS-STRICT: when --since is active, drop events whose
