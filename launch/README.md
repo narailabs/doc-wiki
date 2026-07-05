@@ -11,7 +11,7 @@ Status fields below: ⬜ not yet · 🟦 ready (you can run it) · 🟨 do this 
 | T-21..T-15 | Benchmark: built, run (4 configs, 92 pairs), null published in full | `benchmark/RESULTS.md` | n/a | 🟩 |
 | T-21..T-15 | Draft (already drafted, just publish) the manifesto | personal blog / `docs/manifesto.md` | [`../docs/manifesto.md`](../docs/manifesto.md) | 🟩 |
 | T-21..T-15 | Build HN karma — 5–10 thoughtful comments | news.ycombinator.com | n/a | ⬜ |
-| T-21..T-15 | Submit to community marketplace | clau.de/plugin-directory-submission | [`marketplace-submission.md`](marketplace-submission.md) | 🟦 |
+| T-21..T-15 | Submit to community marketplace | clau.de/plugin-directory-submission | [`marketplace-submission.md`](marketplace-submission.md) | 🟨 |
 | T-14..T-8 | Cold-email Simon Willison | email | [`cold-email-simonw.md`](cold-email-simonw.md) | 🟦 |
 | T-14..T-8 | Submit to awesome lists | GitHub | [`awesome-list-submissions.md`](awesome-list-submissions.md) | 🟦 |
 | T-7..T-1 | Soft post Anthropic Discord #showcase | Discord | [`discord-anthropic.md`](discord-anthropic.md) | 🟦 |
