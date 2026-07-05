@@ -15,6 +15,15 @@ Lead-time: ~2 weeks review per the [Sunpeak guide](https://sunpeak.ai/blogs/clau
   - `keywords` (use: `documentation`, `wiki`, `knowledge-base`, `enterprise`, `agents`, `narai-primitives`)
   - Do NOT add an `icon` field — it's not in the plugin manifest schema and `claude plugin validate --strict` fails on it. The icon (square, ≥256×256, at `media/icon.png`) is uploaded via the submission form instead.
   - Run `claude plugin validate --strict .` and fix any manifest warnings before submitting.
+  - Known-tolerated warning (verified 2026-07-04): `--strict` exits 1 with
+    "CLAUDE.md at the plugin root is not loaded as project context. To ship
+    context with your plugin, use a skill." This is expected and NOT a
+    submission blocker: root `CLAUDE.md` is deliberate contributor-facing
+    project memory (with the AGENTS.md/GEMINI.md wrapper family), the plugin
+    ships its runtime context via `skills/doc-wiki/SKILL.md`, and the CLI help
+    itself notes the runtime tolerates warnings. There is no ignore flag.
+    Submit as-is; only investigate if the reviewer flags it. Any OTHER
+    warning from `--strict` still needs fixing.
 - [ ] README hero block live (already done)
 - [ ] Apache-2.0 LICENSE file at repo root (already done)
 - [ ] All `/doc-wiki:*` slash commands have descriptions matching their actual behavior (security review checks this)
