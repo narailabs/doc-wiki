@@ -10,10 +10,11 @@ Lead-time: ~2 weeks review per the [Sunpeak guide](https://sunpeak.ai/blogs/clau
 
 ### Pre-flight checklist
 
-- [ ] `claude-plugin.json` (or equivalent manifest) at repo root is current and includes:
+- [ ] `.claude-plugin/plugin.json` is current and includes:
   - `name`, `description`, `version`, `homepage`, `repository`
-  - `tags` (use: `documentation`, `wiki`, `knowledge-base`, `enterprise`, `agents`, `narai-primitives`)
-  - `icon` (square, ≥256×256, hosted in the repo at `media/icon.png`)
+  - `keywords` (use: `documentation`, `wiki`, `knowledge-base`, `enterprise`, `agents`, `narai-primitives`)
+  - Do NOT add an `icon` field — it's not in the plugin manifest schema and `claude plugin validate --strict` fails on it. The icon (square, ≥256×256, at `media/icon.png`) is uploaded via the submission form instead.
+  - Run `claude plugin validate --strict .` and fix any manifest warnings before submitting.
 - [ ] README hero block live (already done)
 - [ ] Apache-2.0 LICENSE file at repo root (already done)
 - [ ] All `/doc-wiki:*` slash commands have descriptions matching their actual behavior (security review checks this)

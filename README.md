@@ -70,7 +70,7 @@ The "~10% to ~50%" figure mentioned above is the author's measurement on a **pri
 
 ## Apache 2.0 — forever
 
-doc-wiki is Apache-2.0 licensed and will stay that way. No relicensing, no rug-pull, no "open core" with the good parts behind a paywall. The Terraform → OpenTofu and Redis → Valkey lessons are why enterprise legal teams now check for explicit relicense-risk language — here it is. Releases are signed and attested via GitHub Attestations; see [`docs/governance.md`](docs/governance.md) _(coming soon)_.
+doc-wiki is Apache-2.0 licensed and will stay that way. No relicensing, no rug-pull, no "open core" with the good parts behind a paywall. The Terraform → OpenTofu and Redis → Valkey lessons are why enterprise legal teams now check for explicit relicense-risk language — here it is. The release policy — signed tags + GitHub Attestations — and the maintainership contract are documented in [`docs/governance.md`](docs/governance.md).
 
 ## What it is good for
 

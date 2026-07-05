@@ -1,7 +1,7 @@
 {
   "name": "doc-wiki",
   "version": "0.1.0",
-  "description": "Documentation wiki generator and maintainer for Claude Code. Bootstrap, ingest, query, lint, refresh — all driven by the doc-wiki skill and 10 namespaced slash commands.",
+  "description": "Documentation wiki generator and maintainer for Claude Code. Atlas (full-codebase docs with ER diagrams and a cross-service map), ingest, query, lint — all driven by the doc-wiki skill and 8 namespaced slash commands.",
   "author": {
     "name": "NarAI Labs",
     "url": "https://github.com/narailabs"
@@ -14,6 +14,9 @@
     "wiki",
     "knowledge-base",
     "orm-mapping",
-    "claude-code"
+    "claude-code",
+    "enterprise",
+    "agents",
+    "narai-primitives"
   ]
 }
