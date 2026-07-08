@@ -121,6 +121,77 @@ describe("installClaudeCodeHooks", () => {
     const parsed2 = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
     expect(parsed2.hooks.PreToolUse.length).toBe(count1);
   });
+
+  it("upgrades a pre-existing managed entry with an outdated (injectable) command", () => {
+    // Simulate an install created before the shell-escaping fix: the
+    // WebFetch matcher already exists, but its command double-quotes the
+    // wiki root (vulnerable to command injection) instead of escaping it.
+    const settingsPath = path.join(tmpPath, ".claude", "settings.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    const staleCommand = `node "/old/security_check.js" --tool-input-url --wiki-root "${tmpPath}; touch pwned"`;
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "WebFetch",
+                hooks: [{ type: "command", command: staleCommand }],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const result = installClaudeCodeHooks(tmpPath);
+    expect(result.installed).toBe(true);
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    const webFetch = parsed.hooks.PreToolUse.find(
+      (e: { matcher: string }) => e.matcher === "WebFetch",
+    );
+    const cmd: string = webFetch.hooks[0].command;
+    // The stale, injectable command must be gone and replaced with the
+    // single-quote-escaped form.
+    expect(cmd).not.toBe(staleCommand);
+    expect(cmd).not.toContain('--wiki-root "');
+    expect(cmd).toContain(`--wiki-root '${tmpPath}'`);
+  });
+
+  it("never rewrites a user-authored entry that shares a matcher", () => {
+    const settingsPath = path.join(tmpPath, ".claude", "settings.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    // User has their own WebFetch hook that does NOT invoke security_check.js.
+    const userCommand = `echo "my own webfetch hook"`;
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "WebFetch",
+                hooks: [{ type: "command", command: userCommand }],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    installClaudeCodeHooks(tmpPath);
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    const webFetch = parsed.hooks.PreToolUse.find(
+      (e: { matcher: string }) => e.matcher === "WebFetch",
+    );
+    // The user's command is untouched (not a managed security_check.js entry).
+    expect(webFetch.hooks[0].command).toBe(userCommand);
+  });
 });
 
 // ── Codex ──────────────────────────────────────────────────────────────
@@ -170,6 +241,29 @@ describe("installCodexHooks", () => {
     expect(parsed.custom).toEqual({ flag: true });
     expect(parsed.unrelated).toEqual([1, 2]);
     expect(Array.isArray(parsed.preToolUse)).toBe(true);
+  });
+
+  it("upgrades a pre-existing managed entry with an outdated command", () => {
+    const settingsPath = path.join(tmpPath, ".codex", "hooks.json");
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    const staleCommand = `node "/old/security_check.js" --tool-input-url --wiki-root "${tmpPath}; touch pwned"`;
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify(
+        { preToolUse: [{ matcher: "WebFetch", command: staleCommand }] },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    installCodexHooks(tmpPath);
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    const webFetch = parsed.preToolUse.find(
+      (e: { matcher: string }) => e.matcher === "WebFetch",
+    );
+    expect(webFetch.command).not.toBe(staleCommand);
+    expect(webFetch.command).not.toContain('--wiki-root "');
+    expect(webFetch.command).toContain(`--wiki-root '${tmpPath}'`);
   });
 });
 
