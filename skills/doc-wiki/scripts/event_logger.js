@@ -102,6 +102,9 @@ function _eventsPath(wikiRoot) {
     return p;
 }
 // ── Logging ─────────────────────────────────────────────────────────
+// Fast-path timestamp regex: extracted to module level to avoid instantiation
+// overhead inside the hot loop that reads events.
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 /**
  * Append a JSON-line event to `log/events.jsonl`.
  *
@@ -156,7 +159,7 @@ function _readEvents(wikiRoot, since = null) {
             // leading whitespace. The character class excludes both `"` and `\` so
             // any ts containing a JSON escape (like `\+` for `+`) misses the regex
             // and safely falls through to the slow path for proper decoding.
-            const m = line.match(/^{"ts":"([^"\\]+)"/);
+            const m = TS_REGEX.exec(line);
             if (m) {
                 const entryMs = parsePythonIsoformat(m[1]);
                 // G-EVENTS-TS-STRICT: when --since is active, drop events whose
