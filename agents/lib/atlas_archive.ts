@@ -259,13 +259,28 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
   let allEvents: Array<ArchiveEvent | UnarchiveEvent> = [];
 
   if (fs.existsSync(journalPath)) {
-    const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        allEvents.push(JSON.parse(line) as ArchiveEvent | UnarchiveEvent);
-      } catch {
-        // skip malformed lines
+    const content = fs.readFileSync(journalPath, "utf-8");
+    let startIdx = 0;
+
+    // ⚡ Bolt: Use an iterative .indexOf() and .substring() loop instead of .split('\n').
+    // This avoids allocating a massive intermediate array of strings synchronously when processing
+    // large, append-only JSON event logs, significantly reducing memory spikes and allowing
+    // garbage collection during parsing.
+    while (startIdx < content.length) {
+      const endIdx = content.indexOf("\n", startIdx);
+      const lineEnd = endIdx === -1 ? content.length : endIdx;
+      const line = content.substring(startIdx, lineEnd);
+      startIdx = lineEnd + 1;
+
+      if (line) {
+        try {
+          allEvents.push(JSON.parse(line) as ArchiveEvent | UnarchiveEvent);
+        } catch {
+          // skip malformed lines
+        }
       }
+
+      if (endIdx === -1) break;
     }
   }
 
