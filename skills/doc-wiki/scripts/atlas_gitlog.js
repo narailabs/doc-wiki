@@ -52,16 +52,22 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let text;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        text = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    let lastIdx = text.length;
+    // If the file ends with a newline, ignore the trailing empty string
+    if (lastIdx > 0 && text[lastIdx - 1] === '\n')
+        lastIdx--;
+    while (lastIdx >= 0) {
+        const newIdx = text.lastIndexOf('\n', lastIdx - 1);
+        const line = text.substring(newIdx + 1, lastIdx);
+        lastIdx = newIdx;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event

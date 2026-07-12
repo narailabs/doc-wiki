@@ -643,30 +643,38 @@ export function assembleTroubleshootingInputs(wikiRoot) {
     // Recent error events from events.jsonl
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (fs.existsSync(eventsPath)) {
-        let lines;
+        let text;
         try {
-            lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+            text = fs.readFileSync(eventsPath, "utf-8");
         }
         catch {
-            lines = [];
+            text = "";
         }
         const errors = [];
-        for (let i = lines.length - 1; i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT; i--) {
-            const line = lines[i];
-            if (!line)
-                continue;
-            let parsed;
-            try {
-                parsed = JSON.parse(line);
-            }
-            catch {
-                continue;
-            }
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-                continue;
-            const rec = parsed;
-            if (_isErrorEvent(rec)) {
-                errors.push({ raw: line, parsed: rec });
+        if (text) {
+            let lastIdx = text.length;
+            // If the file ends with a newline, ignore the trailing empty string
+            if (lastIdx > 0 && text[lastIdx - 1] === '\n')
+                lastIdx--;
+            while (lastIdx >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
+                const newIdx = text.lastIndexOf('\n', lastIdx - 1);
+                const line = text.substring(newIdx + 1, lastIdx);
+                lastIdx = newIdx;
+                if (!line)
+                    continue;
+                let parsed;
+                try {
+                    parsed = JSON.parse(line);
+                }
+                catch {
+                    continue;
+                }
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+                    continue;
+                const rec = parsed;
+                if (_isErrorEvent(rec)) {
+                    errors.push({ raw: line, parsed: rec });
+                }
             }
         }
         if (errors.length > 0) {
