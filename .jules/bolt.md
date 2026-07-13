@@ -12,3 +12,13 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-05-23 - Iterative backward search optimization
+**Learning:** When parsing large append-only files where the most recent entries are at the end, reading the whole file as a string and using `.split('
+')` will synchronously allocate a massive intermediate array in memory.
+**Action:** Use an iterative `lastIndexOf('
+')` backwards loop coupled with `substring()` to process lines without creating the full array, avoiding heap limits and massive GC stalls.
+## 2026-05-23 - Iterative forward search optimization
+**Learning:** When streaming or iterating forwards over a massive string representation of a file, using `.split('
+')` forces immediate allocation of the entire array.
+**Action:** Iterate dynamically using a forward `indexOf('
+')` pointer with `substring()` to walk the lines sequentially without spiking memory usage.
