@@ -191,9 +191,21 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
+  let prevIdx = -1;
+  while (true) {
+    let nextIdx = raw.indexOf("\n", prevIdx + 1);
+    const rawLine =
+      nextIdx === -1
+        ? raw.substring(prevIdx + 1)
+        : raw.substring(prevIdx + 1, nextIdx);
+    prevIdx = nextIdx;
+
     const line = rawLine.trim();
-    if (!line) continue;
+    if (!line && nextIdx === -1) break;
+    if (!line) {
+      if (nextIdx === -1) break;
+      continue;
+    }
 
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
       // Fast-path: extract `ts` via anchored regex to skip JSON.parse for old
@@ -211,6 +223,7 @@ function _readEvents(
         // malformed timestamps. Fail-closed: if we can't place it on
         // the timeline, it's not in the window.
         if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+          if (nextIdx === -1) break;
           continue;
         }
       }
@@ -223,6 +236,7 @@ function _readEvents(
       process.stderr.write(
         `[event_logger] warning: skipping malformed JSON line: ${line}\n`,
       );
+      if (nextIdx === -1) break;
       continue;
     }
 
@@ -231,10 +245,13 @@ function _readEvents(
       const entryMs =
         typeof entryTs === "string" ? parsePythonIsoformat(entryTs) : NaN;
       if (Number.isNaN(entryMs) || entryMs < sinceMs) {
+        if (nextIdx === -1) break;
         continue;
       }
     }
     events.push(entry);
+
+    if (nextIdx === -1) break;
   }
   return events;
 }
