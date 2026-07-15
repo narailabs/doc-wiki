@@ -38,39 +38,22 @@ function readEvents(
   }
   const events: Array<Record<string, unknown>> = [];
   const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-  let prevIdx = -1;
-  while (true) {
-    let nextIdx = raw.indexOf("\n", prevIdx + 1);
-    const rawLine =
-      nextIdx === -1
-        ? raw.substring(prevIdx + 1)
-        : raw.substring(prevIdx + 1, nextIdx);
-    prevIdx = nextIdx;
-
+  for (const rawLine of raw.split("\n")) {
     const line = rawLine.trim();
-    if (!line && nextIdx === -1) break;
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot match our date
-    if (!line.includes(dateStr)) {
-      if (nextIdx === -1) break;
-      continue;
-    }
+    if (!line.includes(dateStr)) continue;
     const match = line.match(/^{"ts":"([^"\\]+)"/);
-    if (match && match[1] && !match[1].startsWith(dateStr)) {
-      if (nextIdx === -1) break;
-      continue;
-    }
+    if (match && match[1] && !match[1].startsWith(dateStr)) continue;
 
     let entry: unknown;
     try {
       entry = JSON.parse(line);
     } catch {
-      if (nextIdx === -1) break;
       continue;
     }
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      if (nextIdx === -1) break;
       continue;
     }
     const rec = entry as Record<string, unknown>;
@@ -78,8 +61,6 @@ function readEvents(
     if (ts.startsWith(dateStr)) {
       events.push(rec);
     }
-
-    if (nextIdx === -1) break;
   }
   return events;
 }
@@ -318,7 +299,9 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export function main(
+  argv: readonly string[] = process.argv.slice(2),
+): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);
