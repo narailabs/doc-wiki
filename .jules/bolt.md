@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-07-16 - Zero-allocation parsing of large text files
+
+**Learning:** When processing large files read into memory as a single string (e.g., via `fs.readFileSync`), avoid using `.split('\n')` to iterate over lines. It synchronously allocates a massive intermediate array of strings, leading to excessive memory overhead and blocking the event loop.
+**Action:** Use zero-allocation iterative string parsing. Use `lastIndexOf('\n')` and `substring()` for backward iteration (e.g., searching for recent logs), or `indexOf('\n')` and `substring()` for forward iteration. This approach iterates directly over the source string, allowing garbage collection of individual line strings immediately after processing.

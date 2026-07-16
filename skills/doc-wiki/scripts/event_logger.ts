@@ -191,7 +191,14 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
+  // ⚡ Bolt: Use zero-allocation forward string iteration instead of .split('\n')
+  // to prevent synchronous allocation of massive arrays for large event logs.
+  let pos = 0;
+  while (pos < raw.length) {
+    let nextNewline = raw.indexOf("\n", pos);
+    if (nextNewline === -1) nextNewline = raw.length;
+    const rawLine = raw.substring(pos, nextNewline);
+    pos = nextNewline + 1;
     const line = rawLine.trim();
     if (!line) continue;
 
