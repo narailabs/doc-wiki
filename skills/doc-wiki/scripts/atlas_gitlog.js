@@ -52,16 +52,28 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let raw;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        raw = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
+    let endIdx = raw.length;
+    // If the file ends with a newline, skip the trailing empty string line
+    if (endIdx > 0 && raw.charCodeAt(endIdx - 1) === 10) {
+        endIdx--;
+    }
+    // ⚡ Bolt Optimization: Use an iterative backward `lastIndexOf('\n')` combined with
+    // `substring()` instead of `fs.readFileSync(..).split('\n')`. This avoids synchronously
+    // allocating a massive intermediate array when processing large `events.jsonl` files.
+    // Performance impact: significantly reduces memory overhead and allows GC during processing.
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    while (endIdx > 0) {
+        let startIdx = raw.lastIndexOf("\n", endIdx - 1);
+        const lineStart = startIdx === -1 ? 0 : startIdx + 1;
+        const line = raw.substring(lineStart, endIdx);
+        endIdx = startIdx;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -229,7 +241,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -277,11 +293,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {

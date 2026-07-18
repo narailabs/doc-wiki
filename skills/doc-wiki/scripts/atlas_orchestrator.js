@@ -124,15 +124,27 @@ export function getLastAtlasRunId(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let raw;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        raw = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    let endIdx = raw.length;
+    // If the file ends with a newline, skip the trailing empty string line
+    if (endIdx > 0 && raw.charCodeAt(endIdx - 1) === 10) {
+        endIdx--;
+    }
+    // ⚡ Bolt Optimization: Use an iterative backward `lastIndexOf('\n')` combined with
+    // `substring()` instead of `fs.readFileSync(..).split('\n')`. This avoids synchronously
+    // allocating a massive intermediate array when processing large `events.jsonl` files.
+    // Performance impact: significantly reduces memory overhead and allows GC during processing.
+    while (endIdx > 0) {
+        let startIdx = raw.lastIndexOf("\n", endIdx - 1);
+        const lineStart = startIdx === -1 ? 0 : startIdx + 1;
+        const line = raw.substring(lineStart, endIdx);
+        endIdx = startIdx;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -189,7 +201,7 @@ export function detectState(wikiRoot, atlasPageThreshold = 3) {
     return "fresh";
 }
 // ── Per-ingest cost average ────────────────────────────────────────
-const DEFAULT_PER_INGEST_AVG_USD = 0.20;
+const DEFAULT_PER_INGEST_AVG_USD = 0.2;
 /**
  * Read recent `op: ingest` events from `log/events.jsonl` and return a
  * rolling-average `cost_usd` over up to `sampleSize` entries. Falls back
@@ -202,16 +214,28 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return DEFAULT_PER_INGEST_AVG_USD;
-    let lines;
+    let raw;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        raw = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return DEFAULT_PER_INGEST_AVG_USD;
     }
     const samples = [];
-    for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
-        const line = lines[i];
+    let endIdx = raw.length;
+    // If the file ends with a newline, skip the trailing empty string line
+    if (endIdx > 0 && raw.charCodeAt(endIdx - 1) === 10) {
+        endIdx--;
+    }
+    // ⚡ Bolt Optimization: Use an iterative backward `lastIndexOf('\n')` combined with
+    // `substring()` instead of `fs.readFileSync(..).split('\n')`. This avoids synchronously
+    // allocating a massive intermediate array when processing large `events.jsonl` files.
+    // Performance impact: significantly reduces memory overhead and allows GC during processing.
+    while (endIdx > 0 && samples.length < sampleSize) {
+        let startIdx = raw.lastIndexOf("\n", endIdx - 1);
+        const lineStart = startIdx === -1 ? 0 : startIdx + 1;
+        const line = raw.substring(lineStart, endIdx);
+        endIdx = startIdx;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
@@ -280,7 +304,7 @@ export const CROSS_SERVICE_GLOBAL_PAGES = [
     "database-traces",
     "shared-libraries",
 ];
-const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
+const GLOBAL_PAGE_AVG_USD = 0.2; // synthesis-only, smaller than ingest
 /**
  * Count of global synthesis pages that will be regenerated in Phase 7.
  * The `facets` argument is reserved for future per-facet-driven globals.
@@ -289,7 +313,8 @@ const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
  */
 export function expectedGlobalCount(facets, crossServiceEnabled = false) {
     void facets;
-    return STATIC_GLOBAL_PAGES.length + (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0);
+    return (STATIC_GLOBAL_PAGES.length +
+        (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0));
 }
 /**
  * Estimate the cost of running a plan on a wiki. For each `(topic, facet)`
@@ -309,11 +334,21 @@ export function estimateCost(wikiRoot, plan, perIngestAvgUsd, crossServiceEnable
         const cached = _isPlanEntryCached(wikiRoot, entry);
         if (cached) {
             cacheHits++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: false, cached: true });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: false,
+                cached: true,
+            });
         }
         else {
             expectedIngests++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: true, cached: false });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: true,
+                cached: false,
+            });
         }
     }
     const topicCost = expectedIngests * avg;
@@ -515,7 +550,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     }
     const sourceFilesWithNoPage = [...missingSources].sort();
     // 4. Gitlog uncovered_files — pass through if provided.
-    const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
+    const uncoveredFiles = gitlog?.uncovered_files
+        ? [...gitlog.uncovered_files]
+        : [];
     // 5. Connectors mentioned in atlas pages but missing from integrations.md.
     // Single wiki walk also collects every page's `sources:` frontmatter so
     // step 6 (manifest-driven) doesn't re-walk.
@@ -524,7 +561,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     let integrationsBody = "";
     if (fs.existsSync(integrationsPath)) {
         try {
-            integrationsBody = fs.readFileSync(integrationsPath, "utf-8").toLowerCase();
+            integrationsBody = fs
+                .readFileSync(integrationsPath, "utf-8")
+                .toLowerCase();
         }
         catch {
             integrationsBody = "";
