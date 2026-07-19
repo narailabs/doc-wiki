@@ -38,7 +38,16 @@ function readEvents(
   }
   const events: Array<Record<string, unknown>> = [];
   const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-  for (const rawLine of raw.split("\n")) {
+
+  let startIndex = 0;
+  while (startIndex < raw.length) {
+    let endIndex = raw.indexOf("\n", startIndex);
+    if (endIndex === -1) {
+      endIndex = raw.length;
+    }
+    const rawLine = raw.substring(startIndex, endIndex);
+    startIndex = endIndex + 1;
+
     const line = rawLine.trim();
     if (!line) continue;
 
@@ -299,9 +308,7 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(
-  argv: readonly string[] = process.argv.slice(2),
-): number {
+export function main(argv: readonly string[] = process.argv.slice(2)): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);

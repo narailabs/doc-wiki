@@ -12,3 +12,11 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-06-15 - Fast-path memory iteration for massive JSON files
+
+**Learning:** When parsing large append-only JSON files (e.g. `events.jsonl`), loading the entire string and synchronously mapping it via `.split('
+')` will create a massive intermediate string array that allocates excessive memory before V8 can garbage collect. This can cause OOM errors or huge performance overhead on memory constrained systems.
+**Action:** Instead of `.split('
+')`, use a `while` loop with an iterative `indexOf('
+')` loop (or `lastIndexOf` for reverse time iteration) with `.substring()` bounds to allow GC to clean strings per cycle.
