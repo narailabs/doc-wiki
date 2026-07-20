@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-05-23 - Iterative indexOf vs split("\n") for massive log parsing
+
+**Learning:** When processing large string payloads into lines, using `.split("\n")` creates a massive synchronous intermediate array in memory which blocks the event loop and delays garbage collection.
+**Action:** Use an iterative `.indexOf("\n")` and `.substring()` loop to stream over lines one by one without creating the large intermediate array.

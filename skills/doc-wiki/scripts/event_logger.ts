@@ -191,7 +191,18 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
+
+  // Use indexOf('\n') instead of .split('\n') to avoid allocating
+  // a massive intermediate array in memory for large log files.
+  let startIdx = 0;
+  while (startIdx < raw.length) {
+    let nextIdx = raw.indexOf("\n", startIdx);
+    if (nextIdx === -1) {
+      nextIdx = raw.length;
+    }
+    const rawLine = raw.substring(startIdx, nextIdx);
+    startIdx = nextIdx + 1;
+
     const line = rawLine.trim();
     if (!line) continue;
 
