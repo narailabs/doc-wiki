@@ -124,15 +124,26 @@ export function getLastAtlasRunId(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let body;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        body = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    // OPTIMIZATION: Use backwards substring scanning to prevent massive intermediate array
+    // allocation that occurs when calling .split('\n') on the entire events.jsonl file.
+    let endIdx = body.length;
+    while (endIdx >= 0) {
+        let startIdx = endIdx === 0 ? -1 : body.lastIndexOf("\n", endIdx - 1);
+        let actualStart = startIdx === -1 ? 0 : startIdx + 1;
+        let line = body.substring(actualStart, endIdx);
+        if (startIdx === -1) {
+            endIdx = -1; // ensure termination
+        }
+        else {
+            endIdx = startIdx;
+        }
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -202,16 +213,27 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return DEFAULT_PER_INGEST_AVG_USD;
-    let lines;
+    let body;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        body = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return DEFAULT_PER_INGEST_AVG_USD;
     }
     const samples = [];
-    for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
-        const line = lines[i];
+    // OPTIMIZATION: Use backwards substring scanning to prevent massive intermediate array
+    // allocation that occurs when calling .split('\n') on the entire events.jsonl file.
+    let endIdx = body.length;
+    while (endIdx >= 0 && samples.length < sampleSize) {
+        let startIdx = endIdx === 0 ? -1 : body.lastIndexOf("\n", endIdx - 1);
+        let actualStart = startIdx === -1 ? 0 : startIdx + 1;
+        let line = body.substring(actualStart, endIdx);
+        if (startIdx === -1) {
+            endIdx = -1; // ensure termination
+        }
+        else {
+            endIdx = startIdx;
+        }
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an ingest event

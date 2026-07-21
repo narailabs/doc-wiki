@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-07-21 - Array allocation in file splitting
+
+**Learning:** When using `.split('\n')` on large text files (like JSONL logs read via `fs.readFileSync`), it synchronously allocates a massive intermediate array in memory which takes CPU and memory overhead, especially when only a few backwards iterations are necessary.
+**Action:** Use an iterative `lastIndexOf('\n')` or `indexOf('\n')` combined with `substring()` to sequentially scan backward or forward and extract lines lazily.
