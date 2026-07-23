@@ -52,20 +52,16 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let raw;
+    let lines;
     try {
-        raw = fs.readFileSync(eventsPath, "utf-8");
+        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
     }
     catch {
         return null;
     }
     // Walk backwards — most recent atlas event wins.
-    let pos = raw.length;
-    while (pos > 0) {
-        const nextPos = raw.lastIndexOf("\n", pos - 1);
-        const start = nextPos === -1 ? 0 : nextPos + 1;
-        const line = raw.substring(start, pos);
-        pos = nextPos;
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -233,11 +229,7 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return {
-        stale_pages,
-        uncovered_files: uncovered,
-        unrelated_files: unrelated,
-    };
+    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -285,13 +277,11 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
-        parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" &&
-        parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {
