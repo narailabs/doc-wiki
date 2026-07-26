@@ -52,16 +52,23 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let content;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        content = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
+    let lastNewline = content.length;
+    if (content.endsWith("\n")) {
+        lastNewline--;
+    }
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    while (lastNewline >= 0) {
+        const prevNewline = lastNewline === 0 ? -1 : content.lastIndexOf("\n", lastNewline - 1);
+        const start = prevNewline === -1 ? 0 : prevNewline + 1;
+        const line = content.substring(start, lastNewline);
+        lastNewline = prevNewline;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -229,7 +236,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -277,11 +288,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {
