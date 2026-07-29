@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-06-12 - Backward Log Traversal Memory Optimization
+**Learning:** In append-only large log files, iterating backward using `fs.readFileSync(path).split('\n')` synchronously allocates a massive intermediate string array, driving significant memory overhead for operations that only need the last few lines (like searching for recent errors).
+**Action:** Replaced `.split('\n')` with an iterative backwards string traversal using `.lastIndexOf('\n')` and `.substring()` to extract individual lines incrementally, drastically reducing intermediate memory allocation.
