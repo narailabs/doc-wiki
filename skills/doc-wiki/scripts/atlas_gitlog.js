@@ -52,16 +52,22 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let fileContent;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        fileContent = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    // Performance optimization: Avoid .split("\n") on large log files to prevent massive intermediate array allocation.
+    // Instead, we iteratively find the previous newline backwards and extract substrings.
+    // Memory improvement: O(N) allocation -> O(1) allocation for line parsing.
+    let pos = fileContent.length;
+    while (pos >= 0) {
+        const nextPos = pos === 0 ? -1 : fileContent.lastIndexOf("\n", pos - 1);
+        const line = fileContent.substring(nextPos + 1, pos);
+        pos = nextPos;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -229,7 +235,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -277,11 +287,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {
