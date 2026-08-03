@@ -12,3 +12,6 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2024-08-03 - Zero-Allocation Line Counting for Regex Matches
+**Learning:** Using \`content.slice(0, idx).split("\\n").length\` to calculate the line number of a regex match in a large string is O(N) in both time and memory. It synchronously allocates massive intermediate strings and arrays for every single match, causing a massive performance degradation on large log or code files.
+**Action:** When finding the line number of an arbitrary index in a large string, use a backward \`lastIndexOf('\\n')\` loop instead to traverse the string with zero memory allocations.
