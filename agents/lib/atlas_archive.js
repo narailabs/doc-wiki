@@ -17,13 +17,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
-import { walkLivePages } from "../../skills/doc-wiki/scripts/_wiki_fs.js";
+import { walkLivePages, } from "../../skills/doc-wiki/scripts/_wiki_fs.js";
 import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
 import { sourceExistence, } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { checkPathContainment } from "narai-primitives/toolkit";
-import { parseConfig } from "./parse_config.js";
-export const AUTONOMY_MODES = ["conservative", "balanced", "autonomous", "auto"];
+import { parseConfig, } from "./parse_config.js";
+export const AUTONOMY_MODES = [
+    "conservative",
+    "balanced",
+    "autonomous",
+    "auto",
+];
 export const REWRITE_MODES = ["rewrite", "drop", "leave"];
 function decideAutonomy(autonomy, _kind) {
     switch (autonomy) {
@@ -47,7 +52,9 @@ function filterAtlasPages(pages) {
             continue;
         }
         const { frontmatter } = parseFrontmatter(raw);
-        if (frontmatter && "atlas_facet" in frontmatter && frontmatter["atlas_facet"] != null) {
+        if (frontmatter &&
+            "atlas_facet" in frontmatter &&
+            frontmatter["atlas_facet"] != null) {
             out.push(page);
         }
     }
@@ -222,7 +229,8 @@ async function resolveArchivePath(wikiRoot, pageOrSlug) {
     const candidateRelPosix = path.posix.normalize(candidateRelRaw);
     // If the raw input looked like a direct wiki/_archive/ path but normalization
     // resolved ".." segments that escape the archive root, it is a traversal attempt.
-    if (candidateRelRaw.startsWith("wiki/_archive/") && !candidateRelPosix.startsWith("wiki/_archive/")) {
+    if (candidateRelRaw.startsWith("wiki/_archive/") &&
+        !candidateRelPosix.startsWith("wiki/_archive/")) {
         throw new Error(`path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`);
     }
     if (candidateRelPosix.startsWith("wiki/_archive/")) {
@@ -245,7 +253,9 @@ async function resolveArchivePath(wikiRoot, pageOrSlug) {
             if (entry.isDirectory()) {
                 walk(abs);
             }
-            else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+            else if (entry.isFile() &&
+                entry.name.endsWith(".md") &&
+                entry.name !== "index.md") {
                 const relPath = path.relative(wikiRoot, abs).replace(/\\/g, "/");
                 if (relPath.includes(pageOrSlug)) {
                     matches.push({ absPath: abs, relPath });
@@ -264,7 +274,12 @@ async function resolveArchivePath(wikiRoot, pageOrSlug) {
     return matches[0];
 }
 // ── stripArchiveFrontmatter ───────────────────────────────────────────────────
-const ARCHIVE_FM_KEYS = new Set(["status", "archived_at", "archive_reason", "archived_from"]);
+const ARCHIVE_FM_KEYS = new Set([
+    "status",
+    "archived_at",
+    "archive_reason",
+    "archived_from",
+]);
 /**
  * Read the file at absPath, remove the four deprecation frontmatter fields,
  * preserve everything else, write it back in place.
@@ -280,9 +295,7 @@ async function stripArchiveFrontmatter(absPath) {
             }
         }
     }
-    const newContent = Object.keys(fm).length === 0
-        ? body
-        : `---\n${yaml.dump(fm)}---\n${body}`;
+    const newContent = Object.keys(fm).length === 0 ? body : `---\n${yaml.dump(fm)}---\n${body}`;
     await fs.promises.writeFile(absPath, newContent, "utf-8");
 }
 // ── Code-block-aware text rewriter ────────────────────────────────────────────
@@ -423,7 +436,8 @@ export async function rewriteInboundLinksForUnarchive(opts) {
                 const [whole, label, rawTarget] = m;
                 // Only process links that look like rewritten archive links:
                 // label must end with " (archived)" AND path must be under _archive/.
-                if (!label.endsWith(" (archived)") || !rawTarget.includes("_archive/")) {
+                if (!label.endsWith(" (archived)") ||
+                    !rawTarget.includes("_archive/")) {
                     out.push(text.slice(lastIndex, m.index + whole.length));
                     lastIndex = m.index + whole.length;
                     continue;
@@ -469,7 +483,8 @@ export async function unarchive(opts) {
     const resolved = await resolveArchivePath(opts.wikiRoot, opts.pageOrSlug);
     const raw = await fs.promises.readFile(resolved.absPath, "utf-8");
     const { frontmatter } = parseFrontmatter(raw);
-    const archivedFrom = opts.target ?? frontmatter?.["archived_from"];
+    const archivedFrom = opts.target ??
+        frontmatter?.["archived_from"];
     if (!archivedFrom) {
         throw new Error(`page ${resolved.relPath} lacks archived_from frontmatter; pass --target to specify restore path`);
     }
@@ -504,7 +519,10 @@ export async function unarchive(opts) {
     // there are no archive-style links to drop, so treat it as "leave".
     const effectiveMode = opts.inboundLinks === "drop" ? "leave" : opts.inboundLinks;
     const linksReverted = effectiveMode === "rewrite"
-        ? await rewriteInboundLinksForUnarchive({ wikiRoot: opts.wikiRoot, event })
+        ? await rewriteInboundLinksForUnarchive({
+            wikiRoot: opts.wikiRoot,
+            event,
+        })
         : 0;
     return { from: event.from, to: event.to, linksReverted };
 }
@@ -514,7 +532,11 @@ export async function sweep(opts) {
         throw new Error(`invalid autonomy '${opts.autonomy}'; expected one of: ${AUTONOMY_MODES.join(", ")}`);
     }
     const partialThreshold = opts.partialThreshold ?? 1.0;
-    const resolvedOpts = { inboundLinks: "rewrite", ...opts, partialThreshold };
+    const resolvedOpts = {
+        inboundLinks: "rewrite",
+        ...opts,
+        partialThreshold,
+    };
     const livePages = walkLivePages(opts.wikiRoot);
     const atlasPages = filterAtlasPages(livePages);
     const archived = [];
@@ -676,9 +698,12 @@ export async function main() {
         const wikiRoot = parsed.values["wikiRoot"];
         const repoRoot = parsed.values["repoRoot"];
         const runId = parsed.values["runId"];
-        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
-            typeof repoRoot !== "string" || repoRoot.length === 0 ||
-            typeof runId !== "string" || runId.length === 0) {
+        if (typeof wikiRoot !== "string" ||
+            wikiRoot.length === 0 ||
+            typeof repoRoot !== "string" ||
+            repoRoot.length === 0 ||
+            typeof runId !== "string" ||
+            runId.length === 0) {
             process.stderr.write("--wiki-root, --repo-root, and --run-id are required\n");
             return 2;
         }
@@ -725,7 +750,15 @@ export async function main() {
         else {
             inboundLinks = configInboundLinks;
         }
-        const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun, inboundLinks });
+        const result = await sweep({
+            wikiRoot,
+            repoRoot,
+            runId,
+            autonomy,
+            partialThreshold,
+            dryRun,
+            inboundLinks,
+        });
         process.stdout.write(JSON.stringify(result) + "\n");
         return 0;
     }
@@ -740,12 +773,15 @@ export async function main() {
         }
         const wikiRoot = parsed.values["wikiRoot"];
         const pageOrSlug = parsed.values["pageOrSlug"];
-        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
-            typeof pageOrSlug !== "string" || pageOrSlug.length === 0) {
+        if (typeof wikiRoot !== "string" ||
+            wikiRoot.length === 0 ||
+            typeof pageOrSlug !== "string" ||
+            pageOrSlug.length === 0) {
             process.stderr.write("--wiki-root and --page-or-slug are required\n");
             return 2;
         }
-        const target = typeof parsed.values["target"] === "string" && parsed.values["target"].length > 0
+        const target = typeof parsed.values["target"] === "string" &&
+            parsed.values["target"].length > 0
             ? parsed.values["target"]
             : undefined;
         const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
@@ -756,7 +792,12 @@ export async function main() {
         }
         const inboundLinks = inboundLinksRaw;
         try {
-            const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
+            const result = await unarchive({
+                wikiRoot,
+                pageOrSlug,
+                target,
+                inboundLinks,
+            });
             process.stdout.write(JSON.stringify(result) + "\n");
             return 0;
         }
@@ -795,12 +836,15 @@ export async function main() {
         const wikiRoot = parsed.values["wikiRoot"];
         const eventsFile = parsed.values["eventsFile"];
         const modeRaw = parsed.values["mode"] ?? "rewrite";
-        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
-            typeof eventsFile !== "string" || eventsFile.length === 0) {
+        if (typeof wikiRoot !== "string" ||
+            wikiRoot.length === 0 ||
+            typeof eventsFile !== "string" ||
+            eventsFile.length === 0) {
             process.stderr.write("--wiki-root and --events-file are required\n");
             return 2;
         }
-        if (typeof modeRaw !== "string" || !REWRITE_MODES.includes(modeRaw)) {
+        if (typeof modeRaw !== "string" ||
+            !REWRITE_MODES.includes(modeRaw)) {
             process.stderr.write(`error: invalid --mode value '${modeRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`);
             return 2;
         }
@@ -821,8 +865,10 @@ export async function main() {
         }
         const wikiRoot = parsed.values["wikiRoot"];
         const eventFile = parsed.values["eventFile"];
-        if (typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
-            typeof eventFile !== "string" || eventFile.length === 0) {
+        if (typeof wikiRoot !== "string" ||
+            wikiRoot.length === 0 ||
+            typeof eventFile !== "string" ||
+            eventFile.length === 0) {
             process.stderr.write("--wiki-root and --event-file are required\n");
             return 2;
         }
@@ -837,7 +883,9 @@ export async function main() {
 }
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-    main().then(process.exit).catch((e) => {
+    main()
+        .then(process.exit)
+        .catch((e) => {
         process.stderr.write(`${e.message}\n`);
         process.exit(1);
     });
