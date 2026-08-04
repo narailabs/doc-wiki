@@ -643,16 +643,19 @@ export function assembleTroubleshootingInputs(wikiRoot) {
     // Recent error events from events.jsonl
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (fs.existsSync(eventsPath)) {
-        let lines;
+        let content = "";
         try {
-            lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+            content = fs.readFileSync(eventsPath, "utf-8");
         }
         catch {
-            lines = [];
+            // ignore
         }
         const errors = [];
-        for (let i = lines.length - 1; i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT; i--) {
-            const line = lines[i];
+        let pos = content.length;
+        while (pos > 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
+            const nextPos = pos === 0 ? -1 : content.lastIndexOf("\n", pos - 1);
+            const line = content.substring(nextPos + 1, pos);
+            pos = nextPos;
             if (!line)
                 continue;
             let parsed;

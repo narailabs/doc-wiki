@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-08-04 - Fast-path memory optimization for iterating over lines in large strings
+**Learning:** In JavaScript, using `.split('\n')` on a large string loaded into memory creates a massive intermediate array of strings, which wastes memory and degrades performance.
+**Action:** Use forward `indexOf('\n')` or backward `lastIndexOf('\n')` with a `substring()` loop to iterate over lines efficiently without creating large arrays. When using backward iteration (`lastIndexOf`), ensure the condition handles `pos === 0` to prevent an infinite loop, since `lastIndexOf(str, pos)` treats `pos < 0` as 0.

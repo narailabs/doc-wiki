@@ -132,8 +132,20 @@ export async function rebuildArchiveIndex(wikiRoot) {
     const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
     let allEvents = [];
     if (fs.existsSync(journalPath)) {
-        const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
-        for (const line of lines) {
+        const content = fs.readFileSync(journalPath, "utf-8");
+        let pos = 0;
+        while (pos < content.length) {
+            const nextPos = content.indexOf("\n", pos);
+            const endPos = nextPos === -1 ? content.length : nextPos;
+            const line = content.substring(pos, endPos);
+            if (nextPos === -1) {
+                pos = content.length;
+            }
+            else {
+                pos = nextPos + 1;
+            }
+            if (!line)
+                continue;
             try {
                 allEvents.push(JSON.parse(line));
             }
