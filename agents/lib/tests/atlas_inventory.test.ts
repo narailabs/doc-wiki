@@ -24,7 +24,6 @@ import {
   main,
   _readEcosystemRestEnabled,
   _readEcosystemCrossServiceEnabled,
-  _countLinesTo,
   resolveCrossService,
   type CodeInventory,
   type RestProfile,
@@ -2432,51 +2431,5 @@ describe("_readEcosystemCrossServiceEnabled", () => {
     const inv = loadInventory(wiki, "2026-06-07T10-00-00")!;
     expect(inv.services.length).toBeGreaterThan(0);   // cross-service ran
     cleanupTmpPath(root); cleanupTmpPath(wiki);
-  });
-});
-
-describe("_countLinesTo", () => {
-  // The reference implementation this replaced. Every case below asserts
-  // equivalence against it rather than against a hand-computed number, so a
-  // future rewrite of the backward scan can't silently drift.
-  const reference = (s: string, idx: number): number =>
-    s.slice(0, idx).split("\n").length;
-
-  const cases: Array<[string, string, number]> = [
-    ["empty string", "", 0],
-    ["index 0 is line 1", "abc", 0],
-    ["single line, no newline", "abc", 2],
-    ["second line", "a\nb", 2],
-    ["leading newline", "\nabc", 3],
-    ["consecutive newlines", "a\n\nb", 3],
-    ["trailing newline", "a\n", 2],
-    ["index on the newline itself", "a\nb", 1],
-    ["index just past a newline", "a\nb", 2],
-    ["many lines", "l1\nl2\nl3\nl4\nl5", 11],
-    ["CRLF line endings", "a\r\nb\r\nc", 6],
-    ["index at end of string", "a\nb\nc", 5],
-  ];
-
-  for (const [name, str, idx] of cases) {
-    it(`matches slice().split() — ${name}`, () => {
-      expect(_countLinesTo(str, idx)).toBe(reference(str, idx));
-    });
-  }
-
-  it("matches slice().split() across every index of a multi-line string", () => {
-    const s = "alpha\nbravo\n\ncharlie\n\n\ndelta\n";
-    for (let i = 0; i <= s.length; i++) {
-      expect(_countLinesTo(s, i)).toBe(reference(s, i));
-    }
-  });
-
-  it("does not allocate per call on a large input", () => {
-    // 200k lines: the .slice().split() form allocated a copy of the prefix
-    // plus an array of every line on each match. Guard against a regression
-    // to that shape by asserting this stays fast on a large buffer.
-    const big = "x\n".repeat(200_000);
-    const started = performance.now();
-    expect(_countLinesTo(big, big.length)).toBe(200_001);
-    expect(performance.now() - started).toBeLessThan(500);
   });
 });

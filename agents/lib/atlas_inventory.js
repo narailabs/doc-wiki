@@ -1985,18 +1985,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
  * Performance optimization: Calculates 1-based line number for a specific
  * string index using a backward lastIndexOf loop. Avoids O(N) memory allocations
  * caused by String.slice().split("\\n").length.
- *
- * Counts newlines in `[0, idx)`, so it matches the 1-based line number the
- * `.slice().split()` form returned — including `idx === 0` ⇒ line 1, and a
- * `\n` at index 0 counting toward the total.
- *
- * Exported for tests only; not part of the module's public surface.
  */
-export function _countLinesTo(str, idx) {
+function _countLinesTo(str, idx) {
     let count = 1;
     let pos = idx;
     while (pos > 0) {
-        pos = str.lastIndexOf("\n", pos - 1);
+        pos = pos === 0 ? -1 : str.lastIndexOf("\n", pos - 1);
         if (pos !== -1)
             count++;
     }
