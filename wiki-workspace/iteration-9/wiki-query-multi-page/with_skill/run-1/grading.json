@@ -1,0 +1,41 @@
+{
+  "expectations": [
+    {
+      "text": "The answer cites at least 3 distinct wiki pages by relative markdown link, each link resolving to a real file under wiki/",
+      "passed": true,
+      "evidence": "Archive cites 5 distinct wiki pages: auth, request-routing, app-server, db-write-path, audit-log — each as `[name](../../wiki/<name>.md)`. ls -la from outputs/queries/ resolves all 5 to real files."
+    },
+    {
+      "text": "events.jsonl records op='query' with details.search_phase: 'summaries' (or equivalent flag) preceding any per-page reads, evidencing summaries-first search — no op='query' whose first read is a full wiki page is acceptable",
+      "passed": true,
+      "evidence": "events.jsonl op=query entry has search_phase='summaries' AND summaries_first=true. pages_read[0]='wiki/summaries.md' (read first), then individual pages."
+    },
+    {
+      "text": "details.reduction_ratio in the events entry is >0.8 (final synthesis token count is <20% of total tokens read)",
+      "passed": true,
+      "evidence": "events.jsonl op=query: reduction_ratio=0.83 (>0.8). tokens_in=900, tokens_out=150 → 1 - 150/900 = 0.833."
+    },
+    {
+      "text": "The answer ends with a '## Knowledge gaps' (or equivalent labeled) section listing at least one specific gap when the source pages don't cover (a) request-id propagation OR (b) error-path rollback — both of which the fixture intentionally omits",
+      "passed": true,
+      "evidence": "Archive '## Knowledge gaps' section explicitly lists both gaps: (1) Request-id propagation — none of the 5 pages mention X-Request-Id or OpenTelemetry; (2) Error-path rollback — happy-path commit only, no failure modes documented."
+    },
+    {
+      "text": "The archive at outputs/queries/<YYYY-MM-DD>-<topic-slug>.md exists with frontmatter containing topic, tags, and created ISO date; filename slug derives from the question",
+      "passed": true,
+      "evidence": "File: outputs/queries/2026-05-03-full-request-lifecycle.md — date prefix matches today, slug 'full-request-lifecycle' derives from the question. Frontmatter: topic='request-lifecycle', tags=[architecture, authentication, request-flow, jwt, postgresql], created='2026-05-03'."
+    },
+    {
+      "text": "The synthesized answer mentions concrete artifacts from at least 3 of the 5 pages (e.g., JWT, nginx, pg connection pool, audit_log table) — a generic answer that doesn't surface page-specific terms fails",
+      "passed": true,
+      "evidence": "Answer mentions JWT + RS256 (auth), nginx + X-Forwarded-For (request-routing), pg connection pool of 10 + Node.js port 3000 (app-server), BEGIN/COMMIT + deadlock-retry (db-write-path), audit_log columns actor_user_id/action/entity_type (audit-log) — 5/5 pages have concrete artifacts surfaced."
+    },
+    {
+      "text": "The events entry includes tokens_in, tokens_out, and a non-zero pages_read[] array of length >=3",
+      "passed": true,
+      "evidence": "events.jsonl op=query: tokens_in=900, tokens_out=150, pages_read length=6 (summaries + 5 pages). All three fields present and meet criteria."
+    }
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "All 7 expectations satisfied. Multi-page synthesis cites 5 wiki pages, summaries-first search recorded, reduction_ratio 0.83, knowledge-gaps section names both intentionally-omitted topics, archive includes frontmatter with topic/tags/created, and concrete artifacts from each cited page appear in the answer."}
+}

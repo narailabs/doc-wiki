@@ -1,0 +1,24 @@
+{
+  "total_ops": 9,
+  "ops_by_type": {
+    "ingest": 4,
+    "query": 3,
+    "lint": 1,
+    "fix": 1
+  },
+  "total_cost_usd": 0.0,
+  "reduction_ratio": {},
+  "per_agent_cost": {},
+  "total_tokens_by_op": {
+    "ingest": 2000,
+    "query": 1500,
+    "lint": 500,
+    "fix": 500
+  },
+  "avg_duration_ms_by_op": {
+    "ingest": 150,
+    "query": 150,
+    "lint": 150,
+    "fix": 150
+  }
+}

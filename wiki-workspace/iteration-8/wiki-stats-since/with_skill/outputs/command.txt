@@ -1,0 +1,14 @@
+# Invocation 1: --since 1h (expect total_events=2)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i8-stats-since-wiki --since 1h
+
+# Invocation 2: --since 30d (expect total_events=9)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i8-stats-since-wiki --since 30d
+
+# Invocation 3: --since 2026-04-01T00:00:00Z (expect total_events=5, E1 revised)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i8-stats-since-wiki --since 2026-04-01T00:00:00Z
+
+# Invocation 4: --since 1z (invalid — expect exit 2, stderr error, stdout empty, W1 fix)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i8-stats-since-wiki --since 1z
+
+# Invocation 5: --since 2026-04-01T00:00:00+00:00 (expect total_events=5, same as Z variant)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i8-stats-since-wiki --since 2026-04-01T00:00:00+00:00

@@ -1,0 +1,10 @@
+connectors:
+  aws:
+    disable: true
+  notion:
+    skill: notion-agent-connector
+    token: env:NOTION_TOKEN
+consumers:
+  doc-wiki:
+    enabled:
+      - notion

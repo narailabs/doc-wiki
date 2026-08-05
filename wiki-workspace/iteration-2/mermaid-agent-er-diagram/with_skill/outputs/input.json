@@ -1,0 +1,11 @@
+{
+  "page": "target.md",
+  "content": "Schema overview with entity relationships.",
+  "mermaid": [
+    {
+      "type": "erDiagram",
+      "title": "User / Order / Product schema",
+      "code": "    User ||--o{ Order : places\n    Order }o--o{ Product : contains\n    User {\n        int id PK\n        string email\n    }\n    Order {\n        int id PK\n        int user_id FK\n        decimal total\n    }\n    Product {\n        int id PK\n        string name\n    }"
+    }
+  ]
+}

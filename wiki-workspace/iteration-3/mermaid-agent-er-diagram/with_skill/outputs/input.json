@@ -1,0 +1,1 @@
+{"mermaid":[{"type":"erDiagram","title":"Schema","code":"    User ||--o{ Order : places\n    Order }o--o{ Product : contains\n    User { int id PK string email }\n    Order { int id PK int user_id FK decimal total }\n    Product { int id PK string name }"}]}

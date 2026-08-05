@@ -1,0 +1,19 @@
+{
+  "expectations": [
+    {"text": "Runs the wiki's event_logger stats subcommand (event_logger.js stats --since 7d) or equivalent", "passed": true, "evidence": "command.txt captures the invocation; stdout.txt has structured JSON output."},
+    {"text": "Output lists counts for at least op='ingest', op='query', op='lint', op='fix' — one line per op", "passed": true, "evidence": "ops_by_type: {ingest: 7, query: 6, lint: 2, fix: 2}."},
+    {"text": "Each op's count matches the number of corresponding entries in the fixture's events.jsonl within the 7-day window", "passed": true, "evidence": "Fixture has 21 events; 4 are 8 days old and excluded. Within-window counts (7/6/2/2) match ops_by_type exactly."},
+    {"text": "Output emits `total_tokens_by_op` NATIVELY from the stats subcommand (no manual post-processing) — with a per-op breakdown summing event.tokens / total_tokens / tokens_in+tokens_out fields", "passed": true, "evidence": "S3 PROOF: stdout.total_tokens_by_op = {ingest: 7700, query: 5350, fix: 700}. lint omitted because all-zero tokens (documented behaviour)."},
+    {"text": "Output emits `avg_duration_ms_by_op` NATIVELY from the stats subcommand with a per-op average of event.duration_ms / total_duration_ms", "passed": true, "evidence": "S3 PROOF: stdout.avg_duration_ms_by_op = {ingest: 307.14, query: 195.83, lint: 87.5, fix: 142.5}. All four ops present; values match hand-computed averages."},
+    {"text": "The --since 7d window is honored — any event older than 7 days is excluded from the counts", "passed": true, "evidence": "21 fixture events - 4 out-of-window = 17. stdout.total_ops = 17. since-filter-check.md proves the 4 excluded events would have lifted ingest to 9 and query to 8."}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {"reason": "Current impl filters zero-token ops out of total_tokens_by_op for compactness. Some consumers may prefer explicit zeros (ingest: 7700, lint: 0). Easy to toggle; worth a design note."}
+    ],
+    "overall": "S3 verified. getStats emits total_tokens_by_op and avg_duration_ms_by_op natively; --since 7d filter honoured; arithmetic matches fixture."
+  }
+}

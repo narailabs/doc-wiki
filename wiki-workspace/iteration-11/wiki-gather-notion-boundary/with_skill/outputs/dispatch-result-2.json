@@ -1,0 +1,28 @@
+{
+  "plan": [
+    {
+      "connector": "notion",
+      "action": "get_page",
+      "params": {
+        "page_id": "abcdef0123456789abcdef0123456789"
+      }
+    }
+  ],
+  "results": [
+    {
+      "step": 1,
+      "connector": "notion",
+      "action": "get_page",
+      "params": {
+        "page_id": "abcdef0123456789abcdef0123456789"
+      },
+      "envelope": {
+        "status": "error",
+        "action": "get_page",
+        "error_code": "CONFIG_ERROR",
+        "message": "Notion credentials not configured. Set NOTION_TOKEN or register a credential provider via narai-primitives/credentials.",
+        "retriable": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+Working directory: /tmp/eval-i4-db-schema
+
+Fixture setup:
+  mkdir -p /tmp/eval-i4-db-schema
+  cd /tmp/eval-i4-db-schema
+  sqlite3 dev.sqlite 'CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);'
+  # wiki.config.yaml written with wiki.name='eval', autonomy.mode='auto',
+  # ecosystem.database.{driver:sqlite, environments.dev.{driver:sqlite,
+  # database:/tmp/eval-i4-db-schema/dev.sqlite, approval_mode:auto},
+  # audit.{enabled:true, path:./audit.jsonl}}
+
+Agent invocation:
+  node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
+    --env dev \
+    --config ./wiki.config.yaml \
+    --action schema \
+    --filter users \
+    > stdout.txt 2> stderr.txt
+
+Exit code: 0

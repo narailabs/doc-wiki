@@ -1,0 +1,38 @@
+{
+  "eval_id": 3,
+  "eval_name": "mermaid-agent-sequence",
+  "skill": "wiki-mermaid-agent",
+  "prompt": "Convert this agent output describing an HTTP request flow (client → API gateway → auth service → database) into a Mermaid sequenceDiagram and inject it into request-flow.md",
+  "assertions": [
+    {
+      "text": "Generated block starts with the `sequenceDiagram` directive",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Block declares participants (or actors) for each of the four nodes (Client, Gateway, Auth, Database) using `participant` lines",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Each message between participants is rendered with `->` (sync) or `->>` (async) and carries the label from the input JSON",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on request-flow.md — no EOF append",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Content outside the markers is preserved byte-for-byte across the run",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "mermaid_lint.js passes on the resulting page",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

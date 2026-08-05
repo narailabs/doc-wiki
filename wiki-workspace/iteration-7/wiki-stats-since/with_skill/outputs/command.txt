@@ -1,0 +1,16 @@
+# All 5 event_logger.js stats invocations
+
+## 1. --since 1h (expect total_ops=2)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i7-stats-since-wiki --since 1h
+
+## 2. --since 30d (expect total_ops=9)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i7-stats-since-wiki --since 30d
+
+## 3. --since 2026-04-01T00:00:00Z (ISO absolute, Z suffix)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i7-stats-since-wiki --since 2026-04-01T00:00:00Z
+
+## 4. --since 1z (INVALID granularity — expect error/warning)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i7-stats-since-wiki --since 1z
+
+## 5. --since 2026-04-01T00:00:00+00:00 (UTC offset variant — expect same as Z)
+node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i7-stats-since-wiki --since 2026-04-01T00:00:00+00:00

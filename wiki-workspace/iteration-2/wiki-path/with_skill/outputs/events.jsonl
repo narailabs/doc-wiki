@@ -1,0 +1,2 @@
+{"ts": "2026-04-14T16:03:02.784000+00:00", "op": "path", "from": "authentication", "to": "database-schema", "hops": 3, "status": "found"}
+{"ts": "2026-04-14T16:03:02.811000+00:00", "op": "path", "from": "authentication", "to": "nonexistent-concept", "hops": 0, "status": "no_path"}

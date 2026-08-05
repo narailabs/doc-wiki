@@ -1,0 +1,26 @@
+[
+  {
+    "from": "authentication",
+    "to": "session-store",
+    "type": "supports",
+    "provenance": "EXTRACTED",
+    "evidence": "Auth issues a session row when login succeeds.",
+    "source_file": "raw/auth.md"
+  },
+  {
+    "from": "session-store",
+    "to": "users-table",
+    "type": "supports",
+    "provenance": "EXTRACTED",
+    "evidence": "Session store maps session_id -> user_id in users table.",
+    "source_file": "raw/session.md"
+  },
+  {
+    "from": "users-table",
+    "to": "database-schema",
+    "type": "extends",
+    "provenance": "EXTRACTED",
+    "evidence": "users table is part of the database schema.",
+    "source_file": "raw/users.md"
+  }
+]

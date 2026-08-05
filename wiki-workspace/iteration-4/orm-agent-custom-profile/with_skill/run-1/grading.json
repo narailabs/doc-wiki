@@ -1,0 +1,58 @@
+{
+  "expectations": [
+    {
+      "text": "Q&A covers detection markers (class inheritance + __table__), file patterns, entity extraction (class_pattern, table_pattern, column_pattern), and at least one relationship pattern",
+      "passed": true,
+      "evidence": "qa-transcript.md Q2–Q7 cover every sub-topic."
+    },
+    {
+      "text": "Q&A covers naming conventions (table_from_class and column_from_field)",
+      "passed": true,
+      "evidence": "qa-transcript.md Q8 asks/answers snake_case_plural for tables, snake_case for columns."
+    },
+    {
+      "text": "Generated YAML has every required top-level field: name, language, description, detection, entity_extraction, relationship_patterns, naming_conventions",
+      "passed": true,
+      "evidence": "custom-basemodel.yaml has all required fields. YAML input uses relationship_detection.patterns which loader (profiles.ts:167) maps to internal relationship_patterns — both forms accepted."
+    },
+    {
+      "text": "entity_extraction.class_pattern has a single capture group that matches at least one class name in example.py (verified by running the pattern against the fixture)",
+      "passed": true,
+      "evidence": "class-pattern-match.md: pattern captures User@327, Post@543, Comment@758 — 3 matches, 1 capture group each. BaseModel itself correctly excluded (empty parens)."
+    },
+    {
+      "text": "profile loader (profiles.js loadProfile) accepts the YAML without raising ProfileValueError",
+      "passed": true,
+      "evidence": "profile-load-test.txt line 17: loadProfile returns populated OrmProfile; no exception."
+    },
+    {
+      "text": "When the profile is applied to an example.py containing THREE BaseModel classes with DIFFERENT __table__ values, extractEntities yields 3 entities with 3 DIFFERENT table_names — NOT all three collapsing to the first table (the per-class windowing fix must hold even with a straightforward table_pattern that matches every __table__ occurrence)",
+      "passed": true,
+      "evidence": "per-class-tables.md + profile-load-test.txt: extractEntities returns 3 entities with table_names ['users','posts','comments'] — 3 distinct values, each matching its own class's __table__. Profile uses the plainest pattern (__table__\\s*=\\s*['\"](\\w+)['\"]) that would match globally first-match-wins; R3 per-class windowing is what makes it resolve correctly. Columns and ForeignKey relationships are also disjoint per class, confirming column_pattern and relationship_patterns are windowed too."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Generated YAML has all required top-level fields",
+        "reason": "The YAML input key is relationship_detection.patterns while the loader renames to relationship_patterns internally. A literal-key check could misfire; reference the loader-normalized name."
+      },
+      {
+        "assertion": "extractEntities yields 3 different table_names",
+        "reason": "Assertion correctly calls out 'straightforward table_pattern', but no mechanical check enforces it. A sneaky class-anchored regex could bypass. Consider asserting table_pattern contains no BaseModel/class-name literal, or that removing class_pattern breaks extraction — to truly discriminate R3 from a bypass."
+      }
+    ],
+    "overall": "R3 per-class windowing verified. Three entities extract correctly with a naive global-first-match-wins table_pattern; column_pattern and relationship_patterns are also windowed."
+  }
+}

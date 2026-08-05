@@ -1,0 +1,97 @@
+{
+  "expectations": [
+    {
+      "text": "Every class that inherits from the declarative Base is identified as an entity — detected-entities.json has an entry per SQLAlchemy class in the fixture",
+      "passed": true,
+      "evidence": "detected-entities.json lists all 3 Base-inherited classes from models.py: User (class_name='User'), Order (class_name='Order'), Role (class_name='Role'). entities-check.md confirms: 'Classes defined in that file: 3 (User, Order, Role). Entities emitted in detected-entities.json: 3 (User, Order, Role)'. The non-declarative user_roles Table is correctly excluded."
+    },
+    {
+      "text": "Each entity's table_name matches its own __tablename__ assignment (the per-class windowing fix; multi-class single-file input must not collapse to one table)",
+      "passed": true,
+      "evidence": "detected-entities.json: User.table_name='users', Order.table_name='orders', Role.table_name='roles'. All three match the __tablename__ strings in models.py. entities-check.md R3 fix section: 'Each class has its own distinct __tablename__ preserved: yes. No collapsing / no duplication / no last-class-wins behavior observed.'"
+    },
+    {
+      "text": "relationship() declarations are picked up by the relationship_patterns, with type and target_entity populated where the back-ref is unambiguous",
+      "passed": true,
+      "evidence": "detected-entities.json captures all 3 relationship() calls from source: User=[relationship, relationship] (orders O2M + roles M2M), Order=[relationship, foreign_key] (user back-ref + user_id FK), Role=[] (no relationship() declared on Role side). relationships-check.md tally: '3 relationship() calls in source -> extracted: 3'."
+    },
+    {
+      "text": "Mermaid erDiagram contains one node per extracted entity with its columns, and at least one edge between two of them",
+      "passed": false,
+      "evidence": "FAIL on edge sub-check. database-mapping.md erDiagram has all 3 nodes with correct columns (users: id/username/email; orders: id/total_amount/user_id; roles: id/name) but 0 edges. mermaid-er-check.md: 'Edges in the emitted block: 0 (no ||--o{, ||--||, }o--o{, or similar ER connectors).' Ground-truth expected edges (users||--o{orders and users}o--o{roles) are missing. Root cause in agents/lib/wiki_orm/output.ts lines 198 and 220: edge rendering only fires when rel.type === 'one_to_many' || 'many_to_many', but SQLAlchemy profile emits generic type 'relationship', so no edges are drawn."
+    },
+    {
+      "text": "Generated markdown has frontmatter with type='entity' and orm_profile='sqlalchemy'",
+      "passed": true,
+      "evidence": "database-mapping.md frontmatter lines 2-6: 'title: Database Mapping — sqlalchemy / type: entity / tags: [database, orm, sqlalchemy] / generated_by: orm-mapper / orm_profile: sqlalchemy'. Both required keys present with correct values."
+    },
+    {
+      "text": "mermaid_lint.js passes on the generated page",
+      "passed": true,
+      "evidence": "mermaid-lint.txt contains '[]' (empty error array). mermaid-er-check.md confirms: 'mermaid_lint.js --page database-mapping.md -> [] (no errors). Syntax is valid.' The diagram is syntactically valid even though it lacks relationship edges."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 1,
+    "total": 6,
+    "pass_rate": 0.83
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": 0,
+    "total_steps": 0,
+    "errors_encountered": 0,
+    "output_chars": 10479,
+    "transcript_chars": 0
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "R3 per-class windowing fix correctly preserves distinct table_name per class in a multi-class single file",
+      "type": "quality",
+      "verified": true,
+      "evidence": "3 classes in a single models.py each retained their own __tablename__ in detected-entities.json (users, orders, roles); no collapse observed"
+    },
+    {
+      "claim": "user_roles M2M association Table is correctly treated as metadata, not as an entity",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detected-entities.json entity list has exactly 3 entries (User/Order/Role); the top-level user_roles = Table(...) is not emitted as an entity class"
+    },
+    {
+      "claim": "Mermaid output is lint-clean",
+      "type": "process",
+      "verified": true,
+      "evidence": "mermaid-lint.txt == '[]'"
+    },
+    {
+      "claim": "Missing Mermaid edges are a renderer feature gap, not an extraction bug",
+      "type": "quality",
+      "verified": true,
+      "evidence": "Relationships are captured correctly in detected-entities.json (User has 2 relationship entries, Order has 1 + 1 FK). Confirmed in agents/lib/wiki_orm/output.ts: edge emission at lines 198 and 220 is gated on rel.type === 'one_to_many' || 'many_to_many', but the SQLAlchemy profile emits type 'relationship'. So extraction is complete but the renderer filter drops generic relationships."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [
+      "Mermaid renderer in agents/lib/wiki_orm/output.ts only emits edges for rel.type of 'one_to_many' or 'many_to_many'. The SQLAlchemy profile's relationship_patterns classify declarations as generic 'relationship' type, causing zero edges in the erDiagram despite relationships being correctly extracted."
+    ],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Mermaid erDiagram contains one node per extracted entity with its columns, and at least one edge between two of them",
+        "reason": "This assertion correctly caught a real rendering gap (output.ts filters edges to only one_to_many/many_to_many while SQLAlchemy emits generic 'relationship'). Consider splitting into two sub-assertions — one for node coverage (which passes) and one for edge rendering (which fails) — so future iterations can track them independently as the gap is closed."
+      },
+      {
+        "reason": "No assertion validates the SQLAlchemy-specific classification of relationship types. Adding an assertion that each extracted relationship has a specific type (one_to_many, many_to_one, many_to_many) rather than a generic 'relationship' bucket would surface this same upstream cause — and would prompt the profile to classify relationships with cardinality."
+      }
+    ],
+    "overall": "Assertions are discriminating and caught the real output.ts rendering gap via the 'at least one edge' check. Main suggestion: add a cardinality-classification assertion so the root cause is tested directly rather than only via its downstream rendering effect."
+  }
+}

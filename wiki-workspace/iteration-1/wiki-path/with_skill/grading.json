@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "wiki-path",
+  "expectations": [
+    {"text": "All 5 edges added successfully to edges.jsonl", "passed": true, "evidence": "5 edges in edges.jsonl: auth->jwt, jwt->session, session->database, auth->oauth, oauth->database"},
+    {"text": "Shortest path found between auth.md and database.md", "passed": true, "evidence": "Shortest path: auth.md -> oauth.md -> database.md (2 hops)"},
+    {"text": "Path includes typed edges (extends, supports) with provenance", "passed": true, "evidence": "Edge 1: extends/EXTRACTED, Edge 2: supports/AMBIGUOUS"},
+    {"text": "God-nodes output identifies highest-degree node", "passed": true, "evidence": "All nodes have degree 2 in this small graph — evenly distributed"},
+    {"text": "Path length is 2 hops (shortest route)", "passed": true, "evidence": "auth->oauth->database = 2 hops. Alternative auth->jwt->session->database = 3 hops."}
+  ]
+}

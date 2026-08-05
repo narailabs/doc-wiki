@@ -1,0 +1,12 @@
+{
+  "eval_id": 3,
+  "eval_name": "wiki-path",
+  "prompt": "Find shortest path between authentication and database concepts",
+  "assertions": [
+    {"text": "All 5 edges added successfully to edges.jsonl", "type": "structural"},
+    {"text": "Shortest path found between auth.md and database.md", "type": "functional"},
+    {"text": "Path includes typed edges (extends, supports) with provenance", "type": "content"},
+    {"text": "God-nodes output identifies highest-degree node (auth.md with degree 3)", "type": "functional"},
+    {"text": "Path length is 2 hops (auth->oauth->database or auth->jwt->session->database shortest)", "type": "functional"}
+  ]
+}

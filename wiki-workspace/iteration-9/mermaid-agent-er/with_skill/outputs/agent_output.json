@@ -1,0 +1,19 @@
+{
+  "status": "success",
+  "entities": [
+    {"name": "User", "attributes": ["id: int PK", "email: string", "name: string"]},
+    {"name": "Order", "attributes": ["id: int PK", "user_id: int FK", "total: decimal", "placed_at: datetime"]},
+    {"name": "Product", "attributes": ["id: int PK", "order_id: int FK", "sku: string", "price: decimal"]}
+  ],
+  "edges": [
+    {"from": "User", "to": "Order", "cardinality": "one-to-many", "label": "places"},
+    {"from": "Order", "to": "Product", "cardinality": "one-to-many", "label": "contains"}
+  ],
+  "mermaid": [
+    {
+      "type": "erDiagram",
+      "title": "Order Processing Schema",
+      "code": "    User ||--o{ Order : places\n    Order ||--o{ Product : contains\n    User {\n        int id PK\n        string email\n        string name\n    }\n    Order {\n        int id PK\n        int user_id FK\n        decimal total\n        datetime placed_at\n    }\n    Product {\n        int id PK\n        int order_id FK\n        string sku\n        decimal price\n    }"
+    }
+  ]
+}

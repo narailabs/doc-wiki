@@ -1,0 +1,101 @@
+{
+  "expectations": [
+    {
+      "text": "Runs graph_ops.py (or graph_ops.ts) to query the relationship graph",
+      "passed": true,
+      "evidence": "path-answer.md shows the command: `node skills/wiki/scripts/graph_ops.js path --edges /tmp/eval-path-wiki/graph/edges.jsonl --from \"authentication\" --to \"database-schema\"`. graph_ops-raw-output.txt contains a JSON array of edge objects consistent with graph_ops.ts `shortestPath` output. events.jsonl also records `{\"op\": \"path\", ...}` entries, matching the script's event-logging contract."
+    },
+    {
+      "text": "Reads edges.jsonl for typed relationships",
+      "passed": true,
+      "evidence": "The command invocation explicitly passes `--edges /tmp/eval-path-wiki/graph/edges.jsonl`. The raw output shows edge records with `type: \"supports\"` and `provenance: \"INFERRED\"/\"EXTRACTED\"` fields — the exact typed-edge schema stored in edges.jsonl."
+    },
+    {
+      "text": "Returns ordered list of pages from authentication to database-schema",
+      "passed": true,
+      "evidence": "path-answer.md renders an ordered 3-row table: row 1 authentication -> user-model, row 2 user-model -> orm-mapping, row 3 orm-mapping -> database-schema. The sequence begins at `authentication` and terminates at `database-schema` with 4 nodes / 3 hops. Same ordering present in graph_ops-raw-output.txt."
+    },
+    {
+      "text": "Shows edge types (supports, extends, etc.) between each pair",
+      "passed": true,
+      "evidence": "The `Edge type` column in the path table lists `supports` for all three hops (also visible in graph_ops-raw-output.txt: each edge has `\"type\": \"supports\"`). The answer also references edge-type semantics in the prose."
+    },
+    {
+      "text": "Shows provenance tags on each edge",
+      "passed": true,
+      "evidence": "The `Provenance` column shows INFERRED for hop 1 and EXTRACTED for hops 2 and 3. The narrative also calls out that the `authentication -> user-model` edge carries `INFERRED` provenance. Raw JSON confirms: `\"provenance\": \"INFERRED\"` and `\"provenance\": \"EXTRACTED\"`."
+    },
+    {
+      "text": "Handles case where no path exists with a clear message",
+      "passed": true,
+      "evidence": "no-path-test.md documents two no-path cases (unknown target node and directed-unreachable source/target swap). Both return stdout `[]` and exit code `0`, with clear interpretation guidance that `[]` means no directed path. events.jsonl also records `{\"status\": \"no_path\", \"hops\": 0}` for the unknown-node case. No crash or stderr."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": 0,
+    "total_steps": 0,
+    "errors_encountered": 0,
+    "output_chars": 3984,
+    "transcript_chars": 0
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "grader_duration_seconds": null,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 55498
+  },
+  "claims": [
+    {
+      "claim": "Length: 3 hops (4 nodes) is the shortest path",
+      "type": "factual",
+      "verified": true,
+      "evidence": "The table enumerates exactly 3 hops between 4 nodes, and the answer explicitly compares against an unchosen 4-hop alternative `authentication -> session-management -> user-model -> orm-mapping -> database-schema`, so the 3-hop result is a legitimate minimum given the stated fixture."
+    },
+    {
+      "claim": "BFS is provenance-blind and picks shortest chain regardless of INFERRED vs EXTRACTED",
+      "type": "process",
+      "verified": true,
+      "evidence": "Consistent with graph_ops.ts `shortestPath` contract (unweighted bidirectional BFS). The answer flags this as a caveat — that hop 1 is INFERRED — rather than silently hiding it."
+    },
+    {
+      "claim": "Empty array `[]` is returned for both unknown-node and unreachable-direction cases",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Both cases in no-path-test.md show stdout `[]` with exit code 0. Events log confirms `status: \"no_path\"` for the unknown-concept case."
+    },
+    {
+      "claim": "`--max-hops` cap also returns `[]`; spec in operations.md documents `{\"status\":\"no_path\",\"max_hops\":N}` as an alternative shape that the current TS implementation does not produce",
+      "type": "quality",
+      "verified": true,
+      "evidence": "This is a useful, honest divergence-from-spec callout. It suggests the executor actually inspected the script rather than fabricating contract details. Not verified against operations.md directly, but the claim is self-consistent and calibrated (not overclaiming)."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Returns ordered list of pages from authentication to database-schema",
+        "reason": "The assertion only checks that the sequence starts and ends correctly. A skill that returned any plausible-looking intermediate chain (e.g., hallucinated intermediates not present in edges.jsonl) would still pass. Consider asserting that every intermediate node appears in the input edges.jsonl fixture and that consecutive (from, to) pairs exist as edges in the fixture."
+      },
+      {
+        "assertion": "Handles case where no path exists with a clear message",
+        "reason": "The assertion is satisfied by returning `[]`, but \"clear message\" is subjective — an empty array with no text could be considered unclear. The executor's answer is actually excellent (distinguishes unknown-node vs disconnected-node, gives interpretation guidance), but a simpler `[]` dump would also pass. Consider explicitly requiring a human-readable explanation or distinguishing the two no-path sub-cases."
+      },
+      {
+        "reason": "No assertion checks that the chosen path is actually the shortest. The executor helpfully shows a longer alternative to demonstrate minimality, but a skill that returned a 4-hop path when a 3-hop exists would still pass every current assertion."
+      }
+    ],
+    "overall": "All assertions pass with strong evidence. The eval is reasonable but the path-shape checks are surface-level — they verify endpoints and edge-type presence but not minimality or fidelity to the fixture. The executor's output exceeds what the assertions demand, which is a sign the assertions could be tightened."
+  }
+}

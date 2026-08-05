@@ -1,0 +1,6 @@
+{
+  "status": "skipped",
+  "skip_reason": "TEST_LIVE_AWS not set; success-path covered only via the live-API gate. Set TEST_LIVE_AWS=1 plus AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (or AWS_PROFILE) to exercise.",
+  "approach": "B",
+  "rationale": "Faithfully stubbing S3's signed-request protocol or any other AWS SDK call requires localstack/moto (Docker dep) or a SigV4-aware HTTP stub — both higher-friction than this gate. AWS_ENDPOINT_URL would point an SDK at a stub, but the stub itself is the expensive part."
+}

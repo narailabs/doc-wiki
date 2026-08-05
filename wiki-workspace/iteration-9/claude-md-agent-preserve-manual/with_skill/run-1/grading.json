@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Bytes above the `<!-- wiki-managed: start -->` marker are preserved — sha256 of the pre-marker region before vs after matches",
+      "passed": true,
+      "evidence": "Pre-marker sha256 BEFORE update = 5424b5ac37a09ccbacef70ce62a9351c465ff25df5914cc87300f902b2d8f9f5; AFTER update = 5424b5ac37a09ccbacef70ce62a9351c465ff25df5914cc87300f902b2d8f9f5 (identical). The `# billing-svc — engineer notes` and `## Custom Section` content with TODOs survived intact."
+    },
+    {
+      "text": "Bytes below the `<!-- wiki-managed: end -->` marker are preserved — sha256 of the post-marker region before vs after matches",
+      "passed": true,
+      "evidence": "Post-marker sha256 BEFORE = 8ce08f18d039991a3ccd43f428a2fbf37b43568d316242ba32b0b0fdd5ec0f15; AFTER = 8ce08f18d039991a3ccd43f428a2fbf37b43568d316242ba32b0b0fdd5ec0f15 (identical). The `## Manual Notes (below the markers)` section with the contact line survived intact."
+    },
+    {
+      "text": "The managed section is refreshed from the current wiki state — its sha256 differs between before and after (proving the tool actually ran)",
+      "passed": true,
+      "evidence": "Managed-region sha256 BEFORE (stale single-Overview block with placeholder text) = f12f3d3db6c7870d02cf70e1f36e54fe04d7cfdfecd982f02c83f6136e321baa; AFTER (refreshed full content with 4 sections) = bc8ea26efd94a5bd217e1f8b2aabdabe9808fe23d354ee531e4027d8f05511cb (differs)."
+    },
+    {
+      "text": "The refreshed managed section contains substantive content: at least one heading AND either a link into wiki/ or a mention of the project's real name — a block of whitespace or an error stub fails this",
+      "passed": true,
+      "evidence": "Refreshed managed region contains 4 headings (`## Overview`, `## Build & Run`, `## Service Dependencies`, `## Database References`), the wiki link `[Wiki documentation](wiki/index.md)`, AND the project name `billing-svc` (`Auto-generated documentation index for **billing-svc**.`)."
+    },
+    {
+      "text": "After regeneration, the file still contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (no marker duplication, no whitespace drift on the marker lines)",
+      "passed": true,
+      "evidence": "Marker count after update: start=1 end=1; marker lines are flush with no leading/trailing whitespace (verified by content.count() and visual inspection of the regenerated file)."
+    },
+    {
+      "text": "A second run against the same wiki state produces a byte-identical file (idempotent)",
+      "passed": true,
+      "evidence": "Snapshotted file after first update, ran the generator a second time with identical inputs; `diff -q` reported no differences (byte-identical)."
+    }
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "All 6 expectations pass. The generator surgically refreshed only the bytes between the wiki-managed markers; user content above and below was preserved hash-for-hash, and a second run is byte-identical."}
+}

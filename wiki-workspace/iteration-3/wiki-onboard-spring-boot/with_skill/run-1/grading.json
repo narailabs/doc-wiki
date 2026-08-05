@@ -1,0 +1,106 @@
+{
+  "expectations": [
+    {
+      "text": "Detects Java/Spring Boot by parsing pom.xml or build.gradle — wiki.config.yaml lists framework='spring-boot' AND a framework version string that matches the fixture (e.g., '3.2.0' when pom.xml pins that version)",
+      "passed": true,
+      "evidence": "wiki.config.yaml lines 8-10 set language=java, build_tool=maven, framework=spring-boot; line 10 sets framework_version: 3.2.0. detection-trace.md Phase 1 cites pom.xml lines 8-13 including <version>3.2.0</version> on line 11 of the fixture pom."
+    },
+    {
+      "text": "Detects JPA by scanning .java files — ecosystem.orm.profiles includes 'jpa' AND the detection trace lists at least one concrete @Entity class name found (e.g., 'User')",
+      "passed": true,
+      "evidence": "wiki.config.yaml lines 41-48 show orm.enabled: true, profiles: [jpa], detected_entities: [User, Order]. detection-trace.md Phase 2 names concrete @Entity classes 'User' (User.java line 8) and 'Order' (Order.java line 7), with @Table(name=\"users\") and @Table(name=\"orders\") annotations cited."
+    },
+    {
+      "text": "Detects PostgreSQL from application.properties JDBC URL — wiki.config.yaml's database block sets driver='postgresql' AND host+port+database match the URL (e.g., localhost:5432/mydb when the fixture contains jdbc:postgresql://localhost:5432/mydb)",
+      "passed": true,
+      "evidence": "wiki.config.yaml lines 19-30: driver: postgresql, host: localhost, port: 5432, database: mydb, jdbc_url: jdbc:postgresql://localhost:5432/mydb. detection-trace.md Phase 3 shows the parse table mapping each component back to the source property spring.datasource.url=jdbc:postgresql://localhost:5432/mydb."
+    },
+    {
+      "text": "Credentials are referenced via secret names (e.g., user_secret: WIKI_DB_DEV_USER) — plaintext passwords anywhere in wiki.config.yaml is a failure",
+      "passed": true,
+      "evidence": "Grep for 'password' in wiki.config.yaml returned only line 28 'password_secret: WIKI_DB_DEV_PASSWORD' (uppercase secret-store name under WIKI_ prefix) and line 32 'password_ref: ${DB_PASSWORD}' (env-var placeholder token preserved from application.properties). Grep for 'secret' returned lines 27-28, both WIKI_DB_DEV_* secret-store names. No literal password values appear anywhere in the file. credentials-check.md documents the same three grep sweeps with the same classification."
+    },
+    {
+      "text": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated in the database section",
+      "passed": true,
+      "evidence": "wiki.config.yaml lines 33-40 under ecosystem.database: policy.block_ddl: true, block_privilege: true, dml_mode: present_only, escalate_unbounded_reads: true; audit.enabled: true with path ~/.wiki/db_audit.jsonl."
+    },
+    {
+      "text": "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root",
+      "passed": true,
+      "evidence": "Directory check of outputs/scaffold/ confirms all six directories present: wiki, raw, graph, audit, log, outputs. scaffold-tree.txt lists them plus subdirs (audit/open, audit/resolved, log/daily, outputs/queries, outputs/reports, wiki/claims, wiki/synthesis, wiki/templates) and the init event in events.jsonl records all created_dirs."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tokens": 52041,
+    "duration_ms": 209150,
+    "output_chars": 14614,
+    "output_files": 5
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "pom.xml pins Spring Boot 3.2.0 via spring-boot-starter-parent on line 11",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detection-trace.md Phase 1 quotes the exact <parent> block with <version>3.2.0</version> at line 11 and corroborates via spring-boot-starter-data-jpa at lines 26-29."
+    },
+    {
+      "claim": "Two @Entity classes were found: User and Order",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detection-trace.md Phase 2 cites User.java:8 and Order.java:7 with the exact @Entity/@Table source lines. Both names appear in wiki.config.yaml detected_entities."
+    },
+    {
+      "claim": "JDBC URL was parsed from spring.datasource.url in application.properties",
+      "type": "process",
+      "verified": true,
+      "evidence": "detection-trace.md Phase 3 quotes the four-line properties block and shows the component-by-component parse table. wiki.config.yaml records both the parsed fields and the raw jdbc_url string."
+    },
+    {
+      "claim": "No plaintext credentials appear anywhere in wiki.config.yaml",
+      "type": "quality",
+      "verified": true,
+      "evidence": "Independent grep of 'password' and 'secret' (case-insensitive) returned only WIKI_DB_DEV_* secret-store names and ${DB_*} environment placeholders — no literal username/password values."
+    },
+    {
+      "claim": "UserRepository extends JpaRepository<User, Long> confirming Spring Data JPA",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detection-trace.md Phase 2 table explicitly calls out UserRepository.java line 4 importing org.springframework.data.jpa.repository.JpaRepository; not a fixture I could re-open independently but consistent with the declared JPA detection."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Detects Java/Spring Boot by parsing pom.xml or build.gradle — wiki.config.yaml lists framework='spring-boot' AND a framework version string that matches the fixture (e.g., '3.2.0' when pom.xml pins that version)",
+        "reason": "Strong as tightened — requires version match against the fixture. Consider also asserting build_tool='maven' (or 'gradle' for a build.gradle fixture) so a skill that writes framework correctly but mislabels the build tool is caught."
+      },
+      {
+        "assertion": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated in the database section",
+        "reason": "Checks presence but not values — a skill that wrote block_ddl: false would still pass 'populated'. Consider requiring block_ddl: true and dml_mode in {present_only, explain_only} to ensure the guard-rails are actually active."
+      },
+      {
+        "reason": "No assertion checks the audit path or that audit.enabled=true specifically. The current stanza assertion would pass with audit.enabled: false. Adding 'audit.enabled is true' would discriminate a truly-wired policy from a nominal one."
+      },
+      {
+        "reason": "No assertion verifies that the detected entity names (User, Order) actually correspond to the @Entity classes in the fixture — a skill could hallucinate entity names and still pass. Consider asserting the detected_entities list equals the fixture's ground-truth set."
+      }
+    ],
+    "overall": "Assertions are meaningfully tightened (version match, concrete @Entity name, grep-verified absence of plaintext). Two small gaps remain: policy values aren't checked, and entity names aren't cross-validated against the fixture."
+  }
+}

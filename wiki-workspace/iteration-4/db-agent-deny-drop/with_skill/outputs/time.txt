@@ -1,0 +1,1 @@
+node  --env production --config ./wiki.config.yaml --sql "DROP TABLE users" >  0.03s user 0.01s system 89% cpu 0.046 total

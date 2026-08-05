@@ -1,0 +1,19 @@
+{
+  "status": "success",
+  "participants": ["Client", "Gateway", "Auth", "Database"],
+  "messages": [
+    {"from": "Client", "to": "Gateway", "label": "GET /orders (Bearer token)", "kind": "sync"},
+    {"from": "Gateway", "to": "Auth", "label": "validate(token)", "kind": "async"},
+    {"from": "Auth", "to": "Gateway", "label": "user_id, scopes", "kind": "sync"},
+    {"from": "Gateway", "to": "Database", "label": "SELECT orders WHERE user_id=?", "kind": "async"},
+    {"from": "Database", "to": "Gateway", "label": "rows", "kind": "sync"},
+    {"from": "Gateway", "to": "Client", "label": "200 OK + JSON", "kind": "sync"}
+  ],
+  "mermaid": [
+    {
+      "type": "sequenceDiagram",
+      "title": "HTTP Request Flow",
+      "code": "    participant Client\n    participant Gateway\n    participant Auth\n    participant Database\n    Client->Gateway: GET /orders (Bearer token)\n    Gateway->>Auth: validate(token)\n    Auth->Gateway: user_id, scopes\n    Gateway->>Database: SELECT orders WHERE user_id=?\n    Database->Gateway: rows\n    Gateway->Client: 200 OK + JSON"
+    }
+  ]
+}

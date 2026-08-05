@@ -1,0 +1,38 @@
+{
+  "eval_id": 4,
+  "eval_name": "wiki-onboard-spring-boot",
+  "skill": "wiki",
+  "prompt": "Set up wiki for a Spring Boot + PostgreSQL project",
+  "assertions": [
+    {
+      "text": "Detects Java/Spring Boot by parsing pom.xml or build.gradle — wiki.config.yaml lists framework='spring-boot' AND a framework version string that matches the fixture (e.g., '3.2.0' when pom.xml pins that version)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Detects JPA by scanning .java files — ecosystem.orm.profiles includes 'jpa' AND the detection trace lists at least one concrete @Entity class name found (e.g., 'User')",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Detects PostgreSQL from application.properties JDBC URL — wiki.config.yaml's database block sets driver='postgresql' AND host+port+database match the URL (e.g., localhost:5432/mydb when the fixture contains jdbc:postgresql://localhost:5432/mydb)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Credentials are referenced via secret names (e.g., user_secret: WIKI_DB_DEV_USER) — plaintext passwords anywhere in wiki.config.yaml is a failure",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated in the database section",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

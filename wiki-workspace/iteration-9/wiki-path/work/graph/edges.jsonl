@@ -1,0 +1,8 @@
+{"from":"authentication","to":"session-management","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
+{"from":"session-management","to":"database-schema","type":"extends","provenance":"INFERRED","created":"2026-05-03"}
+{"from":"authentication","to":"jwt","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
+{"from":"jwt","to":"crypto-utils","type":"supports","provenance":"INFERRED","created":"2026-05-03"}
+{"from":"crypto-utils","to":"key-rotation","type":"extends","provenance":"AMBIGUOUS","created":"2026-05-03"}
+{"from":"key-rotation","to":"database-schema","type":"supports","provenance":"INFERRED","created":"2026-05-03"}
+{"from":"audit-log","to":"database-schema","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
+{"from":"unrelated-topic","to":"another-topic","type":"supports","provenance":"INFERRED","created":"2026-05-03"}

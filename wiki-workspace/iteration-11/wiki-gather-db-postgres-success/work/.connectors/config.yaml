@@ -1,0 +1,18 @@
+connectors:
+  aws:
+    disable: true
+  db:
+    skill: db-agent-connector
+    servers:
+      evaldb:
+        driver: postgresql
+        host: localhost
+        port: 5455
+        database: evaldb
+        user: postgres
+        password: env:POSTGRES_PASSWORD
+        schema: public
+consumers:
+  doc-wiki:
+    enabled:
+      - db

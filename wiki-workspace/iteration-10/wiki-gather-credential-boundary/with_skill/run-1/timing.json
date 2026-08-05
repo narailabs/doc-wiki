@@ -1,0 +1,11 @@
+{
+  "executor_duration_seconds": 0,
+  "total_duration_seconds": 0,
+  "phases": {
+    "init_wiki": "ran node init_wiki.js --path <work>",
+    "gather_run_1": "node run.mjs > dispatch-result.json (cwd=<work>); exit=0; envelope.error_code=CONFIG_ERROR",
+    "gather_run_2": "node run.mjs > dispatch-result-2.json (cwd=<work>); exit=0; envelope identical to run 1",
+    "cli_resolution": "node cli-resolve.mjs > cli-resolution.json; source=bundled-self",
+    "events_logged": "two op=ingest entries in log/events.jsonl, one per gather run"
+  }
+}

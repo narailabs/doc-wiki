@@ -1,0 +1,5 @@
+node /Users/narayan/src/doc-wiki/agents/wiki-orm-agent/scripts/orm_detect.js \
+  --codebase-path /Users/narayan/src/doc-wiki/agents/wiki-orm-agent/evals/fixtures/prisma/ \
+  --profile prisma \
+  --output-markdown /tmp/eval-i8-orm-prisma/database-mapping.md \
+  --output-json /tmp/eval-i8-orm-prisma/detected-entities.json
