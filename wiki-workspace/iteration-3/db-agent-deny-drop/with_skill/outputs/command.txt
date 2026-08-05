@@ -1,1 +1,0 @@
-node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js --env production --config /tmp/eval-i3-db-deny/wiki.config.yaml --sql "DROP TABLE users"

@@ -1,5 +1,0 @@
-{
-  "path": [],
-  "found": false,
-  "reason": "No path from 'authentication' to 'quarantined-feature' within 6 hops — either the target is unknown, unreachable from the source, or the shortest path exceeds --max-hops."
-}

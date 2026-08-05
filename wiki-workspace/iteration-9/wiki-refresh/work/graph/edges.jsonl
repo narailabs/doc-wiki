@@ -1,4 +1,0 @@
-{"from":"wiki/architecture.md","to":"kubernetes","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
-{"from":"wiki/architecture.md","to":"postgresql","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
-{"from":"wiki/architecture.md","to":"nginx","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
-{"from":"wiki/architecture.md","to":"microservices","type":"extends","provenance":"INFERRED","created":"2026-05-03"}

@@ -1,5 +1,0 @@
-{
-  "executor_duration_seconds": 0,
-  "total_duration_seconds": 0,
-  "notes": "Skip path returns immediately (gate check + JSON.stringify); no subprocess spawned."
-}
