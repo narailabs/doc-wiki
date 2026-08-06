@@ -31,7 +31,7 @@ import { extractEntities } from "./wiki_orm/extractor.js";
 import { parseMavenArtifactId, discoverServices } from "./service_discovery.js";
 import { countRealServices } from "./cross_service_pages.js";
 import { resolveRef, buildResolutionContext } from "./property_resolver.js";
-import { detectExternalSources } from "./external_sources.js";
+import { detectExternalSources, } from "./external_sources.js";
 import { loadConfiguredConnectorIds } from "./source_registry.js";
 // ── Project metadata ────────────────────────────────────────────────
 /** Match the major Node version embedded in `engines.node`. */
@@ -65,9 +65,10 @@ export function detectProjectMetadata(repoRoot, notes = []) {
             if (language === "unknown")
                 language = "typescript";
             if (runtime.length === 0) {
-                runtime = typeof json.engines?.node === "string"
-                    ? _nodeMajorFromEnginesString(json.engines.node)
-                    : "node";
+                runtime =
+                    typeof json.engines?.node === "string"
+                        ? _nodeMajorFromEnginesString(json.engines.node)
+                        : "node";
             }
             manifestsSeen.push("package.json");
         }
@@ -84,7 +85,9 @@ export function detectProjectMetadata(repoRoot, notes = []) {
             const poetryName = typeof parsed.tool?.poetry?.name === "string"
                 ? parsed.tool.poetry.name
                 : "";
-            const projectVersion = typeof parsed.project?.version === "string" ? parsed.project.version : "";
+            const projectVersion = typeof parsed.project?.version === "string"
+                ? parsed.project.version
+                : "";
             const poetryVersion = typeof parsed.tool?.poetry?.version === "string"
                 ? parsed.tool.poetry.version
                 : "";
@@ -153,7 +156,9 @@ export function detectProjectMetadata(repoRoot, notes = []) {
             const artifact = parseMavenArtifactId(pom);
             if (artifact)
                 name = name || artifact;
-            const verM = pom.replace(/<parent>[\s\S]*?<\/parent>/gi, "").match(/<version>\s*([^<\s]+)/i);
+            const verM = pom
+                .replace(/<parent>[\s\S]*?<\/parent>/gi, "")
+                .match(/<version>\s*([^<\s]+)/i);
             if (verM?.[1])
                 version = version || verM[1];
             if (language === "unknown")
@@ -169,7 +174,9 @@ export function detectProjectMetadata(repoRoot, notes = []) {
         }
     }
     // build.gradle(.kts) — Java / Gradle
-    const gradlePath = ["build.gradle", "build.gradle.kts"].map((f) => path.join(repoRoot, f)).find(fs.existsSync);
+    const gradlePath = ["build.gradle", "build.gradle.kts"]
+        .map((f) => path.join(repoRoot, f))
+        .find(fs.existsSync);
     if (gradlePath) {
         if (language === "unknown")
             language = "java";
@@ -208,7 +215,15 @@ function _pomDependencyArtifactIds(pomXml) {
  * Build subdirectory names conventionally used to hold a nested build
  * manifest — mirrors the same list in `service_discovery.ts`.
  */
-const _BUILD_SUBDIR_NAMES = ["project", "app", "server", "service", "backend", "src", "main"];
+const _BUILD_SUBDIR_NAMES = [
+    "project",
+    "app",
+    "server",
+    "service",
+    "backend",
+    "src",
+    "main",
+];
 /**
  * Locate the effective `pom.xml` for a service whose root may use a
  * nested build-subdir layout (T5: `feed-processor/project/pom.xml`).
@@ -709,7 +724,15 @@ export function detectCodeClients(repoRoot) {
  *  Handles annotation verbs (`Get`→GET) and RestTemplate For-methods (`getForObject`→GET). */
 function _normalizeHttpVerb(raw) {
     const s = raw.toLowerCase();
-    for (const v of ["get", "post", "put", "delete", "patch", "head", "options"]) {
+    for (const v of [
+        "get",
+        "post",
+        "put",
+        "delete",
+        "patch",
+        "head",
+        "options",
+    ]) {
         if (s === v || s.startsWith(v))
             return v.toUpperCase();
     }
@@ -787,7 +810,9 @@ export function detectHttpClients(repoRoot, profiles) {
                             anchorService = m[fa.service_group] ?? undefined;
                         }
                     }
-                    catch { /* skip bad regex */ }
+                    catch {
+                        /* skip bad regex */
+                    }
                 }
                 if (fa.prefix_regex) {
                     try {
@@ -797,7 +822,9 @@ export function detectHttpClients(repoRoot, profiles) {
                             anchorPrefix = m[fa.prefix_group] ?? undefined;
                         }
                     }
-                    catch { /* skip bad regex */ }
+                    catch {
+                        /* skip bad regex */
+                    }
                 }
                 if (fa.url_regex) {
                     try {
@@ -807,7 +834,9 @@ export function detectHttpClients(repoRoot, profiles) {
                             anchorUrl = m[fa.url_group] ?? undefined;
                         }
                     }
-                    catch { /* skip bad regex */ }
+                    catch {
+                        /* skip bad regex */
+                    }
                 }
             }
             const lines = content.split("\n");
@@ -827,11 +856,10 @@ export function detectHttpClients(repoRoot, profiles) {
                     ? _feignConcatPath(anchorPrefix, rawUrl)
                     : _resolvePath(rawUrl, undefined);
                 const _perCallHost = _hostFromUrl(rawUrl);
-                const target_ref = (_perCallHost || undefined) ??
-                    anchorUrl ??
-                    anchorService ??
-                    "";
-                if (method.length > 0 && resolvedPath.length > 0 && _looksLikeUrlOrPath(resolvedPath)) {
+                const target_ref = (_perCallHost || undefined) ?? anchorUrl ?? anchorService ?? "";
+                if (method.length > 0 &&
+                    resolvedPath.length > 0 &&
+                    _looksLikeUrlOrPath(resolvedPath)) {
                     const key = `${relFile}|${lineNo}|${method}|${resolvedPath}`;
                     if (!seen.has(key)) {
                         seen.add(key);
@@ -863,7 +891,7 @@ export function detectHttpClients(repoRoot, profiles) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[ext.url_group] ?? "");
                         const idx = m[ext.url_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _countLinesTo(content, idx);
                         emitClient(ext, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1072,8 +1100,12 @@ export function detectQueueEndpoints(repoRoot, profiles, ctx) {
                 if (!captured)
                     return;
                 // Literal vs. symbol: only call resolveRef on bare symbols.
-                const queue_name = pat.resolve === true && ctx ? (resolveRef(captured, ctx) ?? captured) : captured;
-                const message_type = pat.message_type_group != null ? (m[pat.message_type_group] ?? undefined) : undefined;
+                const queue_name = pat.resolve === true && ctx
+                    ? (resolveRef(captured, ctx) ?? captured)
+                    : captured;
+                const message_type = pat.message_type_group != null
+                    ? (m[pat.message_type_group] ?? undefined)
+                    : undefined;
                 const key = `${relFile}|${lineNo}|${pat.role}|${queue_name}`;
                 if (seen.has(key))
                     return;
@@ -1104,7 +1136,7 @@ export function detectQueueEndpoints(repoRoot, profiles, ctx) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[pat.name_group] ?? "");
                         const idx = m[pat.name_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _countLinesTo(content, idx);
                         emit(pat, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1244,7 +1276,7 @@ export function detectQueueBindings(repoRoot, ctx) {
             // A binding needs at least a real queue AND a real exchange to bridge.
             if (!queue_name || !exchange)
                 return;
-            const line = content.slice(0, idx).split("\n").length;
+            const line = _countLinesTo(content, idx);
             const key = `${relFile}|${line}|${queue_name}|${exchange}|${routing_key}`;
             if (seen.has(key))
                 return;
@@ -1303,8 +1335,12 @@ export function generateInventory(repoRoot, runId, options = {}) {
         const discovered = discoverServices(repoRoot);
         // Detect repo-wide ONCE, then partition per service via inService().
         // Mirrors the existing orm_entities / rest_endpoints filtering pattern.
-        const clientProfiles = resolveClientProfiles({ wikiConfigPath: options.wikiConfigPath });
-        const queueProfiles = resolveQueueProfiles({ wikiConfigPath: options.wikiConfigPath });
+        const clientProfiles = resolveClientProfiles({
+            wikiConfigPath: options.wikiConfigPath,
+        });
+        const queueProfiles = resolveQueueProfiles({
+            wikiConfigPath: options.wikiConfigPath,
+        });
         // Walk config + source files PER SERVICE ROOT (not once repo-wide).
         // A single repo-wide walk shares one MAX_FILES budget across the whole
         // monorepo; in a large (30+-service, thousands-of-files) tree the DFS
@@ -1321,7 +1357,12 @@ export function generateInventory(repoRoot, runId, options = {}) {
             "**/bootstrap*.yaml",
         ];
         const CONST_GLOBS = [
-            "**/*.java", "**/*.kt", "**/*.ts", "**/*.js", "**/*.go", "**/*.py",
+            "**/*.java",
+            "**/*.kt",
+            "**/*.ts",
+            "**/*.js",
+            "**/*.go",
+            "**/*.py",
         ];
         // Per-service budget — generous enough for a single large service's tree
         // while still bounding pathological repos.
@@ -1335,11 +1376,16 @@ export function generateInventory(repoRoot, runId, options = {}) {
         // fields come back relative to that service root; re-prefix them with the
         // service's repo-relative root so downstream inService(e.file) (which
         // matches against the repo-relative svcRoot) works unchanged.
-        const rebaseFile = (svcRootPosix, e) => ({ ...e, file: e.file ? `${svcRootPosix}/${e.file}` : svcRootPosix });
+        const rebaseFile = (svcRootPosix, e) => ({
+            ...e,
+            file: e.file ? `${svcRootPosix}/${e.file}` : svcRootPosix,
+        });
         for (const svc of discovered) {
             const svcRootPosix = svc.root.replace(/\\/g, "/");
             const svcAbsRoot = path.join(repoRoot, svc.root);
-            Object.assign(configFiles, walkCodebase(svcAbsRoot, CONFIG_GLOBS, { maxFiles: PER_ROOT_MAX_FILES }));
+            Object.assign(configFiles, walkCodebase(svcAbsRoot, CONFIG_GLOBS, {
+                maxFiles: PER_ROOT_MAX_FILES,
+            }));
             Object.assign(constSource, walkCodebase(svcAbsRoot, CONST_GLOBS, { maxFiles: PER_ROOT_MAX_FILES }));
             // Detect queue endpoints + HTTP clients per root WITHOUT a ctx so raw
             // symbols stay as bare identifiers (e.g. "Q", "SHARED_Q"). Resolution
@@ -1431,7 +1477,9 @@ export function generateInventory(repoRoot, runId, options = {}) {
                     }
                     library_deps = [...matched];
                 }
-                catch { /* pom unreadable — leave empty */ }
+                catch {
+                    /* pom unreadable — leave empty */
+                }
             }
             // ── auth_issuer: spring.security.oauth2.resourceserver.jwt.issuer-uri ──
             const auth_issuer = svcCtx.properties.get("spring.security.oauth2.resourceserver.jwt.issuer-uri") ??
@@ -1442,7 +1490,9 @@ export function generateInventory(repoRoot, runId, options = {}) {
                 project_metadata: detectProjectMetadata(path.join(repoRoot, identity.root)),
                 orm_entities: orm_entities.filter((e) => inService(e.source_file)),
                 rest_endpoints: rest_endpoints.filter((e) => inService(e.file)),
-                http_clients: allHttpClients.filter((e) => inService(e.file)).map((e) => ({
+                http_clients: allHttpClients
+                    .filter((e) => inService(e.file))
+                    .map((e) => ({
                     ...e,
                     resolved_target: e.target_ref.startsWith("${")
                         ? (resolveRef(e.target_ref, svcCtx) ?? undefined)
@@ -1450,12 +1500,14 @@ export function generateInventory(repoRoot, runId, options = {}) {
                 })),
                 queue_endpoints: allQueueEndpoints
                     .filter((e) => inService(e.file))
-                    .map((e) => ({ ...e, queue_name: resolveRef(e.queue_name, svcCtx) ?? e.queue_name })),
+                    .map((e) => ({
+                    ...e,
+                    queue_name: resolveRef(e.queue_name, svcCtx) ?? e.queue_name,
+                })),
                 // Exchange→queue bindings, detected with the service-scoped resolution
                 // context so bean-method names + UPPER_SNAKE constants resolve to literals.
                 // Scoped to the service abs root; `file` rebased to repo-relative.
-                queue_bindings: detectQueueBindings(path.join(repoRoot, identity.root), svcCtx)
-                    .map((e) => ({
+                queue_bindings: detectQueueBindings(path.join(repoRoot, identity.root), svcCtx).map((e) => ({
                     ...e,
                     file: e.file ? `${svcRoot}/${e.file}` : svcRoot,
                 })),
@@ -1469,7 +1521,9 @@ export function generateInventory(repoRoot, runId, options = {}) {
                 // Repo-relative path of the pom actually used to derive library_deps.
                 // Differs from `<root>/pom.xml` for nested-build-subdir layouts.
                 ...(svcPomPath !== null
-                    ? { pom_path: path.relative(repoRoot, svcPomPath).replace(/\\/g, "/") }
+                    ? {
+                        pom_path: path.relative(repoRoot, svcPomPath).replace(/\\/g, "/"),
+                    }
                     : {}),
                 auth_issuer,
             };
@@ -1567,7 +1621,9 @@ export function loadInventory(wikiRoot, runId) {
     // `queue_bindings` is optional per-service (added with binding resolution);
     // default to [] so manifests written before it still load + build a graph.
     for (const s of rec["services"]) {
-        if (s && typeof s === "object" && !Array.isArray(s["queue_bindings"])) {
+        if (s &&
+            typeof s === "object" &&
+            !Array.isArray(s["queue_bindings"])) {
             s["queue_bindings"] = [];
         }
     }
@@ -1924,4 +1980,25 @@ export function main(argv = process.argv.slice(2)) {
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
     process.exit(main());
+}
+/**
+ * Performance optimization: Calculates 1-based line number for a specific
+ * string index using a backward lastIndexOf loop. Avoids O(N) memory allocations
+ * caused by String.slice().split("\\n").length.
+ *
+ * Counts newlines in `[0, idx)`, so it matches the 1-based line number the
+ * `.slice().split()` form returned — including `idx === 0` ⇒ line 1, and a
+ * `\n` at index 0 counting toward the total.
+ *
+ * Exported for tests only; not part of the module's public surface.
+ */
+export function _countLinesTo(str, idx) {
+    let count = 1;
+    let pos = idx;
+    while (pos > 0) {
+        pos = str.lastIndexOf("\n", pos - 1);
+        if (pos !== -1)
+            count++;
+    }
+    return count;
 }
