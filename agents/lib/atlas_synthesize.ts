@@ -130,11 +130,11 @@ function _extractTldr(body: string): string {
  * derived from the `atlas_facet`. Mirrors the table documented in
  * `references/compilation.md` ("Additional frontmatter for atlas pages").
  */
-function _inferAudience(
-  facet: string,
-  frontmatterAudience: unknown,
-): string {
-  if (typeof frontmatterAudience === "string" && frontmatterAudience.length > 0) {
+function _inferAudience(facet: string, frontmatterAudience: unknown): string {
+  if (
+    typeof frontmatterAudience === "string" &&
+    frontmatterAudience.length > 0
+  ) {
     return frontmatterAudience;
   }
   switch (facet) {
@@ -197,7 +197,13 @@ export function assembleOverviewInputs(wikiRoot: string): SynthesisBundle {
     parts.push("## Audience routing\n");
     parts.push("| Audience | Pages |");
     parts.push("|---|---|");
-    const order = ["new-user", "operator", "contributor", "integrator", "debugger"];
+    const order = [
+      "new-user",
+      "operator",
+      "contributor",
+      "integrator",
+      "debugger",
+    ];
     for (const audience of order) {
       const pages = grouped.get(audience);
       if (!pages || pages.length === 0) continue;
@@ -260,7 +266,9 @@ export function assembleIntegrationsInputs(
 
   const apis = _findAtlasPages(wikiRoot, ["api"]);
   if (apis.length === 0) {
-    notes.push("no api.md pages found — integrations will draw only from architecture mentions");
+    notes.push(
+      "no api.md pages found — integrations will draw only from architecture mentions",
+    );
   }
   for (const page of apis) {
     sources.push(page.page);
@@ -284,7 +292,9 @@ export function assembleIntegrationsInputs(
     }
     if (hits.length > 0) {
       sources.push(page.page);
-      parts.push(`## external-mentions in ${page.page}\n\n${hits.join("\n")}\n`);
+      parts.push(
+        `## external-mentions in ${page.page}\n\n${hits.join("\n")}\n`,
+      );
     }
   }
 
@@ -457,7 +467,12 @@ function _commandsLifecycleSeed(slugs: readonly string[]): string {
     { name: "cmd", fill: "#fff3cd", stroke: "#856404" },
     { name: "orch", fill: "#d4edda", stroke: "#155724" },
   ];
-  const block = formatPhaseFlow("slash-command fan-out", nodes, edges, classDefs);
+  const block = formatPhaseFlow(
+    "slash-command fan-out",
+    nodes,
+    edges,
+    classDefs,
+  );
   return [
     "<!-- mermaid-seed: slash-command fan-out — preserve in synthesized page -->",
     "```mermaid",
@@ -546,7 +561,10 @@ export function assembleCommandsInputs(repoRoot: string): SynthesisBundle {
         if (/^###\s+\//.test(line)) headings.push(line.trim());
       }
       if (headings.length > 0) {
-        const rel = path.relative(repoRoot, skillFile).split(path.sep).join("/");
+        const rel = path
+          .relative(repoRoot, skillFile)
+          .split(path.sep)
+          .join("/");
         sources.push(rel);
         parts.push(
           `## Slash-command headings in ${rel}\n\n${headings.join("\n")}\n`,
@@ -573,7 +591,9 @@ const _BOOTSTRAP_FILE_CANDIDATES: readonly string[] = [
  * Makefile, etc.). Gives the LLM enough raw material to produce a
  * numbered first-run walkthrough for new users.
  */
-export function assembleGettingStartedInputs(repoRoot: string): SynthesisBundle {
+export function assembleGettingStartedInputs(
+  repoRoot: string,
+): SynthesisBundle {
   const sources: string[] = [];
   const parts: string[] = [];
   const notes: string[] = [];
@@ -650,10 +670,11 @@ const _CONFIGURATION_FILE_GLOBS: ReadonlyArray<RegExp> = [
   /^application\.(properties|ya?ml)$/i,
 ];
 
-const _CONFIGURATION_DIR_PATTERNS: ReadonlyArray<{ dir: string; rx: RegExp }> = [
-  { dir: "config", rx: /\.(ya?ml|json|toml|conf|ini|properties)$/i },
-  { dir: ".connectors", rx: /\.ya?ml$/i },
-];
+const _CONFIGURATION_DIR_PATTERNS: ReadonlyArray<{ dir: string; rx: RegExp }> =
+  [
+    { dir: "config", rx: /\.(ya?ml|json|toml|conf|ini|properties)$/i },
+    { dir: ".connectors", rx: /\.ya?ml$/i },
+  ];
 
 /**
  * Assemble the input for `wiki/configuration.md` synthesis: top-level
@@ -706,7 +727,9 @@ function _isErrorEvent(rec: Record<string, unknown>): boolean {
  * drift report (if present). Gives the LLM symptom signals the page can
  * organize into symptom → cause → fix triplets.
  */
-export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle {
+export function assembleTroubleshootingInputs(
+  wikiRoot: string,
+): SynthesisBundle {
   const sources: string[] = [];
   const parts: string[] = [];
   const notes: string[] = [];
@@ -714,19 +737,18 @@ export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle
   // Recent error events from events.jsonl
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (fs.existsSync(eventsPath)) {
-    let lines: string[];
+    let fileContent: string;
     try {
-      lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+      fileContent = fs.readFileSync(eventsPath, "utf-8");
     } catch {
-      lines = [];
+      fileContent = "";
     }
     const errors: AtlasErrorEventLine[] = [];
-    for (
-      let i = lines.length - 1;
-      i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT;
-      i--
-    ) {
-      const line = lines[i];
+    let pos = fileContent.length;
+    while (pos >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
+      const prevPos = pos === 0 ? -1 : fileContent.lastIndexOf("\n", pos - 1);
+      const line = fileContent.substring(prevPos + 1, pos);
+      pos = prevPos;
       if (!line) continue;
       let parsed: unknown;
       try {
@@ -734,7 +756,8 @@ export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle
       } catch {
         continue;
       }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+        continue;
       const rec = parsed as Record<string, unknown>;
       if (_isErrorEvent(rec)) {
         errors.push({ raw: line, parsed: rec });
@@ -748,7 +771,9 @@ export function assembleTroubleshootingInputs(wikiRoot: string): SynthesisBundle
       for (const e of [...errors].reverse()) parts.push(e.raw);
       parts.push("```\n");
     } else {
-      notes.push("no error events in events.jsonl — troubleshooting will be sparse");
+      notes.push(
+        "no error events in events.jsonl — troubleshooting will be sparse",
+      );
     }
   } else {
     notes.push("no log/events.jsonl found");
@@ -940,12 +965,17 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   }
   const wikiRoot = parsed.values["wikiRoot"];
   const repoRoot =
-    typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    typeof parsed.values["repoRoot"] === "string" &&
+    parsed.values["repoRoot"].length > 0
       ? parsed.values["repoRoot"]
       : process.cwd();
 
   // Subcommands that need --wiki-root.
-  if (sub === "overview" || sub === "integrations" || sub === "troubleshooting") {
+  if (
+    sub === "overview" ||
+    sub === "integrations" ||
+    sub === "troubleshooting"
+  ) {
     if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
       process.stderr.write("--wiki-root is required\n");
       return 2;

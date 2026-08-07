@@ -12,3 +12,6 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2024-08-07 - Avoid massive array allocations by replacing .split('\n') with string iterations
+**Learning:** In Node.js, `fs.readFileSync(path).split('\n')` creates a massive intermediate array in memory which can cause performance issues for large append-only log files like `events.jsonl` or `_archive_history.jsonl`.
+**Action:** Replace `.split('\n')` with iterative `lastIndexOf('\n')` traversing backwards for finding recent events in large log strings, or `indexOf('\n')` traversing forwards, then extracting lines on the fly with `substring()`.
