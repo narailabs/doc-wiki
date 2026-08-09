@@ -85,8 +85,12 @@ function readAllEdges(edgesPath: string): Edge[] {
   }
   const raw = fs.readFileSync(edgesPath, { encoding: "utf-8" });
   const edges: Edge[] = [];
-  for (const rawLine of raw.split("\n")) {
-    const line = rawLine.trim();
+  let pos = 0;
+  while (pos < raw.length) {
+    let nlPos = raw.indexOf("\n", pos);
+    if (nlPos === -1) nlPos = raw.length;
+    const line = raw.substring(pos, nlPos).trim();
+    pos = nlPos + 1;
     if (line) {
       edges.push(JSON.parse(line) as Edge);
     }

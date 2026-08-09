@@ -51,10 +51,7 @@ export { importOptional };
  */
 export function normalizeExtracted(text: string): string {
   // Strip trailing whitespace per line (keeps blank lines as `""`, not `"   "`).
-  const stripped = text
-    .split("\n")
-    .map((line) => line.replace(/[ \t\r\f\v]+$/, ""))
-    .join("\n");
+  const stripped = text.replace(/[ \t\r\f\v]+$/gm, "");
   // Collapse 3+ consecutive newlines → exactly 2 (max one blank line).
   const collapsed = stripped.replace(/\n{3,}/g, "\n\n");
   return collapsed.trim();
@@ -82,10 +79,7 @@ interface PdfLoadingTask {
   promise: Promise<PdfDocumentProxy>;
 }
 interface PdfJsModule {
-  getDocument(src: {
-    data: Uint8Array;
-    verbosity?: number;
-  }): PdfLoadingTask;
+  getDocument(src: { data: Uint8Array; verbosity?: number }): PdfLoadingTask;
   VerbosityLevel?: { ERRORS: number; WARNINGS: number; INFOS: number };
 }
 
@@ -102,7 +96,9 @@ interface PdfJsModule {
  * Pages are joined by a blank line and then run through `normalizeExtracted`.
  */
 export async function extractPdf(filePath: string): Promise<string> {
-  const pdfjs = await importOptional<PdfJsModule>("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdfjs = await importOptional<PdfJsModule>(
+    "pdfjs-dist/legacy/build/pdf.mjs",
+  );
   const data = fs.readFileSync(filePath);
   // pdfjs accepts a Uint8Array view; copy into a fresh buffer so it doesn't
   // hold onto Node's pooled allocator.
