@@ -374,3 +374,47 @@ describe("TestDailySummaryCLI", () => {
   });
 
 });
+
+// ── JSONL line-iteration edge cases ─────────────────────────────────
+
+describe("readEvents line iteration", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("daily-lines-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** readEvents scans events.jsonl with indexOf/substring rather than
+   *  split("\n"); pin the blank-line and terminator handling so the
+   *  per-date counts cannot drift. */
+  function seed(wikiRoot: string, body: string): void {
+    fs.mkdirSync(path.join(wikiRoot, "log"), { recursive: true });
+    fs.writeFileSync(path.join(wikiRoot, "log", "events.jsonl"), body);
+  }
+
+  const ev = (op: string) =>
+    JSON.stringify({
+      ts: "2026-04-11T10:00:00+00:00",
+      op,
+      source: "x",
+      agent: "file",
+    });
+
+  it("counts events across blank lines and a missing final newline", () => {
+    const wiki = makeInitializedWiki(tmpPath);
+    seed(wiki, `\n${ev("ingest")}\n\n   \n${ev("ingest")}`);
+    const out = generateSummary(wiki, "2026-04-11");
+    expect(out).toContain("2026-04-11");
+    expect(out).toMatch(/2/);
+  });
+
+  it("produces a summary for a whitespace-only log without throwing", () => {
+    const wiki = makeInitializedWiki(tmpPath);
+    seed(wiki, "\n\n  \n");
+    expect(() => generateSummary(wiki, "2026-04-11")).not.toThrow();
+  });
+});

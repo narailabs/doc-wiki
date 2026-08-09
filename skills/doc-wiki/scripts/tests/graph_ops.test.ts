@@ -802,3 +802,56 @@ describe("graph_ops isExcludedNode — directory-only exclusion", () => {
     expect(Object.keys(degrees).some((k) => k.includes("_drafts"))).toBe(false);
   });
 });
+
+// ── JSONL line-iteration edge cases ─────────────────────────────────
+
+describe("readAllEdges line iteration", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-lines-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  /** The reader walks the file with indexOf/substring rather than
+   *  split("\n"), so the blank-line and terminator cases are the ones
+   *  worth pinning: a trailing newline must not yield a phantom edge,
+   *  and a missing one must not drop the last edge. */
+  function writeEdges(body: string): string {
+    const p = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(p, body);
+    return p;
+  }
+
+  const edge = (from: string) =>
+    JSON.stringify({
+      from,
+      to: "wiki/b.md",
+      type: "extends",
+      provenance: "EXTRACTED",
+    });
+
+  it("ignores a trailing newline", () => {
+    expect(listEdges(writeEdges(edge("wiki/a.md") + "\n"))).toHaveLength(1);
+  });
+
+  it("reads the last edge when the trailing newline is missing", () => {
+    const body = `${edge("wiki/a.md")}\n${edge("wiki/c.md")}`;
+    const edges = listEdges(writeEdges(body));
+    expect(edges).toHaveLength(2);
+    expect(edges[1]?.from).toBe("wiki/c.md");
+  });
+
+  it("skips blank and whitespace-only lines", () => {
+    const body = `\n${edge("wiki/a.md")}\n\n   \n\t\n${edge("wiki/c.md")}\n\n`;
+    expect(listEdges(writeEdges(body))).toHaveLength(2);
+  });
+
+  it("returns an empty list for an empty or whitespace-only file", () => {
+    expect(listEdges(writeEdges(""))).toEqual([]);
+    expect(listEdges(writeEdges("\n\n  \n"))).toEqual([]);
+  });
+});
