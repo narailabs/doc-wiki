@@ -33,8 +33,13 @@ function readEvents(wikiRoot, dateStr) {
     }
     const events = [];
     const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-    for (const rawLine of raw.split("\n")) {
-        const line = rawLine.trim();
+    let pos = 0;
+    while (pos < raw.length) {
+        let nlPos = raw.indexOf("\n", pos);
+        if (nlPos === -1)
+            nlPos = raw.length;
+        const line = raw.substring(pos, nlPos).trim();
+        pos = nlPos + 1;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot match our date

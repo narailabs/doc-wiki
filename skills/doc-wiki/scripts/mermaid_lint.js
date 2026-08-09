@@ -74,9 +74,13 @@ export function extractMermaidBlocks(content) {
         const captured = match[1] ?? "";
         const blockContent = captured.trim();
         // Diagram type is the first non-empty token
-        const firstLine = blockContent
-            ? (blockContent.split("\n")[0] ?? "").trim()
-            : "";
+        let firstLine = "";
+        if (blockContent) {
+            let end = blockContent.indexOf("\n");
+            if (end === -1)
+                end = blockContent.length;
+            firstLine = blockContent.substring(0, end).trim();
+        }
         const diagramType = firstLine
             ? (firstLine.split(/\s+/).filter((s) => s.length > 0)[0] ?? "")
             : "";
@@ -101,7 +105,10 @@ export function validateBlock(block) {
         return errors;
     }
     // Check diagram type
-    const firstLine = (trimmed.split("\n")[0] ?? "").trim();
+    let end = trimmed.indexOf("\n");
+    if (end === -1)
+        end = trimmed.length;
+    const firstLine = trimmed.substring(0, end).trim();
     const diagramType = firstLine
         ? (firstLine.split(/\s+/).filter((s) => s.length > 0)[0] ?? "")
         : "";

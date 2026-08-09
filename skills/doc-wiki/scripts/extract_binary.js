@@ -44,10 +44,7 @@ export { importOptional };
  */
 export function normalizeExtracted(text) {
     // Strip trailing whitespace per line (keeps blank lines as `""`, not `"   "`).
-    const stripped = text
-        .split("\n")
-        .map((line) => line.replace(/[ \t\r\f\v]+$/, ""))
-        .join("\n");
+    const stripped = text.replace(/[ \t\r\f\v]+$/gm, "");
     // Collapse 3+ consecutive newlines → exactly 2 (max one blank line).
     const collapsed = stripped.replace(/\n{3,}/g, "\n\n");
     return collapsed.trim();

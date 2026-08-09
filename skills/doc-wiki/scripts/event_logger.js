@@ -146,8 +146,13 @@ function _readEvents(wikiRoot, since = null) {
     }
     const raw = fs.readFileSync(p, { encoding: "utf-8" });
     const events = [];
-    for (const rawLine of raw.split("\n")) {
-        const line = rawLine.trim();
+    let pos = 0;
+    while (pos < raw.length) {
+        let nlPos = raw.indexOf("\n", pos);
+        if (nlPos === -1)
+            nlPos = raw.length;
+        const line = raw.substring(pos, nlPos).trim();
+        pos = nlPos + 1;
         if (!line)
             continue;
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
