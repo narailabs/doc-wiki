@@ -18,10 +18,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
 
-import {
-  walkLivePages,
-  type WikiPage,
-} from "../../skills/doc-wiki/scripts/_wiki_fs.js";
+import { walkLivePages, type WikiPage } from "../../skills/doc-wiki/scripts/_wiki_fs.js";
 import { parseFrontmatter } from "../../skills/doc-wiki/scripts/_frontmatter.js";
 import {
   sourceExistence,
@@ -29,21 +26,12 @@ import {
 } from "../../skills/doc-wiki/scripts/atlas_validate.js";
 import { parseFlags } from "../../skills/doc-wiki/scripts/_cli_args.js";
 import { checkPathContainment } from "narai-primitives/toolkit";
-import {
-  parseConfig,
-  ConfigFileNotFoundError,
-  type ArchiveConfig,
-} from "./parse_config.js";
+import { parseConfig, ConfigFileNotFoundError, type ArchiveConfig } from "./parse_config.js";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
 export type Autonomy = "conservative" | "balanced" | "autonomous" | "auto";
-export const AUTONOMY_MODES = [
-  "conservative",
-  "balanced",
-  "autonomous",
-  "auto",
-] as const;
+export const AUTONOMY_MODES = ["conservative", "balanced", "autonomous", "auto"] as const;
 
 export const REWRITE_MODES = ["rewrite", "drop", "leave"] as const;
 export type RewriteMode = (typeof REWRITE_MODES)[number];
@@ -51,7 +39,7 @@ export type RewriteMode = (typeof REWRITE_MODES)[number];
 export interface UnarchiveOptions {
   wikiRoot: string;
   pageOrSlug: string; // "wiki/_archive/billing/architecture.md" OR "architecture"
-  target?: string; // override the archived_from value
+  target?: string;    // override the archived_from value
   inboundLinks: RewriteMode;
 }
 
@@ -65,7 +53,7 @@ export interface UnarchiveEvent {
   ts: string;
   op: "unarchive";
   from: string; // wiki/_archive/<topic>/<page>.md
-  to: string; // wiki/<topic>/<page>.md
+  to: string;   // wiki/<topic>/<page>.md
 }
 
 export interface SweepOptions {
@@ -156,11 +144,7 @@ function filterAtlasPages(pages: WikiPage[]): AtlasPage[] {
       continue;
     }
     const { frontmatter } = parseFrontmatter(raw);
-    if (
-      frontmatter &&
-      "atlas_facet" in frontmatter &&
-      frontmatter["atlas_facet"] != null
-    ) {
+    if (frontmatter && "atlas_facet" in frontmatter && frontmatter["atlas_facet"] != null) {
       out.push(page);
     }
   }
@@ -194,11 +178,7 @@ function isoDate(isoTs: string): string {
  */
 function stampFrontmatter(
   absPath: string,
-  fields: {
-    archived_from: string;
-    archived_at: string;
-    archive_reason: string;
-  },
+  fields: { archived_from: string; archived_at: string; archive_reason: string },
 ): void {
   const raw = fs.readFileSync(absPath, "utf-8");
   const { frontmatter, body } = parseFrontmatter(raw);
@@ -220,10 +200,9 @@ function buildEvent(
   ts: string,
 ): ArchiveEvent {
   const archRelPath = toArchiveRelPath(page.relPath);
-  const reason =
-    existence.ratio === 1.0
-      ? `all sources removed (${existence.missing.join(", ")})`
-      : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
+  const reason = existence.ratio === 1.0
+    ? `all sources removed (${existence.missing.join(", ")})`
+    : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
   return {
     ts,
     op: "archive",
@@ -251,10 +230,9 @@ async function applyArchive(
   // If stamp fails after rename, the file is at the archive path with original
   // frontmatter; the next sweep won't see it (outside walkLivePages).
   fs.renameSync(page.absPath, archAbsPath);
-  const archiveReason =
-    existence.ratio === 1.0
-      ? `all sources removed (${existence.missing.join(", ")})`
-      : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
+  const archiveReason = existence.ratio === 1.0
+    ? `all sources removed (${existence.missing.join(", ")})`
+    : `${existence.missing.length} of ${existence.total} sources removed (${existence.missing.join(", ")})`;
   stampFrontmatter(archAbsPath, {
     archived_from: page.relPath,
     archived_at: isoDate(ts),
@@ -281,16 +259,8 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
   let allEvents: Array<ArchiveEvent | UnarchiveEvent> = [];
 
   if (fs.existsSync(journalPath)) {
-    const fileContent = fs.readFileSync(journalPath, "utf-8");
-    let pos = 0;
-    while (pos < fileContent.length) {
-      let nextPos = fileContent.indexOf("\n", pos);
-      if (nextPos === -1) nextPos = fileContent.length;
-      const line = fileContent.substring(pos, nextPos);
-      pos = nextPos + 1;
-
-      if (!line) continue;
-
+    const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
+    for (const line of lines) {
       try {
         allEvents.push(JSON.parse(line) as ArchiveEvent | UnarchiveEvent);
       } catch {
@@ -347,9 +317,7 @@ export async function rebuildArchiveIndex(wikiRoot: string): Promise<void> {
       const archRelPath = e.to; // e.g. "wiki/_archive/billing/architecture.md"
       const linkTarget = archRelPath.replace(/^wiki\/_archive\//, "");
       const dateStr = isoDate(e.ts);
-      lines.push(
-        `- [${linkTarget}](${linkTarget}) — archived ${dateStr}, ${e.reason}`,
-      );
+      lines.push(`- [${linkTarget}](${linkTarget}) — archived ${dateStr}, ${e.reason}`);
     }
     lines.push("");
   }
@@ -388,10 +356,7 @@ async function resolveArchivePath(
 
   // If the raw input looked like a direct wiki/_archive/ path but normalization
   // resolved ".." segments that escape the archive root, it is a traversal attempt.
-  if (
-    candidateRelRaw.startsWith("wiki/_archive/") &&
-    !candidateRelPosix.startsWith("wiki/_archive/")
-  ) {
+  if (candidateRelRaw.startsWith("wiki/_archive/") && !candidateRelPosix.startsWith("wiki/_archive/")) {
     throw new Error(
       `path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`,
     );
@@ -399,9 +364,7 @@ async function resolveArchivePath(
 
   if (candidateRelPosix.startsWith("wiki/_archive/")) {
     const absPath = path.resolve(wikiRoot, candidateRelPosix);
-    if (
-      !checkPathContainment(absPath, path.join(wikiRoot, "wiki", "_archive"))
-    ) {
+    if (!checkPathContainment(absPath, path.join(wikiRoot, "wiki", "_archive"))) {
       throw new Error(
         `path traversal detected: "${pageOrSlug}" resolves outside wiki/_archive/`,
       );
@@ -413,9 +376,7 @@ async function resolveArchivePath(
 
   // Substring slug match: collect all *.md under wiki/_archive/
   if (!fs.existsSync(archiveRoot)) {
-    throw new Error(
-      `no archived page matching "${pageOrSlug}" — archive directory does not exist`,
-    );
+    throw new Error(`no archived page matching "${pageOrSlug}" — archive directory does not exist`);
   }
 
   const matches: ResolvedArchivePath[] = [];
@@ -424,11 +385,7 @@ async function resolveArchivePath(
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(abs);
-      } else if (
-        entry.isFile() &&
-        entry.name.endsWith(".md") &&
-        entry.name !== "index.md"
-      ) {
+      } else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
         const relPath = path.relative(wikiRoot, abs).replace(/\\/g, "/");
         if (relPath.includes(pageOrSlug)) {
           matches.push({ absPath: abs, relPath });
@@ -450,12 +407,7 @@ async function resolveArchivePath(
 
 // ── stripArchiveFrontmatter ───────────────────────────────────────────────────
 
-const ARCHIVE_FM_KEYS = new Set([
-  "status",
-  "archived_at",
-  "archive_reason",
-  "archived_from",
-]);
+const ARCHIVE_FM_KEYS = new Set(["status", "archived_at", "archive_reason", "archived_from"]);
 
 /**
  * Read the file at absPath, remove the four deprecation frontmatter fields,
@@ -473,7 +425,9 @@ async function stripArchiveFrontmatter(absPath: string): Promise<void> {
     }
   }
   const newContent =
-    Object.keys(fm).length === 0 ? body : `---\n${yaml.dump(fm)}---\n${body}`;
+    Object.keys(fm).length === 0
+      ? body
+      : `---\n${yaml.dump(fm)}---\n${body}`;
   await fs.promises.writeFile(absPath, newContent, "utf-8");
 }
 
@@ -497,9 +451,7 @@ export interface RewriteUnarchiveLinksOptions {
  * Fenced code blocks (triple backtick) are "code" segments; everything else is
  * "non-code".  Returns an array of { text, isCode } records.
  */
-function splitOnFencedBlocks(
-  body: string,
-): Array<{ text: string; isCode: boolean }> {
+function splitOnFencedBlocks(body: string): Array<{ text: string; isCode: boolean }> {
   const segments: Array<{ text: string; isCode: boolean }> = [];
   const fenceRe = /^```/m;
   let remaining = body;
@@ -532,9 +484,7 @@ function splitOnFencedBlocks(
  *
  * Returns the total number of link substitutions made.
  */
-export async function rewriteInboundLinks(
-  opts: RewriteArchiveLinksOptions,
-): Promise<number> {
+export async function rewriteInboundLinks(opts: RewriteArchiveLinksOptions): Promise<number> {
   if (!(REWRITE_MODES as readonly string[]).includes(opts.mode)) {
     throw new Error(
       `invalid mode '${opts.mode}'; expected one of: ${REWRITE_MODES.join(", ")}`,
@@ -567,8 +517,7 @@ export async function rewriteInboundLinks(
       const out: string[] = [];
 
       while ((m = re.exec(text)) !== null) {
-        const [whole, label, rawTarget] = m as RegExpExecArray &
-          [string, string, string];
+        const [whole, label, rawTarget] = m as RegExpExecArray & [string, string, string];
 
         // Skip already-rewritten links
         if (label.endsWith(" (archived)") && rawTarget.includes("_archive/")) {
@@ -579,8 +528,7 @@ export async function rewriteInboundLinks(
 
         // Split off fragment/query so resolution works on the bare path
         const fragIdx = rawTarget.search(/[#?]/);
-        const pathPart =
-          fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
+        const pathPart = fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
         const suffix = fragIdx === -1 ? "" : rawTarget.slice(fragIdx);
 
         // Resolve target to wiki-relative path
@@ -640,7 +588,7 @@ export async function rewriteInboundLinksForUnarchive(
 
   // The archived path and the restored (live) path, both wiki-relative.
   const archiveRelPath = event.from; // "wiki/_archive/billing/architecture.md"
-  const liveRelPath = event.to; // "wiki/billing/architecture.md"
+  const liveRelPath = event.to;      // "wiki/billing/architecture.md"
 
   const livePages = walkLivePages(wikiRoot);
   let totalReverted = 0;
@@ -661,15 +609,11 @@ export async function rewriteInboundLinksForUnarchive(
       const out: string[] = [];
 
       while ((m = re.exec(text)) !== null) {
-        const [whole, label, rawTarget] = m as RegExpExecArray &
-          [string, string, string];
+        const [whole, label, rawTarget] = m as RegExpExecArray & [string, string, string];
 
         // Only process links that look like rewritten archive links:
         // label must end with " (archived)" AND path must be under _archive/.
-        if (
-          !label.endsWith(" (archived)") ||
-          !rawTarget.includes("_archive/")
-        ) {
+        if (!label.endsWith(" (archived)") || !rawTarget.includes("_archive/")) {
           out.push(text.slice(lastIndex, m.index + whole.length));
           lastIndex = m.index + whole.length;
           continue;
@@ -677,8 +621,7 @@ export async function rewriteInboundLinksForUnarchive(
 
         // Split off fragment/query so resolution works on the bare path
         const fragIdx = rawTarget.search(/[#?]/);
-        const pathPart =
-          fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
+        const pathPart = fragIdx === -1 ? rawTarget : rawTarget.slice(0, fragIdx);
         const suffix = fragIdx === -1 ? "" : rawTarget.slice(fragIdx);
 
         // Resolve to wiki-relative to check it matches the archive path
@@ -722,18 +665,15 @@ export async function rewriteInboundLinksForUnarchive(
 
 // ── unarchive ─────────────────────────────────────────────────────────────────
 
-export async function unarchive(
-  opts: UnarchiveOptions,
-): Promise<UnarchiveResult> {
+export async function unarchive(opts: UnarchiveOptions): Promise<UnarchiveResult> {
   const resolved = await resolveArchivePath(opts.wikiRoot, opts.pageOrSlug);
 
   const raw = await fs.promises.readFile(resolved.absPath, "utf-8");
   const { frontmatter } = parseFrontmatter(raw);
   const archivedFrom =
-    opts.target ??
-    ((frontmatter as Record<string, unknown> | null)?.["archived_from"] as
-      | string
-      | undefined);
+    opts.target ?? (frontmatter as Record<string, unknown> | null)?.[
+      "archived_from"
+    ] as string | undefined;
 
   if (!archivedFrom) {
     throw new Error(
@@ -783,14 +723,10 @@ export async function unarchive(
 
   // "drop" was forward-only (drop links to a page being archived); on unarchive
   // there are no archive-style links to drop, so treat it as "leave".
-  const effectiveMode =
-    opts.inboundLinks === "drop" ? "leave" : opts.inboundLinks;
+  const effectiveMode = opts.inboundLinks === "drop" ? "leave" : opts.inboundLinks;
   const linksReverted =
     effectiveMode === "rewrite"
-      ? await rewriteInboundLinksForUnarchive({
-          wikiRoot: opts.wikiRoot,
-          event,
-        })
+      ? await rewriteInboundLinksForUnarchive({ wikiRoot: opts.wikiRoot, event })
       : 0;
   return { from: event.from, to: event.to, linksReverted };
 }
@@ -804,11 +740,7 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
     );
   }
   const partialThreshold = opts.partialThreshold ?? 1.0;
-  const resolvedOpts: SweepOptions = {
-    inboundLinks: "rewrite",
-    ...opts,
-    partialThreshold,
-  };
+  const resolvedOpts: SweepOptions = { inboundLinks: "rewrite", ...opts, partialThreshold };
 
   const livePages = walkLivePages(opts.wikiRoot);
   const atlasPages = filterAtlasPages(livePages);
@@ -847,8 +779,7 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
       const decision = decideAutonomy(opts.autonomy, "orphan");
       if (decision === "auto") {
         try {
-          if (!opts.dryRun)
-            await applyArchive(page, existence, resolvedOpts, ts);
+          if (!opts.dryRun) await applyArchive(page, existence, resolvedOpts, ts);
           const event = buildEvent(page, existence, resolvedOpts, ts);
           archived.push(event);
         } catch (e) {
@@ -871,8 +802,7 @@ export async function sweep(opts: SweepOptions): Promise<SweepResult> {
       const decision = decideAutonomy(opts.autonomy, "orphan");
       if (decision === "auto") {
         try {
-          if (!opts.dryRun)
-            await applyArchive(page, existence, resolvedOpts, ts);
+          if (!opts.dryRun) await applyArchive(page, existence, resolvedOpts, ts);
           const event = buildEvent(page, existence, resolvedOpts, ts);
           archived.push(event);
         } catch (e) {
@@ -976,16 +906,11 @@ export async function main(): Promise<number> {
     const repoRoot = parsed.values["repoRoot"];
     const runId = parsed.values["runId"];
     if (
-      typeof wikiRoot !== "string" ||
-      wikiRoot.length === 0 ||
-      typeof repoRoot !== "string" ||
-      repoRoot.length === 0 ||
-      typeof runId !== "string" ||
-      runId.length === 0
+      typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+      typeof repoRoot !== "string" || repoRoot.length === 0 ||
+      typeof runId !== "string" || runId.length === 0
     ) {
-      process.stderr.write(
-        "--wiki-root, --repo-root, and --run-id are required\n",
-      );
+      process.stderr.write("--wiki-root, --repo-root, and --run-id are required\n");
       return 2;
     }
     const autonomyRaw = parsed.values["autonomy"] ?? "autonomous";
@@ -1018,9 +943,7 @@ export async function main(): Promise<number> {
     const configPath = path.join(wikiRoot, "wiki.config.yaml");
     try {
       const cfg = parseConfig(configPath);
-      const archiveCfg = (
-        cfg["ecosystem"] as Record<string, unknown> | undefined
-      )?.["archive"] as ArchiveConfig | undefined;
+      const archiveCfg = (cfg["ecosystem"] as Record<string, unknown> | undefined)?.["archive"] as ArchiveConfig | undefined;
       if (archiveCfg?.inbound_links) {
         configInboundLinks = archiveCfg.inbound_links;
       }
@@ -1042,15 +965,7 @@ export async function main(): Promise<number> {
       inboundLinks = configInboundLinks;
     }
 
-    const result = await sweep({
-      wikiRoot,
-      repoRoot,
-      runId,
-      autonomy,
-      partialThreshold,
-      dryRun,
-      inboundLinks,
-    });
+    const result = await sweep({ wikiRoot, repoRoot, runId, autonomy, partialThreshold, dryRun, inboundLinks });
     process.stdout.write(JSON.stringify(result) + "\n");
     return 0;
   }
@@ -1066,17 +981,14 @@ export async function main(): Promise<number> {
     const wikiRoot = parsed.values["wikiRoot"];
     const pageOrSlug = parsed.values["pageOrSlug"];
     if (
-      typeof wikiRoot !== "string" ||
-      wikiRoot.length === 0 ||
-      typeof pageOrSlug !== "string" ||
-      pageOrSlug.length === 0
+      typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+      typeof pageOrSlug !== "string" || pageOrSlug.length === 0
     ) {
       process.stderr.write("--wiki-root and --page-or-slug are required\n");
       return 2;
     }
     const target =
-      typeof parsed.values["target"] === "string" &&
-      parsed.values["target"].length > 0
+      typeof parsed.values["target"] === "string" && parsed.values["target"].length > 0
         ? parsed.values["target"]
         : undefined;
     const inboundLinksRaw = parsed.values["inboundLinks"] ?? "rewrite";
@@ -1091,12 +1003,7 @@ export async function main(): Promise<number> {
     }
     const inboundLinks = inboundLinksRaw as RewriteMode;
     try {
-      const result = await unarchive({
-        wikiRoot,
-        pageOrSlug,
-        target,
-        inboundLinks,
-      });
+      const result = await unarchive({ wikiRoot, pageOrSlug, target, inboundLinks });
       process.stdout.write(JSON.stringify(result) + "\n");
       return 0;
     } catch (e) {
@@ -1135,18 +1042,13 @@ export async function main(): Promise<number> {
     const eventsFile = parsed.values["eventsFile"];
     const modeRaw = parsed.values["mode"] ?? "rewrite";
     if (
-      typeof wikiRoot !== "string" ||
-      wikiRoot.length === 0 ||
-      typeof eventsFile !== "string" ||
-      eventsFile.length === 0
+      typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+      typeof eventsFile !== "string" || eventsFile.length === 0
     ) {
       process.stderr.write("--wiki-root and --events-file are required\n");
       return 2;
     }
-    if (
-      typeof modeRaw !== "string" ||
-      !(REWRITE_MODES as readonly string[]).includes(modeRaw)
-    ) {
+    if (typeof modeRaw !== "string" || !(REWRITE_MODES as readonly string[]).includes(modeRaw)) {
       process.stderr.write(
         `error: invalid --mode value '${modeRaw}'; expected one of: ${REWRITE_MODES.join(", ")}\n`,
       );
@@ -1172,10 +1074,8 @@ export async function main(): Promise<number> {
     const wikiRoot = parsed.values["wikiRoot"];
     const eventFile = parsed.values["eventFile"];
     if (
-      typeof wikiRoot !== "string" ||
-      wikiRoot.length === 0 ||
-      typeof eventFile !== "string" ||
-      eventFile.length === 0
+      typeof wikiRoot !== "string" || wikiRoot.length === 0 ||
+      typeof eventFile !== "string" || eventFile.length === 0
     ) {
       process.stderr.write("--wiki-root and --event-file are required\n");
       return 2;
@@ -1195,10 +1095,8 @@ export async function main(): Promise<number> {
 
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
-  main()
-    .then(process.exit)
-    .catch((e) => {
-      process.stderr.write(`${(e as Error).message}\n`);
-      process.exit(1);
-    });
+  main().then(process.exit).catch((e) => {
+    process.stderr.write(`${(e as Error).message}\n`);
+    process.exit(1);
+  });
 }
