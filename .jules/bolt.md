@@ -12,3 +12,6 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2025-02-19 - Avoid synchronous allocation of intermediate arrays for append-only logs
+**Learning:** When parsing large append-only JSON logs, reading into memory via `fs.readFileSync` and `.split("\n")` synchronously allocates a massive intermediate array.
+**Action:** Replace `.split("\n")` with an iterative `lastIndexOf("\n")` loop for backwards traversal (or `indexOf` for forwards traversal) and use `substring()` to avoid creating an intermediate array.

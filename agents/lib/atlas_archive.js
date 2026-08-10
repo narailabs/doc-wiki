@@ -132,13 +132,22 @@ export async function rebuildArchiveIndex(wikiRoot) {
     const journalPath = path.join(wikiRoot, "_archive_history.jsonl");
     let allEvents = [];
     if (fs.existsSync(journalPath)) {
-        const lines = fs.readFileSync(journalPath, "utf-8").split("\n").filter(Boolean);
-        for (const line of lines) {
-            try {
-                allEvents.push(JSON.parse(line));
-            }
-            catch {
-                // skip malformed lines
+        const logContent = fs.readFileSync(journalPath, "utf-8");
+        let pos = 0;
+        const len = logContent.length;
+        while (pos < len) {
+            let nextPos = logContent.indexOf("\n", pos);
+            if (nextPos === -1)
+                nextPos = len;
+            const line = logContent.substring(pos, nextPos);
+            pos = nextPos + 1;
+            if (line) {
+                try {
+                    allEvents.push(JSON.parse(line));
+                }
+                catch {
+                    // skip malformed lines
+                }
             }
         }
     }
