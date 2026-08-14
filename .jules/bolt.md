@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2024-08-14 - Prevent synchronous massive array allocation from string splits
+**Learning:** In a codebase that parses extremely large, append-only JSON files (`events.jsonl`) multiple times backwards from the end to find the most recent matching event, executing `.split('\n')` on the entire file contents allocated massive intermediate arrays, blocking the Node main thread and creating enormous garbage collection overhead.
+**Action:** Replace `const lines = raw.split("\n"); for (let i = lines.length -1...)` with an iterative `lastIndexOf("\n")` loop and `substring` to fetch strings segment-by-segment exactly as they are needed backwards. Since there are frequently early returns (e.g., retrieving sample chunks or the latest run log), this scales better than processing the entire string initially.
