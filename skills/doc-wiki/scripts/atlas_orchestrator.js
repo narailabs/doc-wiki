@@ -193,7 +193,7 @@ export function detectState(wikiRoot, atlasPageThreshold = 3) {
     return "fresh";
 }
 // ── Per-ingest cost average ────────────────────────────────────────
-const DEFAULT_PER_INGEST_AVG_USD = 0.20;
+const DEFAULT_PER_INGEST_AVG_USD = 0.2;
 /**
  * Read recent `op: ingest` events from `log/events.jsonl` and return a
  * rolling-average `cost_usd` over up to `sampleSize` entries. Falls back
@@ -288,7 +288,7 @@ export const CROSS_SERVICE_GLOBAL_PAGES = [
     "database-traces",
     "shared-libraries",
 ];
-const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
+const GLOBAL_PAGE_AVG_USD = 0.2; // synthesis-only, smaller than ingest
 /**
  * Count of global synthesis pages that will be regenerated in Phase 7.
  * The `facets` argument is reserved for future per-facet-driven globals.
@@ -297,7 +297,8 @@ const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
  */
 export function expectedGlobalCount(facets, crossServiceEnabled = false) {
     void facets;
-    return STATIC_GLOBAL_PAGES.length + (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0);
+    return (STATIC_GLOBAL_PAGES.length +
+        (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0));
 }
 /**
  * Estimate the cost of running a plan on a wiki. For each `(topic, facet)`
@@ -317,11 +318,21 @@ export function estimateCost(wikiRoot, plan, perIngestAvgUsd, crossServiceEnable
         const cached = _isPlanEntryCached(wikiRoot, entry);
         if (cached) {
             cacheHits++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: false, cached: true });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: false,
+                cached: true,
+            });
         }
         else {
             expectedIngests++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: true, cached: false });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: true,
+                cached: false,
+            });
         }
     }
     const topicCost = expectedIngests * avg;
@@ -523,7 +534,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     }
     const sourceFilesWithNoPage = [...missingSources].sort();
     // 4. Gitlog uncovered_files — pass through if provided.
-    const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
+    const uncoveredFiles = gitlog?.uncovered_files
+        ? [...gitlog.uncovered_files]
+        : [];
     // 5. Connectors mentioned in atlas pages but missing from integrations.md.
     // Single wiki walk also collects every page's `sources:` frontmatter so
     // step 6 (manifest-driven) doesn't re-walk.
@@ -532,7 +545,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     let integrationsBody = "";
     if (fs.existsSync(integrationsPath)) {
         try {
-            integrationsBody = fs.readFileSync(integrationsPath, "utf-8").toLowerCase();
+            integrationsBody = fs
+                .readFileSync(integrationsPath, "utf-8")
+                .toLowerCase();
         }
         catch {
             integrationsBody = "";
