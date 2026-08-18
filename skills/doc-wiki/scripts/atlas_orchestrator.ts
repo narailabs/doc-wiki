@@ -178,8 +178,8 @@ export function getLastAtlasRunId(wikiRoot: string): string | null {
   }
   let pos = body.length;
   while (pos > 0) {
-    const searchPos = pos - 1;
-    const startPos = searchPos < 0 ? -1 : body.lastIndexOf("\n", searchPos);
+    // `pos > 0` is the loop guard, so `pos - 1` is never negative.
+    const startPos = body.lastIndexOf("\n", pos - 1);
     const line = body.substring(startPos + 1, pos);
     pos = startPos;
     if (!line) continue;
@@ -266,8 +266,8 @@ export function getRollingPerIngestAvg(
   const samples: number[] = [];
   let pos = body.length;
   while (pos > 0 && samples.length < sampleSize) {
-    const searchPos = pos - 1;
-    const startPos = searchPos < 0 ? -1 : body.lastIndexOf("\n", searchPos);
+    // `pos > 0` is the loop guard, so `pos - 1` is never negative.
+    const startPos = body.lastIndexOf("\n", pos - 1);
     const line = body.substring(startPos + 1, pos);
     pos = startPos;
     if (!line) continue;
