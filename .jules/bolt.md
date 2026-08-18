@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2024-05-18 - Avoid Array allocations with string.split()
+
+**Learning:** When dealing with potentially large text files in memory (like source code parsing or massive JSON event logs), iterating lines using `content.split('\n')` synchronously allocates a massive intermediate Array of strings, which is very inefficient.
+**Action:** Use a fast string scanning loop with `indexOf('\n')` for forward scans to significantly reduce GC pressure and memory usage, without altering logic or readability.

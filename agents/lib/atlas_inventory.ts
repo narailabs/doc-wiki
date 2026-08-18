@@ -34,7 +34,10 @@ import type { ServiceIdentity } from "./service_discovery.js";
 import { countRealServices } from "./cross_service_pages.js";
 import { resolveRef, buildResolutionContext } from "./property_resolver.js";
 import type { ResolutionContext } from "./property_resolver.js";
-import { detectExternalSources, type ExternalSourceEntry } from "./external_sources.js";
+import {
+  detectExternalSources,
+  type ExternalSourceEntry,
+} from "./external_sources.js";
 import { loadConfiguredConnectorIds } from "./source_registry.js";
 
 // ── Manifest types ──────────────────────────────────────────────────
@@ -86,8 +89,8 @@ export interface CodeClientEntry {
 }
 
 export interface HttpClientEntry {
-  framework: string;            // profile name (feign, axios, ...)
-  method: string;               // uppercase verb (best-effort)
+  framework: string; // profile name (feign, axios, ...)
+  method: string; // uppercase verb (best-effort)
   /** Raw target reference as written: a literal host/URL, `${prop}`, Feign service name, or "". */
   target_ref: string;
   /** When `target_ref` is a `${prop}` reference, the property's value resolved
@@ -101,7 +104,7 @@ export interface HttpClientEntry {
   line: number;
 }
 export interface QueueEndpointEntry {
-  framework: string;            // spring_amqp, spring_kafka, ...
+  framework: string; // spring_amqp, spring_kafka, ...
   role: "producer" | "consumer";
   /** Resolved queue/topic/exchange name literal (after constant resolution) or raw ref. */
   queue_name: string;
@@ -215,9 +218,10 @@ export function detectProjectMetadata(
       if (typeof json.version === "string") version = version || json.version;
       if (language === "unknown") language = "typescript";
       if (runtime.length === 0) {
-        runtime = typeof json.engines?.node === "string"
-          ? _nodeMajorFromEnginesString(json.engines.node)
-          : "node";
+        runtime =
+          typeof json.engines?.node === "string"
+            ? _nodeMajorFromEnginesString(json.engines.node)
+            : "node";
       }
       manifestsSeen.push("package.json");
     } catch (e) {
@@ -240,7 +244,9 @@ export function detectProjectMetadata(
           ? parsed.tool.poetry.name
           : "";
       const projectVersion =
-        typeof parsed.project?.version === "string" ? parsed.project.version : "";
+        typeof parsed.project?.version === "string"
+          ? parsed.project.version
+          : "";
       const poetryVersion =
         typeof parsed.tool?.poetry?.version === "string"
           ? parsed.tool.poetry.version
@@ -310,19 +316,27 @@ export function detectProjectMetadata(
       const pom = fs.readFileSync(pomPath, "utf-8");
       const artifact = parseMavenArtifactId(pom);
       if (artifact) name = name || artifact;
-      const verM = pom.replace(/<parent>[\s\S]*?<\/parent>/gi, "").match(/<version>\s*([^<\s]+)/i);
+      const verM = pom
+        .replace(/<parent>[\s\S]*?<\/parent>/gi, "")
+        .match(/<version>\s*([^<\s]+)/i);
       if (verM?.[1]) version = version || verM[1];
       if (language === "unknown") language = "java";
       if (runtime.length === 0) {
-        const jv = pom.match(/<(?:java\.version|maven\.compiler\.target|maven\.compiler\.release)>\s*([\d.]+)/);
+        const jv = pom.match(
+          /<(?:java\.version|maven\.compiler\.target|maven\.compiler\.release)>\s*([\d.]+)/,
+        );
         runtime = jv?.[1] ? `java@${jv[1]}` : "java";
       }
       manifestsSeen.push("pom.xml");
-    } catch (e) { notes.push(`pom.xml unparseable: ${(e as Error).message}`); }
+    } catch (e) {
+      notes.push(`pom.xml unparseable: ${(e as Error).message}`);
+    }
   }
 
   // build.gradle(.kts) — Java / Gradle
-  const gradlePath = ["build.gradle", "build.gradle.kts"].map((f) => path.join(repoRoot, f)).find(fs.existsSync);
+  const gradlePath = ["build.gradle", "build.gradle.kts"]
+    .map((f) => path.join(repoRoot, f))
+    .find(fs.existsSync);
   if (gradlePath) {
     if (language === "unknown") language = "java";
     if (runtime.length === 0) runtime = "java";
@@ -362,7 +376,15 @@ function _pomDependencyArtifactIds(pomXml: string): string[] {
  * Build subdirectory names conventionally used to hold a nested build
  * manifest — mirrors the same list in `service_discovery.ts`.
  */
-const _BUILD_SUBDIR_NAMES = ["project", "app", "server", "service", "backend", "src", "main"] as const;
+const _BUILD_SUBDIR_NAMES = [
+  "project",
+  "app",
+  "server",
+  "service",
+  "backend",
+  "src",
+  "main",
+] as const;
 
 /**
  * Locate the effective `pom.xml` for a service whose root may use a
@@ -650,18 +672,24 @@ export interface ClientProfile {
   name: string;
   language: string;
   description?: string;
-  detection: { file_patterns: string[]; markers: Array<{ pattern: string; type?: string }> };
+  detection: {
+    file_patterns: string[];
+    markers: Array<{ pattern: string; type?: string }>;
+  };
   client_extraction: {
     /** Interface/instance-level anchor captured once per file (Feign service name + path prefix + url). */
     file_anchor?: {
-      service_regex?: string; service_group?: number;
-      prefix_regex?: string;  prefix_group?: number;
-      url_regex?: string;     url_group?: number;
+      service_regex?: string;
+      service_group?: number;
+      prefix_regex?: string;
+      prefix_group?: number;
+      url_regex?: string;
+      url_group?: number;
     };
     patterns: Array<{
       regex: string;
-      method_group: number;        // 0 ⇒ default_method
-      url_group: number;           // captures URL or path
+      method_group: number; // 0 ⇒ default_method
+      url_group: number; // captures URL or path
       default_method?: string;
       /** N-line window for fluent chains (WebClient .get().uri(...)). Default 1. */
       window?: number;
@@ -762,7 +790,9 @@ export function loadClientProfile(name: string): ClientProfile | null {
  * Custom profiles let users teach the inventory about in-house HTTP client
  * frameworks without modifying the doc-wiki repo.
  */
-export function loadCustomClientProfiles(wikiConfigPath: string): ClientProfile[] {
+export function loadCustomClientProfiles(
+  wikiConfigPath: string,
+): ClientProfile[] {
   if (!fs.existsSync(wikiConfigPath)) return [];
   let raw: string;
   try {
@@ -876,7 +906,10 @@ export function detectRestEndpoints(
 
       // Optional per-file prefix (e.g. ASP.NET `[Route("api/users")]`
       // above the controller class). Captured once per file.
-      const filePrefix = _extractFilePrefix(content, profile.endpoint_extraction.file_prefix);
+      const filePrefix = _extractFilePrefix(
+        content,
+        profile.endpoint_extraction.file_prefix,
+      );
 
       const lines = content.split("\n");
       const relFile = _toRepoRelative(repoRoot, absFile);
@@ -971,7 +1004,15 @@ export function detectCodeClients(repoRoot: string): CodeClientEntry[] {
  *  Handles annotation verbs (`Get`→GET) and RestTemplate For-methods (`getForObject`→GET). */
 function _normalizeHttpVerb(raw: string): string {
   const s = raw.toLowerCase();
-  for (const v of ["get", "post", "put", "delete", "patch", "head", "options"]) {
+  for (const v of [
+    "get",
+    "post",
+    "put",
+    "delete",
+    "patch",
+    "head",
+    "options",
+  ]) {
     if (s === v || s.startsWith(v)) return v.toUpperCase();
   }
   return "";
@@ -998,7 +1039,10 @@ function _looksLikeUrlOrPath(p: string): boolean {
  * path. Unlike `_resolvePath`, Feign ALWAYS concatenates prefix + method-path
  * even when the method path starts with `/`. Ensures a single `/` at the join.
  */
-function _feignConcatPath(prefix: string | undefined, methodPath: string): string {
+function _feignConcatPath(
+  prefix: string | undefined,
+  methodPath: string,
+): string {
   if (!prefix) return methodPath;
   return prefix.replace(/\/+$/, "") + "/" + methodPath.replace(/^\/+/, "");
 }
@@ -1031,7 +1075,10 @@ export function detectHttpClients(
   const seen = new Set<string>();
 
   for (const profile of profiles) {
-    const fileContents = walkCodebase(repoRoot, profile.detection.file_patterns);
+    const fileContents = walkCodebase(
+      repoRoot,
+      profile.detection.file_patterns,
+    );
     if (Object.keys(fileContents).length === 0) continue;
 
     const markerPatterns = profile.detection.markers.map((m) => m.pattern);
@@ -1059,7 +1106,9 @@ export function detectHttpClients(
             if (m && (fa.service_group ?? 0) > 0) {
               anchorService = m[fa.service_group!] ?? undefined;
             }
-          } catch { /* skip bad regex */ }
+          } catch {
+            /* skip bad regex */
+          }
         }
         if (fa.prefix_regex) {
           try {
@@ -1068,7 +1117,9 @@ export function detectHttpClients(
             if (m && (fa.prefix_group ?? 0) > 0) {
               anchorPrefix = m[fa.prefix_group!] ?? undefined;
             }
-          } catch { /* skip bad regex */ }
+          } catch {
+            /* skip bad regex */
+          }
         }
         if (fa.url_regex) {
           try {
@@ -1077,7 +1128,9 @@ export function detectHttpClients(
             if (m && (fa.url_group ?? 0) > 0) {
               anchorUrl = m[fa.url_group!] ?? undefined;
             }
-          } catch { /* skip bad regex */ }
+          } catch {
+            /* skip bad regex */
+          }
         }
       }
 
@@ -1101,18 +1154,20 @@ export function detectHttpClients(
         // method-path starts with `/`), so use the feign-aware helper
         // instead of the generic _resolvePath which treats leading-`/`
         // paths as absolute.
-        const resolvedPath = anchorPrefix !== undefined
-          ? _feignConcatPath(anchorPrefix, rawUrl)
-          : _resolvePath(rawUrl, undefined);
+        const resolvedPath =
+          anchorPrefix !== undefined
+            ? _feignConcatPath(anchorPrefix, rawUrl)
+            : _resolvePath(rawUrl, undefined);
 
         const _perCallHost = _hostFromUrl(rawUrl);
         const target_ref =
-          (_perCallHost || undefined) ??
-          anchorUrl ??
-          anchorService ??
-          "";
+          (_perCallHost || undefined) ?? anchorUrl ?? anchorService ?? "";
 
-        if (method.length > 0 && resolvedPath.length > 0 && _looksLikeUrlOrPath(resolvedPath)) {
+        if (
+          method.length > 0 &&
+          resolvedPath.length > 0 &&
+          _looksLikeUrlOrPath(resolvedPath)
+        ) {
           const key = `${relFile}|${lineNo}|${method}|${resolvedPath}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -1143,10 +1198,15 @@ export function detectHttpClients(
           let m: RegExpExecArray | null;
           while ((m = re.exec(content)) !== null) {
             // Derive the 1-based line of the captured group (fall back to match start).
-            const grpStart =
-              m.index + m[0].indexOf(m[ext.url_group] ?? "");
+            const grpStart = m.index + m[0].indexOf(m[ext.url_group] ?? "");
             const idx = m[ext.url_group] ? grpStart : m.index;
-            const lineNo = content.slice(0, idx).split("\n").length;
+            let count = 1;
+            let pos = 0;
+            while ((pos = content.indexOf("\n", pos)) !== -1 && pos < idx) {
+              count++;
+              pos++;
+            }
+            const lineNo = count;
             emitClient(ext, m, lineNo);
             if (m.index === re.lastIndex) re.lastIndex++;
           }
@@ -1186,7 +1246,10 @@ export interface QueueProfile {
   name: string;
   language: string;
   description?: string;
-  detection: { file_patterns: string[]; markers: Array<{ pattern: string; type?: string }> };
+  detection: {
+    file_patterns: string[];
+    markers: Array<{ pattern: string; type?: string }>;
+  };
   queue_extraction: {
     patterns: Array<{
       regex: string;
@@ -1279,7 +1342,9 @@ export function loadQueueProfile(name: string): QueueProfile | null {
  * return every entry that validates as a `QueueProfile`. Returns `[]` when
  * the config file is missing, malformed, or the key is absent.
  */
-export function loadCustomQueueProfiles(wikiConfigPath: string): QueueProfile[] {
+export function loadCustomQueueProfiles(
+  wikiConfigPath: string,
+): QueueProfile[] {
   if (!fs.existsSync(wikiConfigPath)) return [];
   let raw: string;
   try {
@@ -1384,7 +1449,10 @@ export function detectQueueEndpoints(
   const seen = new Set<string>();
 
   for (const profile of profiles) {
-    const fileContents = walkCodebase(repoRoot, profile.detection.file_patterns);
+    const fileContents = walkCodebase(
+      repoRoot,
+      profile.detection.file_patterns,
+    );
     if (Object.keys(fileContents).length === 0) continue;
 
     const markerPatterns = profile.detection.markers.map((m) => m.pattern);
@@ -1411,9 +1479,13 @@ export function detectQueueEndpoints(
         if (!captured) return;
         // Literal vs. symbol: only call resolveRef on bare symbols.
         const queue_name =
-          pat.resolve === true && ctx ? (resolveRef(captured, ctx) ?? captured) : captured;
+          pat.resolve === true && ctx
+            ? (resolveRef(captured, ctx) ?? captured)
+            : captured;
         const message_type =
-          pat.message_type_group != null ? (m[pat.message_type_group] ?? undefined) : undefined;
+          pat.message_type_group != null
+            ? (m[pat.message_type_group] ?? undefined)
+            : undefined;
         const key = `${relFile}|${lineNo}|${pat.role}|${queue_name}`;
         if (seen.has(key)) return;
         seen.add(key);
@@ -1442,10 +1514,15 @@ export function detectQueueEndpoints(
           let m: RegExpExecArray | null;
           while ((m = re.exec(content)) !== null) {
             // Derive the 1-based line of the captured group (fall back to match start).
-            const grpStart =
-              m.index + m[0].indexOf(m[pat.name_group] ?? "");
+            const grpStart = m.index + m[0].indexOf(m[pat.name_group] ?? "");
             const idx = m[pat.name_group] ? grpStart : m.index;
-            const lineNo = content.slice(0, idx).split("\n").length;
+            let count = 1;
+            let pos = 0;
+            while ((pos = content.indexOf("\n", pos)) !== -1 && pos < idx) {
+              count++;
+              pos++;
+            }
+            const lineNo = count;
             emit(pat, m, lineNo);
             if (m.index === re.lastIndex) re.lastIndex++;
           }
@@ -1526,7 +1603,10 @@ function _buildBeanNameMap(
  *   - a bare camelCase bean-method name → resolved by the caller via the bean map.
  * Returns the resolved literal, or "" when unresolvable.
  */
-function _resolveBindingToken(raw: string, ctx: ResolutionContext | undefined): string {
+function _resolveBindingToken(
+  raw: string,
+  ctx: ResolutionContext | undefined,
+): string {
   if (!raw) return "";
   // Drop a trailing `.build()`-style member access if present (e.g. "MAIN_QUEUE").
   const ref = raw.trim();
@@ -1601,7 +1681,13 @@ export function detectQueueBindings(
     ): void => {
       // A binding needs at least a real queue AND a real exchange to bridge.
       if (!queue_name || !exchange) return;
-      const line = content.slice(0, idx).split("\n").length;
+      let count = 1;
+      let pos = 0;
+      while ((pos = content.indexOf("\n", pos)) !== -1 && pos < idx) {
+        count++;
+        pos++;
+      }
+      const line = count;
       const key = `${relFile}|${line}|${queue_name}|${exchange}|${routing_key}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -1702,8 +1788,12 @@ export function generateInventory(
 
     // Detect repo-wide ONCE, then partition per service via inService().
     // Mirrors the existing orm_entities / rest_endpoints filtering pattern.
-    const clientProfiles = resolveClientProfiles({ wikiConfigPath: options.wikiConfigPath });
-    const queueProfiles = resolveQueueProfiles({ wikiConfigPath: options.wikiConfigPath });
+    const clientProfiles = resolveClientProfiles({
+      wikiConfigPath: options.wikiConfigPath,
+    });
+    const queueProfiles = resolveQueueProfiles({
+      wikiConfigPath: options.wikiConfigPath,
+    });
 
     // Walk config + source files PER SERVICE ROOT (not once repo-wide).
     // A single repo-wide walk shares one MAX_FILES budget across the whole
@@ -1721,7 +1811,12 @@ export function generateInventory(
       "**/bootstrap*.yaml",
     ];
     const CONST_GLOBS = [
-      "**/*.java", "**/*.kt", "**/*.ts", "**/*.js", "**/*.go", "**/*.py",
+      "**/*.java",
+      "**/*.kt",
+      "**/*.ts",
+      "**/*.js",
+      "**/*.go",
+      "**/*.py",
     ];
     // Per-service budget — generous enough for a single large service's tree
     // while still bounding pathological repos.
@@ -1737,15 +1832,22 @@ export function generateInventory(
     // fields come back relative to that service root; re-prefix them with the
     // service's repo-relative root so downstream inService(e.file) (which
     // matches against the repo-relative svcRoot) works unchanged.
-    const rebaseFile = <T extends { file: string }>(svcRootPosix: string, e: T): T =>
-      ({ ...e, file: e.file ? `${svcRootPosix}/${e.file}` : svcRootPosix });
+    const rebaseFile = <T extends { file: string }>(
+      svcRootPosix: string,
+      e: T,
+    ): T => ({
+      ...e,
+      file: e.file ? `${svcRootPosix}/${e.file}` : svcRootPosix,
+    });
 
     for (const svc of discovered) {
       const svcRootPosix = svc.root.replace(/\\/g, "/");
       const svcAbsRoot = path.join(repoRoot, svc.root);
       Object.assign(
         configFiles,
-        walkCodebase(svcAbsRoot, CONFIG_GLOBS, { maxFiles: PER_ROOT_MAX_FILES }),
+        walkCodebase(svcAbsRoot, CONFIG_GLOBS, {
+          maxFiles: PER_ROOT_MAX_FILES,
+        }),
       );
       Object.assign(
         constSource,
@@ -1757,10 +1859,14 @@ export function generateInventory(
       // shared-library files). detectQueueEndpoints walks internally with its
       // own budget; scoping the root keeps that budget per-service too.
       allHttpClients.push(
-        ...detectHttpClients(svcAbsRoot, clientProfiles).map((e) => rebaseFile(svcRootPosix, e)),
+        ...detectHttpClients(svcAbsRoot, clientProfiles).map((e) =>
+          rebaseFile(svcRootPosix, e),
+        ),
       );
       allQueueEndpoints.push(
-        ...detectQueueEndpoints(svcAbsRoot, queueProfiles).map((e) => rebaseFile(svcRootPosix, e)),
+        ...detectQueueEndpoints(svcAbsRoot, queueProfiles).map((e) =>
+          rebaseFile(svcRootPosix, e),
+        ),
       );
     }
 
@@ -1770,7 +1876,9 @@ export function generateInventory(
     // per-service client/queue walk pattern above — so each service gets its
     // own MAX_FILES budget rather than sharing a single repo-wide cap that
     // starves later services on large monorepos.
-    const configuredIds = loadConfiguredConnectorIds(options.connectorsConfigPath);
+    const configuredIds = loadConfiguredConnectorIds(
+      options.connectorsConfigPath,
+    );
     const allExternal: ExternalSourceEntry[] = [];
     for (const svc of discovered) {
       const svcRootPosix = svc.root.replace(/\\/g, "/");
@@ -1786,8 +1894,8 @@ export function generateInventory(
     }
     const gatherExternal: ExternalSourceEntry[] = code_clients.map((c) => ({
       kind: "narai_gather" as const,
-      detail: c.kind,          // "gather" | "fetchWithCaps"
-      connector_id: "",        // narai-gather is the hub, not a single connector
+      detail: c.kind, // "gather" | "fetchWithCaps"
+      connector_id: "", // narai-gather is the hub, not a single connector
       configured: false,
       file: c.file,
       line: c.line,
@@ -1862,48 +1970,66 @@ export function generateInventory(
             }
           }
           library_deps = [...matched];
-        } catch { /* pom unreadable — leave empty */ }
+        } catch {
+          /* pom unreadable — leave empty */
+        }
       }
 
       // ── auth_issuer: spring.security.oauth2.resourceserver.jwt.issuer-uri ──
       const auth_issuer =
-        svcCtx.properties.get("spring.security.oauth2.resourceserver.jwt.issuer-uri") ??
-        svcCtx.properties.get("spring.security.oauth2.resourceserver.jwt.issuer_uri") ??
+        svcCtx.properties.get(
+          "spring.security.oauth2.resourceserver.jwt.issuer-uri",
+        ) ??
+        svcCtx.properties.get(
+          "spring.security.oauth2.resourceserver.jwt.issuer_uri",
+        ) ??
         "";
 
       return {
         identity,
-        project_metadata: detectProjectMetadata(path.join(repoRoot, identity.root)),
+        project_metadata: detectProjectMetadata(
+          path.join(repoRoot, identity.root),
+        ),
         orm_entities: orm_entities.filter((e) => inService(e.source_file)),
         rest_endpoints: rest_endpoints.filter((e) => inService(e.file)),
-        http_clients: allHttpClients.filter((e) => inService(e.file)).map((e) => ({
-          ...e,
-          resolved_target: e.target_ref.startsWith("${")
-            ? (resolveRef(e.target_ref, svcCtx) ?? undefined)
-            : undefined,
-        })),
+        http_clients: allHttpClients
+          .filter((e) => inService(e.file))
+          .map((e) => ({
+            ...e,
+            resolved_target: e.target_ref.startsWith("${")
+              ? (resolveRef(e.target_ref, svcCtx) ?? undefined)
+              : undefined,
+          })),
         queue_endpoints: allQueueEndpoints
           .filter((e) => inService(e.file))
-          .map((e) => ({ ...e, queue_name: resolveRef(e.queue_name, svcCtx) ?? e.queue_name })),
+          .map((e) => ({
+            ...e,
+            queue_name: resolveRef(e.queue_name, svcCtx) ?? e.queue_name,
+          })),
         // Exchange→queue bindings, detected with the service-scoped resolution
         // context so bean-method names + UPPER_SNAKE constants resolve to literals.
         // Scoped to the service abs root; `file` rebased to repo-relative.
-        queue_bindings: detectQueueBindings(path.join(repoRoot, identity.root), svcCtx)
-          .map((e) => ({
-            ...e,
-            file: e.file ? `${svcRoot}/${e.file}` : svcRoot,
-          })),
+        queue_bindings: detectQueueBindings(
+          path.join(repoRoot, identity.root),
+          svcCtx,
+        ).map((e) => ({
+          ...e,
+          file: e.file ? `${svcRoot}/${e.file}` : svcRoot,
+        })),
         external_sources: allExternalAll
           .filter((e) => inService(e.file))
           .map((e) => ({
             ...e,
-            configured: e.connector_id.length > 0 && configuredIds.has(e.connector_id),
+            configured:
+              e.connector_id.length > 0 && configuredIds.has(e.connector_id),
           })),
         library_deps,
         // Repo-relative path of the pom actually used to derive library_deps.
         // Differs from `<root>/pom.xml` for nested-build-subdir layouts.
         ...(svcPomPath !== null
-          ? { pom_path: path.relative(repoRoot, svcPomPath).replace(/\\/g, "/") }
+          ? {
+              pom_path: path.relative(repoRoot, svcPomPath).replace(/\\/g, "/"),
+            }
           : {}),
         auth_issuer,
       };
@@ -2007,7 +2133,11 @@ export function loadInventory(
   // `queue_bindings` is optional per-service (added with binding resolution);
   // default to [] so manifests written before it still load + build a graph.
   for (const s of rec["services"] as Array<Record<string, unknown>>) {
-    if (s && typeof s === "object" && !Array.isArray((s as Record<string, unknown>)["queue_bindings"])) {
+    if (
+      s &&
+      typeof s === "object" &&
+      !Array.isArray((s as Record<string, unknown>)["queue_bindings"])
+    ) {
       (s as Record<string, unknown>)["queue_bindings"] = [];
     }
   }
@@ -2261,7 +2391,9 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
       return 2;
     }
     if (typeof rcsRunId !== "string" || !_RUN_ID_RE.test(rcsRunId)) {
-      process.stderr.write("--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n");
+      process.stderr.write(
+        "--run-id is required and must match YYYY-MM-DDTHH-MM-SS\n",
+      );
       return 2;
     }
     const manifest = loadInventory(rcsWikiRoot, rcsRunId);
@@ -2382,7 +2514,9 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 1;
   }
 
-  process.stdout.write(JSON.stringify({ ...inventory, written: target }) + "\n");
+  process.stdout.write(
+    JSON.stringify({ ...inventory, written: target }) + "\n",
+  );
   return 0;
 }
 
