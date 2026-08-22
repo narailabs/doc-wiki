@@ -128,6 +128,7 @@ export function logEvent(wikiRoot, op, details) {
     return entry;
 }
 // ── Stats ───────────────────────────────────────────────────────────
+/** Hoisted out of `_readEvents` so the literal is compiled once, not per line. */
 const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 function _readEvents(wikiRoot, since = null) {
     const p = _eventsPath(wikiRoot);

@@ -21,12 +21,13 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 // ── Helpers ─────────────────────────────────────────────────────────
+/** Hoisted out of `readEvents` so the literal is compiled once, not per line. */
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 /**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
  * `ts` string starts with `dateStr`. Unparseable JSON lines are silently
  * skipped, matching the Python reference's `json.JSONDecodeError` branch.
  */
-const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 function readEvents(wikiRoot, dateStr) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath)) {

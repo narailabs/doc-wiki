@@ -162,6 +162,7 @@ export function logEvent(
 
 // ── Stats ───────────────────────────────────────────────────────────
 
+/** Hoisted out of `_readEvents` so the literal is compiled once, not per line. */
 const TS_REGEX = /^{"ts":"([^"\\]+)"/;
 
 function _readEvents(

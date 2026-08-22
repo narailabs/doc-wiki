@@ -23,13 +23,14 @@ import { parseFlags } from "./_cli_args.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+/** Hoisted out of `readEvents` so the literal is compiled once, not per line. */
+const TS_REGEX = /^{"ts":"([^"\\]+)"/;
+
 /**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
  * `ts` string starts with `dateStr`. Unparseable JSON lines are silently
  * skipped, matching the Python reference's `json.JSONDecodeError` branch.
  */
-const TS_REGEX = /^{"ts":"([^"\\]+)"/;
-
 function readEvents(
   wikiRoot: string,
   dateStr: string,
@@ -301,7 +302,9 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export function main(
+  argv: readonly string[] = process.argv.slice(2),
+): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);
