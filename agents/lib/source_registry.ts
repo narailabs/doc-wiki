@@ -219,7 +219,19 @@ const _agents: Map<string, AgentManifest> = new Map();
 // ── Registration ──────────────────────────────────────────────────────
 
 export function registerAgent(manifest: AgentManifest): void {
-  _agents.set(manifest.name, manifest);
+  // Normalize schemes to lowercase here rather than at each call site, because
+  // this is the only door into `_agents`. `lookupBySource` lowercases the
+  // scheme it parses out of a source and then compares with a case-sensitive
+  // `includes()`, so a manifest declaring "KB://" would be registered and then
+  // never match anything. URI schemes are case-insensitive (RFC 3986 §3.1),
+  // and `validateCustomAgentEntry` accepts mixed case, so the config file is a
+  // real path to that state.
+  const schemes = manifest.source_schemes;
+  const lowered = schemes.map((s) => s.toLowerCase());
+  const normalized = lowered.every((s, i) => s === schemes[i])
+    ? manifest
+    : { ...manifest, source_schemes: lowered };
+  _agents.set(normalized.name, normalized);
 }
 
 export function unregisterAgent(name: string): boolean {

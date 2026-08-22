@@ -265,6 +265,26 @@ describe("initRegistry — builtin patterns", () => {
     expect(lookupBySource("jira://X")?.name).toBe("wiki-jira-agent");
   });
 
+  it("routes a mixed-case declared scheme — schemes are case-insensitive", () => {
+    // `lookupBySource` lowercases the scheme it parses out of a source and
+    // compares case-sensitively. `validateCustomAgentEntry` accepts "KB://"
+    // (its regex is case-insensitive), so without normalization at
+    // registration this connector would load cleanly and never match.
+    initRegistry({
+      customAgents: [
+        {
+          name: "my-kb-agent",
+          source_schemes: ["KB://", "S3+SSL://"],
+          invocation_template: { subagent_type: "my-kb-agent", default_model: "haiku", label: "Knowledge Base" },
+        },
+      ],
+    });
+    expect(lookupByName("my-kb-agent")?.source_schemes).toEqual(["kb://", "s3+ssl://"]);
+    expect(lookupBySource("kb://article-42")?.name).toBe("my-kb-agent");
+    expect(lookupBySource("KB://article-42")?.name).toBe("my-kb-agent");
+    expect(lookupBySource("s3+ssl://bucket/key")?.name).toBe("my-kb-agent");
+  });
+
   it("custom agents override builtins on name collision", () => {
     initRegistry({
       customAgents: [
