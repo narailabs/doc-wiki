@@ -331,6 +331,35 @@ describe("classifySource with custom agents", () => {
     expect(classifySource("kb://article-1", configPath)).toBe("kb");
   });
 
+  it("reinitializes when a second wiki's config path is passed", () => {
+    // A long-lived process classifying for two wikis used to keep the first
+    // wiki's custom agents forever, so wiki B's sources were classified with
+    // wiki A's connectors.
+    const dirA = makeTmpPath("external-sources-wiki-a-");
+    const dirB = makeTmpPath("external-sources-wiki-b-");
+    try {
+      const configA = writeConfigYaml(dirA, {
+        wiki: { name: "wiki-a" },
+        ecosystem: { agents: { custom: [{ name: "kb", source_schemes: ["kb://"] }] } },
+      });
+      const configB = writeConfigYaml(dirB, {
+        wiki: { name: "wiki-b" },
+        ecosystem: { agents: { custom: [{ name: "vault", source_schemes: ["vault://"] }] } },
+      });
+
+      expect(classifySource("kb://a-1", configA)).toBe("kb");
+      // Wiki B knows vault:// and must NOT still know kb://.
+      expect(classifySource("vault://b-1", configB)).toBe("vault");
+      expect(classifySource("kb://a-1", configB)).toBe("");
+      // Switching back restores wiki A's view.
+      expect(classifySource("kb://a-1", configA)).toBe("kb");
+      expect(classifySource("vault://b-1", configA)).toBe("");
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
+  });
+
   it("detectExternalSources threads wikiConfigPath into classification", () => {
     // A custom entry claiming the postgres:// scheme wins over the
     // DB-scheme fallback, proving the registry saw the config.

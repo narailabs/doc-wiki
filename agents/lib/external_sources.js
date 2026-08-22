@@ -3,20 +3,45 @@ import { initRegistryFromConfig, lookupBySource } from "./source_registry.js";
 import { walkCodebase } from "./repo_walker.js";
 // ── Registry bootstrap ────────────────────────────────────────────────
 let _registryReady = false;
+let _registryConfigPath = null;
 /**
  * Builtins + `ecosystem.agents.custom` from wiki.config.yaml. Callers
  * that know the wiki root pass `<wikiRoot>/wiki.config.yaml`; otherwise
- * cwd is probed. First initialization wins for the process lifetime.
+ * cwd is probed.
+ *
+ * Keyed on the config path, so a long-lived process that classifies sources
+ * for more than one wiki reinitializes instead of silently reusing the first
+ * wiki's custom agents. Caching on first call alone defeats the point of
+ * threading the wiki root through these entry points: the second wiki would
+ * get the first one's connectors, misclassifying its sources or omitting the
+ * ones it configured. Repeat calls for the same wiki still no-op, so the
+ * per-source hot path is unaffected.
+ *
+ * An omitted `wikiConfigPath` means "no opinion", NOT "use cwd": it must never
+ * force a reinitialization. `detectExternalSources` initializes once from its
+ * explicit path and then calls `classifySource(s)` without one for every
+ * source it finds — treating those as a cwd request would reload the registry
+ * mid-scan and drop the very custom agents it was given.
  */
 function ensureRegistry(wikiConfigPath) {
-    if (_registryReady)
+    if (wikiConfigPath === undefined) {
+        if (_registryReady)
+            return;
+        initRegistryFromConfig(undefined);
+        _registryReady = true;
+        _registryConfigPath = null;
+        return;
+    }
+    if (_registryReady && _registryConfigPath === wikiConfigPath)
         return;
     initRegistryFromConfig(wikiConfigPath);
     _registryReady = true;
+    _registryConfigPath = wikiConfigPath;
 }
 /** Reset registry state (test helper). */
 export function _resetRegistry() {
     _registryReady = false;
+    _registryConfigPath = null;
 }
 // ── DB-scheme fallback patterns ───────────────────────────────────────
 /**
@@ -56,8 +81,9 @@ function isDbScheme(s) {
  * 3. Returns "" when unclassifiable.
  *
  * `wikiConfigPath` (optional) locates the wiki.config.yaml whose
- * `ecosystem.agents.custom` block feeds the registry; only the first
- * initialization in the process reads it.
+ * `ecosystem.agents.custom` block feeds the registry. Passing a different
+ * path than the one currently loaded reloads the registry; omitting it
+ * reuses whatever is loaded (and probes cwd only on the very first call).
  */
 export function classifySource(s, wikiConfigPath) {
     if (s === "")
