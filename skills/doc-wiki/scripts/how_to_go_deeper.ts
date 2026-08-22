@@ -30,7 +30,8 @@ import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import {
   lookupBySource,
-  initRegistryFromConfig,
+  ensureRegistryForConfig,
+  _resetRegistryConfigState,
   resolveWikiConfigPath,
   listAgents,
   type AgentManifest,
@@ -62,20 +63,21 @@ const CODE_EXTS = new Set([
 
 // ── Registry initialization ──────────────────────────────────────────
 
-let _initialized = false;
-
 function ensureRegistry(wikiRoot?: string): void {
-  if (_initialized) return;
-  _initialized = true;
   try {
     // Builtins + `ecosystem.agents.custom` from wiki.config.yaml. When the
     // caller passes a wiki root (--wiki-root), its config is used with no
-    // cwd fallback; otherwise cwd is probed. First init wins per process.
+    // cwd fallback; otherwise cwd is probed.
+    //
+    // The "which config is loaded" state lives in the registry, not here. A
+    // local flag went stale as soon as `external_sources.ts` reloaded the same
+    // global registry, so a long-lived process that built the section for wiki
+    // A and then wiki B classified B with A's custom connectors.
     const configPath =
       wikiRoot !== undefined
         ? resolveWikiConfigPath(wikiRoot) ?? path.join(wikiRoot, "wiki.config.yaml")
         : undefined;
-    initRegistryFromConfig(configPath);
+    ensureRegistryForConfig(configPath);
   } catch {
     // Non-fatal: fall through to no-match for all sources
   }
@@ -83,7 +85,7 @@ function ensureRegistry(wikiRoot?: string): void {
 
 /** Reset registry state (test helper). */
 export function _resetRegistry(): void {
-  _initialized = false;
+  _resetRegistryConfigState();
 }
 
 // ── Short ID extraction ──────────────────────────────────────────────

@@ -471,6 +471,39 @@ export function loadCustomAgentConfigs(configPath) {
  */
 export function initRegistryFromConfig(configPath) {
     initRegistry({ customAgents: loadCustomAgentConfigs(configPath) });
+    _loadedConfigPath = configPath ?? null;
+    _registryLoaded = true;
+}
+// Which config the global registry currently holds. Owned here rather than in
+// each wrapper: `how_to_go_deeper.ts` and `external_sources.ts` both bootstrap
+// the same global `_agents`, so a per-module "already initialized" flag goes
+// stale as soon as the other module reloads — one wrapper would then classify
+// with a config it never asked for, believing it was initialized.
+let _registryLoaded = false;
+let _loadedConfigPath = null;
+/**
+ * Load `configPath` into the registry unless it is already loaded.
+ *
+ * An explicit path that differs from the loaded one reloads. An omitted path
+ * means "no opinion, use whatever is loaded" and probes cwd only on the very
+ * first call — callers that classify many sources after one explicit
+ * initialization rely on that, and treating those calls as a cwd request
+ * would reload the registry mid-scan and drop the custom agents.
+ */
+export function ensureRegistryForConfig(configPath) {
+    if (configPath === undefined) {
+        if (_registryLoaded)
+            return;
+    }
+    else if (_registryLoaded && _loadedConfigPath === configPath) {
+        return;
+    }
+    initRegistryFromConfig(configPath);
+}
+/** Reset the loaded-config tracking (test helper). */
+export function _resetRegistryConfigState() {
+    _registryLoaded = false;
+    _loadedConfigPath = null;
 }
 // ── Connector config ──────────────────────────────────────────────────
 /**

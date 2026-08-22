@@ -18,6 +18,7 @@ import {
   type AgentId,
 } from "../how_to_go_deeper.js";
 import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { classifySource as classifySourceExternal } from "../../../../agents/lib/external_sources.js";
 
 const CLI = path.join(SCRIPTS_DIR, "how_to_go_deeper.js");
 
@@ -268,6 +269,80 @@ describe("custom agents from wiki.config.yaml", () => {
     const out = buildHowToGoDeeper(["kb://article-42"]);
     expect(out).toContain("**Knowledge Base:**");
     expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("reloads for a second wiki root instead of reusing the first's agents", () => {
+    const dirA = makeTmpPath();
+    const dirB = makeTmpPath();
+    try {
+      fs.writeFileSync(path.join(dirA, "wiki.config.yaml"), CUSTOM_CONFIG);
+      fs.writeFileSync(
+        path.join(dirB, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: wiki-b",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          "      - name: vault",
+          '        source_schemes: ["vault://"]',
+          "        invocation_template:",
+          "          label: Vault",
+          "",
+        ].join("\n"),
+      );
+
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain("**Knowledge Base:**");
+      // Wiki B must see vault:// and must NOT still see wiki A's kb://.
+      const outB = buildHowToGoDeeper(["vault://b-1"], { wikiRoot: dirB });
+      expect(outB).toContain("**Vault:**");
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirB })).not.toContain("**Knowledge Base:**");
+      // Switching back restores wiki A.
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain("**Knowledge Base:**");
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
+  });
+
+  it("is not left stale by a registry reload from external_sources", () => {
+    // Both modules bootstrap the same global registry. A local "initialized"
+    // flag in this module went stale the moment external_sources reloaded it,
+    // so this helper silently classified with a config it never asked for.
+    const dirA = makeTmpPath();
+    const dirB = makeTmpPath();
+    try {
+      fs.writeFileSync(path.join(dirA, "wiki.config.yaml"), CUSTOM_CONFIG);
+      fs.writeFileSync(
+        path.join(dirB, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: wiki-b",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          "      - name: vault",
+          '        source_schemes: ["vault://"]',
+          "",
+        ].join("\n"),
+      );
+      // This helper loads wiki A...
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain(
+        "**Knowledge Base:**",
+      );
+      // ...then the other wrapper reloads the shared registry for wiki B.
+      expect(classifySourceExternal("vault://b-1", path.join(dirB, "wiki.config.yaml"))).toBe(
+        "vault",
+      );
+      // Asked for wiki A again, this helper must reload rather than trust a
+      // local flag and hand back wiki B's registry.
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain(
+        "**Knowledge Base:**",
+      );
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
   });
 
   it("skips malformed custom entries without failing the run", () => {

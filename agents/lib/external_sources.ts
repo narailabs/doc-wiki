@@ -14,7 +14,11 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { initRegistryFromConfig, lookupBySource } from "./source_registry.js";
+import {
+  _resetRegistryConfigState,
+  ensureRegistryForConfig,
+  lookupBySource,
+} from "./source_registry.js";
 import { walkCodebase } from "./repo_walker.js";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -45,46 +49,22 @@ export interface ExternalSourceEntry {
 
 // ── Registry bootstrap ────────────────────────────────────────────────
 
-let _registryReady = false;
-let _registryConfigPath: string | null = null;
-
 /**
  * Builtins + `ecosystem.agents.custom` from wiki.config.yaml. Callers
  * that know the wiki root pass `<wikiRoot>/wiki.config.yaml`; otherwise
  * cwd is probed.
  *
- * Keyed on the config path, so a long-lived process that classifies sources
- * for more than one wiki reinitializes instead of silently reusing the first
- * wiki's custom agents. Caching on first call alone defeats the point of
- * threading the wiki root through these entry points: the second wiki would
- * get the first one's connectors, misclassifying its sources or omitting the
- * ones it configured. Repeat calls for the same wiki still no-op, so the
- * per-source hot path is unaffected.
- *
- * An omitted `wikiConfigPath` means "no opinion", NOT "use cwd": it must never
- * force a reinitialization. `detectExternalSources` initializes once from its
- * explicit path and then calls `classifySource(s)` without one for every
- * source it finds — treating those as a cwd request would reload the registry
- * mid-scan and drop the very custom agents it was given.
+ * Delegates to the registry, which owns the "which config is loaded" state.
+ * A local flag here would go stale whenever `how_to_go_deeper.ts` reloads the
+ * same global registry.
  */
 function ensureRegistry(wikiConfigPath?: string): void {
-  if (wikiConfigPath === undefined) {
-    if (_registryReady) return;
-    initRegistryFromConfig(undefined);
-    _registryReady = true;
-    _registryConfigPath = null;
-    return;
-  }
-  if (_registryReady && _registryConfigPath === wikiConfigPath) return;
-  initRegistryFromConfig(wikiConfigPath);
-  _registryReady = true;
-  _registryConfigPath = wikiConfigPath;
+  ensureRegistryForConfig(wikiConfigPath);
 }
 
 /** Reset registry state (test helper). */
 export function _resetRegistry(): void {
-  _registryReady = false;
-  _registryConfigPath = null;
+  _resetRegistryConfigState();
 }
 
 // ── DB-scheme fallback patterns ───────────────────────────────────────
