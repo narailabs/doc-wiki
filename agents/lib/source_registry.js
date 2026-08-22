@@ -368,13 +368,29 @@ function validateCustomAgentEntry(entry, index, configPath) {
         return null;
     }
     const urlPatterns = e["source_url_patterns"];
+    // `path_prefix` / `path_contains` must be strings when present, not merely
+    // absent-or-anything. `lookupBySource` gates on their truthiness: a
+    // `path_prefix: false` is skipped by the path-constrained first pass, and
+    // then the second pass's `if (p.path_prefix || p.path_contains) continue`
+    // does not skip it either — so the entry silently widens from "hostname plus
+    // path constraint" to a hostname-wide match and can capture unrelated URLs.
+    // Rejecting the entry is what this validator promises for malformed input.
+    const isValidUrlPattern = (p) => {
+        if (p === null || typeof p !== "object" || Array.isArray(p))
+            return false;
+        const rec = p;
+        if (typeof rec["hostname"] !== "string")
+            return false;
+        for (const key of ["path_prefix", "path_contains"]) {
+            if (rec[key] !== undefined && typeof rec[key] !== "string")
+                return false;
+        }
+        return true;
+    };
     if (urlPatterns !== undefined &&
-        (!Array.isArray(urlPatterns) ||
-            !urlPatterns.every((p) => p !== null &&
-                typeof p === "object" &&
-                !Array.isArray(p) &&
-                typeof p["hostname"] === "string"))) {
-        warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a "hostname" string`);
+        (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))) {
+        warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a "hostname" string, ` +
+            `with "path_prefix" / "path_contains" strings when present`);
         return null;
     }
     const invocation = e["invocation_template"];

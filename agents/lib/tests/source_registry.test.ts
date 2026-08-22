@@ -489,6 +489,27 @@ describe("loadCustomAgentConfigs", () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 
+  it("rejects a url pattern whose path_prefix/path_contains is not a string", () => {
+    // `path_prefix: false` used to pass validation, and `lookupBySource` then
+    // treated it as absent — widening the entry to a hostname-wide match
+    // instead of skipping it.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", source_url_patterns: [{ hostname: "a.example.com", path_prefix: "/x/" }] },
+      { name: "bad-prefix", source_url_patterns: [{ hostname: "b.example.com", path_prefix: false }] },
+      { name: "bad-contains", source_url_patterns: [{ hostname: "c.example.com", path_contains: 7 }] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("accepts a url pattern with only a hostname", () => {
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "host-only", source_url_patterns: [{ hostname: "d.example.com" }] },
+    ]));
+    expect(loadCustomAgentConfigs(p).map((c) => c.name)).toEqual(["host-only"]);
+  });
+
   it("warns and returns [] when custom is not a list", () => {
     const p = writeConfigYaml(tmpDir, configWithCustom({ name: "kb" }));
     expect(loadCustomAgentConfigs(p)).toEqual([]);
