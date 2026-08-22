@@ -219,19 +219,39 @@ const _agents: Map<string, AgentManifest> = new Map();
 // ── Registration ──────────────────────────────────────────────────────
 
 export function registerAgent(manifest: AgentManifest): void {
-  // Normalize schemes to lowercase here rather than at each call site, because
-  // this is the only door into `_agents`. `lookupBySource` lowercases the
-  // scheme it parses out of a source and then compares with a case-sensitive
-  // `includes()`, so a manifest declaring "KB://" would be registered and then
-  // never match anything. URI schemes are case-insensitive (RFC 3986 §3.1),
-  // and `validateCustomAgentEntry` accepts mixed case, so the config file is a
-  // real path to that state.
+  // Case-fold both matchable fields here rather than at each call site, because
+  // this is the only door into `_agents`. Both comparisons downstream are
+  // case-sensitive against an already-lowercased subject, so a mixed-case
+  // manifest registers cleanly and then never matches anything — the silent
+  // no-op `validateCustomAgentEntry` exists to prevent. It accepts mixed case
+  // in both fields, so a config file is a real path to that state.
+  //
+  //  - source_schemes: `lookupBySource` lowercases the scheme it parses out of
+  //    a source, then compares with `includes()`. Schemes are case-insensitive
+  //    per RFC 3986 §3.1.
+  //  - source_url_patterns[].hostname: `matchHostname` compares with `===` and
+  //    `endsWith` against `new URL(source).hostname`, which the URL parser has
+  //    already lowercased. Hostnames are case-insensitive per RFC 4343.
+  // Store the manifest as-is when it is already folded, so callers keep
+  // reference identity through registration (an existing contract).
   const schemes = manifest.source_schemes;
-  const lowered = schemes.map((s) => s.toLowerCase());
-  const normalized = lowered.every((s, i) => s === schemes[i])
-    ? manifest
-    : { ...manifest, source_schemes: lowered };
-  _agents.set(normalized.name, normalized);
+  const patterns = manifest.source_url_patterns;
+  const needsFold =
+    schemes.some((s) => s !== s.toLowerCase()) ||
+    patterns.some((p) => p.hostname !== p.hostname.toLowerCase());
+  _agents.set(
+    manifest.name,
+    needsFold
+      ? {
+          ...manifest,
+          source_schemes: schemes.map((s) => s.toLowerCase()),
+          source_url_patterns: patterns.map((p) => ({
+            ...p,
+            hostname: p.hostname.toLowerCase(),
+          })),
+        }
+      : manifest,
+  );
 }
 
 export function unregisterAgent(name: string): boolean {

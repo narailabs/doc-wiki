@@ -285,6 +285,30 @@ describe("initRegistry — builtin patterns", () => {
     expect(lookupBySource("s3+ssl://bucket/key")?.name).toBe("my-kb-agent");
   });
 
+  it("routes a mixed-case declared hostname — hostnames are case-insensitive", () => {
+    // `matchHostname` compares case-sensitively against `new URL(x).hostname`,
+    // which the URL parser has already lowercased. Without normalization at
+    // registration, a config declaring "GitLab.Example.com" would load cleanly
+    // and never match, for any casing of the source.
+    initRegistry({
+      customAgents: [
+        {
+          name: "my-gitlab-agent",
+          source_url_patterns: [{ hostname: "GitLab.Example.com" }, { hostname: "*.Corp.Example.COM" }],
+          invocation_template: { subagent_type: "my-gitlab-agent", default_model: "haiku", label: "GitLab" },
+        },
+      ],
+    });
+    expect(lookupByName("my-gitlab-agent")?.source_url_patterns).toEqual([
+      { hostname: "gitlab.example.com" },
+      { hostname: "*.corp.example.com" },
+    ]);
+    expect(lookupBySource("https://GitLab.Example.com/g/p")?.name).toBe("my-gitlab-agent");
+    expect(lookupBySource("https://gitlab.example.com/g/p")?.name).toBe("my-gitlab-agent");
+    // The leading-`*.` glob branch of matchHostname folds too.
+    expect(lookupBySource("https://Team.Corp.Example.com/x")?.name).toBe("my-gitlab-agent");
+  });
+
   it("custom agents override builtins on name collision", () => {
     initRegistry({
       customAgents: [
