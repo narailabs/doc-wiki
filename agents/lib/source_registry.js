@@ -340,6 +340,15 @@ function warnCustomAgents(msg) {
  * stderr warning) when the entry is malformed — a bad entry is skipped,
  * never fatal, so one typo can't take down an ingest run.
  */
+/**
+ * A string that is empty or only whitespace. Every config field guarded by
+ * this is one whose blank value survives a `typeof` check and then silently
+ * matches nothing (hostnames, path constraints) or defeats a `??` default
+ * (invocation members), which is worse than being rejected outright.
+ */
+function isBlank(value) {
+    return value.trim() === "";
+}
 function validateCustomAgentEntry(entry, index, configPath) {
     const where = `ecosystem.agents.custom[${index}] in ${configPath}`;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
@@ -350,6 +359,14 @@ function validateCustomAgentEntry(entry, index, configPath) {
     const name = e["name"];
     if (typeof name !== "string" || name.trim() === "") {
         warnCustomAgents(`skipping ${where}: "name" (non-empty string) is required`);
+        return null;
+    }
+    // A quoted `name: " stripe "` survives the non-empty check but is stored
+    // verbatim, so every ID derivation yields `" stripe "` and no enabled-agent
+    // set or credentials key spelled `stripe` matches it. Reject rather than
+    // trim, to match how this validator treats every other malformed field.
+    if (name !== name.trim()) {
+        warnCustomAgents(`skipping ${where}: "name" must not have leading or trailing whitespace`);
         return null;
     }
     const schemes = e["source_schemes"];
@@ -380,16 +397,16 @@ function validateCustomAgentEntry(entry, index, configPath) {
         if (p === null || typeof p !== "object" || Array.isArray(p))
             return false;
         const rec = p;
-        // An empty hostname is not merely useless, it is invisible: `matchHostname`
-        // compares against `URL.hostname`, which is never empty for an http(s)
+        // A blank hostname is not merely useless, it is invisible: `matchHostname`
+        // compares against `URL.hostname`, which is never blank for an http(s)
         // URL, so the pattern silently matches nothing and the user gets no
-        // warning that their entry is dead.
-        if (typeof rec["hostname"] !== "string" || rec["hostname"] === "")
+        // warning that their entry is dead. Whitespace-only is as dead as empty.
+        if (typeof rec["hostname"] !== "string" || isBlank(rec["hostname"]))
             return false;
         for (const key of ["path_prefix", "path_contains"]) {
             if (rec[key] === undefined)
                 continue;
-            if (typeof rec[key] !== "string" || rec[key] === "")
+            if (typeof rec[key] !== "string" || isBlank(rec[key]))
                 return false;
         }
         return true;
@@ -422,8 +439,8 @@ function validateCustomAgentEntry(entry, index, configPath) {
         for (const key of ["label", "subagent_type", "default_model"]) {
             if (inv[key] === undefined)
                 continue;
-            if (typeof inv[key] !== "string" || inv[key] === "") {
-                warnCustomAgents(`skipping ${where}: "invocation_template.${key}" must be a non-empty string when present`);
+            if (typeof inv[key] !== "string" || isBlank(inv[key])) {
+                warnCustomAgents(`skipping ${where}: "invocation_template.${key}" must be a non-blank string when present`);
                 return null;
             }
         }

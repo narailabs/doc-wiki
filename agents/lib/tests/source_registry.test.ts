@@ -512,9 +512,23 @@ describe("loadCustomAgentConfigs", () => {
       { name: "ok", source_url_patterns: [{ hostname: "a.example.com", path_prefix: "/x/" }] },
       { name: "empty-prefix", source_url_patterns: [{ hostname: "b.example.com", path_prefix: "" }] },
       { name: "empty-contains", source_url_patterns: [{ hostname: "c.example.com", path_contains: "" }] },
+      { name: "blank-prefix", source_url_patterns: [{ hostname: "d.example.com", path_prefix: "   " }] },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("rejects a name with leading or trailing whitespace", () => {
+    // `" stripe "` passes the non-empty check but is stored verbatim, so every
+    // ID derivation yields the padded form and a credentials key spelled
+    // `stripe` never matches it.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "stripe", source_schemes: ["stripe://"] },
+      { name: " padded ", source_schemes: ["padded://"] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["stripe"]);
     expect(stderrSpy).toHaveBeenCalled();
   });
 
@@ -525,6 +539,7 @@ describe("loadCustomAgentConfigs", () => {
     const p = writeConfigYaml(tmpDir, configWithCustom([
       { name: "ok", source_url_patterns: [{ hostname: "a.example.com" }] },
       { name: "empty-host", source_url_patterns: [{ hostname: "" }] },
+      { name: "blank-host", source_url_patterns: [{ hostname: "   " }] },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
@@ -544,6 +559,7 @@ describe("loadCustomAgentConfigs", () => {
       { name: "empty-label", invocation_template: { label: "" } },
       { name: "empty-subagent", invocation_template: { subagent_type: "" } },
       { name: "empty-model", invocation_template: { default_model: "" } },
+      { name: "blank-label", invocation_template: { label: "   " } },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
