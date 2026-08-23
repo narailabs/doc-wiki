@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-08-23 - Optimize Append-Only Log Parsing
+**Learning:** In Node.js, reading large, multiline append-only files (like `events.jsonl`) and using `.split('\n')` forces the synchronous allocation of a massive intermediate array. This causes excessive memory pressure and potentially large GC pauses, completely undermining fast-path optimizations (like `.includes()`) executed during the array iteration.
+**Action:** When parsing large append-only files (especially when searching backwards for recent events), replace `.split('\n')` with manual substring extraction using backward iteration via `lastIndexOf('\n')` and `.substring()`. Always handle index 0 explicitly to prevent infinite loops during backwards traversal.
