@@ -483,7 +483,11 @@ function validateCustomAgentEntry(
   const isValidUrlPattern = (p: unknown): boolean => {
     if (p === null || typeof p !== "object" || Array.isArray(p)) return false;
     const rec = p as Record<string, unknown>;
-    if (typeof rec["hostname"] !== "string") return false;
+    // An empty hostname is not merely useless, it is invisible: `matchHostname`
+    // compares against `URL.hostname`, which is never empty for an http(s)
+    // URL, so the pattern silently matches nothing and the user gets no
+    // warning that their entry is dead.
+    if (typeof rec["hostname"] !== "string" || rec["hostname"] === "") return false;
     for (const key of ["path_prefix", "path_contains"] as const) {
       if (rec[key] === undefined) continue;
       if (typeof rec[key] !== "string" || rec[key] === "") return false;
@@ -495,7 +499,7 @@ function validateCustomAgentEntry(
     (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))
   ) {
     warnCustomAgents(
-      `skipping ${where}: every "source_url_patterns" entry needs a "hostname" string, ` +
+      `skipping ${where}: every "source_url_patterns" entry needs a non-empty "hostname" string, ` +
         `with non-empty "path_prefix" / "path_contains" strings when present`,
     );
     return null;
@@ -513,12 +517,19 @@ function validateCustomAgentEntry(
   // "How to Go Deeper" renderer interpolates the label directly
   // (`how_to_go_deeper.ts:215`), so a non-string member reaches the wiki as a
   // bogus bullet like `- **false:**` instead of being skipped as promised.
+  //
+  // Empty strings need rejecting for the same reason: `customConfigToManifest`
+  // fills each member with `?? <default>`, which only fires on null/undefined,
+  // so `label: ""` survives the default and renders as `- **:**`. The same
+  // holds for `subagent_type` and `default_model`, whose empty values would
+  // reach the dispatcher instead of the derived name and model.
   if (invocation !== undefined) {
     const inv = invocation as Record<string, unknown>;
     for (const key of ["label", "subagent_type", "default_model"] as const) {
-      if (inv[key] !== undefined && typeof inv[key] !== "string") {
+      if (inv[key] === undefined) continue;
+      if (typeof inv[key] !== "string" || inv[key] === "") {
         warnCustomAgents(
-          `skipping ${where}: "invocation_template.${key}" must be a string when present`,
+          `skipping ${where}: "invocation_template.${key}" must be a non-empty string when present`,
         );
         return null;
       }

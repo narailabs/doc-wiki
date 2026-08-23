@@ -518,6 +518,19 @@ describe("loadCustomAgentConfigs", () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 
+  it("rejects a url pattern whose hostname is an empty string", () => {
+    // `matchHostname` compares against `URL.hostname`, which is never empty
+    // for an http(s) URL — so the pattern matches nothing and the entry is
+    // silently dead rather than reported as malformed.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", source_url_patterns: [{ hostname: "a.example.com" }] },
+      { name: "empty-host", source_url_patterns: [{ hostname: "" }] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
   it("rejects an invocation_template with a non-string member", () => {
     // A mapping check alone let `label: false` through, and the renderer
     // interpolates the label directly — emitting `- **false:**` into the wiki.
@@ -526,6 +539,11 @@ describe("loadCustomAgentConfigs", () => {
       { name: "bad-label", invocation_template: { label: false } },
       { name: "bad-subagent", invocation_template: { subagent_type: 7 } },
       { name: "bad-model", invocation_template: { default_model: ["haiku"] } },
+      // `customConfigToManifest` fills these with `?? <default>`, which does
+      // not fire on "" — so an empty label renders as `- **:**`.
+      { name: "empty-label", invocation_template: { label: "" } },
+      { name: "empty-subagent", invocation_template: { subagent_type: "" } },
+      { name: "empty-model", invocation_template: { default_model: "" } },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
