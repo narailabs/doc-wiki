@@ -368,12 +368,13 @@ function validateCustomAgentEntry(entry, index, configPath) {
         return null;
     }
     const urlPatterns = e["source_url_patterns"];
-    // `path_prefix` / `path_contains` must be strings when present, not merely
-    // absent-or-anything. `lookupBySource` gates on their truthiness: a
-    // `path_prefix: false` is skipped by the path-constrained first pass, and
-    // then the second pass's `if (p.path_prefix || p.path_contains) continue`
-    // does not skip it either — so the entry silently widens from "hostname plus
-    // path constraint" to a hostname-wide match and can capture unrelated URLs.
+    // `path_prefix` / `path_contains` must be NON-EMPTY strings when present,
+    // not merely absent-or-anything. `lookupBySource` gates on their
+    // truthiness: a `path_prefix: false` — or an equally falsy `path_prefix:
+    // ""` — is skipped by the path-constrained first pass, and then the second
+    // pass's `if (p.path_prefix || p.path_contains) continue` does not skip it
+    // either — so the entry silently widens from "hostname plus path
+    // constraint" to a hostname-wide match and can capture unrelated URLs.
     // Rejecting the entry is what this validator promises for malformed input.
     const isValidUrlPattern = (p) => {
         if (p === null || typeof p !== "object" || Array.isArray(p))
@@ -382,7 +383,9 @@ function validateCustomAgentEntry(entry, index, configPath) {
         if (typeof rec["hostname"] !== "string")
             return false;
         for (const key of ["path_prefix", "path_contains"]) {
-            if (rec[key] !== undefined && typeof rec[key] !== "string")
+            if (rec[key] === undefined)
+                continue;
+            if (typeof rec[key] !== "string" || rec[key] === "")
                 return false;
         }
         return true;
@@ -390,7 +393,7 @@ function validateCustomAgentEntry(entry, index, configPath) {
     if (urlPatterns !== undefined &&
         (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))) {
         warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a "hostname" string, ` +
-            `with "path_prefix" / "path_contains" strings when present`);
+            `with non-empty "path_prefix" / "path_contains" strings when present`);
         return null;
     }
     const invocation = e["invocation_template"];
@@ -398,6 +401,20 @@ function validateCustomAgentEntry(entry, index, configPath) {
         (invocation === null || typeof invocation !== "object" || Array.isArray(invocation))) {
         warnCustomAgents(`skipping ${where}: "invocation_template" must be a mapping`);
         return null;
+    }
+    // Every `InvocationTemplate` member is typed `string`, but a mapping check
+    // alone lets `label: false` through and the cast below preserves it. The
+    // "How to Go Deeper" renderer interpolates the label directly
+    // (`how_to_go_deeper.ts:215`), so a non-string member reaches the wiki as a
+    // bogus bullet like `- **false:**` instead of being skipped as promised.
+    if (invocation !== undefined) {
+        const inv = invocation;
+        for (const key of ["label", "subagent_type", "default_model"]) {
+            if (inv[key] !== undefined && typeof inv[key] !== "string") {
+                warnCustomAgents(`skipping ${where}: "invocation_template.${key}" must be a string when present`);
+                return null;
+            }
+        }
     }
     const out = { name };
     if (typeof e["description"] === "string")

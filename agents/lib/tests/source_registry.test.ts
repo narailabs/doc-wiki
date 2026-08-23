@@ -503,6 +503,35 @@ describe("loadCustomAgentConfigs", () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 
+  it("rejects a url pattern whose path_prefix/path_contains is an empty string", () => {
+    // An empty string is as falsy as `false`: `lookupBySource` skips it in the
+    // path-constrained pass, and `if (p.path_prefix || p.path_contains)
+    // continue` fails to skip it in the hostname pass — so the entry captures
+    // every URL on the host.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", source_url_patterns: [{ hostname: "a.example.com", path_prefix: "/x/" }] },
+      { name: "empty-prefix", source_url_patterns: [{ hostname: "b.example.com", path_prefix: "" }] },
+      { name: "empty-contains", source_url_patterns: [{ hostname: "c.example.com", path_contains: "" }] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("rejects an invocation_template with a non-string member", () => {
+    // A mapping check alone let `label: false` through, and the renderer
+    // interpolates the label directly — emitting `- **false:**` into the wiki.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", invocation_template: { label: "Knowledge Base" } },
+      { name: "bad-label", invocation_template: { label: false } },
+      { name: "bad-subagent", invocation_template: { subagent_type: 7 } },
+      { name: "bad-model", invocation_template: { default_model: ["haiku"] } },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
   it("accepts a url pattern with only a hostname", () => {
     const p = writeConfigYaml(tmpDir, configWithCustom([
       { name: "host-only", source_url_patterns: [{ hostname: "d.example.com" }] },
