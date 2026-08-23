@@ -513,6 +513,7 @@ describe("loadCustomAgentConfigs", () => {
       { name: "empty-prefix", source_url_patterns: [{ hostname: "b.example.com", path_prefix: "" }] },
       { name: "empty-contains", source_url_patterns: [{ hostname: "c.example.com", path_contains: "" }] },
       { name: "blank-prefix", source_url_patterns: [{ hostname: "d.example.com", path_prefix: "   " }] },
+      { name: "padded-prefix", source_url_patterns: [{ hostname: "e.example.com", path_prefix: " /v1" }] },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
@@ -540,6 +541,7 @@ describe("loadCustomAgentConfigs", () => {
       { name: "ok", source_url_patterns: [{ hostname: "a.example.com" }] },
       { name: "empty-host", source_url_patterns: [{ hostname: "" }] },
       { name: "blank-host", source_url_patterns: [{ hostname: "   " }] },
+      { name: "padded-host", source_url_patterns: [{ hostname: " api.example.com " }] },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);
@@ -560,6 +562,7 @@ describe("loadCustomAgentConfigs", () => {
       { name: "empty-subagent", invocation_template: { subagent_type: "" } },
       { name: "empty-model", invocation_template: { default_model: "" } },
       { name: "blank-label", invocation_template: { label: "   " } },
+      { name: "padded-label", invocation_template: { label: " Jira " } },
     ]));
     const configs = loadCustomAgentConfigs(p);
     expect(configs.map((c) => c.name)).toEqual(["ok"]);

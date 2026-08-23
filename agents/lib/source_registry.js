@@ -341,13 +341,19 @@ function warnCustomAgents(msg) {
  * never fatal, so one typo can't take down an ingest run.
  */
 /**
- * A string that is empty or only whitespace. Every config field guarded by
- * this is one whose blank value survives a `typeof` check and then silently
- * matches nothing (hostnames, path constraints) or defeats a `??` default
- * (invocation members), which is worse than being rejected outright.
+ * A string fit to store verbatim: non-empty, and free of surrounding
+ * whitespace. Every config field guarded by this is one that is compared
+ * literally later — `matchHostname` against `URL.hostname`, `startsWith`
+ * against `URL.pathname`, a label straight into markdown — and none of those
+ * comparisons ever sees padding, so a padded value passes validation and then
+ * silently matches nothing. Blank values additionally defeat the `??`
+ * defaults in `customConfigToManifest`.
+ *
+ * Rejecting rather than trimming, so the user is told what is wrong instead
+ * of having their config quietly rewritten.
  */
-function isBlank(value) {
-    return value.trim() === "";
+function isTidyString(value) {
+    return value !== "" && value === value.trim();
 }
 function validateCustomAgentEntry(entry, index, configPath) {
     const where = `ecosystem.agents.custom[${index}] in ${configPath}`;
@@ -365,7 +371,7 @@ function validateCustomAgentEntry(entry, index, configPath) {
     // verbatim, so every ID derivation yields `" stripe "` and no enabled-agent
     // set or credentials key spelled `stripe` matches it. Reject rather than
     // trim, to match how this validator treats every other malformed field.
-    if (name !== name.trim()) {
+    if (!isTidyString(name)) {
         warnCustomAgents(`skipping ${where}: "name" must not have leading or trailing whitespace`);
         return null;
     }
@@ -401,20 +407,20 @@ function validateCustomAgentEntry(entry, index, configPath) {
         // compares against `URL.hostname`, which is never blank for an http(s)
         // URL, so the pattern silently matches nothing and the user gets no
         // warning that their entry is dead. Whitespace-only is as dead as empty.
-        if (typeof rec["hostname"] !== "string" || isBlank(rec["hostname"]))
+        if (typeof rec["hostname"] !== "string" || !isTidyString(rec["hostname"]))
             return false;
         for (const key of ["path_prefix", "path_contains"]) {
             if (rec[key] === undefined)
                 continue;
-            if (typeof rec[key] !== "string" || isBlank(rec[key]))
+            if (typeof rec[key] !== "string" || !isTidyString(rec[key]))
                 return false;
         }
         return true;
     };
     if (urlPatterns !== undefined &&
         (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))) {
-        warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a non-empty "hostname" string, ` +
-            `with non-empty "path_prefix" / "path_contains" strings when present`);
+        warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a "hostname" string, with ` +
+            `optional "path_prefix" / "path_contains" strings — none empty or whitespace-padded`);
         return null;
     }
     const invocation = e["invocation_template"];
@@ -439,8 +445,9 @@ function validateCustomAgentEntry(entry, index, configPath) {
         for (const key of ["label", "subagent_type", "default_model"]) {
             if (inv[key] === undefined)
                 continue;
-            if (typeof inv[key] !== "string" || isBlank(inv[key])) {
-                warnCustomAgents(`skipping ${where}: "invocation_template.${key}" must be a non-blank string when present`);
+            if (typeof inv[key] !== "string" || !isTidyString(inv[key])) {
+                warnCustomAgents(`skipping ${where}: "invocation_template.${key}" must be a non-empty string ` +
+                    `without surrounding whitespace`);
                 return null;
             }
         }
