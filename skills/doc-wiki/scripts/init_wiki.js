@@ -143,10 +143,13 @@ function buildConfig(domain, name) {
             agents: {
                 source: {}, // populated by /doc-wiki:onboard
                 custom: [], // custom source agents — each entry is an AgentManifest:
-                // - name: my-agent
+                // Do not end `name` in "-agent": the connector ID is derived by
+                // stripping that suffix, so `my-agent` is reported as `my` and a
+                // credentials key named `my-agent` will not match it.
+                // - name: my-kb
                 //   source_schemes: ["myscheme://"]
                 //   source_url_patterns: [{hostname: "kb.company.com"}]
-                //   invocation_template: {subagent_type: my-agent, default_model: haiku, label: "My Agent"}
+                //   invocation_template: {subagent_type: my-kb-agent, default_model: haiku, label: "My KB"}
                 model_overrides: {}, // per-agent model overrides
             },
             credentials: {
