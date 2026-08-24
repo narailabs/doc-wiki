@@ -105,7 +105,8 @@ function _extractTldr(body) {
  * `references/compilation.md` ("Additional frontmatter for atlas pages").
  */
 function _inferAudience(facet, frontmatterAudience) {
-    if (typeof frontmatterAudience === "string" && frontmatterAudience.length > 0) {
+    if (typeof frontmatterAudience === "string" &&
+        frontmatterAudience.length > 0) {
         return frontmatterAudience;
     }
     switch (facet) {
@@ -164,7 +165,13 @@ export function assembleOverviewInputs(wikiRoot) {
         parts.push("## Audience routing\n");
         parts.push("| Audience | Pages |");
         parts.push("|---|---|");
-        const order = ["new-user", "operator", "contributor", "integrator", "debugger"];
+        const order = [
+            "new-user",
+            "operator",
+            "contributor",
+            "integrator",
+            "debugger",
+        ];
         for (const audience of order) {
             const pages = grouped.get(audience);
             if (!pages || pages.length === 0)
@@ -496,7 +503,10 @@ export function assembleCommandsInputs(repoRoot) {
                     headings.push(line.trim());
             }
             if (headings.length > 0) {
-                const rel = path.relative(repoRoot, skillFile).split(path.sep).join("/");
+                const rel = path
+                    .relative(repoRoot, skillFile)
+                    .split(path.sep)
+                    .join("/");
                 sources.push(rel);
                 parts.push(`## Slash-command headings in ${rel}\n\n${headings.join("\n")}\n`);
             }
@@ -643,31 +653,39 @@ export function assembleTroubleshootingInputs(wikiRoot) {
     // Recent error events from events.jsonl
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (fs.existsSync(eventsPath)) {
-        let lines;
+        let eventsContent = "";
         try {
-            lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+            eventsContent = fs.readFileSync(eventsPath, "utf-8");
         }
         catch {
-            lines = [];
+            eventsContent = "";
         }
         const errors = [];
-        for (let i = lines.length - 1; i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT; i--) {
-            const line = lines[i];
-            if (!line)
-                continue;
-            let parsed;
-            try {
-                parsed = JSON.parse(line);
+        let pos = eventsContent.length;
+        while (pos > 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
+            const prevNewline = pos === 0 ? -1 : eventsContent.lastIndexOf("\n", pos - 1);
+            // Ignore trailing empty line from the last newline
+            if (prevNewline !== pos - 1) {
+                const line = eventsContent.substring(prevNewline + 1, pos);
+                if (line) {
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(line);
+                        if (parsed &&
+                            typeof parsed === "object" &&
+                            !Array.isArray(parsed)) {
+                            const rec = parsed;
+                            if (_isErrorEvent(rec)) {
+                                errors.push({ raw: line, parsed: rec });
+                            }
+                        }
+                    }
+                    catch {
+                        // ignore JSON parse errors
+                    }
+                }
             }
-            catch {
-                continue;
-            }
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-                continue;
-            const rec = parsed;
-            if (_isErrorEvent(rec)) {
-                errors.push({ raw: line, parsed: rec });
-            }
+            pos = prevNewline;
         }
         if (errors.length > 0) {
             sources.push("log/events.jsonl");
@@ -854,11 +872,14 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const wikiRoot = parsed.values["wikiRoot"];
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     // Subcommands that need --wiki-root.
-    if (sub === "overview" || sub === "integrations" || sub === "troubleshooting") {
+    if (sub === "overview" ||
+        sub === "integrations" ||
+        sub === "troubleshooting") {
         if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
             process.stderr.write("--wiki-root is required\n");
             return 2;

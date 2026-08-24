@@ -52,34 +52,42 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let eventsContent = "";
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        eventsContent = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        if (!line)
-            continue;
-        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-        if (!line.includes('"atlas"'))
-            continue;
-        let parsed;
-        try {
-            parsed = JSON.parse(line);
-        }
-        catch {
-            continue;
-        }
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const rec = parsed;
-            if (rec["op"] === "atlas" && typeof rec["timestamp"] === "string") {
-                return rec["timestamp"];
+    let pos = eventsContent.length;
+    while (pos > 0) {
+        const prevNewline = pos === 0 ? -1 : eventsContent.lastIndexOf("\n", pos - 1);
+        if (prevNewline !== pos - 1) {
+            const line = eventsContent.substring(prevNewline + 1, pos);
+            if (line) {
+                // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+                if (line.includes('"atlas"')) {
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(line);
+                        if (parsed &&
+                            typeof parsed === "object" &&
+                            !Array.isArray(parsed)) {
+                            const rec = parsed;
+                            if (rec["op"] === "atlas" &&
+                                typeof rec["timestamp"] === "string") {
+                                return rec["timestamp"];
+                            }
+                        }
+                    }
+                    catch {
+                        // ignore JSON parse errors
+                    }
+                }
             }
         }
+        pos = prevNewline;
     }
     return null;
 }
@@ -229,7 +237,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -277,11 +289,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {

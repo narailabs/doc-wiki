@@ -124,44 +124,53 @@ export function getLastAtlasRunId(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let eventsContent = "";
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        eventsContent = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        if (!line)
-            continue;
-        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-        if (!line.includes('"atlas"'))
-            continue;
-        let parsed;
-        try {
-            parsed = JSON.parse(line);
-        }
-        catch {
-            continue;
-        }
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const rec = parsed;
-            if (rec["op"] !== "atlas")
-                continue;
-            // run_id may live at top level or under details.atlas_run_id.
-            if (typeof rec["atlas_run_id"] === "string")
-                return rec["atlas_run_id"];
-            const details = rec["details"];
-            if (details && typeof details === "object" && !Array.isArray(details)) {
-                const d = details;
-                if (typeof d["atlas_run_id"] === "string")
-                    return d["atlas_run_id"];
+    let pos = eventsContent.length;
+    while (pos > 0) {
+        const prevNewline = pos === 0 ? -1 : eventsContent.lastIndexOf("\n", pos - 1);
+        if (prevNewline !== pos - 1) {
+            const line = eventsContent.substring(prevNewline + 1, pos);
+            if (line) {
+                // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+                if (line.includes('"atlas"')) {
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(line);
+                        if (parsed &&
+                            typeof parsed === "object" &&
+                            !Array.isArray(parsed)) {
+                            const rec = parsed;
+                            if (rec["op"] === "atlas") {
+                                // run_id may live at top level or under details.atlas_run_id.
+                                if (typeof rec["atlas_run_id"] === "string")
+                                    return rec["atlas_run_id"];
+                                const details = rec["details"];
+                                if (details &&
+                                    typeof details === "object" &&
+                                    !Array.isArray(details)) {
+                                    const d = details;
+                                    if (typeof d["atlas_run_id"] === "string")
+                                        return d["atlas_run_id"];
+                                }
+                                // No run_id but the event existed — return empty marker so callers
+                                // can distinguish "atlas has run before" from "never run".
+                                return "";
+                            }
+                        }
+                    }
+                    catch {
+                        // ignore JSON parse errors
+                    }
+                }
             }
-            // No run_id but the event existed — return empty marker so callers
-            // can distinguish "atlas has run before" from "never run".
-            return "";
         }
+        pos = prevNewline;
     }
     return null;
 }
@@ -189,7 +198,7 @@ export function detectState(wikiRoot, atlasPageThreshold = 3) {
     return "fresh";
 }
 // ── Per-ingest cost average ────────────────────────────────────────
-const DEFAULT_PER_INGEST_AVG_USD = 0.20;
+const DEFAULT_PER_INGEST_AVG_USD = 0.2;
 /**
  * Read recent `op: ingest` events from `log/events.jsonl` and return a
  * rolling-average `cost_usd` over up to `sampleSize` entries. Falls back
@@ -202,46 +211,53 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return DEFAULT_PER_INGEST_AVG_USD;
-    let lines;
+    let eventsContent = "";
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        eventsContent = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return DEFAULT_PER_INGEST_AVG_USD;
     }
     const samples = [];
-    for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
-        const line = lines[i];
-        if (!line)
-            continue;
-        // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
-        if (!line.includes('"ingest"'))
-            continue;
-        let parsed;
-        try {
-            parsed = JSON.parse(line);
+    let pos = eventsContent.length;
+    while (pos > 0 && samples.length < sampleSize) {
+        const prevNewline = pos === 0 ? -1 : eventsContent.lastIndexOf("\n", pos - 1);
+        if (prevNewline !== pos - 1) {
+            const line = eventsContent.substring(prevNewline + 1, pos);
+            if (line) {
+                // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
+                if (line.includes('"ingest"')) {
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(line);
+                        if (parsed &&
+                            typeof parsed === "object" &&
+                            !Array.isArray(parsed)) {
+                            const rec = parsed;
+                            if (rec["op"] === "ingest") {
+                                // Cost may live at top level or in details.total_cost_usd.
+                                let cost = null;
+                                if (typeof rec["cost_usd"] === "number")
+                                    cost = rec["cost_usd"];
+                                else if (rec["details"] && typeof rec["details"] === "object") {
+                                    const d = rec["details"];
+                                    if (typeof d["total_cost_usd"] === "number")
+                                        cost = d["total_cost_usd"];
+                                    else if (typeof d["cost_usd"] === "number")
+                                        cost = d["cost_usd"];
+                                }
+                                if (cost !== null && cost >= 0)
+                                    samples.push(cost);
+                            }
+                        }
+                    }
+                    catch {
+                        // ignore JSON parse errors
+                    }
+                }
+            }
         }
-        catch {
-            continue;
-        }
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-            continue;
-        const rec = parsed;
-        if (rec["op"] !== "ingest")
-            continue;
-        // Cost may live at top level or in details.total_cost_usd.
-        let cost = null;
-        if (typeof rec["cost_usd"] === "number")
-            cost = rec["cost_usd"];
-        else if (rec["details"] && typeof rec["details"] === "object") {
-            const d = rec["details"];
-            if (typeof d["total_cost_usd"] === "number")
-                cost = d["total_cost_usd"];
-            else if (typeof d["cost_usd"] === "number")
-                cost = d["cost_usd"];
-        }
-        if (cost !== null && cost >= 0)
-            samples.push(cost);
+        pos = prevNewline;
     }
     if (samples.length === 0)
         return DEFAULT_PER_INGEST_AVG_USD;
@@ -280,7 +296,7 @@ export const CROSS_SERVICE_GLOBAL_PAGES = [
     "database-traces",
     "shared-libraries",
 ];
-const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
+const GLOBAL_PAGE_AVG_USD = 0.2; // synthesis-only, smaller than ingest
 /**
  * Count of global synthesis pages that will be regenerated in Phase 7.
  * The `facets` argument is reserved for future per-facet-driven globals.
@@ -289,7 +305,8 @@ const GLOBAL_PAGE_AVG_USD = 0.20; // synthesis-only, smaller than ingest
  */
 export function expectedGlobalCount(facets, crossServiceEnabled = false) {
     void facets;
-    return STATIC_GLOBAL_PAGES.length + (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0);
+    return (STATIC_GLOBAL_PAGES.length +
+        (crossServiceEnabled ? CROSS_SERVICE_GLOBAL_PAGES.length : 0));
 }
 /**
  * Estimate the cost of running a plan on a wiki. For each `(topic, facet)`
@@ -309,11 +326,21 @@ export function estimateCost(wikiRoot, plan, perIngestAvgUsd, crossServiceEnable
         const cached = _isPlanEntryCached(wikiRoot, entry);
         if (cached) {
             cacheHits++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: false, cached: true });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: false,
+                cached: true,
+            });
         }
         else {
             expectedIngests++;
-            breakdown.push({ topic: entry.topic, facet: entry.facet, expected: true, cached: false });
+            breakdown.push({
+                topic: entry.topic,
+                facet: entry.facet,
+                expected: true,
+                cached: false,
+            });
         }
     }
     const topicCost = expectedIngests * avg;
@@ -515,7 +542,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     }
     const sourceFilesWithNoPage = [...missingSources].sort();
     // 4. Gitlog uncovered_files — pass through if provided.
-    const uncoveredFiles = gitlog?.uncovered_files ? [...gitlog.uncovered_files] : [];
+    const uncoveredFiles = gitlog?.uncovered_files
+        ? [...gitlog.uncovered_files]
+        : [];
     // 5. Connectors mentioned in atlas pages but missing from integrations.md.
     // Single wiki walk also collects every page's `sources:` frontmatter so
     // step 6 (manifest-driven) doesn't re-walk.
@@ -524,7 +553,9 @@ export function assembleGapReport(wikiRoot, plan, gitlog, inventory) {
     let integrationsBody = "";
     if (fs.existsSync(integrationsPath)) {
         try {
-            integrationsBody = fs.readFileSync(integrationsPath, "utf-8").toLowerCase();
+            integrationsBody = fs
+                .readFileSync(integrationsPath, "utf-8")
+                .toLowerCase();
         }
         catch {
             integrationsBody = "";

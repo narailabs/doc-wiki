@@ -79,32 +79,45 @@ export interface ClassifyResult {
 export function getLastAtlasTimestamp(wikiRoot: string): string | null {
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (!fs.existsSync(eventsPath)) return null;
-  let lines: string[];
+  let eventsContent = "";
   try {
-    lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+    eventsContent = fs.readFileSync(eventsPath, "utf-8");
   } catch {
     return null;
   }
   // Walk backwards — most recent atlas event wins.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
-    if (!line) continue;
-
-    // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-    if (!line.includes('"atlas"')) continue;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const rec = parsed as Record<string, unknown>;
-      if (rec["op"] === "atlas" && typeof rec["timestamp"] === "string") {
-        return rec["timestamp"];
+  let pos = eventsContent.length;
+  while (pos > 0) {
+    const prevNewline =
+      pos === 0 ? -1 : eventsContent.lastIndexOf("\n", pos - 1);
+    if (prevNewline !== pos - 1) {
+      const line = eventsContent.substring(prevNewline + 1, pos);
+      if (line) {
+        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+        if (line.includes('"atlas"')) {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(line);
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              !Array.isArray(parsed)
+            ) {
+              const rec = parsed as Record<string, unknown>;
+              if (
+                rec["op"] === "atlas" &&
+                typeof rec["timestamp"] === "string"
+              ) {
+                return rec["timestamp"];
+              }
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+        }
       }
     }
+    pos = prevNewline;
   }
   return null;
 }
@@ -231,7 +244,10 @@ function _matchPage(
  * `app/<topic>/`, `services/<topic>/`, or just `<topic>/...` at the repo root)
  * otherwise `null`.
  */
-function _matchTopic(filePath: string, topics: readonly string[]): string | null {
+function _matchTopic(
+  filePath: string,
+  topics: readonly string[],
+): string | null {
   const parts = filePath.split("/");
   for (const topic of topics) {
     if (parts.includes(topic)) return topic;
@@ -279,7 +295,11 @@ export function classifyChanges(
   for (const [page, sources] of [...staleByPage.entries()].sort()) {
     stale_pages.push({ page, sources: [...sources].sort() });
   }
-  return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+  return {
+    stale_pages,
+    uncovered_files: uncovered,
+    unrelated_files: unrelated,
+  };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────
@@ -333,12 +353,16 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 2;
   }
   const repoRoot =
-    typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    typeof parsed.values["repoRoot"] === "string" &&
+    parsed.values["repoRoot"].length > 0
       ? parsed.values["repoRoot"]
       : process.cwd();
 
   let since: string | null = null;
-  if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+  if (
+    typeof parsed.values["since"] === "string" &&
+    parsed.values["since"].length > 0
+  ) {
     since = parsed.values["since"];
   } else {
     const last = getLastAtlasTimestamp(wikiRoot);
