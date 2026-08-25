@@ -344,31 +344,42 @@ export function listAgents(filter?: {
 }
 
 /**
+ * The `wiki-<id>-agent` naming convention every builtin manifest follows.
+ * BOTH affixes are required, with something between them: `my-agent` and
+ * `wiki-search` are ordinary names that merely resemble it.
+ */
+const _WIKI_AGENT_NAME_RE = /^wiki-(.+)-agent$/;
+
+/**
  * Derive the connector ID a manifest is addressed by.
  *
- * `wiki-<id>-agent` is the naming convention for BUILTIN manifests only
- * (see `BUILTIN_AGENTS` below), so the unwrap is applied only to those. A
- * custom entry's `name` comes straight from `ecosystem.agents.custom` and
- * IS the connector ID — unwrapping it reported `my-agent` as `my`, and then
- * neither an `--enabled my-agent` token nor a `.connectors/config.yaml` key
- * spelled `my-agent` matched the connector, so atlas called it unconfigured.
+ * The unwrap keys off the NAME CONVENTION, not `origin`. Keying it on origin
+ * looks right — builtins are the ones named `wiki-<id>-agent` — but it breaks
+ * the builtin override documented in `docs/connectors.md`: reusing a builtin's
+ * name under `ecosystem.agents.custom` is how a self-hosted GitLab or GitHub
+ * Enterprise host gets classified, and `registerAgent` is a `Map.set` keyed on
+ * name, so that entry REPLACES the builtin while carrying origin "custom".
+ * Under an origin rule it derived `wiki-gitlab-agent`, and an already-enabled
+ * `gitlab` stopped matching.
  *
- * The result is lowercased for every origin. Consumers canonicalize to lower
- * case — `how_to_go_deeper.parseEnabled` lowercases each `--enabled` token,
- * and `.connectors/config.yaml` IDs are lowercase — while the validator
- * accepts a mixed-case `name`, so a literal `Stripe` matched neither.
- * Builtin names are already lowercase, so this is a no-op for them.
+ * A name that does not follow the convention is the connector ID itself, so it
+ * is returned as-is. `my-agent` has the suffix but not the prefix; unwrapping
+ * it reported `my`, and then neither an `--enabled my-agent` token nor a
+ * `.connectors/config.yaml` key spelled `my-agent` matched.
+ *
+ * The result is always lowercased. Consumers canonicalize to lower case —
+ * `how_to_go_deeper.parseEnabled` lowercases each `--enabled` token, and
+ * `.connectors/config.yaml` IDs are lowercase — while the validator accepts a
+ * mixed-case `name`, so a literal `Stripe` matched neither. Builtin names are
+ * already lowercase, so this is a no-op for them.
  *
  * This is the single derivation site. `external_sources.classifySource` and
  * `how_to_go_deeper.shortId` both route through it; three private copies of
- * the regex pair is how the two mismatches above went unnoticed.
+ * the regex pair is how the mismatches above went unnoticed.
  */
 export function agentShortId(manifest: AgentManifest): string {
-  if (manifest.origin === "custom") return manifest.name.toLowerCase();
-  return manifest.name
-    .replace(/^wiki-/, "")
-    .replace(/-agent$/, "")
-    .toLowerCase();
+  const conventional = _WIKI_AGENT_NAME_RE.exec(manifest.name);
+  return (conventional?.[1] ?? manifest.name).toLowerCase();
 }
 
 /** Return the set of all registered agent short IDs (for enabledAgents filtering). */

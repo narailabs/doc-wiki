@@ -344,6 +344,33 @@ describe("classifySource with custom agents", () => {
     expect(classifySource("stripe://cus_123")).toBe("stripe");
   });
 
+  it("classifies a self-hosted host under the builtin ID it overrides", () => {
+    // Regression (Codex P2): the documented GitLab override registers the
+    // builtin name with origin "custom", so an origin-keyed unwrap returned
+    // `wiki-gitlab-agent` and atlas stopped recognizing an enabled `gitlab`.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [
+            {
+              name: "wiki-gitlab-agent",
+              source_schemes: ["gitlab://"],
+              source_url_patterns: [
+                { hostname: "gitlab.com" },
+                { hostname: "gitlab.example.com" },
+              ],
+              invocation_template: { label: "GitLab" },
+            },
+          ],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("https://gitlab.example.com/group/proj")).toBe("gitlab");
+    expect(classifySource("https://gitlab.com/org/repo")).toBe("gitlab");
+  });
+
   it("stays builtins-only when no wiki.config.yaml is present", () => {
     process.chdir(tmpDir);
     expect(classifySource("kb://article-1")).toBe("");

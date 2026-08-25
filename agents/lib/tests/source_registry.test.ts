@@ -385,6 +385,39 @@ describe("registeredAgentIds", () => {
     registerAgent(makeManifest({ name: "wiki-jira-agent", origin: "builtin" }));
     expect(registeredAgentIds().has("jira")).toBe(true);
   });
+
+  it("keeps the builtin ID when a custom entry overrides a builtin", () => {
+    // Regression (Codex P2): `docs/connectors.md` documents overriding a
+    // builtin by reusing its name under `ecosystem.agents.custom` — the
+    // self-hosted GitLab and GitHub Enterprise recipe. That entry registers
+    // with origin "custom" and REPLACES the builtin (`registerAgent` is a
+    // `Map.set` keyed on name), so keying the unwrap on origin reported it
+    // as `wiki-gitlab-agent` and an already-enabled `gitlab` stopped
+    // matching. The unwrap follows the NAME convention, not the origin.
+    registerAgent(makeManifest({ name: "wiki-gitlab-agent", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("gitlab")).toBe(true);
+    expect(ids.has("wiki-gitlab-agent")).toBe(false);
+  });
+
+  it("does not unwrap a half-convention custom name", () => {
+    // Both affixes are required. `my-agent` has the suffix but not the
+    // prefix; `wiki-search` has the prefix but not the suffix. Neither is
+    // the builtin convention, so both stay literal.
+    registerAgent(makeManifest({ name: "my-agent", origin: "custom" }));
+    registerAgent(makeManifest({ name: "wiki-search", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("my-agent")).toBe(true);
+    expect(ids.has("wiki-search")).toBe(true);
+    expect(ids.has("my")).toBe(false);
+    expect(ids.has("search")).toBe(false);
+  });
+
+  it("does not unwrap a name with nothing between the affixes", () => {
+    registerAgent(makeManifest({ name: "wiki--agent", origin: "custom" }));
+    expect(registeredAgentIds().has("wiki--agent")).toBe(true);
+    expect(registeredAgentIds().has("")).toBe(false);
+  });
 });
 
 // ── loadConfiguredConnectorIds ────────────────────────────────────────
@@ -690,6 +723,12 @@ describe("initRegistryFromConfig", () => {
     expect(selfHosted?.origin).toBe("custom");
     // gitlab.com still classifies after the override
     expect(lookupBySource("https://gitlab.com/org/repo")?.name).toBe("wiki-gitlab-agent");
+    // And it is still addressed as `gitlab`. This assertion is the one that
+    // was missing: the override classified correctly all along, so a
+    // derivation keyed on `origin` broke the connector ID without failing
+    // any test above.
+    expect(registeredAgentIds().has("gitlab")).toBe(true);
+    expect(registeredAgentIds().has("wiki-gitlab-agent")).toBe(false);
   });
 
   it("falls back to builtins-only when no config exists", () => {
