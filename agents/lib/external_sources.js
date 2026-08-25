@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { _resetRegistryConfigState, ensureRegistryForConfig, lookupBySource, } from "./source_registry.js";
+import { _resetRegistryConfigState, agentShortId, ensureRegistryForConfig, lookupBySource, } from "./source_registry.js";
 import { walkCodebase } from "./repo_walker.js";
 // ── Registry bootstrap ────────────────────────────────────────────────
 /**
@@ -66,7 +66,7 @@ export function classifySource(s, wikiConfigPath) {
     ensureRegistry(wikiConfigPath);
     const manifest = lookupBySource(s);
     if (manifest !== null) {
-        return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+        return agentShortId(manifest);
     }
     if (isDbScheme(s))
         return "db";

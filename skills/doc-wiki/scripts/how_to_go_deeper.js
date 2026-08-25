@@ -28,7 +28,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
-import { lookupBySource, ensureRegistryForConfig, _resetRegistryConfigState, resolveWikiConfigPath, } from "../../../agents/lib/source_registry.js";
+import { agentShortId, lookupBySource, ensureRegistryForConfig, _resetRegistryConfigState, resolveWikiConfigPath, } from "../../../agents/lib/source_registry.js";
 const LOCAL_RAW_PREFIX = "raw/";
 const CODE_EXTS = new Set([
     ".ts", ".tsx", ".js", ".jsx", ".py", ".java", ".kt", ".go", ".rs",
@@ -60,9 +60,15 @@ export function _resetRegistry() {
     _resetRegistryConfigState();
 }
 // ── Short ID extraction ──────────────────────────────────────────────
-/** Extract short agent ID from manifest name: "wiki-jira-agent" → "jira". */
+/**
+ * Extract the connector ID from a manifest: "wiki-jira-agent" → "jira".
+ *
+ * Delegates to `source_registry.agentShortId`, which owns the derivation:
+ * the `wiki-<id>-agent` unwrap applies to builtins only, and every ID is
+ * lowercased so `parseEnabled`'s lowercased `--enabled` tokens match.
+ */
 function shortId(manifest) {
-    return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+    return agentShortId(manifest);
 }
 // ── Hint builder ──────────────────────────────────────────────────────
 /**

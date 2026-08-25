@@ -350,6 +350,41 @@ describe("registeredAgentIds", () => {
     const ids = registeredAgentIds();
     expect(ids).toEqual(new Set(["jira", "confluence", "github", "gitlab", "notion", "linear", "gcp", "aws", "db"]));
   });
+
+  it("keeps a custom name that ends in -agent intact", () => {
+    // Regression (Codex P2): `wiki-<id>-agent` is the BUILTIN manifest naming
+    // convention. A custom entry's `name` is the connector ID itself, so
+    // stripping the suffix reported `my-agent` as `my` — and then neither an
+    // `--enabled my-agent` token nor a `.connectors/config.yaml` key spelled
+    // `my-agent` matched it.
+    registerAgent(makeManifest({ name: "my-agent", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("my-agent")).toBe(true);
+    expect(ids.has("my")).toBe(false);
+  });
+
+  it("keeps a custom name that starts with wiki- intact", () => {
+    registerAgent(makeManifest({ name: "wiki-search", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("wiki-search")).toBe(true);
+    expect(ids.has("search")).toBe(false);
+  });
+
+  it("lowercases derived IDs so case-insensitive consumers match", () => {
+    // Regression (Codex P2): the validator accepts a mixed-case `name`, but
+    // `how_to_go_deeper.parseEnabled` lowercases every `--enabled` token and
+    // `.connectors/config.yaml` IDs are lowercase, so a literal `Stripe`
+    // never matched and the source rendered an enable-the-connector prompt.
+    registerAgent(makeManifest({ name: "Stripe", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("stripe")).toBe(true);
+    expect(ids.has("Stripe")).toBe(false);
+  });
+
+  it("still unwraps the wiki-<id>-agent convention for builtins", () => {
+    registerAgent(makeManifest({ name: "wiki-jira-agent", origin: "builtin" }));
+    expect(registeredAgentIds().has("jira")).toBe(true);
+  });
 });
 
 // ── loadConfiguredConnectorIds ────────────────────────────────────────

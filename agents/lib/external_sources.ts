@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   _resetRegistryConfigState,
+  agentShortId,
   ensureRegistryForConfig,
   lookupBySource,
 } from "./source_registry.js";
@@ -119,7 +120,7 @@ export function classifySource(s: string, wikiConfigPath?: string): string {
 
   const manifest = lookupBySource(s);
   if (manifest !== null) {
-    return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+    return agentShortId(manifest);
   }
 
   if (isDbScheme(s)) return "db";

@@ -271,6 +271,86 @@ describe("custom agents from wiki.config.yaml", () => {
     expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
   });
 
+  it("matches an --enabled token against a mixed-case custom name", () => {
+    // Regression (Codex P2): `parseEnabled` lowercases every `--enabled`
+    // token, but `shortId` returned the literal `Stripe`, so `enabled.has()`
+    // missed and a recognized source rendered the enable-the-connector
+    // prompt instead of its ingest hint.
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: Stripe",
+        '        source_schemes: ["stripe://"]',
+        "        invocation_template:",
+        "          label: Stripe",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    // What `parseEnabled("Stripe")` produces.
+    const enabled = new Set<AgentId>(["stripe"]);
+    const out = buildHowToGoDeeper(["stripe://cus_123"], {
+      enabledAgents: enabled,
+    });
+    expect(out).toContain('/doc-wiki:ingest "stripe://cus_123"');
+    expect(out).not.toContain("enable the");
+  });
+
+  it("matches an --enabled token against a custom name ending in -agent", () => {
+    // Regression (Codex P2): the `wiki-<id>-agent` unwrap is a builtin naming
+    // convention; applied to a custom name it reported `my-agent` as `my`.
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: my-agent",
+        '        source_schemes: ["mykb://"]',
+        "        invocation_template:",
+        "          label: My KB",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    const enabled = new Set<AgentId>(["my-agent"]);
+    const out = buildHowToGoDeeper(["mykb://article-42"], {
+      enabledAgents: enabled,
+    });
+    expect(out).toContain('/doc-wiki:ingest "mykb://article-42"');
+    expect(out).not.toContain("enable the");
+  });
+
+  it("names the literal custom ID in the disabled-connector hint", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: my-agent",
+        '        source_schemes: ["mykb://"]',
+        "        invocation_template:",
+        "          label: My KB",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    const out = buildHowToGoDeeper(["mykb://article-42"], {
+      enabledAgents: new Set<AgentId>(["github"]),
+    });
+    expect(out).toContain("enable the `my-agent` connector");
+  });
+
   it("reloads for a second wiki root instead of reusing the first's agents", () => {
     const dirA = makeTmpPath();
     const dirB = makeTmpPath();

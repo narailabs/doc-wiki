@@ -312,6 +312,38 @@ describe("classifySource with custom agents", () => {
     expect(classifySource("jira://AUTH-1")).toBe("jira");
   });
 
+  it("reports a custom connector under its literal name", () => {
+    // Regression (Codex P2): the `wiki-<id>-agent` unwrap is a BUILTIN naming
+    // convention, but it ran on custom names too, so `my-agent` classified as
+    // `my` and no config key spelled `my-agent` matched.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "my-agent", source_schemes: ["mykb://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("mykb://article-1")).toBe("my-agent");
+  });
+
+  it("lowercases a mixed-case custom connector name", () => {
+    // Regression (Codex P2): downstream consumers canonicalize to lower case
+    // (`parseEnabled`, `.connectors/config.yaml` keys), so a literal `Stripe`
+    // never matched and the source rendered an enable-the-connector prompt.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "Stripe", source_schemes: ["stripe://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("stripe://cus_123")).toBe("stripe");
+  });
+
   it("stays builtins-only when no wiki.config.yaml is present", () => {
     process.chdir(tmpDir);
     expect(classifySource("kb://article-1")).toBe("");

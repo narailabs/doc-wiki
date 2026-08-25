@@ -262,13 +262,39 @@ export function listAgents(filter) {
         agents = agents.filter((a) => a.origin === filter.origin);
     return agents;
 }
+/**
+ * Derive the connector ID a manifest is addressed by.
+ *
+ * `wiki-<id>-agent` is the naming convention for BUILTIN manifests only
+ * (see `BUILTIN_AGENTS` below), so the unwrap is applied only to those. A
+ * custom entry's `name` comes straight from `ecosystem.agents.custom` and
+ * IS the connector ID — unwrapping it reported `my-agent` as `my`, and then
+ * neither an `--enabled my-agent` token nor a `.connectors/config.yaml` key
+ * spelled `my-agent` matched the connector, so atlas called it unconfigured.
+ *
+ * The result is lowercased for every origin. Consumers canonicalize to lower
+ * case — `how_to_go_deeper.parseEnabled` lowercases each `--enabled` token,
+ * and `.connectors/config.yaml` IDs are lowercase — while the validator
+ * accepts a mixed-case `name`, so a literal `Stripe` matched neither.
+ * Builtin names are already lowercase, so this is a no-op for them.
+ *
+ * This is the single derivation site. `external_sources.classifySource` and
+ * `how_to_go_deeper.shortId` both route through it; three private copies of
+ * the regex pair is how the two mismatches above went unnoticed.
+ */
+export function agentShortId(manifest) {
+    if (manifest.origin === "custom")
+        return manifest.name.toLowerCase();
+    return manifest.name
+        .replace(/^wiki-/, "")
+        .replace(/-agent$/, "")
+        .toLowerCase();
+}
 /** Return the set of all registered agent short IDs (for enabledAgents filtering). */
 export function registeredAgentIds() {
     const ids = new Set();
     for (const agent of _agents.values()) {
-        // Extract the short ID: "wiki-jira-agent" → "jira"
-        const short = agent.name.replace(/^wiki-/, "").replace(/-agent$/, "");
-        ids.add(short);
+        ids.add(agentShortId(agent));
     }
     return ids;
 }

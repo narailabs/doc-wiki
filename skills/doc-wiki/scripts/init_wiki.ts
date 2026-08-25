@@ -161,9 +161,9 @@ function buildConfig(domain: string, name: string): Record<string, unknown> {
       agents: {
         source: {},          // populated by /doc-wiki:onboard
         custom: [],          // custom source agents — each entry is an AgentManifest:
-        // Do not end `name` in "-agent": the connector ID is derived by
-        // stripping that suffix, so `my-agent` is reported as `my` and a
-        // credentials key named `my-agent` will not match it.
+        // `name` IS the connector ID — it is used verbatim (lowercased) as
+        // the `--enabled` token and the `.connectors/config.yaml` key. The
+        // `wiki-<id>-agent` unwrap applies to builtin manifests only.
         // - name: my-kb
         //   source_schemes: ["myscheme://"]
         //   source_url_patterns: [{hostname: "kb.company.com"}]
