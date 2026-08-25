@@ -1,2 +1,0 @@
-{"from":"wiki/auth/authentication-flow.md","to":"raw/auth-architecture.md","type":"supports","provenance":"EXTRACTED","created":"2026-05-03"}
-{"from":"wiki/auth/authentication-flow.md","to":"https://example.com/internal/auth-spec","type":"extends","provenance":"INFERRED","created":"2026-05-03"}

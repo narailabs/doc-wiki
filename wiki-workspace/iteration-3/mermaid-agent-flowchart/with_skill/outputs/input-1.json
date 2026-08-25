@@ -1,9 +1,0 @@
-{
-  "mermaid": [
-    {
-      "type": "flowchart TD",
-      "title": "Deploy",
-      "code": "    checkout --> build\n    build --> docker\n    docker --> push\n    push --> deploy\n    deploy --> smoke"
-    }
-  ]
-}

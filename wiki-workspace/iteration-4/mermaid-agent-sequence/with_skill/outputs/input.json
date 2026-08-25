@@ -1,9 +1,0 @@
-{
-  "mermaid": [
-    {
-      "type": "sequenceDiagram",
-      "title": "Authenticated API request flow",
-      "code": "    participant Client\n    participant Gateway as API Gateway\n    participant Auth as Auth Service\n    participant DB as Database\n    Client->>Gateway: POST /orders\n    Gateway->>Auth: verify(token)\n    Auth->>DB: SELECT user WHERE session_id=?\n    DB-->>Auth: user row\n    Auth-->>Gateway: user_id\n    Gateway->>DB: INSERT INTO orders ...\n    DB-->>Gateway: order_id\n    Gateway-->>Client: 201 Created"
-    }
-  ]
-}

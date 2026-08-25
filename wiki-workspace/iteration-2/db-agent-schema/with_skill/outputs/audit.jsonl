@@ -1,6 +1,0 @@
-{"event_type":"connect","timestamp":"2026-04-14T09:03:00.000Z","session_id":"eval-2026-04-14","details":{"env":"dev","driver":"sqlite","database":"/tmp/eval-db-schema/dev.sqlite"}}
-{"event_type":"schema_inspect","timestamp":"2026-04-14T09:03:00.100Z","session_id":"eval-2026-04-14","details":{"env":"dev","filter":"users","table_count":1}}
-{"event_type":"query","timestamp":"2026-04-14T09:03:00.200Z","session_id":"eval-2026-04-14","env":"dev","query":"SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users') LIMIT 100","status":"ok","row_count":4,"execution_time_ms":0.5}
-{"event_type":"policy_allow","timestamp":"2026-04-14T09:03:00.200Z","session_id":"eval-2026-04-14","details":{"op":"read","reason":"auto-approved","approval_mode":"auto"}}
-{"event_type":"policy_escalate","timestamp":"2026-04-14T09:03:00.150Z","session_id":"eval-2026-04-14","details":{"op":"read","reason":"Unbounded SELECT detected -- add WHERE or LIMIT"}}
-{"event_type":"disconnect","timestamp":"2026-04-14T09:03:00.300Z","session_id":"eval-2026-04-14","details":{"env":"dev"}}

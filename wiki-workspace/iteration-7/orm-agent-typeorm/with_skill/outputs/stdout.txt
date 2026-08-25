@@ -1,1 +1,0 @@
-(no stdout — both outputs were routed to files via --output-markdown and --output-json)

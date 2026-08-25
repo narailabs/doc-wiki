@@ -1,1 +1,0 @@
-Injected 1 mermaid block(s) into /tmp/eval-i7-class-hierarchy/class-hierarchy.md

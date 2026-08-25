@@ -1,9 +1,0 @@
-{
-  "mermaid": [
-    {
-      "type": "classDiagram",
-      "title": "Class Hierarchy",
-      "code": "    class Animal {\n        +name: string\n        +eat()\n    }\n    class Dog {\n        +bark()\n    }\n    class Cat {\n        +meow()\n    }\n    Animal <|-- Dog\n    Animal <|-- Cat"
-    }
-  ]
-}

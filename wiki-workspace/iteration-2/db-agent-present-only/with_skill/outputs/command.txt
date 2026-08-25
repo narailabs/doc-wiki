@@ -1,6 +1,0 @@
-cd /tmp/eval-db-po && node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
-  --env dev \
-  --config /tmp/eval-db-po/wiki.config.yaml \
-  --sql "INSERT INTO users (name, email) VALUES ('Test', 'test@example.com')"
-
-Exit code: 0

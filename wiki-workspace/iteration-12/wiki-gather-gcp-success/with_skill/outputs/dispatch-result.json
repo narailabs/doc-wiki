@@ -1,6 +1,0 @@
-{
-  "status": "skipped",
-  "skip_reason": "TEST_LIVE_GCP not set; success-path covered only via the live-API gate. Set TEST_LIVE_GCP=1 plus install gcloud and configure Application Default Credentials to exercise.",
-  "approach": "B",
-  "rationale": "The gcp connector probes for the gcloud binary on PATH and relies on Application Default Credentials; faithfully stubbing both (a fake gcloud shim plus signed-token mock) is far more friction than this gate."
-}

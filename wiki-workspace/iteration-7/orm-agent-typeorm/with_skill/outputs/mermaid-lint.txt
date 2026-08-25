@@ -1,4 +1,0 @@
-command: node mermaid_lint.js --page /tmp/eval-i7-orm-typeorm/database-mapping.md
-output: []
-exit_code: 0
-result: PASS — no mermaid syntax errors detected

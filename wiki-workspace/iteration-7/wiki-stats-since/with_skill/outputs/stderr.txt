@@ -1,5 +1,0 @@
-# stderr from all 5 invocations
-
-All 5 invocations produced empty stderr (exit code 0 for all, including the invalid --since 1z invocation).
-
-The --since 1z invocation silently fell back to no filter (returned all 12 events total_ops=12) with no stderr output and exit code 0.
