@@ -425,6 +425,21 @@ function validateCustomAgentEntry(entry, index, configPath) {
         warnCustomAgents(`skipping ${where}: every "source_schemes" entry must be a URI scheme ending in "://" (e.g. "s3://")`);
         return null;
     }
+    // `http://` and `https://` are well-formed but unroutable here: every
+    // `http(s)://` source takes `lookupBySource`'s URL-pattern branch, which
+    // returns from inside itself, so the scheme matcher below it is unreachable
+    // for exactly these two. An entry declaring them registers a connector that
+    // can never fire — the same silent dead end the checks above prevent.
+    //
+    // Rejected rather than routed through as a fallback: a scheme entry matches
+    // on prefix alone, so an `https://` entry would claim EVERY unmatched https
+    // URL and shadow the builtins by registry insertion order. Hostname
+    // matching is what `source_url_patterns` is for.
+    if (Array.isArray(schemes) &&
+        schemes.some((s) => /^https?:\/\/$/i.test(s))) {
+        warnCustomAgents(`skipping ${where}: "http://" and "https://" are not routable as "source_schemes" — use "source_url_patterns" with a hostname instead`);
+        return null;
+    }
     const urlPatterns = e["source_url_patterns"];
     // `path_prefix` / `path_contains` must be NON-EMPTY strings when present,
     // not merely absent-or-anything. `lookupBySource` gates on their

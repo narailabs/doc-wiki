@@ -557,6 +557,36 @@ describe("loadCustomAgentConfigs", () => {
     expect(stderrSpy).toHaveBeenCalled();
   });
 
+  it("rejects http:// and https:// as source_schemes", () => {
+    // Regression (Codex P2): `lookupBySource` routes every `http(s)://` input
+    // through its URL-pattern branch and returns null from there — the scheme
+    // matcher below it is unreachable for those two. Measured: an entry
+    // declaring `source_schemes: ["https://"]` never matched
+    // `https://kb.example.com/article-1`, while the same shape with `kb://`
+    // matched. Accepting them registered a connector that cannot fire, which
+    // is the same failure the "kb" and "my_kb://" rejections above prevent.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", source_schemes: ["kb://"] },
+      { name: "bad-https", source_schemes: ["https://"] },
+      { name: "bad-http", source_schemes: ["http://"] },
+      { name: "bad-mixed", source_schemes: ["kb://", "HTTPS://"] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("still accepts schemes that merely start with http", () => {
+    // Only the two exact schemes are unroutable; `https-proxy://` is a
+    // perfectly ordinary custom scheme and must not be caught by the guard.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "proxy", source_schemes: ["https-proxy://"] },
+      { name: "httpish", source_schemes: ["httpx://"] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["proxy", "httpish"]);
+  });
+
   it("rejects a url pattern whose path_prefix/path_contains is not a string", () => {
     // `path_prefix: false` used to pass validation, and `lookupBySource` then
     // treated it as absent — widening the entry to a hostname-wide match
