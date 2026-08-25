@@ -296,8 +296,12 @@ const _WIKI_AGENT_NAME_RE = /^wiki-(.+)-agent$/;
  * the regex pair is how the mismatches above went unnoticed.
  */
 export function agentShortId(manifest) {
-    const conventional = _WIKI_AGENT_NAME_RE.exec(manifest.name);
-    return (conventional?.[1] ?? manifest.name).toLowerCase();
+    // Case-fold FIRST, then match. Matching before lowercasing made the two
+    // steps order-dependent: a mixed-case `Wiki-GitLab-Agent` missed the
+    // convention, fell through to the literal branch and derived
+    // `wiki-gitlab-agent` rather than `gitlab`.
+    const name = manifest.name.toLowerCase();
+    return _WIKI_AGENT_NAME_RE.exec(name)?.[1] ?? name;
 }
 /** Return the set of all registered agent short IDs (for enabledAgents filtering). */
 export function registeredAgentIds() {

@@ -413,6 +413,18 @@ describe("registeredAgentIds", () => {
     expect(ids.has("search")).toBe(false);
   });
 
+  it("recognizes the convention regardless of the name's case", () => {
+    // Regression (Codex P2, round 4): the convention regex ran BEFORE the
+    // lowercasing, so a mixed-case `Wiki-GitLab-Agent` missed the pattern and
+    // fell through to the literal branch, deriving `wiki-gitlab-agent` instead
+    // of `gitlab` — measured. Case-folding first makes the two steps
+    // order-independent.
+    registerAgent(makeManifest({ name: "Wiki-GitLab-Agent", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("gitlab")).toBe(true);
+    expect(ids.has("wiki-gitlab-agent")).toBe(false);
+  });
+
   it("does not unwrap a name with nothing between the affixes", () => {
     registerAgent(makeManifest({ name: "wiki--agent", origin: "custom" }));
     expect(registeredAgentIds().has("wiki--agent")).toBe(true);
