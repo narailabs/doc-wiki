@@ -599,6 +599,40 @@ describe("loadCustomAgentConfigs", () => {
     expect(configs.map((c) => c.name)).toEqual(["proxy", "httpish"]);
   });
 
+  it("rejects url-pattern constraints that URL matching can never satisfy", () => {
+    // Regression (Codex P2) generalized across the whole class. `lookupBySource`
+    // compares `path_prefix` against `URL.pathname` (always leading-slash) and
+    // `hostname` against `URL.hostname` (bare host — no scheme, path or port).
+    // Measured against https://kb.example.com/api/v1/doc-1:
+    //   path_prefix "/api/"        -> MATCH
+    //   path_prefix "api/"         -> no match
+    //   hostname "https://kb…"     -> no match
+    //   hostname "kb.example.com/api" -> no match
+    //   hostname "kb.example.com:443" -> no match
+    // `path_contains` is unconstrained — any substring is legitimately
+    // matchable, so "api/" is fine there.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok", source_url_patterns: [{ hostname: "kb.example.com", path_prefix: "/api/" }] },
+      { name: "ok-contains", source_url_patterns: [{ hostname: "kb.example.com", path_contains: "api/" }] },
+      { name: "bad-prefix-no-slash", source_url_patterns: [{ hostname: "kb.example.com", path_prefix: "api/" }] },
+      { name: "bad-host-scheme", source_url_patterns: [{ hostname: "https://kb.example.com" }] },
+      { name: "bad-host-path", source_url_patterns: [{ hostname: "kb.example.com/api" }] },
+      { name: "bad-host-port", source_url_patterns: [{ hostname: "kb.example.com:443" }] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok", "ok-contains"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
+  it("keeps accepting the wildcard hostname form", () => {
+    // `matchHostname` supports a leading `*.`, so the guard must not treat
+    // the `*` as an illegal host character.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "wild", source_url_patterns: [{ hostname: "*.gitlab.com" }] },
+    ]));
+    expect(loadCustomAgentConfigs(p).map((c) => c.name)).toEqual(["wild"]);
+  });
+
   it("rejects a url pattern whose path_prefix/path_contains is not a string", () => {
     // `path_prefix: false` used to pass validation, and `lookupBySource` then
     // treated it as absent — widening the entry to a hostname-wide match

@@ -574,9 +574,23 @@ function validateCustomAgentEntry(
     // URL, so the pattern silently matches nothing and the user gets no
     // warning that their entry is dead. Whitespace-only is as dead as empty.
     if (typeof rec["hostname"] !== "string" || !isTidyString(rec["hostname"])) return false;
+    // `matchHostname` compares against `URL.hostname`, which is the bare host:
+    // no scheme, no path, no port, no credentials. A value carrying any of
+    // those — `https://kb.example.com`, `kb.example.com/api`,
+    // `kb.example.com:443` — is a natural thing to write and matches nothing,
+    // which is the same silent dead end the blank-hostname check above
+    // prevents. `*` stays legal: `matchHostname` supports a `*.` prefix.
+    if (!/^[*a-z0-9.-]+$/i.test(rec["hostname"])) return false;
     for (const key of ["path_prefix", "path_contains"] as const) {
       if (rec[key] === undefined) continue;
       if (typeof rec[key] !== "string" || !isTidyString(rec[key] as string)) return false;
+    }
+    // `path_prefix` is compared with `URL.pathname.startsWith`, and an
+    // http(s) pathname always begins with "/", so a slashless prefix like
+    // "api/" can never match. `path_contains` uses `.includes` and is
+    // deliberately NOT constrained — any substring is legitimately matchable.
+    if (rec["path_prefix"] !== undefined && !(rec["path_prefix"] as string).startsWith("/")) {
+      return false;
     }
     return true;
   };
@@ -585,8 +599,9 @@ function validateCustomAgentEntry(
     (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))
   ) {
     warnCustomAgents(
-      `skipping ${where}: every "source_url_patterns" entry needs a "hostname" string, with ` +
-        `optional "path_prefix" / "path_contains" strings — none empty or whitespace-padded`,
+      `skipping ${where}: every "source_url_patterns" entry needs a bare "hostname" ` +
+        `(no scheme, path or port), with optional "path_prefix" (must start with "/") ` +
+        `and "path_contains" strings — none empty or whitespace-padded`,
     );
     return null;
   }
