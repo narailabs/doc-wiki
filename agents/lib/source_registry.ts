@@ -190,6 +190,9 @@ export function builtinConnectorIds(): string[] {
   return BUILTIN_PATTERNS.map((p) => p.id);
 }
 
+/** Builtin IDs as a set, for the `wiki-<id>-agent` unwrap in `agentShortId`. */
+const _BUILTIN_IDS: ReadonlySet<string> = new Set(BUILTIN_PATTERNS.map((p) => p.id));
+
 function patternToManifest(p: BuiltinPattern): AgentManifest {
   const name = `wiki-${p.id}-agent`;
   return {
@@ -255,10 +258,25 @@ export function registerAgent(manifest: AgentManifest): void {
 }
 
 export function unregisterAgent(name: string): boolean {
+  // Removing an agent invalidates the "this config is loaded" claim below —
+  // see `clearRegistry`.
+  _invalidateLoadedConfig();
   return _agents.delete(name);
 }
 
 export function clearRegistry(): void {
+  // `_registryLoaded`/`_loadedConfigPath` assert that `_agents` holds at least
+  // the agents of `_loadedConfigPath`. Emptying the map falsifies that, and
+  // `ensureRegistryForConfig` would then early-return on the same path and
+  // classify every source against an empty registry, forever. Only removal
+  // needs this: `registerAgent` keeps the claim true (the map is a superset),
+  // and invalidating there would instead drop the caller's registration on
+  // the next classify.
+  //
+  // `initRegistry` and `initRegistryFromConfig` both route through here, so
+  // this is the single invalidation point; `initRegistryFromConfig` re-asserts
+  // the claim afterwards.
+  _invalidateLoadedConfig();
   _agents.clear();
 }
 
@@ -383,7 +401,17 @@ export function agentShortId(manifest: AgentManifest): string {
   // convention, fell through to the literal branch and derived
   // `wiki-gitlab-agent` rather than `gitlab`.
   const name = manifest.name.toLowerCase();
-  return _WIKI_AGENT_NAME_RE.exec(name)?.[1] ?? name;
+  const inner = _WIKI_AGENT_NAME_RE.exec(name)?.[1];
+  // Unwrap ONLY when the inner token names a builtin. `wiki-<id>-agent` is
+  // the documented override recipe (docs/connectors.md), and the whole point
+  // of unwrapping is that an override must keep the builtin's ID so an
+  // already-enabled `gitlab` key still matches. A custom connector that
+  // merely happens to be spelled that way — `wiki-search-agent` — overrides
+  // nothing, so stripping it to `search` just made its own
+  // `.connectors/config.yaml` key unreachable and atlas reported it
+  // unconfigured. For those, the literal name IS the ID.
+  if (inner !== undefined && _BUILTIN_IDS.has(inner)) return inner;
+  return name;
 }
 
 /** Return the set of all registered agent short IDs (for enabledAgents filtering). */
@@ -746,10 +774,19 @@ export function ensureRegistryForConfig(configPath?: string): void {
   initRegistryFromConfig(configPath);
 }
 
-/** Reset the loaded-config tracking (test helper). */
-export function _resetRegistryConfigState(): void {
+/**
+ * Drop the "this config is loaded" claim. Called by every registry mutation
+ * that can remove an agent, so `ensureRegistryForConfig` reloads instead of
+ * early-returning onto a registry that no longer holds the config.
+ */
+function _invalidateLoadedConfig(): void {
   _registryLoaded = false;
   _loadedConfigPath = null;
+}
+
+/** Reset the loaded-config tracking (test helper). */
+export function _resetRegistryConfigState(): void {
+  _invalidateLoadedConfig();
 }
 
 // ── Connector config ──────────────────────────────────────────────────

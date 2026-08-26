@@ -21,6 +21,8 @@ import {
   registeredAgentIds,
   loadConfiguredConnectorIds,
   resolveWikiConfigPath,
+  ensureRegistryForConfig,
+  _resetRegistryConfigState,
 } from "../source_registry.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -361,6 +363,30 @@ describe("registeredAgentIds", () => {
     const ids = registeredAgentIds();
     expect(ids.has("my-agent")).toBe(true);
     expect(ids.has("my")).toBe(false);
+  });
+
+  it("keeps a wiki-<x>-agent name intact when <x> is not a builtin", () => {
+    // Regression (Codex P2). The `wiki-<id>-agent` unwrap exists so a builtin
+    // OVERRIDE keeps the builtin's ID — `wiki-gitlab-agent` must stay `gitlab`
+    // or an already-enabled `gitlab` key stops matching. A custom connector
+    // that merely happens to be spelled that way overrides nothing, so
+    // stripping `wiki-search-agent` to `search` made its own
+    // `.connectors/config.yaml` key unreachable and atlas reported it
+    // unconfigured. The scaffolded config already promises builtin-only
+    // unwrap (init_wiki.ts:163); this is the code catching up to it.
+    registerAgent(makeManifest({ name: "wiki-search-agent", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("wiki-search-agent")).toBe(true);
+    expect(ids.has("search")).toBe(false);
+  });
+
+  it("still unwraps a builtin override to the builtin ID", () => {
+    // The other half of the same rule: overriding a builtin MUST keep the
+    // builtin's short ID, which is the entire reason the unwrap exists.
+    registerAgent(makeManifest({ name: "wiki-gitlab-agent", origin: "custom" }));
+    const ids = registeredAgentIds();
+    expect(ids.has("gitlab")).toBe(true);
+    expect(ids.has("wiki-gitlab-agent")).toBe(false);
   });
 
   it("keeps a custom name that starts with wiki- intact", () => {
@@ -836,6 +862,69 @@ describe("initRegistryFromConfig", () => {
 });
 
 // ── resolveWikiConfigPath ─────────────────────────────────────────────
+
+describe("ensureRegistryForConfig — cache invalidation", () => {
+  let tmpDir: string;
+  let cfgPath: string;
+
+  beforeEach(() => {
+    _resetRegistryConfigState();
+    tmpDir = makeTmpPath("registry-cache-");
+    cfgPath = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "my-kb", source_schemes: ["kb://"] }],
+        },
+      },
+    });
+    ensureRegistryForConfig(cfgPath);
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpDir);
+    clearRegistry();
+    _resetRegistryConfigState();
+  });
+
+  // Regression (Codex P2). `_registryLoaded`/`_loadedConfigPath` assert that
+  // `_agents` holds at least the agents of that config. Every mutation that
+  // can REMOVE an agent falsifies the claim, and `ensureRegistryForConfig`
+  // would then early-return on the same path and classify against a registry
+  // that no longer holds the config — permanently, since nothing else resets
+  // the flags. Measured: clearRegistry lost builtins *and* custom agents,
+  // initRegistry lost custom agents, unregisterAgent lost the named one.
+
+  it("reloads the config after clearRegistry emptied the registry", () => {
+    clearRegistry();
+    ensureRegistryForConfig(cfgPath);
+    expect(lookupBySource("kb://a")?.name).toBe("my-kb");
+    expect(lookupBySource("jira://AUTH-1")?.name).toBe("wiki-jira-agent");
+  });
+
+  it("reloads the config after initRegistry replaced the registry", () => {
+    initRegistry();
+    ensureRegistryForConfig(cfgPath);
+    expect(lookupBySource("kb://a")?.name).toBe("my-kb");
+  });
+
+  it("reloads the config after unregisterAgent removed a builtin", () => {
+    unregisterAgent("wiki-jira-agent");
+    ensureRegistryForConfig(cfgPath);
+    expect(lookupBySource("jira://AUTH-1")?.name).toBe("wiki-jira-agent");
+  });
+
+  it("does not reload — and so does not drop — an agent added by registerAgent", () => {
+    // The rule is one-sided on purpose. Adding keeps the claim true (the map
+    // is a superset), so `registerAgent` must NOT invalidate: doing so would
+    // reload the config on the next classify and throw away the caller's
+    // registration.
+    registerAgent(makeManifest({ name: "adhoc", source_schemes: ["adhoc://"] }));
+    ensureRegistryForConfig(cfgPath);
+    expect(lookupBySource("adhoc://a")?.name).toBe("adhoc");
+    expect(lookupBySource("kb://a")?.name).toBe("my-kb");
+  });
+});
 
 describe("resolveWikiConfigPath", () => {
   let tmpDir: string;
