@@ -468,10 +468,11 @@ Ingest sources into the wiki. The source can be a file, URL, folder, or pasted t
     ```bash
     node {skill_path}/scripts/how_to_go_deeper.js \
       --sources '<JSON-array-of-source-strings>' \
-      --enabled <csv-of-enabled-agent-ids>
+      --enabled <csv-of-enabled-agent-ids> \
+      --wiki-root <wiki-root>
     ```
 
-    Classifies each source against the agent registry (builtin + custom agents) and emits one bullet per entry with the exact agent command to run. Pass the enabled agents from `wiki.config.yaml` so disabled-agent hints are suppressed. Custom agents registered in `ecosystem.agents.custom` are included automatically. Elides when sources are all local `raw/...` already in the wiki body.
+    Classifies each source against the agent registry (builtin + custom agents) and emits one bullet per entry with the exact agent command to run. Pass the enabled agents from `wiki.config.yaml` so disabled-agent hints are suppressed. Custom agents registered in `ecosystem.agents.custom` are included automatically — `--wiki-root` locates that `wiki.config.yaml` (the cwd is probed when omitted, so always pass it when the wiki root differs from the cwd). Elides when sources are all local `raw/...` already in the wiki body.
 11. **Update indexes + summaries.md** — rebuild `wiki/summaries.md` deterministically:
 
     ```bash

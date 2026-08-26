@@ -143,10 +143,13 @@ function buildConfig(domain, name) {
             agents: {
                 source: {}, // populated by /doc-wiki:onboard
                 custom: [], // custom source agents — each entry is an AgentManifest:
-                // - name: my-agent
+                // `name` IS the connector ID — it is used verbatim (lowercased) as
+                // the `--enabled` token and the `.connectors/config.yaml` key. The
+                // `wiki-<id>-agent` unwrap applies to builtin manifests only.
+                // - name: my-kb
                 //   source_schemes: ["myscheme://"]
                 //   source_url_patterns: [{hostname: "kb.company.com"}]
-                //   invocation_template: {subagent_type: my-agent, default_model: haiku, label: "My Agent"}
+                //   invocation_template: {subagent_type: my-kb-agent, default_model: haiku, label: "My KB"}
                 model_overrides: {}, // per-agent model overrides
             },
             credentials: {

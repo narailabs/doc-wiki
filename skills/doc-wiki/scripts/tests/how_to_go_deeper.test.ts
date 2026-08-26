@@ -6,16 +6,19 @@
  * `gather()`. Service-specific CLI hints (e.g. `wiki agent jira`) are
  * gone — they were a vestige of the per-service wrappers.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
   buildHowToGoDeeper,
   classifySource,
+  _resetRegistry,
   type AgentId,
 } from "../how_to_go_deeper.js";
-import { SCRIPTS_DIR } from "./fixtures.js";
+import { SCRIPTS_DIR, makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { classifySource as classifySourceExternal } from "../../../../agents/lib/external_sources.js";
 
 const CLI = path.join(SCRIPTS_DIR, "how_to_go_deeper.js");
 
@@ -226,5 +229,286 @@ describe("how_to_go_deeper CLI", () => {
     const result = runCli(["--sources", JSON.stringify([1, 2, 3])]);
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("array of strings");
+  });
+});
+
+// ── Custom agents from wiki.config.yaml ──────────────────────────────
+
+describe("custom agents from wiki.config.yaml", () => {
+  let tmpDir: string;
+  let prevCwd: string;
+
+  const CUSTOM_CONFIG = [
+    "wiki:",
+    "  name: test-wiki",
+    "ecosystem:",
+    "  agents:",
+    "    custom:",
+    "      - name: kb",
+    '        source_schemes: ["kb://"]',
+    "        invocation_template:",
+    "          label: Knowledge Base",
+    "",
+  ].join("\n");
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath();
+    prevCwd = process.cwd();
+    _resetRegistry();
+  });
+
+  afterEach(() => {
+    process.chdir(prevCwd);
+    _resetRegistry();
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("classifies a custom scheme registered in <cwd>/wiki.config.yaml", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    process.chdir(tmpDir);
+    const out = buildHowToGoDeeper(["kb://article-42"]);
+    expect(out).toContain("**Knowledge Base:**");
+    expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("matches an --enabled token against a mixed-case custom name", () => {
+    // Regression (Codex P2): `parseEnabled` lowercases every `--enabled`
+    // token, but `shortId` returned the literal `Stripe`, so `enabled.has()`
+    // missed and a recognized source rendered the enable-the-connector
+    // prompt instead of its ingest hint.
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: Stripe",
+        '        source_schemes: ["stripe://"]',
+        "        invocation_template:",
+        "          label: Stripe",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    // What `parseEnabled("Stripe")` produces.
+    const enabled = new Set<AgentId>(["stripe"]);
+    const out = buildHowToGoDeeper(["stripe://cus_123"], {
+      enabledAgents: enabled,
+    });
+    expect(out).toContain('/doc-wiki:ingest "stripe://cus_123"');
+    expect(out).not.toContain("enable the");
+  });
+
+  it("matches an --enabled token against a custom name ending in -agent", () => {
+    // Regression (Codex P2): the `wiki-<id>-agent` unwrap is a builtin naming
+    // convention; applied to a custom name it reported `my-agent` as `my`.
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: my-agent",
+        '        source_schemes: ["mykb://"]',
+        "        invocation_template:",
+        "          label: My KB",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    const enabled = new Set<AgentId>(["my-agent"]);
+    const out = buildHowToGoDeeper(["mykb://article-42"], {
+      enabledAgents: enabled,
+    });
+    expect(out).toContain('/doc-wiki:ingest "mykb://article-42"');
+    expect(out).not.toContain("enable the");
+  });
+
+  it("names the literal custom ID in the disabled-connector hint", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: my-agent",
+        '        source_schemes: ["mykb://"]',
+        "        invocation_template:",
+        "          label: My KB",
+        "",
+      ].join("\n"),
+    );
+    process.chdir(tmpDir);
+    const out = buildHowToGoDeeper(["mykb://article-42"], {
+      enabledAgents: new Set<AgentId>(["github"]),
+    });
+    expect(out).toContain("enable the `my-agent` connector");
+  });
+
+  it("reloads for a second wiki root instead of reusing the first's agents", () => {
+    const dirA = makeTmpPath();
+    const dirB = makeTmpPath();
+    try {
+      fs.writeFileSync(path.join(dirA, "wiki.config.yaml"), CUSTOM_CONFIG);
+      fs.writeFileSync(
+        path.join(dirB, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: wiki-b",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          "      - name: vault",
+          '        source_schemes: ["vault://"]',
+          "        invocation_template:",
+          "          label: Vault",
+          "",
+        ].join("\n"),
+      );
+
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain("**Knowledge Base:**");
+      // Wiki B must see vault:// and must NOT still see wiki A's kb://.
+      const outB = buildHowToGoDeeper(["vault://b-1"], { wikiRoot: dirB });
+      expect(outB).toContain("**Vault:**");
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirB })).not.toContain("**Knowledge Base:**");
+      // Switching back restores wiki A.
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain("**Knowledge Base:**");
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
+  });
+
+  it("is not left stale by a registry reload from external_sources", () => {
+    // Both modules bootstrap the same global registry. A local "initialized"
+    // flag in this module went stale the moment external_sources reloaded it,
+    // so this helper silently classified with a config it never asked for.
+    const dirA = makeTmpPath();
+    const dirB = makeTmpPath();
+    try {
+      fs.writeFileSync(path.join(dirA, "wiki.config.yaml"), CUSTOM_CONFIG);
+      fs.writeFileSync(
+        path.join(dirB, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: wiki-b",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          "      - name: vault",
+          '        source_schemes: ["vault://"]',
+          "",
+        ].join("\n"),
+      );
+      // This helper loads wiki A...
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain(
+        "**Knowledge Base:**",
+      );
+      // ...then the other wrapper reloads the shared registry for wiki B.
+      expect(classifySourceExternal("vault://b-1", path.join(dirB, "wiki.config.yaml"))).toBe(
+        "vault",
+      );
+      // Asked for wiki A again, this helper must reload rather than trust a
+      // local flag and hand back wiki B's registry.
+      expect(buildHowToGoDeeper(["kb://a-1"], { wikiRoot: dirA })).toContain(
+        "**Knowledge Base:**",
+      );
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
+  });
+
+  it("skips malformed custom entries without failing the run", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      fs.writeFileSync(
+        path.join(tmpDir, "wiki.config.yaml"),
+        [
+          "wiki:",
+          "  name: test-wiki",
+          "ecosystem:",
+          "  agents:",
+          "    custom:",
+          '      - source_schemes: ["broken://"]', // missing name
+          "      - name: kb",
+          '        source_schemes: ["kb://"]',
+          "        invocation_template:",
+          "          label: Knowledge Base",
+          "",
+        ].join("\n"),
+      );
+      process.chdir(tmpDir);
+      const out = buildHowToGoDeeper(["kb://article-42", "jira://AUTH-1"]);
+      expect(out).toContain("**Knowledge Base:**");
+      expect(out).toContain("**Jira:**");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("stays builtins-only when no wiki.config.yaml is present", () => {
+    process.chdir(tmpDir);
+    // Unmatched scheme falls through to the local-path classifier
+    expect(classifySource("kb://article-42")?.agent).toBeUndefined();
+    expect(classifySource("jira://AUTH-1")?.agent).toBe("jira");
+  });
+
+  it("buildHowToGoDeeper honors the wikiRoot option when config is not in cwd", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    // No chdir — the wiki root differs from the process cwd
+    const out = buildHowToGoDeeper(["kb://article-42"], { wikiRoot: tmpDir });
+    expect(out).toContain("**Knowledge Base:**");
+    expect(out).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("classifies a custom scheme containing a digit (s3://)", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "wiki.config.yaml"),
+      [
+        "wiki:",
+        "  name: test-wiki",
+        "ecosystem:",
+        "  agents:",
+        "    custom:",
+        "      - name: s3",
+        '        source_schemes: ["s3://"]',
+        "        invocation_template:",
+        "          label: S3 Object",
+        "",
+      ].join("\n"),
+    );
+    const out = buildHowToGoDeeper(["s3://bucket/report.pdf"], { wikiRoot: tmpDir });
+    expect(out).toContain("**S3 Object:**");
+    expect(out).toContain('/doc-wiki:ingest "s3://bucket/report.pdf"');
+  });
+
+  it("CLI picks up custom agents from the working directory", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    const stdout = execFileSync(
+      "node",
+      [CLI, "--sources", JSON.stringify(["kb://article-42"])],
+      { encoding: "utf-8", cwd: tmpDir },
+    );
+    expect(stdout).toContain("**Knowledge Base:**");
+    expect(stdout).toContain('/doc-wiki:ingest "kb://article-42"');
+  });
+
+  it("CLI honors --wiki-root when invoked from a different cwd", () => {
+    fs.writeFileSync(path.join(tmpDir, "wiki.config.yaml"), CUSTOM_CONFIG);
+    // cwd stays at the repo root — the ingest/atlas invocation pattern
+    const stdout = execFileSync(
+      "node",
+      [CLI, "--sources", JSON.stringify(["kb://article-42"]), "--wiki-root", tmpDir],
+      { encoding: "utf-8" },
+    );
+    expect(stdout).toContain("**Knowledge Base:**");
+    expect(stdout).toContain('/doc-wiki:ingest "kb://article-42"');
   });
 });

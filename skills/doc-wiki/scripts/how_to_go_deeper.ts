@@ -29,8 +29,11 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFlags } from "./_cli_args.js";
 import {
+  agentShortId,
   lookupBySource,
-  initRegistry,
+  ensureRegistryForConfig,
+  _resetRegistryConfigState,
+  resolveWikiConfigPath,
   listAgents,
   type AgentManifest,
 } from "../../../agents/lib/source_registry.js";
@@ -61,13 +64,21 @@ const CODE_EXTS = new Set([
 
 // ── Registry initialization ──────────────────────────────────────────
 
-let _initialized = false;
-
-function ensureRegistry(): void {
-  if (_initialized) return;
-  _initialized = true;
+function ensureRegistry(wikiRoot?: string): void {
   try {
-    initRegistry();
+    // Builtins + `ecosystem.agents.custom` from wiki.config.yaml. When the
+    // caller passes a wiki root (--wiki-root), its config is used with no
+    // cwd fallback; otherwise cwd is probed.
+    //
+    // The "which config is loaded" state lives in the registry, not here. A
+    // local flag went stale as soon as `external_sources.ts` reloaded the same
+    // global registry, so a long-lived process that built the section for wiki
+    // A and then wiki B classified B with A's custom connectors.
+    const configPath =
+      wikiRoot !== undefined
+        ? resolveWikiConfigPath(wikiRoot) ?? path.join(wikiRoot, "wiki.config.yaml")
+        : undefined;
+    ensureRegistryForConfig(configPath);
   } catch {
     // Non-fatal: fall through to no-match for all sources
   }
@@ -75,14 +86,20 @@ function ensureRegistry(): void {
 
 /** Reset registry state (test helper). */
 export function _resetRegistry(): void {
-  _initialized = false;
+  _resetRegistryConfigState();
 }
 
 // ── Short ID extraction ──────────────────────────────────────────────
 
-/** Extract short agent ID from manifest name: "wiki-jira-agent" → "jira". */
+/**
+ * Extract the connector ID from a manifest: "wiki-jira-agent" → "jira".
+ *
+ * Delegates to `source_registry.agentShortId`, which owns the derivation:
+ * the `wiki-<id>-agent` unwrap applies to builtins only, and every ID is
+ * lowercased so `parseEnabled`'s lowercased `--enabled` tokens match.
+ */
 function shortId(manifest: AgentManifest): string {
-  return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+  return agentShortId(manifest);
 }
 
 // ── Hint builder ──────────────────────────────────────────────────────
@@ -143,8 +160,10 @@ export function classifySource(source: string): DeepEntry | null {
     return { label: "External link", hint: `Open <${trimmed}>`, source: trimmed };
   }
 
-  // Try scheme matching
-  if (/^[a-z]+:\/\//i.test(trimmed)) {
+  // Try scheme matching. RFC 3986 scheme grammar:
+  // ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) — matches lookupBySource so
+  // custom schemes like s3:// or kb-v2:// reach the registry.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
     const manifest = lookupBySource(trimmed);
     if (manifest !== null) {
       return buildAgentEntry(manifest, trimmed);
@@ -165,12 +184,15 @@ export function classifySource(source: string): DeepEntry | null {
 
 /**
  * Build the "How to Go Deeper" section for a page. Returns `""` when
- * the page has no external sources worth calling out.
+ * the page has no external sources worth calling out. Pass `wikiRoot`
+ * so `ecosystem.agents.custom` patterns load even when the wiki root
+ * is not the process cwd.
  */
 export function buildHowToGoDeeper(
   sources: readonly string[],
-  options: { enabledAgents?: ReadonlySet<AgentId> } = {},
+  options: { enabledAgents?: ReadonlySet<AgentId>; wikiRoot?: string } = {},
 ): string {
+  ensureRegistry(options.wikiRoot);
   const enabled = options.enabledAgents;
   const bullets: DeepEntry[] = [];
   const seen = new Set<string>();
@@ -208,9 +230,10 @@ export function buildHowToGoDeeper(
 const FLAG_SPEC = {
   "--sources": "sources",
   "--enabled": "enabled",
+  "--wiki-root": "wikiRoot",
 } as const;
 
-const HELP_TEXT = `usage: how_to_go_deeper.js --sources JSON_ARRAY [--enabled csv]
+const HELP_TEXT = `usage: how_to_go_deeper.js --sources JSON_ARRAY [--enabled csv] [--wiki-root DIR]
 
 Emit the "How to Go Deeper" markdown section for a page's sources.
 
@@ -220,6 +243,9 @@ arguments:
   --enabled csv         Comma-separated list of enabled source agents
                         (e.g. jira,github,db). When omitted, all hints
                         are rendered.
+  --wiki-root DIR       Wiki root whose wiki.config.yaml supplies
+                        \`ecosystem.agents.custom\` patterns. When
+                        omitted, the working directory is probed.
 options:
   -h, --help            show this help message and exit
 `;
@@ -270,8 +296,14 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
   if (typeof enabledRaw === "string" && enabledRaw !== "") {
     enabled = parseEnabled(enabledRaw);
   }
+  let wikiRoot: string | undefined;
+  const wikiRootRaw = parsed.values["wikiRoot"];
+  if (typeof wikiRootRaw === "string" && wikiRootRaw !== "") {
+    wikiRoot = wikiRootRaw;
+  }
   const out = buildHowToGoDeeper(sources as string[], {
     enabledAgents: enabled,
+    wikiRoot,
   });
   process.stdout.write(out);
   return 0;

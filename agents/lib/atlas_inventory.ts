@@ -35,7 +35,7 @@ import { countRealServices } from "./cross_service_pages.js";
 import { resolveRef, buildResolutionContext } from "./property_resolver.js";
 import type { ResolutionContext } from "./property_resolver.js";
 import { detectExternalSources, type ExternalSourceEntry } from "./external_sources.js";
-import { loadConfiguredConnectorIds } from "./source_registry.js";
+import { loadConfiguredConnectorIds, resolveWikiConfigPath } from "./source_registry.js";
 
 // ── Manifest types ──────────────────────────────────────────────────
 
@@ -1778,10 +1778,12 @@ export function generateInventory(
       // detectExternalSources returns paths relative to the root it is given
       // (svcAbsRoot). Rebase each entry's `file` to repo-relative so that the
       // inService() predicate (which matches against the repo-relative svcRoot)
-      // continues to work unchanged.
-      const svcEntries = detectExternalSources(svcAbsRoot).map((e) =>
-        rebaseFile(svcRootPosix, e),
-      );
+      // continues to work unchanged. Thread wikiConfigPath so
+      // ecosystem.agents.custom patterns classify even when the wiki root
+      // is not the process cwd.
+      const svcEntries = detectExternalSources(svcAbsRoot, {
+        wikiConfigPath: options.wikiConfigPath,
+      }).map((e) => rebaseFile(svcRootPosix, e));
       allExternal.push(...svcEntries);
     }
     const gatherExternal: ExternalSourceEntry[] = code_clients.map((c) => ({
@@ -2330,10 +2332,14 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     profileNames = [restProfileRaw];
   }
 
-  // Custom profiles come from <wikiRoot>/wiki.config.yaml. Always
-  // attempted; missing file yields an empty list, which the resolver
-  // tolerates without complaint.
-  const wikiConfigPath = path.join(wikiRoot, "wiki.config.yaml");
+  // Custom profiles (REST/client/queue) and `ecosystem.agents.custom` come
+  // from the wiki config. Probe <wikiRoot>/wiki.config.yaml then the
+  // <wikiRoot>/wiki/ fallback (matching resolveWikiConfigPath / how_to_go_deeper)
+  // so custom patterns still load when the config lives under wiki/. Falls
+  // back to the root path when neither exists — downstream loaders tolerate a
+  // missing file by yielding an empty list.
+  const wikiConfigPath =
+    resolveWikiConfigPath(wikiRoot) ?? path.join(wikiRoot, "wiki.config.yaml");
 
   // Resolve the REST-detection flag: CLI > config > default false.
   const enableRest = enableRestFromCli || _readEcosystemRestEnabled(wikiRoot);

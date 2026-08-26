@@ -14,7 +14,12 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { initRegistry, lookupBySource } from "./source_registry.js";
+import {
+  _resetRegistryConfigState,
+  agentShortId,
+  ensureRegistryForConfig,
+  lookupBySource,
+} from "./source_registry.js";
 import { walkCodebase } from "./repo_walker.js";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -45,12 +50,22 @@ export interface ExternalSourceEntry {
 
 // ── Registry bootstrap ────────────────────────────────────────────────
 
-let _registryReady = false;
+/**
+ * Builtins + `ecosystem.agents.custom` from wiki.config.yaml. Callers
+ * that know the wiki root pass `<wikiRoot>/wiki.config.yaml`; otherwise
+ * cwd is probed.
+ *
+ * Delegates to the registry, which owns the "which config is loaded" state.
+ * A local flag here would go stale whenever `how_to_go_deeper.ts` reloads the
+ * same global registry.
+ */
+function ensureRegistry(wikiConfigPath?: string): void {
+  ensureRegistryForConfig(wikiConfigPath);
+}
 
-function ensureRegistry(): void {
-  if (_registryReady) return;
-  initRegistry();
-  _registryReady = true;
+/** Reset registry state (test helper). */
+export function _resetRegistry(): void {
+  _resetRegistryConfigState();
 }
 
 // ── DB-scheme fallback patterns ───────────────────────────────────────
@@ -92,15 +107,20 @@ function isDbScheme(s: string): boolean {
  * 1. Tries `lookupBySource` (source_registry builtins + custom).
  * 2. Falls back to DB-scheme detection for real DB URLs.
  * 3. Returns "" when unclassifiable.
+ *
+ * `wikiConfigPath` (optional) locates the wiki.config.yaml whose
+ * `ecosystem.agents.custom` block feeds the registry. Passing a different
+ * path than the one currently loaded reloads the registry; omitting it
+ * reuses whatever is loaded (and probes cwd only on the very first call).
  */
-export function classifySource(s: string): string {
+export function classifySource(s: string, wikiConfigPath?: string): string {
   if (s === "") return "";
 
-  ensureRegistry();
+  ensureRegistry(wikiConfigPath);
 
   const manifest = lookupBySource(s);
   if (manifest !== null) {
-    return manifest.name.replace(/^wiki-/, "").replace(/-agent$/, "");
+    return agentShortId(manifest);
   }
 
   if (isDbScheme(s)) return "db";
@@ -181,8 +201,15 @@ const GCP_PATTERNS = [
  *
  * Walks `repoRoot`, returns repo-relative entries with `configured=false`.
  * Caller sets `configured` in B7b after loading the connector config.
+ * Pass `options.wikiConfigPath` (`<wikiRoot>/wiki.config.yaml`) so
+ * `ecosystem.agents.custom` patterns participate in classification even
+ * when the wiki root is not the process cwd.
  */
-export function detectExternalSources(repoRoot: string): ExternalSourceEntry[] {
+export function detectExternalSources(
+  repoRoot: string,
+  options: { wikiConfigPath?: string } = {},
+): ExternalSourceEntry[] {
+  ensureRegistry(options.wikiConfigPath);
   const entries: ExternalSourceEntry[] = [];
   // Dedup key: "file:line:kind"
   const seen = new Set<string>();

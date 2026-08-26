@@ -161,7 +161,23 @@ connectors:
 
 **Self-hosted:** set `GITLAB_HOST` (or `gitlab.host` in config) to your instance base URL — the connector appends `/api/v4/` to all requests.
 
-> **URL classification of self-hosted hosts.** Only `gitlab.com` / `*.gitlab.com` URLs are auto-classified as GitLab sources — the same way the `github` connector covers only `github.com`, not GitHub Enterprise hosts. Setting `GITLAB_HOST` changes where the *connector fetches from* once it is invoked, but a self-hosted host appearing in a URL (e.g. `gitlab.example.com`) is **not** auto-recognized for `/doc-wiki:ingest` source hints or cross-link classification.
+> **URL classification of self-hosted hosts.** Out of the box, only `gitlab.com` / `*.gitlab.com` URLs are auto-classified as GitLab sources. Setting `GITLAB_HOST` changes where the *connector fetches from* once it is invoked; to also have your self-hosted host (e.g. `gitlab.example.com`) recognized for `/doc-wiki:ingest` source hints and cross-link classification, override the builtin `wiki-gitlab-agent` entry under `ecosystem.agents.custom` in `wiki.config.yaml`. An override **replaces** the builtin patterns wholesale, so restate the `gitlab.com` ones alongside your host:
+>
+> ```yaml
+> ecosystem:
+>   agents:
+>     custom:
+>       - name: wiki-gitlab-agent          # reusing the builtin name extends GitLab classification
+>         source_schemes: ["gitlab://"]
+>         source_url_patterns:
+>           - hostname: gitlab.com
+>           - hostname: "*.gitlab.com"
+>           - hostname: gitlab.example.com # your self-hosted instance
+>         invocation_template:
+>           label: GitLab
+> ```
+>
+> The same recipe works for GitHub Enterprise hosts (`name: wiki-github-agent`). See [Adding a custom local connector](#adding-a-custom-local-connector) for the full schema.
 
 ### `jira`
 
@@ -311,19 +327,24 @@ For a SaaS / API / CLI that isn't in the nine built-ins, use the `/create-connec
 
 This scaffolds a minimal connector at `.connectors/connectors/<name>/` (project scope, default) or `~/.connectors/connectors/<name>/` (user scope). No `git init`, no `npm publish`, no plugin manifest, no marketplace entry — just a `cli.ts`, an `actions/` directory, and a `SKILL.md`.
 
-Once scaffolded, register it in `wiki.config.yaml` so doc-wiki routes the right URLs through it during ingest:
+Once scaffolded, register it in `wiki.config.yaml` (in the wiki root) so doc-wiki classifies the right URLs to it during ingest:
 
 ```yaml
 ecosystem:
   agents:
     custom:
-      - id: stripe
-        patterns:
-          - https://(api\.|dashboard\.)?stripe\.com/.*
-        skill: ./.connectors/connectors/stripe/cli.js
+      - name: stripe
+        source_schemes: ["stripe://"]    # optional scheme shorthand
+        source_url_patterns:             # hostname matches (leading `*.` glob allowed) — not regexes
+          - hostname: api.stripe.com
+          - hostname: dashboard.stripe.com
+        invocation_template:
+          label: "Stripe API"
 ```
 
-doc-wiki's `source_registry.ts` will then route Stripe URLs through your connector when `/doc-wiki:ingest` encounters them.
+Only `name` is required. `source_schemes` entries match the `scheme://` prefix of a source string, and each one must be a full RFC 3986 scheme written with its `://` suffix — `s3://`, `s3+ssl://`, `view-source://` are all accepted. A bare `kb` (no `://`) or a `my_kb://` (underscore is not a scheme character) is rejected at config load with a warning naming the entry, because such a value parses cleanly and then never matches anything. `http://` and `https://` are rejected for the same reason despite being well-formed: an `http(s)://` source is routed by hostname, so a scheme entry for either can never fire — use `source_url_patterns` for those. `source_url_patterns` match a URL's hostname (with optional `path_prefix` / `path_contains` keys for disambiguation). The `hostname` must be a bare host — no scheme, path or port. A `*` wildcard is allowed in exactly one position, a single leading `*.` (`*.gitlab.com`); any other placement (`*example.com`, `api.*.com`, a bare `*`) is rejected at load, because hostname matching only interprets the `*.` prefix and a literal `*` never appears in a parsed URL host. `path_prefix` must start with `/`, since both are compared against the corresponding `URL` fields; values that cannot match are rejected at load with a warning; `invocation_template.label` is the display name used in generated hints. A custom entry whose `name` collides with a builtin (e.g. `wiki-gitlab-agent`) **replaces** that builtin's patterns — see the self-hosted GitLab example in the [`gitlab`](#gitlab) section.
+
+doc-wiki's `source_registry.ts` loads this block and uses it everywhere sources are classified: `/doc-wiki:ingest` hints, the auto-generated "How to Go Deeper" section, and atlas external-source detection. The classification entry points take the wiki root explicitly (`how_to_go_deeper.js --wiki-root`, atlas's `wikiConfigPath` option) and probe `<wikiRoot>/wiki.config.yaml` then `<wikiRoot>/wiki/wiki.config.yaml`; when no root is given, the working directory is probed the same way. A malformed entry is skipped with a warning on stderr — it never aborts a run. Note this block only controls *classification*; the fetch itself is planned by `gather()` over `.connectors/config.yaml`.
 
 **Don't** modify an existing connector for ad-hoc behavior. If the change is general-purpose, contribute it upstream — see [`internals/connectors-api.md` § Contributing a built-in connector](internals/connectors-api.md#contributing-a-built-in-connector). If it's project-local, scaffold a custom connector instead.
 

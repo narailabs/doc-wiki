@@ -5,11 +5,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { makeTmpPath, cleanupTmpPath } from "./fixtures.js";
+import { makeTmpPath, cleanupTmpPath, writeConfigYaml } from "./fixtures.js";
 
 import {
   classifySource,
   detectExternalSources,
+  _resetRegistry,
   type ExternalSourceEntry,
 } from "../external_sources.js";
 
@@ -275,5 +276,166 @@ describe("detectExternalSources", () => {
     expect(path.isAbsolute(dbEntries[0]!.file)).toBe(false);
     // Should use forward slashes
     expect(dbEntries[0]!.file).not.toContain("\\");
+  });
+});
+
+// ── classifySource — custom agents from wiki.config.yaml ─────────────
+
+describe("classifySource with custom agents", () => {
+  let tmpDir: string;
+  let prevCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpPath("external-sources-custom-");
+    prevCwd = process.cwd();
+    _resetRegistry();
+  });
+
+  afterEach(() => {
+    process.chdir(prevCwd);
+    _resetRegistry();
+    cleanupTmpPath(tmpDir);
+  });
+
+  it("classifies a custom scheme registered in <cwd>/wiki.config.yaml", () => {
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "kb", source_schemes: ["kb://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("kb://article-1")).toBe("kb");
+    // Builtins are unaffected by the custom entry
+    expect(classifySource("jira://AUTH-1")).toBe("jira");
+  });
+
+  it("reports a custom connector under its literal name", () => {
+    // Regression (Codex P2): the `wiki-<id>-agent` unwrap is a BUILTIN naming
+    // convention, but it ran on custom names too, so `my-agent` classified as
+    // `my` and no config key spelled `my-agent` matched.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "my-agent", source_schemes: ["mykb://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("mykb://article-1")).toBe("my-agent");
+  });
+
+  it("lowercases a mixed-case custom connector name", () => {
+    // Regression (Codex P2): downstream consumers canonicalize to lower case
+    // (`parseEnabled`, `.connectors/config.yaml` keys), so a literal `Stripe`
+    // never matched and the source rendered an enable-the-connector prompt.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "Stripe", source_schemes: ["stripe://"] }],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("stripe://cus_123")).toBe("stripe");
+  });
+
+  it("classifies a self-hosted host under the builtin ID it overrides", () => {
+    // Regression (Codex P2): the documented GitLab override registers the
+    // builtin name with origin "custom", so an origin-keyed unwrap returned
+    // `wiki-gitlab-agent` and atlas stopped recognizing an enabled `gitlab`.
+    writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [
+            {
+              name: "wiki-gitlab-agent",
+              source_schemes: ["gitlab://"],
+              source_url_patterns: [
+                { hostname: "gitlab.com" },
+                { hostname: "gitlab.example.com" },
+              ],
+              invocation_template: { label: "GitLab" },
+            },
+          ],
+        },
+      },
+    });
+    process.chdir(tmpDir);
+    expect(classifySource("https://gitlab.example.com/group/proj")).toBe("gitlab");
+    expect(classifySource("https://gitlab.com/org/repo")).toBe("gitlab");
+  });
+
+  it("stays builtins-only when no wiki.config.yaml is present", () => {
+    process.chdir(tmpDir);
+    expect(classifySource("kb://article-1")).toBe("");
+    expect(classifySource("https://github.com/org/repo")).toBe("github");
+  });
+
+  it("classifySource accepts an explicit wikiConfigPath outside cwd", () => {
+    const configPath = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "kb", source_schemes: ["kb://"] }],
+        },
+      },
+    });
+    // No chdir — the wiki root differs from the process cwd
+    expect(classifySource("kb://article-1", configPath)).toBe("kb");
+  });
+
+  it("reinitializes when a second wiki's config path is passed", () => {
+    // A long-lived process classifying for two wikis used to keep the first
+    // wiki's custom agents forever, so wiki B's sources were classified with
+    // wiki A's connectors.
+    const dirA = makeTmpPath("external-sources-wiki-a-");
+    const dirB = makeTmpPath("external-sources-wiki-b-");
+    try {
+      const configA = writeConfigYaml(dirA, {
+        wiki: { name: "wiki-a" },
+        ecosystem: { agents: { custom: [{ name: "kb", source_schemes: ["kb://"] }] } },
+      });
+      const configB = writeConfigYaml(dirB, {
+        wiki: { name: "wiki-b" },
+        ecosystem: { agents: { custom: [{ name: "vault", source_schemes: ["vault://"] }] } },
+      });
+
+      expect(classifySource("kb://a-1", configA)).toBe("kb");
+      // Wiki B knows vault:// and must NOT still know kb://.
+      expect(classifySource("vault://b-1", configB)).toBe("vault");
+      expect(classifySource("kb://a-1", configB)).toBe("");
+      // Switching back restores wiki A's view.
+      expect(classifySource("kb://a-1", configA)).toBe("kb");
+      expect(classifySource("vault://b-1", configA)).toBe("");
+    } finally {
+      cleanupTmpPath(dirA);
+      cleanupTmpPath(dirB);
+    }
+  });
+
+  it("detectExternalSources threads wikiConfigPath into classification", () => {
+    // A custom entry claiming the postgres:// scheme wins over the
+    // DB-scheme fallback, proving the registry saw the config.
+    const configPath = writeConfigYaml(tmpDir, {
+      wiki: { name: "test-wiki" },
+      ecosystem: {
+        agents: {
+          custom: [{ name: "pgproxy", source_schemes: ["postgres://"] }],
+        },
+      },
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, ".env"),
+      "DATABASE_URL=postgres://host:5432/app\n",
+    );
+    const entries = detectExternalSources(tmpDir, { wikiConfigPath: configPath });
+    const dbEntry = entries.find((e) => e.kind === "database");
+    expect(dbEntry?.connector_id).toBe("pgproxy");
   });
 });
