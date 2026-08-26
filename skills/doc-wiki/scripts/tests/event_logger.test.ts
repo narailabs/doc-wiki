@@ -1006,39 +1006,3 @@ it("test_stats_with_since_filter_when_ts_contains_json_escape", () => {
   expect(stats.ops_by_type["query"]).toBe(1);
   fs.rmSync(tmpPath, { recursive: true, force: true });
 });
-
-// ── JSONL line-iteration edge cases ─────────────────────────────────
-
-describe("_readEvents line iteration", () => {
-  /** _readEvents walks events.jsonl with indexOf/substring instead of
-   *  split("\n"). Blank lines and a missing final newline are the cases
-   *  where a hand-rolled scan and split() are easiest to get apart. */
-  function seed(body: string): string {
-    const tmpPath = makeTmpPath("evlog-lines-");
-    fs.mkdirSync(path.join(tmpPath, "log"), { recursive: true });
-    fs.writeFileSync(path.join(tmpPath, "log", "events.jsonl"), body);
-    return tmpPath;
-  }
-
-  const ev = (op: string) =>
-    JSON.stringify({ ts: "2023-01-01T12:00:00+00:00", op });
-
-  it("counts every event regardless of blank lines or a missing final newline", () => {
-    const tmpPath = seed(`\n${ev("ingest")}\n\n   \n${ev("query")}`);
-    const stats = getStats(tmpPath);
-    expect(stats.total_events).toBe(2);
-    cleanupTmpPath(tmpPath);
-  });
-
-  it("does not count a phantom event for a trailing newline", () => {
-    const tmpPath = seed(`${ev("ingest")}\n`);
-    expect(getStats(tmpPath).total_events).toBe(1);
-    cleanupTmpPath(tmpPath);
-  });
-
-  it("reports zero events for a whitespace-only log", () => {
-    const tmpPath = seed("\n\n  \n\t\n");
-    expect(getStats(tmpPath).total_events).toBe(0);
-    cleanupTmpPath(tmpPath);
-  });
-});

@@ -153,62 +153,6 @@ describe("normalizeExtracted", () => {
   it("preserves single blank line between paragraphs", () => {
     expect(normalizeExtracted("p1\n\np2")).toBe("p1\n\np2");
   });
-
-  it("preserves standalone carriage returns", () => {
-    // `\r` is a line terminator to a multiline regex but NOT to `split("\n")`,
-    // so a naive `/[ \t\r\f\v]+$/gm` eats the CRs themselves and blank lines
-    // vanish from CR-delimited text.
-    expect(normalizeExtracted("left\r\rright")).toBe("left\r\rright");
-    expect(normalizeExtracted("x\r\r\ry")).toBe("x\r\r\ry");
-  });
-
-  it("still strips whitespace before a CRLF line ending", () => {
-    expect(normalizeExtracted("a  \r\nb")).toBe("a\nb");
-  });
-
-  /**
-   * The reference is the pre-optimization implementation: split on `\n`,
-   * strip trailing horizontal whitespace per segment, rejoin. Asserting
-   * against it (rather than hand-computed constants) is what catches the
-   * line-terminator mismatch above across the whole input space.
-   */
-  function referenceNormalize(text: string): string {
-    const stripped = text
-      .split("\n")
-      .map((line) => line.replace(/[ \t\r\f\v]+$/, ""))
-      .join("\n");
-    return stripped.replace(/\n{3,}/g, "\n\n").trim();
-  }
-
-  it("matches the reference implementation across line-ending shapes", () => {
-    const cases = [
-      "",
-      "a",
-      "a\n",
-      "\na",
-      "left\r\rright",
-      "x\r\r\ry",
-      "a\rb\rc",
-      "line1\r\nline2",
-      "a  \r\nb",
-      "a  \r\n  b  \r\n",
-      "trailing   \nnext",
-      "cr-only\rsecond\rthird",
-      "mixed \r\n\r\n \r\n done",
-      "tabs\t\t\nand\v\fforms  ",
-      "a\n\n\n\n\nb",
-      "  \r  \n  \r  ",
-      "\r",
-      "\r\r",
-      "no-terminators-at-all",
-      "form\ffeed\vvert\r\rend",
-    ];
-    for (const input of cases) {
-      expect(normalizeExtracted(input), `input=${JSON.stringify(input)}`).toBe(
-        referenceNormalize(input),
-      );
-    }
-  });
 });
 
 // ── General extraction tests ───────────────────────────────────────

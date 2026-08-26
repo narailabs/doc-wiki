@@ -51,12 +51,10 @@ export { importOptional };
  */
 export function normalizeExtracted(text: string): string {
   // Strip trailing whitespace per line (keeps blank lines as `""`, not `"   "`).
-  // The line break has to be matched explicitly rather than with `$`+`m`: to a
-  // multiline regex `\r` is itself a line terminator, so `$` also matches
-  // between consecutive CRs and the run of `\r` gets consumed as "trailing
-  // whitespace" — `"left\r\rright"` would lose a CR. Lines here are delimited
-  // by `\n` only, matching the rest of the pipeline.
-  const stripped = text.replace(/[ \t\r\f\v]+(?=\n|$)/g, "");
+  const stripped = text
+    .split("\n")
+    .map((line) => line.replace(/[ \t\r\f\v]+$/, ""))
+    .join("\n");
   // Collapse 3+ consecutive newlines → exactly 2 (max one blank line).
   const collapsed = stripped.replace(/\n{3,}/g, "\n\n");
   return collapsed.trim();
@@ -84,7 +82,10 @@ interface PdfLoadingTask {
   promise: Promise<PdfDocumentProxy>;
 }
 interface PdfJsModule {
-  getDocument(src: { data: Uint8Array; verbosity?: number }): PdfLoadingTask;
+  getDocument(src: {
+    data: Uint8Array;
+    verbosity?: number;
+  }): PdfLoadingTask;
   VerbosityLevel?: { ERRORS: number; WARNINGS: number; INFOS: number };
 }
 
@@ -101,9 +102,7 @@ interface PdfJsModule {
  * Pages are joined by a blank line and then run through `normalizeExtracted`.
  */
 export async function extractPdf(filePath: string): Promise<string> {
-  const pdfjs = await importOptional<PdfJsModule>(
-    "pdfjs-dist/legacy/build/pdf.mjs",
-  );
+  const pdfjs = await importOptional<PdfJsModule>("pdfjs-dist/legacy/build/pdf.mjs");
   const data = fs.readFileSync(filePath);
   // pdfjs accepts a Uint8Array view; copy into a fresh buffer so it doesn't
   // hold onto Node's pooled allocator.

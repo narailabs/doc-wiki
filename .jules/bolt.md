@@ -12,10 +12,6 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
-
-## 2026-08-09 - Prevent massive intermediate arrays with split
-**Learning:** When processing large files read into memory as a single string, using `.split('
-')` to iterate over lines synchronously allocates a massive intermediate array.
-**Action:** Use an iterative `indexOf('
-')` for forward iteration, or `lastIndexOf('
-')` for backward iteration, combined with a `substring()` loop to significantly reduce memory overhead.
+## 2025-02-19 - Avoid synchronous allocation of intermediate arrays for append-only logs
+**Learning:** When parsing large append-only JSON logs, reading into memory via `fs.readFileSync` and `.split("\n")` synchronously allocates a massive intermediate array.
+**Action:** Replace `.split("\n")` with an iterative `lastIndexOf("\n")` loop for backwards traversal (or `indexOf` for forwards traversal) and use `substring()` to avoid creating an intermediate array.

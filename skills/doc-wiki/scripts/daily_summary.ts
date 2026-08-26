@@ -38,12 +38,8 @@ function readEvents(
   }
   const events: Array<Record<string, unknown>> = [];
   const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-  let pos = 0;
-  while (pos < raw.length) {
-    let nlPos = raw.indexOf("\n", pos);
-    if (nlPos === -1) nlPos = raw.length;
-    const line = raw.substring(pos, nlPos).trim();
-    pos = nlPos + 1;
+  for (const rawLine of raw.split("\n")) {
+    const line = rawLine.trim();
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot match our date
@@ -303,7 +299,9 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(argv: readonly string[] = process.argv.slice(2)): number {
+export function main(
+  argv: readonly string[] = process.argv.slice(2),
+): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);
