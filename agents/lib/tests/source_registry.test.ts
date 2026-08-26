@@ -633,6 +633,27 @@ describe("loadCustomAgentConfigs", () => {
     expect(loadCustomAgentConfigs(p).map((c) => c.name)).toEqual(["wild"]);
   });
 
+  it("rejects every wildcard placement other than a single leading `*.`", () => {
+    // Regression (Codex P2). `matchHostname` (source_registry.ts:268) branches
+    // only on `pattern.startsWith("*.")`; anything else falls through to
+    // `pattern === hostname`, and a parsed `URL.hostname` never contains a
+    // literal `*`. So these all register and then match nothing — the same
+    // silent dead end the scheme/path/port shapes above already warn about.
+    const p = writeConfigYaml(tmpDir, configWithCustom([
+      { name: "ok-wild", source_url_patterns: [{ hostname: "*.gitlab.com" }] },
+      { name: "ok-plain", source_url_patterns: [{ hostname: "gitlab.com" }] },
+      { name: "bad-suffix-star", source_url_patterns: [{ hostname: "*example.com" }] },
+      { name: "bad-infix-star", source_url_patterns: [{ hostname: "api.*.com" }] },
+      { name: "bad-double-star", source_url_patterns: [{ hostname: "*.*.example.com" }] },
+      { name: "bad-bare-star", source_url_patterns: [{ hostname: "*" }] },
+      { name: "bad-star-dot-only", source_url_patterns: [{ hostname: "*." }] },
+      { name: "bad-star-mid-label", source_url_patterns: [{ hostname: "a*.example.com" }] },
+    ]));
+    const configs = loadCustomAgentConfigs(p);
+    expect(configs.map((c) => c.name)).toEqual(["ok-wild", "ok-plain"]);
+    expect(stderrSpy).toHaveBeenCalled();
+  });
+
   it("rejects a url pattern whose path_prefix/path_contains is not a string", () => {
     // `path_prefix: false` used to pass validation, and `lookupBySource` then
     // treated it as absent — widening the entry to a hostname-wide match

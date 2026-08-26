@@ -468,8 +468,15 @@ function validateCustomAgentEntry(entry, index, configPath) {
         // those — `https://kb.example.com`, `kb.example.com/api`,
         // `kb.example.com:443` — is a natural thing to write and matches nothing,
         // which is the same silent dead end the blank-hostname check above
-        // prevents. `*` stays legal: `matchHostname` supports a `*.` prefix.
-        if (!/^[*a-z0-9.-]+$/i.test(rec["hostname"]))
+        // prevents.
+        //
+        // `*` is legal in exactly one position: a single leading `*.`, the only
+        // form `matchHostname` (line 268) interprets. Every other placement —
+        // `*example.com`, `api.*.com`, `*.*.example.com`, a bare `*` — falls
+        // through to `pattern === hostname`, and a parsed `URL.hostname` never
+        // contains a literal `*`, so those register and match nothing. Same
+        // silent dead end, so they get the same load-time warning.
+        if (!/^(\*\.)?[a-z0-9.-]+$/i.test(rec["hostname"]))
             return false;
         for (const key of ["path_prefix", "path_contains"]) {
             if (rec[key] === undefined)
@@ -489,7 +496,8 @@ function validateCustomAgentEntry(entry, index, configPath) {
     if (urlPatterns !== undefined &&
         (!Array.isArray(urlPatterns) || !urlPatterns.every(isValidUrlPattern))) {
         warnCustomAgents(`skipping ${where}: every "source_url_patterns" entry needs a bare "hostname" ` +
-            `(no scheme, path or port), with optional "path_prefix" (must start with "/") ` +
+            `(no scheme, path or port; a "*" wildcard only as a single leading "*."), ` +
+            `with optional "path_prefix" (must start with "/") ` +
             `and "path_contains" strings — none empty or whitespace-padded`);
         return null;
     }
