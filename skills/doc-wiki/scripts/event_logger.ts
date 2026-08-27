@@ -191,7 +191,12 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
+  let pos = 0;
+  while (pos < raw.length) {
+    const nextPos = raw.indexOf("\n", pos);
+    const endPos = nextPos === -1 ? raw.length : nextPos;
+    const rawLine = raw.substring(pos, endPos);
+    pos = nextPos === -1 ? raw.length : nextPos + 1;
     const line = rawLine.trim();
     if (!line) continue;
 
