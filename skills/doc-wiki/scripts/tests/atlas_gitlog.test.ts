@@ -224,4 +224,43 @@ describe("getLastAtlasTimestamp", () => {
     );
     expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-30T08:00:00+00:00");
   });
+
+  // The backward buffer scan replaced `.split("\n")`, so the cases that
+  // `split` handled implicitly — blank rows, a missing final terminator, and
+  // a single row with no terminator at all — now need explicit coverage.
+  it("skips blank rows between events", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      "\n" +
+        JSON.stringify({ op: "atlas", timestamp: "2026-04-29T10:00:00+00:00" }) +
+        "\n\n\n" +
+        JSON.stringify({ op: "lint", timestamp: "2026-04-29T11:00:00+00:00" }) +
+        "\n\n",
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-29T10:00:00+00:00");
+  });
+
+  it("reads the final event when the file has no trailing newline", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      [
+        JSON.stringify({ op: "atlas", timestamp: "2026-04-29T10:00:00+00:00" }),
+        JSON.stringify({ op: "atlas", timestamp: "2026-04-30T08:00:00+00:00" }),
+      ].join("\n"),
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-30T08:00:00+00:00");
+  });
+
+  it("reads a lone event that has no terminator", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      JSON.stringify({ op: "atlas", timestamp: "2026-05-01T12:00:00+00:00" }),
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-05-01T12:00:00+00:00");
+  });
+
+  it("returns null for a log that is only blank lines", () => {
+    fs.writeFileSync(path.join(wikiRoot, "log", "events.jsonl"), "\n\n\n");
+    expect(getLastAtlasTimestamp(wikiRoot)).toBeNull();
+  });
 });

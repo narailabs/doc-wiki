@@ -105,8 +105,7 @@ function _extractTldr(body) {
  * `references/compilation.md` ("Additional frontmatter for atlas pages").
  */
 function _inferAudience(facet, frontmatterAudience) {
-    if (typeof frontmatterAudience === "string" &&
-        frontmatterAudience.length > 0) {
+    if (typeof frontmatterAudience === "string" && frontmatterAudience.length > 0) {
         return frontmatterAudience;
     }
     switch (facet) {
@@ -165,13 +164,7 @@ export function assembleOverviewInputs(wikiRoot) {
         parts.push("## Audience routing\n");
         parts.push("| Audience | Pages |");
         parts.push("|---|---|");
-        const order = [
-            "new-user",
-            "operator",
-            "contributor",
-            "integrator",
-            "debugger",
-        ];
+        const order = ["new-user", "operator", "contributor", "integrator", "debugger"];
         for (const audience of order) {
             const pages = grouped.get(audience);
             if (!pages || pages.length === 0)
@@ -503,10 +496,7 @@ export function assembleCommandsInputs(repoRoot) {
                     headings.push(line.trim());
             }
             if (headings.length > 0) {
-                const rel = path
-                    .relative(repoRoot, skillFile)
-                    .split(path.sep)
-                    .join("/");
+                const rel = path.relative(repoRoot, skillFile).split(path.sep).join("/");
                 sources.push(rel);
                 parts.push(`## Slash-command headings in ${rel}\n\n${headings.join("\n")}\n`);
             }
@@ -661,9 +651,11 @@ export function assembleTroubleshootingInputs(wikiRoot) {
             logContent = "";
         }
         const errors = [];
+        // Backward buffer scan rather than split(): the loop stops once
+        // _TROUBLESHOOTING_EVENT_LIMIT errors are collected.
         let pos = logContent.length;
         while (pos > 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
-            const nextPos = pos === 0 ? -1 : logContent.lastIndexOf("\n", pos - 1);
+            const nextPos = logContent.lastIndexOf("\n", pos - 1);
             const line = logContent.substring(nextPos + 1, pos);
             pos = nextPos;
             if (!line)
@@ -867,14 +859,11 @@ export function main(argv = process.argv.slice(2)) {
         return 0;
     }
     const wikiRoot = parsed.values["wikiRoot"];
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
-        parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     // Subcommands that need --wiki-root.
-    if (sub === "overview" ||
-        sub === "integrations" ||
-        sub === "troubleshooting") {
+    if (sub === "overview" || sub === "integrations" || sub === "troubleshooting") {
         if (typeof wikiRoot !== "string" || wikiRoot.length === 0) {
             process.stderr.write("--wiki-root is required\n");
             return 2;

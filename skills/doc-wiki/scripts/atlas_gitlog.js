@@ -59,10 +59,12 @@ export function getLastAtlasTimestamp(wikiRoot) {
     catch {
         return null;
     }
-    // Walk backwards — most recent atlas event wins.
+    // Walk backwards — most recent atlas event wins. Scanning the buffer with
+    // lastIndexOf instead of split() avoids materializing one string per line
+    // for a log we usually abandon after a handful of iterations.
     let pos = logContent.length;
     while (pos > 0) {
-        const nextPos = pos === 0 ? -1 : logContent.lastIndexOf("\n", pos - 1);
+        const nextPos = logContent.lastIndexOf("\n", pos - 1);
         const line = logContent.substring(nextPos + 1, pos);
         pos = nextPos;
         if (!line)
@@ -232,11 +234,7 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return {
-        stale_pages,
-        uncovered_files: uncovered,
-        unrelated_files: unrelated,
-    };
+    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -284,13 +282,11 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
-        parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" &&
-        parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {

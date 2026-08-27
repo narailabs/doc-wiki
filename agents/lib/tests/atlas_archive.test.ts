@@ -11,6 +11,7 @@ import {
   unarchive,
   rewriteInboundLinks,
   rewriteInboundLinksForUnarchive,
+  rebuildArchiveIndex,
   main as atlasArchiveMain,
   REWRITE_MODES,
   AUTONOMY_MODES,
@@ -382,6 +383,120 @@ describe("sweep — archive index rebuild", () => {
     expect(idx).toMatch(/billing\/architecture\.md/);
     // Date group header (year-month)
     expect(idx).toMatch(/## \d{4}-\d{2}/);
+  });
+});
+
+// ── Tests: rebuildArchiveIndex journal scan ───────────────────────────────────
+
+describe("rebuildArchiveIndex — journal line scan", () => {
+  let wikiRoot: string;
+
+  beforeEach(() => {
+    wikiRoot = makeTmpPath("archive-journal-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(wikiRoot);
+  });
+
+  /** Create an archived page so the event survives the exists() filter. */
+  function archivedPage(rel: string): void {
+    const abs = path.join(wikiRoot, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, "archived\n", "utf-8");
+  }
+
+  function writeJournal(content: string): void {
+    fs.mkdirSync(wikiRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(wikiRoot, "_archive_history.jsonl"),
+      content,
+      "utf-8",
+    );
+  }
+
+  // The forward buffer scan replaced `.split("\n").filter(Boolean)`. Blank
+  // rows and a missing final terminator were handled by that pair implicitly.
+  it("indexes every event across blank rows and a missing terminator", async () => {
+    archivedPage("wiki/_archive/billing/architecture.md");
+    archivedPage("wiki/_archive/payments/overview.md");
+    writeJournal(
+      "\n" +
+        JSON.stringify({
+          ts: "2026-04-29T10:00:00+00:00",
+          op: "archive",
+          from: "wiki/billing/architecture.md",
+          to: "wiki/_archive/billing/architecture.md",
+        }) +
+        "\n\n\n" +
+        JSON.stringify({
+          ts: "2026-04-30T10:00:00+00:00",
+          op: "archive",
+          from: "wiki/payments/overview.md",
+          to: "wiki/_archive/payments/overview.md",
+        }),
+    );
+
+    await rebuildArchiveIndex(wikiRoot);
+
+    const idx = fs.readFileSync(
+      path.join(wikiRoot, "wiki/_archive/index.md"),
+      "utf-8",
+    );
+    expect(idx).toContain("billing/architecture.md");
+    expect(idx).toContain("payments/overview.md");
+  });
+
+  it("indexes every event in a long journal", async () => {
+    // This consumer needs the whole journal, which is why the scan runs
+    // forward and pushes. A backward walk would have to unshift each row to
+    // keep chronological order — correct, but quadratic in the row count.
+    const rows: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      const rel = `wiki/_archive/topic${i}/page.md`;
+      archivedPage(rel);
+      rows.push(
+        JSON.stringify({
+          ts: `2026-04-${String((i % 28) + 1).padStart(2, "0")}T10:00:00+00:00`,
+          op: "archive",
+          from: `wiki/topic${i}/page.md`,
+          to: rel,
+        }),
+      );
+    }
+    writeJournal(rows.join("\n") + "\n");
+
+    await rebuildArchiveIndex(wikiRoot);
+
+    const idx = fs.readFileSync(
+      path.join(wikiRoot, "wiki/_archive/index.md"),
+      "utf-8",
+    );
+    for (let i = 0; i < 40; i++) {
+      expect(idx).toContain(`topic${i}/page.md`);
+    }
+  });
+
+  it("skips malformed rows without dropping the rest", async () => {
+    archivedPage("wiki/_archive/billing/architecture.md");
+    writeJournal(
+      "not json\n" +
+        JSON.stringify({
+          ts: "2026-04-29T10:00:00+00:00",
+          op: "archive",
+          from: "wiki/billing/architecture.md",
+          to: "wiki/_archive/billing/architecture.md",
+        }) +
+        "\n{ broken\n",
+    );
+
+    await rebuildArchiveIndex(wikiRoot);
+
+    const idx = fs.readFileSync(
+      path.join(wikiRoot, "wiki/_archive/index.md"),
+      "utf-8",
+    );
+    expect(idx).toContain("billing/architecture.md");
   });
 });
 

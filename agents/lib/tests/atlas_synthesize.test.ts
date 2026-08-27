@@ -504,6 +504,22 @@ describe("assembleTroubleshootingInputs", () => {
     expect(bundle.text).not.toContain('"op":"ingest","status":"ok"');
   });
 
+  // The backward buffer scan replaced `.split("\n")`; blank rows and a
+  // missing final terminator were previously normalized away by `split`.
+  it("surfaces error events across blank rows and a missing terminator", () => {
+    const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
+    fs.writeFileSync(
+      eventsPath,
+      "\n\n" +
+        JSON.stringify({ op: "ingest", status: "failed", error: "timeout" }) +
+        "\n\n\n" +
+        JSON.stringify({ op: "atlas", details: { error: "permission denied" } }),
+    );
+    const bundle = assembleTroubleshootingInputs(wikiRoot);
+    expect(bundle.text).toContain("timeout");
+    expect(bundle.text).toContain("permission denied");
+  });
+
   it("notes when no error events exist", () => {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     fs.writeFileSync(eventsPath, JSON.stringify({ op: "ingest", status: "ok" }) + "\n");
