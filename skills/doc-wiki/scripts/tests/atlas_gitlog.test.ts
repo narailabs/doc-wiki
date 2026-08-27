@@ -224,4 +224,53 @@ describe("getLastAtlasTimestamp", () => {
     );
     expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-30T08:00:00+00:00");
   });
+
+  // The fast path narrowed from `line.includes('"atlas"')` to a match on the
+  // `op` field. These pin both directions: the shapes that must still be read,
+  // and the rows that must now be skipped without a parse.
+  it("reads compact op rows (JSON.stringify shape)", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      '{"op":"atlas","timestamp":"2026-04-29T10:00:00+00:00"}\n',
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-29T10:00:00+00:00");
+  });
+
+  it("reads spaced op rows (Python json.dumps shape)", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      '{"op": "atlas", "timestamp": "2026-04-29T10:00:00+00:00"}\n',
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-29T10:00:00+00:00");
+  });
+
+  it("ignores a non-atlas row that merely mentions atlas in details", () => {
+    // The old substring check fired here and paid for a parse the op check
+    // below then rejected. The result was always null; only the cost changed.
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      JSON.stringify({
+        op: "ingest",
+        timestamp: "2026-04-29T10:00:00+00:00",
+        details: { note: "ran after atlas" },
+      }) + "\n",
+    );
+    expect(getLastAtlasTimestamp(wikiRoot)).toBeNull();
+  });
+
+  it("is not fooled by an atlas mention inside a details string", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      JSON.stringify({
+        op: "lint",
+        timestamp: "2026-04-30T10:00:00+00:00",
+        details: { message: 'saw "op":"atlas" in a log excerpt' },
+      }) + "\n" +
+        JSON.stringify({ op: "atlas", timestamp: "2026-04-28T09:00:00+00:00" }) +
+        "\n",
+    );
+    // The lint row trips the fast path, but the authoritative rec["op"]
+    // check rejects it, so the real atlas row still wins.
+    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-28T09:00:00+00:00");
+  });
 });

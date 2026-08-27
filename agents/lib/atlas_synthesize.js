@@ -655,6 +655,14 @@ export function assembleTroubleshootingInputs(wikiRoot) {
             const line = lines[i];
             if (!line)
                 continue;
+            // Fast-path: every branch of `_isErrorEvent` fires on the literal
+            // substring `"error"` or `"failed"` appearing in the serialized row —
+            // as a key (`"error":`, `"status":`) or as a value (`"failed"`,
+            // `"error"`), at the top level or under `details`. Rows containing
+            // neither cannot be error events, so skip the parse.
+            // If `_isErrorEvent` grows a new trigger, widen this check with it.
+            if (!line.includes('"error"') && !line.includes('"failed"'))
+                continue;
             let parsed;
             try {
                 parsed = JSON.parse(line);
