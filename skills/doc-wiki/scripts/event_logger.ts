@@ -191,8 +191,16 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
-    const line = rawLine.trim();
+  // Forward buffer scan rather than split(): this consumer walks every row of
+  // an events.jsonl that grows without bound, and each line is dropped right
+  // after the filter, so the whole-file array of strings is wasted work.
+  let pos = 0;
+  const len = raw.length;
+  while (pos < len) {
+    let nextPos = raw.indexOf("\n", pos);
+    if (nextPos === -1) nextPos = len;
+    const line = raw.substring(pos, nextPos).trim();
+    pos = nextPos + 1;
     if (!line) continue;
 
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {

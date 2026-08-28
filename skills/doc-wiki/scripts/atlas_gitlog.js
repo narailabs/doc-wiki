@@ -107,8 +107,17 @@ export function getChangedFilesSince(repoRoot, since) {
         maxBuffer: 64 * 1024 * 1024,
     });
     const set = new Set();
-    for (const line of out.split("\n")) {
-        const trimmed = line.trim();
+    // Forward buffer scan rather than split(): `git log --name-only` over a long
+    // history returns up to the 64 MB maxBuffer above, and every line is dropped
+    // right after the trim.
+    let pos = 0;
+    const len = out.length;
+    while (pos < len) {
+        let nextPos = out.indexOf("\n", pos);
+        if (nextPos === -1)
+            nextPos = len;
+        const trimmed = out.substring(pos, nextPos).trim();
+        pos = nextPos + 1;
         if (trimmed.length > 0)
             set.add(trimmed);
     }

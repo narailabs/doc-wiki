@@ -11,10 +11,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
+import { execFileSync } from "node:child_process";
+
 import {
   classifyChanges,
   indexAtlasPages,
   getLastAtlasTimestamp,
+  getChangedFilesSince,
 } from "../atlas_gitlog.js";
 import {
   makeTmpPath,
@@ -262,5 +265,81 @@ describe("getLastAtlasTimestamp", () => {
   it("returns null for a log that is only blank lines", () => {
     fs.writeFileSync(path.join(wikiRoot, "log", "events.jsonl"), "\n\n\n");
     expect(getLastAtlasTimestamp(wikiRoot)).toBeNull();
+  });
+});
+
+// ── getChangedFilesSince ───────────────────────────────────────────
+//
+// `getChangedFilesSince` now walks the `git log --name-only` buffer with
+// indexOf instead of `.split("\n")`. `git log --pretty=format:` emits a blank
+// separator row per commit and always terminates the last path with a newline,
+// so these run against a real repo to pin the shape the scan actually sees.
+// The `nextPos === -1` tail guard is defensive only — git never produces an
+// unterminated final path — so no test can reach it through this function.
+
+describe("getChangedFilesSince", () => {
+  let tmpPath: string;
+  let repoRoot: string;
+
+  function git(...args: string[]): void {
+    execFileSync("git", ["-C", repoRoot, ...args], { stdio: "ignore" });
+  }
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("gitlog-changed-");
+    repoRoot = path.join(tmpPath, "repo");
+    fs.mkdirSync(repoRoot, { recursive: true });
+    execFileSync("git", ["-C", repoRoot, "init", "-q"], { stdio: "ignore" });
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "Test");
+    git("config", "commit.gpgsign", "false");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function commit(files: Record<string, string>, message: string): void {
+    for (const [rel, body] of Object.entries(files)) {
+      const target = path.join(repoRoot, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, body);
+    }
+    git("add", "-A");
+    git("commit", "-q", "-m", message);
+  }
+
+  it("returns every touched path, deduplicated and sorted", () => {
+    commit({ "src/b.ts": "b\n", "src/a.ts": "a\n" }, "first");
+    commit({ "src/a.ts": "a2\n", "docs/c.md": "c\n" }, "second");
+
+    expect(getChangedFilesSince(repoRoot, null)).toEqual([
+      "docs/c.md",
+      "src/a.ts",
+      "src/b.ts",
+    ]);
+  });
+
+  it("reads a single-commit, single-file log", () => {
+    commit({ "only.ts": "x\n" }, "only");
+    expect(getChangedFilesSince(repoRoot, null)).toEqual(["only.ts"]);
+  });
+
+  it("skips the blank separator row git emits between commits", () => {
+    // `--pretty=format:` prints an empty subject line ahead of each commit's
+    // paths from the second commit on. Those rows must not become entries.
+    commit({ "a.ts": "a\n" }, "first");
+    commit({ "b.ts": "b\n" }, "second");
+    commit({ "c.ts": "c\n" }, "third");
+    expect(getChangedFilesSince(repoRoot, null)).toEqual([
+      "a.ts",
+      "b.ts",
+      "c.ts",
+    ]);
+  });
+
+  it("returns an empty list when the --since window excludes every commit", () => {
+    commit({ "src/a.ts": "a\n" }, "first");
+    expect(getChangedFilesSince(repoRoot, "2099-01-01")).toEqual([]);
   });
 });
