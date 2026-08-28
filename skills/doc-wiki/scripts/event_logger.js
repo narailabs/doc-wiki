@@ -146,7 +146,13 @@ function _readEvents(wikiRoot, since = null) {
     }
     const raw = fs.readFileSync(p, { encoding: "utf-8" });
     const events = [];
-    for (const rawLine of raw.split("\n")) {
+    // ⚡ Bolt: Using iterative indexOf/substring instead of raw.split("\n") to prevent massive memory allocation for large event logs
+    let pos = 0;
+    while (pos < raw.length) {
+        const nextNewline = raw.indexOf("\n", pos);
+        const end = nextNewline === -1 ? raw.length : nextNewline;
+        const rawLine = raw.substring(pos, end);
+        pos = end + 1;
         const line = rawLine.trim();
         if (!line)
             continue;
