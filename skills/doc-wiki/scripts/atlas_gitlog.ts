@@ -79,15 +79,24 @@ export interface ClassifyResult {
 export function getLastAtlasTimestamp(wikiRoot: string): string | null {
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (!fs.existsSync(eventsPath)) return null;
-  let lines: string[];
+  let raw: string;
   try {
-    lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+    raw = fs.readFileSync(eventsPath, "utf-8");
   } catch {
     return null;
   }
-  // Walk backwards — most recent atlas event wins.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
+
+  // Performance optimization: Iterating backwards using lastIndexOf avoids materializing a massive array
+  // via .split('\n'). This is significantly faster and uses far less memory.
+  for (
+    let pos = raw.length,
+      nextPos = pos === 0 ? -1 : raw.lastIndexOf("\n", pos - 1);
+    pos > 0;
+    pos = nextPos, nextPos = pos === 0 ? -1 : raw.lastIndexOf("\n", pos - 1)
+  ) {
+    const line =
+      nextPos === -1 ? raw.substring(0, pos) : raw.substring(nextPos + 1, pos);
+
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -99,6 +108,7 @@ export function getLastAtlasTimestamp(wikiRoot: string): string | null {
     } catch {
       continue;
     }
+
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const rec = parsed as Record<string, unknown>;
       if (rec["op"] === "atlas" && typeof rec["timestamp"] === "string") {
@@ -231,7 +241,10 @@ function _matchPage(
  * `app/<topic>/`, `services/<topic>/`, or just `<topic>/...` at the repo root)
  * otherwise `null`.
  */
-function _matchTopic(filePath: string, topics: readonly string[]): string | null {
+function _matchTopic(
+  filePath: string,
+  topics: readonly string[],
+): string | null {
   const parts = filePath.split("/");
   for (const topic of topics) {
     if (parts.includes(topic)) return topic;
@@ -279,7 +292,11 @@ export function classifyChanges(
   for (const [page, sources] of [...staleByPage.entries()].sort()) {
     stale_pages.push({ page, sources: [...sources].sort() });
   }
-  return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+  return {
+    stale_pages,
+    uncovered_files: uncovered,
+    unrelated_files: unrelated,
+  };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────
@@ -333,12 +350,16 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 2;
   }
   const repoRoot =
-    typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    typeof parsed.values["repoRoot"] === "string" &&
+    parsed.values["repoRoot"].length > 0
       ? parsed.values["repoRoot"]
       : process.cwd();
 
   let since: string | null = null;
-  if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+  if (
+    typeof parsed.values["since"] === "string" &&
+    parsed.values["since"].length > 0
+  ) {
     since = parsed.values["since"];
   } else {
     const last = getLastAtlasTimestamp(wikiRoot);
