@@ -43,6 +43,18 @@ import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 // ── Last atlas run ─────────────────────────────────────────────────
 /**
+ * Fast-path matcher used to skip `JSON.parse` on rows that cannot be atlas
+ * events. Matches `"op":"atlas"` (compact — what `event_logger.ts` emits via
+ * `JSON.stringify`) and `"op": "atlas"` (one space — historical Python
+ * `json.dumps` rows still checked into `wiki-workspace/`). Those are the only
+ * two shapes either writer produces.
+ *
+ * Narrower than the previous `line.includes('"atlas"')`, which also fired on
+ * the word "atlas" appearing anywhere in `details.*` and paid for a parse the
+ * `rec["op"] === "atlas"` check below would then reject.
+ */
+const _OP_ATLAS_RE = /"op":\s?"atlas"/;
+/**
  * Return the timestamp of the most recent `op: atlas` event in
  * `<wikiRoot>/log/events.jsonl`, or `null` if none exists or the log is
  * unreadable. Timestamps follow the convention `event_logger.ts` writes
@@ -59,18 +71,16 @@ export function getLastAtlasTimestamp(wikiRoot) {
     catch {
         return null;
     }
-    // Walk backwards — most recent atlas event wins. Scanning the buffer with
-    // lastIndexOf instead of split() avoids materializing one string per line
-    // for a log we usually abandon after a handful of iterations.
+    // Walk backwards — most recent atlas event wins.
     let pos = logContent.length;
     while (pos > 0) {
-        const nextPos = logContent.lastIndexOf("\n", pos - 1);
+        const nextPos = pos === 0 ? -1 : logContent.lastIndexOf("\n", pos - 1);
         const line = logContent.substring(nextPos + 1, pos);
         pos = nextPos;
         if (!line)
             continue;
-        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-        if (!line.includes('"atlas"'))
+        // Fast-path: skip the JSON parse when this row cannot be an atlas event.
+        if (!_OP_ATLAS_RE.test(line))
             continue;
         let parsed;
         try {
@@ -107,17 +117,8 @@ export function getChangedFilesSince(repoRoot, since) {
         maxBuffer: 64 * 1024 * 1024,
     });
     const set = new Set();
-    // Forward buffer scan rather than split(): `git log --name-only` over a long
-    // history returns up to the 64 MB maxBuffer above, and every line is dropped
-    // right after the trim.
-    let pos = 0;
-    const len = out.length;
-    while (pos < len) {
-        let nextPos = out.indexOf("\n", pos);
-        if (nextPos === -1)
-            nextPos = len;
-        const trimmed = out.substring(pos, nextPos).trim();
-        pos = nextPos + 1;
+    for (const line of out.split("\n")) {
+        const trimmed = line.trim();
         if (trimmed.length > 0)
             set.add(trimmed);
     }
@@ -243,7 +244,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -291,11 +296,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {
