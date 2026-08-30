@@ -71,6 +71,19 @@ export interface ClassifyResult {
 // ── Last atlas run ─────────────────────────────────────────────────
 
 /**
+ * Fast-path matcher used to skip `JSON.parse` on rows that cannot be atlas
+ * events. Matches `"op":"atlas"` (compact — what `event_logger.ts` emits via
+ * `JSON.stringify`) and `"op": "atlas"` (one space — historical Python
+ * `json.dumps` rows still checked into `wiki-workspace/`). Those are the only
+ * two shapes either writer produces.
+ *
+ * Narrower than the previous `line.includes('"atlas"')`, which also fired on
+ * the word "atlas" appearing anywhere in `details.*` and paid for a parse the
+ * `rec["op"] === "atlas"` check below would then reject.
+ */
+const _OP_ATLAS_RE = /"op":\s?"atlas"/;
+
+/**
  * Return the timestamp of the most recent `op: atlas` event in
  * `<wikiRoot>/log/events.jsonl`, or `null` if none exists or the log is
  * unreadable. Timestamps follow the convention `event_logger.ts` writes
@@ -93,8 +106,8 @@ export function getLastAtlasTimestamp(wikiRoot: string): string | null {
     pos = nextPos;
     if (!line) continue;
 
-    // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-    if (!line.includes('"atlas"')) continue;
+    // Fast-path: skip the JSON parse when this row cannot be an atlas event.
+    if (!_OP_ATLAS_RE.test(line)) continue;
 
     let parsed: unknown;
     try {
@@ -134,10 +147,20 @@ export function getChangedFilesSince(
     encoding: "utf-8",
     maxBuffer: 64 * 1024 * 1024,
   });
+  // Scan the buffer instead of `out.split("\n")`. `maxBuffer` above allows 64
+  // MB, and on a repository with that much history the split allocates one
+  // string per line plus the array holding them, all live at once. Walking with
+  // `indexOf` keeps one substring alive at a time. This is the same treatment
+  // the event-log readers in this file and `atlas_orchestrator.ts` already got;
+  // it was the one caller left on the old form.
   const set = new Set<string>();
-  for (const line of out.split("\n")) {
-    const trimmed = line.trim();
+  let start = 0;
+  while (start < out.length) {
+    let end = out.indexOf("\n", start);
+    if (end === -1) end = out.length;
+    const trimmed = out.substring(start, end).trim();
     if (trimmed.length > 0) set.add(trimmed);
+    start = end + 1;
   }
   return [...set].sort();
 }
