@@ -167,17 +167,6 @@ export function countAllPages(wikiRoot: string): number {
  * its `atlas_run_id` (if present in the event details). Returns `null` if
  * the log is missing, empty, or has no atlas events.
  */
-/**
- * Fast-path matchers used to skip `JSON.parse` on rows that cannot be the
- * event being looked for. Each matches the compact shape `event_logger.ts`
- * writes via `JSON.stringify` and the one-space shape Python `json.dumps`
- * left in `wiki-workspace/`. Narrower than the previous bare-substring
- * checks, which also fired on the word appearing inside `details.*`.
- */
-const _OP_ATLAS_RE = /"op":\s?"atlas"/;
-/** Same shape as {@link _OP_ATLAS_RE}, for `ingest` events. */
-const _OP_INGEST_RE = /"op":\s?"ingest"/;
-
 export function getLastAtlasRunId(wikiRoot: string): string | null {
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (!fs.existsSync(eventsPath)) return null;
@@ -194,8 +183,8 @@ export function getLastAtlasRunId(wikiRoot: string): string | null {
     pos = nextPos;
     if (!line) continue;
 
-    // Fast-path: skip the JSON parse when this row cannot be an atlas event.
-    if (!_OP_ATLAS_RE.test(line)) continue;
+    // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
+    if (!line.includes('"atlas"')) continue;
 
     let parsed: unknown;
     try {
@@ -281,8 +270,8 @@ export function getRollingPerIngestAvg(
     pos = nextPos;
     if (!line) continue;
 
-    // Fast-path: skip the JSON parse when this row cannot be an ingest event.
-    if (!_OP_INGEST_RE.test(line)) continue;
+    // Fast-path: skip JSON parse overhead if this line cannot be an ingest event
+    if (!line.includes('"ingest"')) continue;
 
     let parsed: unknown;
     try {

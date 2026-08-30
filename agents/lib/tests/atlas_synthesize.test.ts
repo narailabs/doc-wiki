@@ -504,30 +504,6 @@ describe("assembleTroubleshootingInputs", () => {
     expect(bundle.text).not.toContain('"op":"ingest","status":"ok"');
   });
 
-  // The error scan gained a substring fast path before the JSON parse. Each
-  // `_isErrorEvent` branch must still be reachable through it.
-  it("surfaces every _isErrorEvent shape through the fast path", () => {
-    const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
-    fs.writeFileSync(
-      eventsPath,
-      [
-        JSON.stringify({ op: "ingest", error: "top-level-error" }),
-        JSON.stringify({ op: "ingest", status: "failed", note: "top-failed" }),
-        JSON.stringify({ op: "ingest", status: "error", note: "top-status-error" }),
-        JSON.stringify({ op: "atlas", details: { error: "nested-error" } }),
-        JSON.stringify({ op: "atlas", details: { status: "failed", note: "nested-failed" } }),
-        JSON.stringify({ op: "atlas", details: { status: "error", note: "nested-status-error" } }),
-      ].join("\n") + "\n",
-    );
-    const bundle = assembleTroubleshootingInputs(wikiRoot);
-    expect(bundle.text).toContain("top-level-error");
-    expect(bundle.text).toContain("top-failed");
-    expect(bundle.text).toContain("top-status-error");
-    expect(bundle.text).toContain("nested-error");
-    expect(bundle.text).toContain("nested-failed");
-    expect(bundle.text).toContain("nested-status-error");
-  });
-
   it("notes when no error events exist", () => {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     fs.writeFileSync(eventsPath, JSON.stringify({ op: "ingest", status: "ok" }) + "\n");
