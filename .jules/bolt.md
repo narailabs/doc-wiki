@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-23 - String traversal instead of split('\n')
+
+**Learning:** When processing large string files (e.g., via `fs.readFileSync`), using `.split('\n')` to iterate over lines synchronously allocates a massive intermediate array, causing huge memory spikes overhead on big jsonl files.
+**Action:** Use an iterative `indexOf('\n')` for forward iteration, or `lastIndexOf('\n')` for backward iteration, combined with a `substring()` loop to significantly reduce memory overhead.
