@@ -171,6 +171,29 @@ describe("getLastAtlasRunId", () => {
     writeEvent(wikiRoot, { op: "atlas" });
     expect(getLastAtlasRunId(wikiRoot)).toBe("");
   });
+
+  // The backward buffer scan replaced `.split("\n")`; these are the rows
+  // `split` used to normalize away.
+  it("skips blank rows between events", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      "\n\n" +
+        JSON.stringify({ op: "atlas", atlas_run_id: "with-blanks" }) +
+        "\n\n\n",
+    );
+    expect(getLastAtlasRunId(wikiRoot)).toBe("with-blanks");
+  });
+
+  it("reads the final event when the file has no trailing newline", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      [
+        JSON.stringify({ op: "atlas", atlas_run_id: "older" }),
+        JSON.stringify({ op: "atlas", atlas_run_id: "newest" }),
+      ].join("\n"),
+    );
+    expect(getLastAtlasRunId(wikiRoot)).toBe("newest");
+  });
 });
 
 // ── detectState ────────────────────────────────────────────────────
@@ -398,6 +421,32 @@ describe("getRollingPerIngestAvg", () => {
     writeEvent(wikiRoot, { op: "ingest", cost_usd: 0.0 });
     // sampleSize=1 → only the most recent event counts
     expect(getRollingPerIngestAvg(wikiRoot, 1)).toBe(0.0);
+  });
+
+  // The backward buffer scan replaced `.split("\n")`; blank rows and a
+  // missing final terminator were previously handled by `split` itself.
+  it("skips blank rows while sampling", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      "\n\n" +
+        JSON.stringify({ op: "ingest", cost_usd: 0.1 }) +
+        "\n\n\n" +
+        JSON.stringify({ op: "ingest", cost_usd: 0.3 }) +
+        "\n\n",
+    );
+    expect(getRollingPerIngestAvg(wikiRoot)).toBeCloseTo(0.2, 5);
+  });
+
+  it("counts the final event when the file has no trailing newline", () => {
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      [
+        JSON.stringify({ op: "ingest", cost_usd: 1.0 }),
+        JSON.stringify({ op: "ingest", cost_usd: 0.0 }),
+      ].join("\n"),
+    );
+    // Both rows are seen, so the average is 0.5 rather than 1.0.
+    expect(getRollingPerIngestAvg(wikiRoot)).toBeCloseTo(0.5, 5);
   });
 });
 

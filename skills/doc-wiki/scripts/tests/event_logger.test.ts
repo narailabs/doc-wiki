@@ -286,6 +286,59 @@ describe("TestGetStats", () => {
     expect(opsByType["ingest"]).toBe(1);
     expect("query" in opsByType).toBe(false);
   });
+
+  // `_readEvents` now walks the buffer with indexOf instead of `.split("\n")`.
+  // `split` handled blank rows, a missing final terminator, and CRLF line ends
+  // implicitly, so pin each one here.
+  it("counts the final event when the log has no trailing newline", () => {
+    const wikiRoot = makeWikiRoot(tmpPath);
+    const events = [
+      { ts: "2026-04-10T08:00:00+00:00", op: "ingest", cost_usd: 0.01 },
+      { ts: "2026-04-11T08:00:00+00:00", op: "lint", cost_usd: 0.02 },
+    ];
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n"),
+    );
+    const stats = getStats(wikiRoot);
+    expect(stats["total_events"]).toBe(2);
+    const opsByType = stats["ops_by_type"] as Record<string, number>;
+    expect(opsByType["lint"]).toBe(1);
+  });
+
+  it("skips blank rows anywhere in the log", () => {
+    const wikiRoot = makeWikiRoot(tmpPath);
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      "\n" +
+        JSON.stringify({ ts: "2026-04-10T08:00:00+00:00", op: "ingest" }) +
+        "\n\n\n" +
+        JSON.stringify({ ts: "2026-04-11T08:00:00+00:00", op: "lint" }) +
+        "\n\n",
+    );
+    const stats = getStats(wikiRoot);
+    expect(stats["total_events"]).toBe(2);
+  });
+
+  it("reads CRLF-terminated rows", () => {
+    const wikiRoot = makeWikiRoot(tmpPath);
+    fs.writeFileSync(
+      path.join(wikiRoot, "log", "events.jsonl"),
+      JSON.stringify({ ts: "2026-04-10T08:00:00+00:00", op: "ingest" }) +
+        "\r\n" +
+        JSON.stringify({ ts: "2026-04-11T08:00:00+00:00", op: "lint" }) +
+        "\r\n",
+    );
+    const stats = getStats(wikiRoot);
+    expect(stats["total_events"]).toBe(2);
+  });
+
+  it("returns zero events for a log that is only blank lines", () => {
+    const wikiRoot = makeWikiRoot(tmpPath);
+    fs.writeFileSync(path.join(wikiRoot, "log", "events.jsonl"), "\n\n\n");
+    const stats = getStats(wikiRoot);
+    expect(stats["total_events"]).toBe(0);
+  });
 });
 
 // ── Python-compat timestamp format check ────────────────────────────
