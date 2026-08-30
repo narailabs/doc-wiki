@@ -116,22 +116,11 @@ export function getChangedFilesSince(repoRoot, since) {
         encoding: "utf-8",
         maxBuffer: 64 * 1024 * 1024,
     });
-    // Scan the buffer instead of `out.split("\n")`. `maxBuffer` above allows 64
-    // MB, and on a repository with that much history the split allocates one
-    // string per line plus the array holding them, all live at once. Walking with
-    // `indexOf` keeps one substring alive at a time. This is the same treatment
-    // the event-log readers in this file and `atlas_orchestrator.ts` already got;
-    // it was the one caller left on the old form.
     const set = new Set();
-    let start = 0;
-    while (start < out.length) {
-        let end = out.indexOf("\n", start);
-        if (end === -1)
-            end = out.length;
-        const trimmed = out.substring(start, end).trim();
+    for (const line of out.split("\n")) {
+        const trimmed = line.trim();
         if (trimmed.length > 0)
             set.add(trimmed);
-        start = end + 1;
     }
     return [...set].sort();
 }

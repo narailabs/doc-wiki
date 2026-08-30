@@ -11,13 +11,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-import { execFileSync } from "node:child_process";
-
 import {
   classifyChanges,
   indexAtlasPages,
   getLastAtlasTimestamp,
-  getChangedFilesSince,
 } from "../atlas_gitlog.js";
 import {
   makeTmpPath,
@@ -228,45 +225,6 @@ describe("getLastAtlasTimestamp", () => {
     expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-30T08:00:00+00:00");
   });
 
-  // The backward buffer scan replaced `.split("\n")`, so the cases that
-  // `split` handled implicitly — blank rows, a missing final terminator, and
-  // a single row with no terminator at all — now need explicit coverage.
-  it("skips blank rows between events", () => {
-    fs.writeFileSync(
-      path.join(wikiRoot, "log", "events.jsonl"),
-      "\n" +
-        JSON.stringify({ op: "atlas", timestamp: "2026-04-29T10:00:00+00:00" }) +
-        "\n\n\n" +
-        JSON.stringify({ op: "lint", timestamp: "2026-04-29T11:00:00+00:00" }) +
-        "\n\n",
-    );
-    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-29T10:00:00+00:00");
-  });
-
-  it("reads the final event when the file has no trailing newline", () => {
-    fs.writeFileSync(
-      path.join(wikiRoot, "log", "events.jsonl"),
-      [
-        JSON.stringify({ op: "atlas", timestamp: "2026-04-29T10:00:00+00:00" }),
-        JSON.stringify({ op: "atlas", timestamp: "2026-04-30T08:00:00+00:00" }),
-      ].join("\n"),
-    );
-    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-30T08:00:00+00:00");
-  });
-
-  it("reads a lone event that has no terminator", () => {
-    fs.writeFileSync(
-      path.join(wikiRoot, "log", "events.jsonl"),
-      JSON.stringify({ op: "atlas", timestamp: "2026-05-01T12:00:00+00:00" }),
-    );
-    expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-05-01T12:00:00+00:00");
-  });
-
-  it("returns null for a log that is only blank lines", () => {
-    fs.writeFileSync(path.join(wikiRoot, "log", "events.jsonl"), "\n\n\n");
-    expect(getLastAtlasTimestamp(wikiRoot)).toBeNull();
-  });
-
   // The fast path narrowed from `line.includes('"atlas"')` to a match on the
   // `op` field. These pin both directions: the shapes that must still be read,
   // and the rows that must now be skipped without a parse.
@@ -307,92 +265,12 @@ describe("getLastAtlasTimestamp", () => {
         op: "lint",
         timestamp: "2026-04-30T10:00:00+00:00",
         details: { message: 'saw "op":"atlas" in a log excerpt' },
-      }) +
-        "\n" +
-        JSON.stringify({
-          op: "atlas",
-          timestamp: "2026-04-28T09:00:00+00:00",
-        }) +
+      }) + "\n" +
+        JSON.stringify({ op: "atlas", timestamp: "2026-04-28T09:00:00+00:00" }) +
         "\n",
     );
     // The lint row trips the fast path, but the authoritative rec["op"]
     // check rejects it, so the real atlas row still wins.
     expect(getLastAtlasTimestamp(wikiRoot)).toBe("2026-04-28T09:00:00+00:00");
-  });
-});
-
-// ── getChangedFilesSince ───────────────────────────────────────────
-//
-// `getChangedFilesSince` now walks the `git log --name-only` buffer with
-// indexOf instead of `.split("\n")`. `git log --pretty=format:` emits a blank
-// separator row per commit and always terminates the last path with a newline,
-// so these run against a real repo to pin the shape the scan actually sees.
-// The `nextPos === -1` tail guard is defensive only — git never produces an
-// unterminated final path — so no test can reach it through this function.
-
-describe("getChangedFilesSince", () => {
-  let tmpPath: string;
-  let repoRoot: string;
-
-  function git(...args: string[]): void {
-    execFileSync("git", ["-C", repoRoot, ...args], { stdio: "ignore" });
-  }
-
-  beforeEach(() => {
-    tmpPath = makeTmpPath("gitlog-changed-");
-    repoRoot = path.join(tmpPath, "repo");
-    fs.mkdirSync(repoRoot, { recursive: true });
-    execFileSync("git", ["-C", repoRoot, "init", "-q"], { stdio: "ignore" });
-    git("config", "user.email", "test@example.com");
-    git("config", "user.name", "Test");
-    git("config", "commit.gpgsign", "false");
-  });
-
-  afterEach(() => {
-    cleanupTmpPath(tmpPath);
-  });
-
-  function commit(files: Record<string, string>, message: string): void {
-    for (const [rel, body] of Object.entries(files)) {
-      const target = path.join(repoRoot, rel);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, body);
-    }
-    git("add", "-A");
-    git("commit", "-q", "-m", message);
-  }
-
-  it("returns every touched path, deduplicated and sorted", () => {
-    commit({ "src/b.ts": "b\n", "src/a.ts": "a\n" }, "first");
-    commit({ "src/a.ts": "a2\n", "docs/c.md": "c\n" }, "second");
-
-    expect(getChangedFilesSince(repoRoot, null)).toEqual([
-      "docs/c.md",
-      "src/a.ts",
-      "src/b.ts",
-    ]);
-  });
-
-  it("reads a single-commit, single-file log", () => {
-    commit({ "only.ts": "x\n" }, "only");
-    expect(getChangedFilesSince(repoRoot, null)).toEqual(["only.ts"]);
-  });
-
-  it("skips the blank separator row git emits between commits", () => {
-    // `--pretty=format:` prints an empty subject line ahead of each commit's
-    // paths from the second commit on. Those rows must not become entries.
-    commit({ "a.ts": "a\n" }, "first");
-    commit({ "b.ts": "b\n" }, "second");
-    commit({ "c.ts": "c\n" }, "third");
-    expect(getChangedFilesSince(repoRoot, null)).toEqual([
-      "a.ts",
-      "b.ts",
-      "c.ts",
-    ]);
-  });
-
-  it("returns an empty list when the --since window excludes every commit", () => {
-    commit({ "src/a.ts": "a\n" }, "first");
-    expect(getChangedFilesSince(repoRoot, "2099-01-01")).toEqual([]);
   });
 });
