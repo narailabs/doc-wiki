@@ -802,3 +802,62 @@ describe("graph_ops isExcludedNode — directory-only exclusion", () => {
     expect(Object.keys(degrees).some((k) => k.includes("_drafts"))).toBe(false);
   });
 });
+
+// ── Buffer-scan terminator handling ─────────────────────────────────
+
+describe("readAllEdges buffer scan — line terminators", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath("graph-scan-");
+  });
+
+  afterEach(() => {
+    cleanupTmpPath(tmpPath);
+  });
+
+  function writeRaw(body: string): string {
+    const p = path.join(tmpPath, "edges.jsonl");
+    fs.writeFileSync(p, body);
+    return p;
+  }
+
+  const edge = (from: string, to: string) => ({
+    from,
+    to,
+    type: "extends",
+    provenance: "EXTRACTED",
+    evidence: "",
+    source_file: "",
+    date: "2026-04-10",
+  });
+
+  it("reads the final edge when the file has no trailing newline", () => {
+    // `readAllEdges` walks the buffer with `indexOf("\n")` instead of
+    // `split("\n")`. The unterminated last line is the case that separates
+    // the two: `indexOf` returns -1 there, so the scan has to fall back to
+    // the buffer end. Reading `pos` instead would silently drop the edge.
+    const p = writeRaw(
+      [edge("A", "B"), edge("B", "C")].map((e) => JSON.stringify(e)).join("\n"),
+    );
+    const edges = listEdges(p);
+    expect(edges).toHaveLength(2);
+    expect(edges[1]?.to).toBe("C");
+  });
+
+  it("reads a lone edge that has no terminator at all", () => {
+    const p = writeRaw(JSON.stringify(edge("A", "B")));
+    expect(listEdges(p)).toHaveLength(1);
+  });
+
+  it("skips blank rows between edges", () => {
+    const p = writeRaw(
+      `${JSON.stringify(edge("A", "B"))}\n\n\n${JSON.stringify(edge("B", "C"))}\n`,
+    );
+    expect(listEdges(p)).toHaveLength(2);
+  });
+
+  it("returns an empty list for a file that is only blank lines", () => {
+    expect(listEdges(writeRaw("\n\n\n"))).toHaveLength(0);
+  });
+});
