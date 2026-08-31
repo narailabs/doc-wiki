@@ -303,9 +303,7 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(
-  argv: readonly string[] = process.argv.slice(2),
-): number {
+export function main(argv: readonly string[] = process.argv.slice(2)): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);
