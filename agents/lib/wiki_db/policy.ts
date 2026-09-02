@@ -43,17 +43,29 @@ export const OperationType = {
 // -----------------------------------------------------------------------
 
 const _READ_KEYWORDS: ReadonlySet<string> = new Set([
-  "SELECT", "EXPLAIN", "SHOW", "DESCRIBE", "DESC", "WITH",
+  "SELECT",
+  "EXPLAIN",
+  "SHOW",
+  "DESCRIBE",
+  "DESC",
+  "WITH",
 ]);
 const _DML_KEYWORDS: ReadonlySet<string> = new Set([
-  "INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE", "UPSERT",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "REPLACE",
+  "MERGE",
+  "UPSERT",
 ]);
 const _DDL_KEYWORDS: ReadonlySet<string> = new Set([
-  "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME",
+  "CREATE",
+  "DROP",
+  "ALTER",
+  "TRUNCATE",
+  "RENAME",
 ]);
-const _PRIVILEGE_KEYWORDS: ReadonlySet<string> = new Set([
-  "GRANT", "REVOKE",
-]);
+const _PRIVILEGE_KEYWORDS: ReadonlySet<string> = new Set(["GRANT", "REVOKE"]);
 
 /**
  * Classify a SQL string by its leading keyword.
@@ -85,6 +97,7 @@ export function classifySqlKeywords(sql: string): OperationType {
 const _LINE_COMMENT_RE = /--[^\n]*/g;
 // Python uses re.DOTALL so `.` matches newlines; in JS use the `s` flag.
 const _BLOCK_COMMENT_RE = /\/\*.*?\*\//gs;
+const _EXEC_COMMENT_RE = /\/\*[A-Za-z]*!/;
 
 /**
  * Heuristic: a SELECT is "unbounded" if it reads from a table but has
@@ -92,7 +105,9 @@ const _BLOCK_COMMENT_RE = /\/\*.*?\*\//gs;
  *
  * Python uses `re.IGNORECASE | re.DOTALL`; in JS we emulate with `is` flags.
  */
-const _UNBOUNDED_RE = /^\s*SELECT\s+.*\bFROM\s+\w+/is;
+// The table name may be a quoted identifier (`FROM "users"`, MySQL
+// `FROM \`users\``), so accept an opening quote as well as a word character.
+const _UNBOUNDED_RE = /^\s*SELECT\s+.*\bFROM\s+["'`\w]/is;
 // G-POLICY-CROSSJOIN: require JOIN ... ON so CROSS JOIN (which has no
 // join predicate and explodes rows) does not count as bounded. Bare
 // JOIN USING (…) also falls through to escalate — safe direction.
@@ -106,7 +121,10 @@ export type ApprovalMode =
   | "grant_required";
 
 const _VALID_APPROVAL_MODES: ReadonlySet<ApprovalMode> = new Set([
-  "auto", "confirm_once", "confirm_each", "grant_required",
+  "auto",
+  "confirm_once",
+  "confirm_each",
+  "grant_required",
 ]);
 
 /**
@@ -140,9 +158,14 @@ export class Policy {
   // SQL classification
   // ------------------------------------------------------------------
 
-  /** Remove SQL comments from the statement. */
+  /**
+   * Remove SQL comments from the statement.
+   * Note: Block comments are replaced with a space (" ") rather than an empty
+   * string. This ensures that an attacker cannot synthesize a keyword to bypass
+   * checks. For example, `WHE/*x*\/RE` will become `WHE RE` instead of `WHERE`.
+   */
   static _stripComments(sql: string): string {
-    let s = sql.replace(_BLOCK_COMMENT_RE, "");
+    let s = sql.replace(_BLOCK_COMMENT_RE, " ");
     s = s.replace(_LINE_COMMENT_RE, "");
     return s.trim();
   }
@@ -156,10 +179,39 @@ export class Policy {
   // Unbounded query heuristic
   // ------------------------------------------------------------------
 
+  /**
+   * Replace the contents of quoted spans with spaces so their text cannot
+   * satisfy a keyword check. Covers single and double quotes plus the
+   * MySQL/MariaDB backtick. A backtick span is an identifier rather than a
+   * string literal, but its contents are equally inert: without masking,
+   * `SELECT \`where\` FROM users` matched _BOUNDED_KEYWORDS_RE on the column
+   * name and a full-table read was classified bounded.
+   */
+  static _maskStringLiterals(sql: string): string {
+    return sql.replace(/(['"`])(?:(?!\1)[^\\]|\\.)*\1/g, (match) => " ".repeat(match.length));
+  }
+
   /** Return true if the SELECT appears to lack a bounding clause. */
   static _isUnboundedSelect(sql: string): boolean {
-    if (!_UNBOUNDED_RE.test(sql)) return false;
-    return !_BOUNDED_KEYWORDS_RE.test(sql);
+    // Fail closed: the regex `_stripComments` is not string-literal-aware, so a
+    // `/* ... */` that opens inside a quoted literal (e.g. `SELECT '/*' ... FROM
+    // users ... '*/'`) gets deleted along with the real `FROM users`, making an
+    // unbounded scan look bounded. MySQL executable comments (`/*! ... */`) are
+    // likewise stripped here but run on the server. So evaluate the heuristic on
+    // BOTH the raw and the comment-stripped text and escalate if either looks
+    // unbounded; always escalate when an executable comment is present.
+    // Ask the two questions of different views of the text. "Does this read
+    // from a table?" is a question about real syntax, so it runs on the raw
+    // text: masking blanks a quoted table name (`FROM \`users\``) and left the
+    // statement looking like no FROM at all, which read as bounded. "Is there
+    // a bounding clause?" must ignore quoted spans, so it runs on the mask.
+    const looksUnbounded = (text: string): boolean => {
+      const masked = Policy._maskStringLiterals(text);
+      return _UNBOUNDED_RE.test(text) && !_BOUNDED_KEYWORDS_RE.test(masked);
+    };
+
+    if (_EXEC_COMMENT_RE.test(sql)) return true;
+    return looksUnbounded(sql) || looksUnbounded(Policy._stripComments(sql));
   }
 
   // ------------------------------------------------------------------
@@ -180,16 +232,20 @@ export class Policy {
   checkQuery(sql: string, driver?: DatabaseDriver): PolicyResult {
     const stripped = sql.trim();
     if (!stripped) {
-      const result: PolicyResult = { decision: "deny", reason: "Empty SQL statement" };
+      const result: PolicyResult = {
+        decision: "deny",
+        reason: "Empty SQL statement",
+      };
       _emitDeny(result.reason, null);
       return result;
     }
 
     let op: OperationType;
     try {
-      op = driver !== undefined
-        ? driver.classifyOperation(stripped)
-        : this.classifySql(stripped);
+      op =
+        driver !== undefined
+          ? driver.classifyOperation(stripped)
+          : this.classifySql(stripped);
     } catch (exc) {
       const reason = (exc as Error).message;
       _emitDeny(reason, null);
@@ -398,9 +454,7 @@ function _emitPresentOnly(
   // can't leak. Same helper used by audit.logQuery.
   const scrubbed = scrubSqlSecrets(formattedSql);
   const truncated =
-    scrubbed.length > 500
-      ? scrubbed.slice(0, 500) + "\u2026"
-      : scrubbed;
+    scrubbed.length > 500 ? scrubbed.slice(0, 500) + "\u2026" : scrubbed;
   const details: Record<string, unknown> = {
     reason,
     formatted_sql: truncated,
