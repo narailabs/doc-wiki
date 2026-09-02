@@ -205,6 +205,29 @@ describe("TestDecisionLogic", () => {
     expect(result.decision).toBe(Decision.ESCALATE);
   });
 
+  // A MySQL/MariaDB backtick-quoted identifier is not a string literal, but
+  // its contents are just as inert as one. Leaving backticks unmasked let a
+  // column named after a bounding keyword satisfy _BOUNDED_KEYWORDS_RE, so a
+  // full-table read classified as bounded and skipped the escalation prompt.
+  it("test_unbounded_select_bounding_keyword_in_backtick_identifier_escalates", () => {
+    const result = policyAuto().checkQuery("SELECT `where` FROM users");
+    expect(result.decision).toBe(Decision.ESCALATE);
+  });
+
+  // A quoted table name is still a table read. The masker blanks the quoted
+  // span, so testing _UNBOUNDED_RE on the masked text left `FROM "users"`
+  // looking like a SELECT with no FROM at all and a full-table read was
+  // allowed. _UNBOUNDED_RE now runs on the raw text; only the bounding-clause
+  // check reads the mask.
+  it("test_unbounded_select_quoted_table_name_escalates", () => {
+    expect(policyAuto().checkQuery('SELECT * FROM "users"').decision).toBe(
+      Decision.ESCALATE,
+    );
+    expect(policyAuto().checkQuery("SELECT * FROM `users`").decision).toBe(
+      Decision.ESCALATE,
+    );
+  });
+
   it("test_unbounded_select_via_executable_comment_escalates", () => {
     const result = policyAuto().checkQuery("SELECT 1 /* WHERE */ /*M! UNION SELECT id FROM users */");
     expect(result.decision).toBe(Decision.ESCALATE);
