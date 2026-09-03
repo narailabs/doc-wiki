@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-09-03 - Avoid memory overhead from string splitting
+
+**Learning:** When processing large append-only JSON logs (like `events.jsonl`), using `.split('\n')` to iterate over lines synchronously allocates a massive intermediate array in memory, causing an unnecessary performance bottleneck.
+**Action:** Instead of `.split('\n')`, use an iterative `indexOf('\n')` (for forward iteration) or `lastIndexOf('\n')` (for backward iteration) combined with a `substring()` loop to significantly reduce memory overhead. Ensure to handle index 0 explicitly when traversing backward to avoid infinite loops.
