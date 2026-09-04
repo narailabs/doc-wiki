@@ -162,6 +162,13 @@ export function logEvent(
 
 // ── Stats ───────────────────────────────────────────────────────────
 
+/**
+ * Anchored `ts` extractor for the reader loop below. Hoisted to module scope
+ * so the literal is evaluated once rather than allocating a fresh `RegExp`
+ * on every line of `events.jsonl`.
+ */
+const _TS_PREFIX_RE = /^{"ts":"([^"\\]+)"/;
+
 function _readEvents(
   wikiRoot: string,
   since: string | null = null,
@@ -191,8 +198,12 @@ function _readEvents(
 
   const raw = fs.readFileSync(p, { encoding: "utf-8" });
   const events: Array<Record<string, unknown>> = [];
-  for (const rawLine of raw.split("\n")) {
-    const line = rawLine.trim();
+  let pos = 0;
+  while (pos < raw.length) {
+    const nextPos = raw.indexOf("\n", pos);
+    const end = nextPos === -1 ? raw.length : nextPos;
+    const line = raw.substring(pos, end).trim();
+    pos = end + 1;
     if (!line) continue;
 
     if (sinceMs !== null && !Number.isNaN(sinceMs)) {
@@ -201,7 +212,7 @@ function _readEvents(
       // leading whitespace. The character class excludes both `"` and `\` so
       // any ts containing a JSON escape (like `\+` for `+`) misses the regex
       // and safely falls through to the slow path for proper decoding.
-      const m = line.match(/^{"ts":"([^"\\]+)"/);
+      const m = _TS_PREFIX_RE.exec(line);
       if (m) {
         const entryMs = parsePythonIsoformat(m[1] as string);
         // G-EVENTS-TS-STRICT: when --since is active, drop events whose

@@ -43,6 +43,18 @@ import { parseFlags } from "./_cli_args.js";
 import { parseFrontmatter } from "./_frontmatter.js";
 // ── Last atlas run ─────────────────────────────────────────────────
 /**
+ * Fast-path matcher used to skip `JSON.parse` on rows that cannot be atlas
+ * events. Matches `"op":"atlas"` (compact — what `event_logger.ts` emits via
+ * `JSON.stringify`) and `"op": "atlas"` (one space — historical Python
+ * `json.dumps` rows still checked into `wiki-workspace/`). Those are the only
+ * two shapes either writer produces.
+ *
+ * Narrower than the previous `line.includes('"atlas"')`, which also fired on
+ * the word "atlas" appearing anywhere in `details.*` and paid for a parse the
+ * `rec["op"] === "atlas"` check below would then reject.
+ */
+const _OP_ATLAS_RE = /"op":\s?"atlas"/;
+/**
  * Return the timestamp of the most recent `op: atlas` event in
  * `<wikiRoot>/log/events.jsonl`, or `null` if none exists or the log is
  * unreadable. Timestamps follow the convention `event_logger.ts` writes
@@ -52,20 +64,23 @@ export function getLastAtlasTimestamp(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let logContent;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        logContent = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
     // Walk backwards — most recent atlas event wins.
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    let pos = logContent.length;
+    while (pos > 0) {
+        const nextPos = pos === 0 ? -1 : logContent.lastIndexOf("\n", pos - 1);
+        const line = logContent.substring(nextPos + 1, pos);
+        pos = nextPos;
         if (!line)
             continue;
-        // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
-        if (!line.includes('"atlas"'))
+        // Fast-path: skip the JSON parse when this row cannot be an atlas event.
+        if (!_OP_ATLAS_RE.test(line))
             continue;
         let parsed;
         try {
@@ -101,11 +116,22 @@ export function getChangedFilesSince(repoRoot, since) {
         encoding: "utf-8",
         maxBuffer: 64 * 1024 * 1024,
     });
+    // Scan the buffer instead of `out.split("\n")`. `maxBuffer` above allows 64
+    // MB, and on a repository with that much history the split allocates one
+    // string per line plus the array holding them, all live at once. Walking with
+    // `indexOf` keeps one substring alive at a time. This is the same treatment
+    // the event-log readers in this file and `atlas_orchestrator.ts` already got;
+    // it was the one caller left on the old form.
     const set = new Set();
-    for (const line of out.split("\n")) {
-        const trimmed = line.trim();
+    let start = 0;
+    while (start < out.length) {
+        let end = out.indexOf("\n", start);
+        if (end === -1)
+            end = out.length;
+        const trimmed = out.substring(start, end).trim();
         if (trimmed.length > 0)
             set.add(trimmed);
+        start = end + 1;
     }
     return [...set].sort();
 }
@@ -229,7 +255,11 @@ export function classifyChanges(changedFiles, pageIndex, topics) {
     for (const [page, sources] of [...staleByPage.entries()].sort()) {
         stale_pages.push({ page, sources: [...sources].sort() });
     }
-    return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+    return {
+        stale_pages,
+        uncovered_files: uncovered,
+        unrelated_files: unrelated,
+    };
 }
 // ── CLI ────────────────────────────────────────────────────────────
 const FLAG_SPEC = {
@@ -277,11 +307,13 @@ export function main(argv = process.argv.slice(2)) {
         process.stderr.write("--wiki-root is required\n");
         return 2;
     }
-    const repoRoot = typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    const repoRoot = typeof parsed.values["repoRoot"] === "string" &&
+        parsed.values["repoRoot"].length > 0
         ? parsed.values["repoRoot"]
         : process.cwd();
     let since = null;
-    if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+    if (typeof parsed.values["since"] === "string" &&
+        parsed.values["since"].length > 0) {
         since = parsed.values["since"];
     }
     else {
