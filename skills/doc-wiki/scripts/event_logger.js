@@ -128,6 +128,12 @@ export function logEvent(wikiRoot, op, details) {
     return entry;
 }
 // ── Stats ───────────────────────────────────────────────────────────
+/**
+ * Anchored `ts` extractor for the reader loop below. Hoisted to module scope
+ * so the literal is evaluated once rather than allocating a fresh `RegExp`
+ * on every line of `events.jsonl`.
+ */
+const _TS_PREFIX_RE = /^{"ts":"([^"\\]+)"/;
 function _readEvents(wikiRoot, since = null) {
     const p = _eventsPath(wikiRoot);
     if (!fs.existsSync(p)) {
@@ -160,7 +166,7 @@ function _readEvents(wikiRoot, since = null) {
             // leading whitespace. The character class excludes both `"` and `\` so
             // any ts containing a JSON escape (like `\+` for `+`) misses the regex
             // and safely falls through to the slow path for proper decoding.
-            const m = line.match(/^{"ts":"([^"\\]+)"/);
+            const m = _TS_PREFIX_RE.exec(line);
             if (m) {
                 const entryMs = parsePythonIsoformat(m[1]);
                 // G-EVENTS-TS-STRICT: when --since is active, drop events whose

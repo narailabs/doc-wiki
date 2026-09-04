@@ -24,6 +24,14 @@ import { parseFlags } from "./_cli_args.js";
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /**
+ * Anchored `ts` extractor for the reader loop below. Hoisted to module scope
+ * so the literal is evaluated once rather than allocating a fresh `RegExp`
+ * on every line of `events.jsonl` — the same treatment `_OP_ATLAS_RE` in
+ * `atlas_gitlog.ts` already gets.
+ */
+const _TS_PREFIX_RE = /^{"ts":"([^"\\]+)"/;
+
+/**
  * Read events from `<wikiRoot>/log/events.jsonl`, keeping only entries whose
  * `ts` string starts with `dateStr`. Unparseable JSON lines are silently
  * skipped, matching the Python reference's `json.JSONDecodeError` branch.
@@ -48,7 +56,7 @@ function readEvents(
 
     // Fast-path: skip JSON parse overhead if this line cannot match our date
     if (!line.includes(dateStr)) continue;
-    const match = line.match(/^{"ts":"([^"\\]+)"/);
+    const match = _TS_PREFIX_RE.exec(line);
     if (match && match[1] && !match[1].startsWith(dateStr)) continue;
 
     let entry: unknown;
