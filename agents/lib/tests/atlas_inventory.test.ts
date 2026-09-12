@@ -24,6 +24,7 @@ import {
   main,
   _readEcosystemRestEnabled,
   _readEcosystemCrossServiceEnabled,
+  _countLinesTo,
   resolveCrossService,
   type CodeInventory,
   type RestProfile,
@@ -2431,5 +2432,56 @@ describe("_readEcosystemCrossServiceEnabled", () => {
     const inv = loadInventory(wiki, "2026-06-07T10-00-00")!;
     expect(inv.services.length).toBeGreaterThan(0);   // cross-service ran
     cleanupTmpPath(root); cleanupTmpPath(wiki);
+  });
+});
+
+describe("_countLinesTo", () => {
+  // The reference implementation this replaced. Every case below asserts
+  // equivalence against it rather than against a hand-computed number, so a
+  // future rewrite of the backward scan can't silently drift.
+  const reference = (s: string, idx: number): number =>
+    s.slice(0, idx).split("\n").length;
+
+  const cases: Array<[string, string, number]> = [
+    ["empty string", "", 0],
+    ["index 0 is line 1", "abc", 0],
+    ["single line, no newline", "abc", 2],
+    ["second line", "a\nb", 2],
+    ["leading newline", "\nabc", 3],
+    ["consecutive newlines", "a\n\nb", 3],
+    ["trailing newline", "a\n", 2],
+    ["index on the newline itself", "a\nb", 1],
+    ["index just past a newline", "a\nb", 2],
+    ["many lines", "l1\nl2\nl3\nl4\nl5", 11],
+    ["CRLF line endings", "a\r\nb\r\nc", 6],
+    ["index at end of string", "a\nb\nc", 5],
+  ];
+
+  for (const [name, str, idx] of cases) {
+    it(`matches slice().split() — ${name}`, () => {
+      expect(_countLinesTo(str, idx)).toBe(reference(str, idx));
+    });
+  }
+
+  it("matches slice().split() across every index of a multi-line string", () => {
+    const s = "alpha\nbravo\n\ncharlie\n\n\ndelta\n";
+    for (let i = 0; i <= s.length; i++) {
+      expect(_countLinesTo(s, i)).toBe(reference(s, i));
+    }
+  });
+
+  it("stays correct at the end of a large buffer", () => {
+    // 200k lines, checked for the COUNT and not for the clock. The wall-clock
+    // bound this replaced did not discriminate: measured on this input the
+    // `.slice().split()` form takes ~2.6ms and the backward scan ~3.0ms, so a
+    // 500ms threshold passed for both and the guard it claimed to be was not
+    // one. Both forms are O(N) in time; the win here is allocation — the old
+    // one copied the whole prefix and built an array of every line on each of
+    // the three call sites, per match — and allocation is not something this
+    // suite can assert without heap instrumentation. So this asserts the part
+    // that is real: the backward scan does not drift or overflow at scale.
+    const big = "x\n".repeat(200_000);
+    expect(_countLinesTo(big, big.length)).toBe(200_001);
+    expect(_countLinesTo(big, big.length - 1)).toBe(200_000);
   });
 });

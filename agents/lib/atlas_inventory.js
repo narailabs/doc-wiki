@@ -863,7 +863,7 @@ export function detectHttpClients(repoRoot, profiles) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[ext.url_group] ?? "");
                         const idx = m[ext.url_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _countLinesTo(content, idx);
                         emitClient(ext, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1104,7 +1104,7 @@ export function detectQueueEndpoints(repoRoot, profiles, ctx) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[pat.name_group] ?? "");
                         const idx = m[pat.name_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _countLinesTo(content, idx);
                         emit(pat, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1244,7 +1244,7 @@ export function detectQueueBindings(repoRoot, ctx) {
             // A binding needs at least a real queue AND a real exchange to bridge.
             if (!queue_name || !exchange)
                 return;
-            const line = content.slice(0, idx).split("\n").length;
+            const line = _countLinesTo(content, idx);
             const key = `${relFile}|${line}|${queue_name}|${exchange}|${routing_key}`;
             if (seen.has(key))
                 return;
@@ -1924,4 +1924,28 @@ export function main(argv = process.argv.slice(2)) {
 const thisFile = fileURLToPath(import.meta.url);
 if (process.argv[1] && path.resolve(process.argv[1]) === thisFile) {
     process.exit(main());
+}
+/**
+ * The 1-based line number at a string index, without materialising the prefix.
+ *
+ * `content.slice(0, idx).split("\n").length` allocated a copy of everything
+ * before the match and then an array of every line in it, once per match. On a
+ * large source file scanned for many patterns that is the dominant cost of the
+ * detector, and none of it is read — only the count is.
+ *
+ * Counts newlines in `[0, idx)`, so it returns exactly what the slice form
+ * returned: `idx === 0` is line 1, and a `\n` at index 0 counts toward the
+ * total.
+ *
+ * Exported for tests only; not part of the module's public surface.
+ */
+export function _countLinesTo(str, idx) {
+    let count = 1;
+    let pos = idx;
+    while (pos > 0) {
+        pos = str.lastIndexOf("\n", pos - 1);
+        if (pos !== -1)
+            count++;
+    }
+    return count;
 }
