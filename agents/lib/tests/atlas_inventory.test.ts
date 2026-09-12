@@ -2470,13 +2470,18 @@ describe("_countLinesTo", () => {
     }
   });
 
-  it("does not allocate per call on a large input", () => {
-    // 200k lines: the .slice().split() form allocated a copy of the prefix
-    // plus an array of every line on each match. Guard against a regression
-    // to that shape by asserting this stays fast on a large buffer.
+  it("stays correct at the end of a large buffer", () => {
+    // 200k lines, checked for the COUNT and not for the clock. The wall-clock
+    // bound this replaced did not discriminate: measured on this input the
+    // `.slice().split()` form takes ~2.6ms and the backward scan ~3.0ms, so a
+    // 500ms threshold passed for both and the guard it claimed to be was not
+    // one. Both forms are O(N) in time; the win here is allocation — the old
+    // one copied the whole prefix and built an array of every line on each of
+    // the three call sites, per match — and allocation is not something this
+    // suite can assert without heap instrumentation. So this asserts the part
+    // that is real: the backward scan does not drift or overflow at scale.
     const big = "x\n".repeat(200_000);
-    const started = performance.now();
     expect(_countLinesTo(big, big.length)).toBe(200_001);
-    expect(performance.now() - started).toBeLessThan(500);
+    expect(_countLinesTo(big, big.length - 1)).toBe(200_000);
   });
 });
