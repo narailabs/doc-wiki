@@ -38,8 +38,14 @@ function readEvents(
   }
   const events: Array<Record<string, unknown>> = [];
   const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-  for (const rawLine of raw.split("\n")) {
-    const line = rawLine.trim();
+  // Performance optimization: Avoid .split("\n") which allocates a massive array for large log files.
+  // Instead, scan the string forwards iteratively using indexOf.
+  let pos = 0;
+  while (pos < raw.length) {
+    const next = raw.indexOf("\n", pos);
+    const end = next === -1 ? raw.length : next;
+    const line = raw.substring(pos, end).trim();
+    pos = next === -1 ? raw.length : next + 1;
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot match our date
@@ -299,9 +305,7 @@ options:
   --date DATE           Date (YYYY-MM-DD), defaults to today
 `;
 
-export function main(
-  argv: readonly string[] = process.argv.slice(2),
-): number {
+export function main(argv: readonly string[] = process.argv.slice(2)): number {
   let parsed: ReturnType<typeof parseFlags>;
   try {
     parsed = parseFlags(argv, FLAG_SPEC);
