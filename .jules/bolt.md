@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2024-09-15 - Parsing large files without massive memory allocation
+**Learning:** When parsing large append-only JSON logs (like `events.jsonl`), using `.split('\n')` or slicing to count lines allocates massive intermediate arrays and string copies synchronously.
+**Action:** Instead, use an iterative `indexOf('\n')` or `lastIndexOf('\n')` loop with `substring()`. In JavaScript, `lastIndexOf` treats `position < 0` as `0`. To safely traverse backwards, explicitly handle the `0` case (e.g. `pos === 0 ? -1 : str.lastIndexOf('\n', pos - 1)`) to avoid an infinite loop.
