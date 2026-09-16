@@ -124,15 +124,22 @@ export function getLastAtlasRunId(wikiRoot) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return null;
-    let lines;
+    let raw;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        raw = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return null;
     }
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
+    let endIdx = raw.length;
+    while (endIdx > 0) {
+        let startIdx = raw.lastIndexOf("\n", endIdx - 2);
+        if (startIdx === -1)
+            startIdx = 0;
+        else
+            startIdx += 1;
+        const line = raw.substring(startIdx, endIdx).trim();
+        endIdx = startIdx > 0 ? startIdx - 1 : 0;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -202,16 +209,23 @@ export function getRollingPerIngestAvg(wikiRoot, sampleSize = 50) {
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (!fs.existsSync(eventsPath))
         return DEFAULT_PER_INGEST_AVG_USD;
-    let lines;
+    let raw;
     try {
-        lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+        raw = fs.readFileSync(eventsPath, "utf-8");
     }
     catch {
         return DEFAULT_PER_INGEST_AVG_USD;
     }
     const samples = [];
-    for (let i = lines.length - 1; i >= 0 && samples.length < sampleSize; i--) {
-        const line = lines[i];
+    let endIdx = raw.length;
+    while (endIdx > 0 && samples.length < sampleSize) {
+        let startIdx = raw.lastIndexOf("\n", endIdx - 2);
+        if (startIdx === -1)
+            startIdx = 0;
+        else
+            startIdx += 1;
+        const line = raw.substring(startIdx, endIdx).trim();
+        endIdx = startIdx > 0 ? startIdx - 1 : 0;
         if (!line)
             continue;
         // Fast-path: skip JSON parse overhead if this line cannot be an ingest event

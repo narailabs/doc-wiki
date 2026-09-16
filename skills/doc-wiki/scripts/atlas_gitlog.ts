@@ -79,15 +79,22 @@ export interface ClassifyResult {
 export function getLastAtlasTimestamp(wikiRoot: string): string | null {
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (!fs.existsSync(eventsPath)) return null;
-  let lines: string[];
+  let raw: string;
   try {
-    lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+    raw = fs.readFileSync(eventsPath, "utf-8");
   } catch {
     return null;
   }
   // Walk backwards — most recent atlas event wins.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
+  let endIdx = raw.length;
+  while (endIdx > 0) {
+    let startIdx = raw.lastIndexOf("\n", endIdx - 2);
+    if (startIdx === -1) startIdx = 0;
+    else startIdx += 1;
+
+    const line = raw.substring(startIdx, endIdx).trim();
+    endIdx = startIdx > 0 ? startIdx - 1 : 0;
+
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
@@ -231,7 +238,10 @@ function _matchPage(
  * `app/<topic>/`, `services/<topic>/`, or just `<topic>/...` at the repo root)
  * otherwise `null`.
  */
-function _matchTopic(filePath: string, topics: readonly string[]): string | null {
+function _matchTopic(
+  filePath: string,
+  topics: readonly string[],
+): string | null {
   const parts = filePath.split("/");
   for (const topic of topics) {
     if (parts.includes(topic)) return topic;
@@ -279,7 +289,11 @@ export function classifyChanges(
   for (const [page, sources] of [...staleByPage.entries()].sort()) {
     stale_pages.push({ page, sources: [...sources].sort() });
   }
-  return { stale_pages, uncovered_files: uncovered, unrelated_files: unrelated };
+  return {
+    stale_pages,
+    uncovered_files: uncovered,
+    unrelated_files: unrelated,
+  };
 }
 
 // ── CLI ────────────────────────────────────────────────────────────
@@ -333,12 +347,16 @@ export function main(argv: readonly string[] = process.argv.slice(2)): number {
     return 2;
   }
   const repoRoot =
-    typeof parsed.values["repoRoot"] === "string" && parsed.values["repoRoot"].length > 0
+    typeof parsed.values["repoRoot"] === "string" &&
+    parsed.values["repoRoot"].length > 0
       ? parsed.values["repoRoot"]
       : process.cwd();
 
   let since: string | null = null;
-  if (typeof parsed.values["since"] === "string" && parsed.values["since"].length > 0) {
+  if (
+    typeof parsed.values["since"] === "string" &&
+    parsed.values["since"].length > 0
+  ) {
     since = parsed.values["since"];
   } else {
     const last = getLastAtlasTimestamp(wikiRoot);
