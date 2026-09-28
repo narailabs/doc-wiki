@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-09-28 - Replaced .split('\n') with string.lastIndexOf for large file parsing
+**Learning:** Using .split('\n') on large files synchronously allocates large intermediate arrays and string copies, which can consume a significant amount of memory. Using an iterative string.lastIndexOf approach over the raw file string buffer prevents these huge allocations while achieving the same backward-iteration goal.
+**Action:** When scanning append-only logs backwards, avoid .split('\n'). Iterate manually backwards using lastIndexOf('\n', pos) to find lines without allocating arrays of strings.
