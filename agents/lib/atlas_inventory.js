@@ -33,6 +33,16 @@ import { countRealServices } from "./cross_service_pages.js";
 import { resolveRef, buildResolutionContext } from "./property_resolver.js";
 import { detectExternalSources } from "./external_sources.js";
 import { loadConfiguredConnectorIds } from "./source_registry.js";
+// Helper to count lines efficiently without massive allocations
+function _getLineNumberFromIndex(content, maxIdx) {
+    let count = 1;
+    let pos = content.indexOf("\n");
+    while (pos !== -1 && pos < maxIdx) {
+        count++;
+        pos = content.indexOf("\n", pos + 1);
+    }
+    return count;
+}
 // ── Project metadata ────────────────────────────────────────────────
 /** Match the major Node version embedded in `engines.node`. */
 function _nodeMajorFromEnginesString(spec) {
@@ -863,7 +873,7 @@ export function detectHttpClients(repoRoot, profiles) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[ext.url_group] ?? "");
                         const idx = m[ext.url_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _getLineNumberFromIndex(content, idx);
                         emitClient(ext, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1104,7 +1114,7 @@ export function detectQueueEndpoints(repoRoot, profiles, ctx) {
                         // Derive the 1-based line of the captured group (fall back to match start).
                         const grpStart = m.index + m[0].indexOf(m[pat.name_group] ?? "");
                         const idx = m[pat.name_group] ? grpStart : m.index;
-                        const lineNo = content.slice(0, idx).split("\n").length;
+                        const lineNo = _getLineNumberFromIndex(content, idx);
                         emit(pat, m, lineNo);
                         if (m.index === re.lastIndex)
                             re.lastIndex++;
@@ -1244,7 +1254,7 @@ export function detectQueueBindings(repoRoot, ctx) {
             // A binding needs at least a real queue AND a real exchange to bridge.
             if (!queue_name || !exchange)
                 return;
-            const line = content.slice(0, idx).split("\n").length;
+            const line = _getLineNumberFromIndex(content, idx);
             const key = `${relFile}|${line}|${queue_name}|${exchange}|${routing_key}`;
             if (seen.has(key))
                 return;

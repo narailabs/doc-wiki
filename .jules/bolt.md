@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-25 - Efficient multi-line string counting
+
+**Learning:** For large multi-line string files read completely into memory (like during regex analysis in `atlas_inventory.ts`), determining line numbers by using `.slice(0, idx).split('\n').length` inside tight regex execution loops causes massive synchronous array and string memory allocations. This is extremely inefficient and drastically slows down iterations over large files with thousands of lines.
+**Action:** Replace `.split('\n')` slicing patterns with an efficient, single-pass iteration of `.indexOf('\n')` starting from index `0` up to the target index `idx`, avoiding intermediate string copying or array instantiations.
