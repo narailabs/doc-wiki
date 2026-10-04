@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-10-04 - Fast-path large file line reading
+
+**Learning:** When reading very large string logs line-by-line in Node.js (V8) to walk logs backwards, using `.split('\n')` on the entire string first allocates massive intermediate arrays, crippling performance and consuming large amounts of memory overhead.
+**Action:** Replace `const lines = text.split('\n'); for(let i = lines.length - 1; i >= 0; i--)` with an iterative `lastIndexOf('\n')` loop tracking `pos` to extract string lines backward via `substring()`.
