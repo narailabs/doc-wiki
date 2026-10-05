@@ -146,8 +146,19 @@ function _readEvents(wikiRoot, since = null) {
     }
     const raw = fs.readFileSync(p, { encoding: "utf-8" });
     const events = [];
-    for (const rawLine of raw.split("\n")) {
-        const line = rawLine.trim();
+    // ⚡ Bolt: Iterative parsing optimization
+    // Reading a multi-megabyte log string and calling .split('\n') allocates
+    // an enormous intermediate array and copies all strings, causing GC pressure
+    // and performance degradation.
+    // We instead use an iterative indexOf loop to extract strings one-by-one,
+    // significantly reducing peak memory overhead and improving throughput.
+    let start = 0;
+    while (start < raw.length) {
+        let end = raw.indexOf("\n", start);
+        if (end === -1)
+            end = raw.length;
+        const line = raw.substring(start, end).trim();
+        start = end + 1;
         if (!line)
             continue;
         if (sinceMs !== null && !Number.isNaN(sinceMs)) {
