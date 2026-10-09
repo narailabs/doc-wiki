@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-10-09 - Memory Overhead with string.split('\n') on Large Logs
+**Learning:** Using `.split('\n')` on large file contents (like event logs read via `fs.readFileSync`) causes immense synchronous memory allocation for the resulting massive array and string copies.
+**Action:** When parsing large append-only strings in memory, use iterative `indexOf('\n')` (forward) or `lastIndexOf('\n')` (backward) combined with `substring()` to process strings dynamically without creating huge intermediate arrays.

@@ -146,7 +146,12 @@ function _readEvents(wikiRoot, since = null) {
     }
     const raw = fs.readFileSync(p, { encoding: "utf-8" });
     const events = [];
-    for (const rawLine of raw.split("\n")) {
+    let pos = 0;
+    while (pos < raw.length) {
+        const nextNewline = raw.indexOf("\n", pos);
+        const endIndex = nextNewline === -1 ? raw.length : nextNewline;
+        const rawLine = raw.substring(pos, endIndex);
+        pos = endIndex + 1;
         const line = rawLine.trim();
         if (!line)
             continue;
