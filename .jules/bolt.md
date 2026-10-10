@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2024-10-10 - Avoid splitting large strings for line extraction
+**Learning:** Using `.split('\n')` on large log files (like `events.jsonl`) synchronously allocates massive intermediate arrays and string copies, leading to memory overhead and potential event loop blocking.
+**Action:** Instead of `.split('\n')`, use an iterative `lastIndexOf('\n')` loop with `substring()` to extract lines as needed when traversing a file backwards.
