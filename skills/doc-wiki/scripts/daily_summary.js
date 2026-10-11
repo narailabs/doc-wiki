@@ -33,7 +33,13 @@ function readEvents(wikiRoot, dateStr) {
     }
     const events = [];
     const raw = fs.readFileSync(eventsPath, { encoding: "utf-8" });
-    for (const rawLine of raw.split("\n")) {
+    let searchPos = 0;
+    while (searchPos < raw.length) {
+        let nextNewline = raw.indexOf("\n", searchPos);
+        if (nextNewline === -1)
+            nextNewline = raw.length;
+        const rawLine = raw.substring(searchPos, nextNewline);
+        searchPos = nextNewline + 1;
         const line = rawLine.trim();
         if (!line)
             continue;
