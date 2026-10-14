@@ -37,6 +37,22 @@ import type { ResolutionContext } from "./property_resolver.js";
 import { detectExternalSources, type ExternalSourceEntry } from "./external_sources.js";
 import { loadConfiguredConnectorIds } from "./source_registry.js";
 
+
+
+/**
+ * Fast-path: count newlines up to a given index without allocating arrays
+ * via slice().split('\n').
+ */
+function getLineNumber(content: string, idx: number): number {
+  let lineNo = 1;
+  let pos = -1;
+  while ((pos = content.indexOf('\n', pos + 1)) !== -1 && pos < idx) {
+    lineNo++;
+  }
+  return lineNo;
+}
+
+
 // ── Manifest types ──────────────────────────────────────────────────
 
 export interface ProjectMetadata {
@@ -1146,7 +1162,7 @@ export function detectHttpClients(
             const grpStart =
               m.index + m[0].indexOf(m[ext.url_group] ?? "");
             const idx = m[ext.url_group] ? grpStart : m.index;
-            const lineNo = content.slice(0, idx).split("\n").length;
+            const lineNo = getLineNumber(content, idx);
             emitClient(ext, m, lineNo);
             if (m.index === re.lastIndex) re.lastIndex++;
           }
@@ -1445,7 +1461,7 @@ export function detectQueueEndpoints(
             const grpStart =
               m.index + m[0].indexOf(m[pat.name_group] ?? "");
             const idx = m[pat.name_group] ? grpStart : m.index;
-            const lineNo = content.slice(0, idx).split("\n").length;
+            const lineNo = getLineNumber(content, idx);
             emit(pat, m, lineNo);
             if (m.index === re.lastIndex) re.lastIndex++;
           }
@@ -1601,7 +1617,7 @@ export function detectQueueBindings(
     ): void => {
       // A binding needs at least a real queue AND a real exchange to bridge.
       if (!queue_name || !exchange) return;
-      const line = content.slice(0, idx).split("\n").length;
+      const line = getLineNumber(content, idx);
       const key = `${relFile}|${line}|${queue_name}|${exchange}|${routing_key}`;
       if (seen.has(key)) return;
       seen.add(key);
