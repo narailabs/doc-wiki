@@ -1,6 +1,0 @@
-{"from":"authentication","to":"session-store","type":"supports","provenance":"EXTRACTED","evidence":"Auth issues a session row when login succeeds.","source_file":"raw/auth.md"}
-{"from":"session-store","to":"users-table","type":"supports","provenance":"EXTRACTED","evidence":"Session store maps session_id -> user_id in users table.","source_file":"raw/session.md"}
-{"from":"users-table","to":"database-schema","type":"extends","provenance":"EXTRACTED","evidence":"users table is part of the database schema.","source_file":"raw/users.md"}
-{"from":"authentication","to":"jwt-signing","type":"supports","provenance":"EXTRACTED","evidence":"Auth subsystem invokes JWT signing for every issued token.","source_file":"raw/auth.md"}
-{"from":"jwt-signing","to":"audit-log","type":"supports","provenance":"INFERRED","evidence":"Each JWT issuance produces an audit_log row.","source_file":"raw/jwt.md"}
-{"from":"audit-log","to":"users-table","type":"supports","provenance":"INFERRED","evidence":"Audit log foreign-keys to users table for actor identity.","source_file":"raw/audit.md"}

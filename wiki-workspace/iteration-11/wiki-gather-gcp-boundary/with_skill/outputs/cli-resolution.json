@@ -1,8 +1,0 @@
-{
-  "command": "node",
-  "args": [
-    "/Users/narayan/src/doc-wiki/node_modules/narai-primitives/dist/connectors/gcp/cli.js"
-  ],
-  "source": "bundled-self",
-  "resolvedPath": "/Users/narayan/src/doc-wiki/node_modules/narai-primitives/dist/connectors/gcp/cli.js"
-}

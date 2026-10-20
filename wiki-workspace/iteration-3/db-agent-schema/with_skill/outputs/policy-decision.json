@@ -1,9 +1,0 @@
-{
-  "final_decision": "allow",
-  "env": "dev",
-  "approval_mode": "auto",
-  "action": "schema",
-  "operation_type": "read",
-  "driver": "sqlite",
-  "reason": "Schema introspection via SQLiteDriver.getSchema() (PRAGMA table_info + sqlite_master). Read-path dispatch through driver.classifyOperation → OperationType.READ. Approval mode 'auto' on env 'dev' grants the read automatically (Policy._checkRead → {decision: allow, reason: 'auto-approved'})."
-}

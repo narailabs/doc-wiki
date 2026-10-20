@@ -1,5 +1,0 @@
-{
-  "executor_duration_seconds": 1,
-  "total_duration_seconds": 1,
-  "notes": "Wall-clock time dominated by Node startup + connector subprocess spawn. Stub-server round trip is ~ms."
-}

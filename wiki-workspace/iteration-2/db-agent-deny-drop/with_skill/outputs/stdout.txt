@@ -1,5 +1,0 @@
-classification: ddl
-policy_result: {
-  "decision": "deny",
-  "reason": "DDL statements are never allowed"
-}

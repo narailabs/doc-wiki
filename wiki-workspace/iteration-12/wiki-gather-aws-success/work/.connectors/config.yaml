@@ -1,8 +1,0 @@
-connectors:
-  aws:
-    skill: aws-agent-connector
-    region: us-east-1
-consumers:
-  doc-wiki:
-    enabled:
-      - aws

@@ -1,2 +1,0 @@
-{"event_type": "pool_created", "timestamp": "2026-04-14T20:28:57.186Z", "session_id": "0bf88fac8e49", "details": {"env": "dev", "driver": "sqlite"}}
-{"event_type": "policy_present_only", "timestamp": "2026-04-14T20:28:57.191Z", "session_id": "0bf88fac8e49", "details": {"reason": "DML statements are displayed but not executed", "formatted_sql": "INSERT INTO users (name, email) VALUES ('Test', 'test@example.com')", "op": "dml"}}

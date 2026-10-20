@@ -1,9 +1,0 @@
---- Step 1: orm_detect.js (stdout captured to detected-entities.json) ---
-(see detected-entities.json — JSON payload was the stdout stream)
-
---- Step 2: mermaid_lint.js (stdout+stderr captured to mermaid-lint.txt) ---
-[]
-
-# Exit codes
-step1_exit=0
-step2_exit=0
