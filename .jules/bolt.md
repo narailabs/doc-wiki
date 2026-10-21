@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-24 - Avoiding split for line counting
+
+**Learning:** When calculating the line number of a given index in a large string file, using `content.slice(0, idx).split('\n').length` is highly inefficient because it synchronously allocates massive intermediate arrays and string copies.
+**Action:** Use an iterative `indexOf('\n')` loop to count newlines up to the index. This significantly reduces memory overhead and improves performance.
