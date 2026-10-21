@@ -1,0 +1,109 @@
+{
+  "expectations": [
+    {
+      "text": "lint_checks.js is invoked and its first-pass report lists at least one 'broken_links' violation and at least one 'missing_frontmatter' violation",
+      "passed": true,
+      "evidence": "lint-report-before.md contains the raw JSON produced by `node skills/wiki/scripts/lint_checks.js --wiki-root /tmp/eval-i3-lint-wiki`. It lists 2 broken_links error rows (page-a.md -> ./page-d.md; page-c.md -> ./ghost.md) and 3 missing_frontmatter error rows (page-b.md sources; page-b.md tags; page-c.md 'No frontmatter found'). Summary: error=5, warning=6, info=0."
+    },
+    {
+      "text": "Each violation record names the offending file path",
+      "passed": true,
+      "evidence": "Every issue object in the JSON carries a `page` field with an absolute path, e.g. '/tmp/eval-i3-lint-wiki/wiki/page-a.md', '/tmp/eval-i3-lint-wiki/wiki/page-c.md', '/tmp/eval-i3-lint-wiki/wiki/page-b.md'. The 'Assertion-relevant subset' table in the report also reproduces the file path per violation."
+    },
+    {
+      "text": "Auto-fix applies the frontmatter fields required by the linter (title, type, tags, sources, created, updated, summary) — running the linter again after fix reports zero errors",
+      "passed": true,
+      "evidence": "post-fix page-b.md now contains tags: [bravo, core] and sources: - internal/notes-b.md (added by auto-fix). post-fix page-c.md has a complete frontmatter block with all required fields: title, type, tags, sources, created, updated, quality, summary. lint-report-after.md shows summary {error: 0, warning: 7, info: 0} — zero errors; warnings are orphan_page / isolated_node only."
+    },
+    {
+      "text": "Broken-link fixes either create a stub for the missing target OR remove the link, never rewrite the page body wholesale (original headings and primary prose are preserved byte-identically outside the fix region)",
+      "passed": true,
+      "evidence": "Verified by my own diff: page-a.md pre/post are byte-identical (broken link to page-d.md healed by creating a new stub post-fix-wiki/wiki/page-d.md, page-a body untouched). page-b.md body (post-frontmatter) is byte-identical pre/post. page-c.md diff shows exactly the expected fix-region changes: one leading blank line after the new frontmatter, and the single link `[missing](./ghost.md)` collapsed to the plain word `missing`; every other byte — title, paragraphs, 'Charlie is the third concept…' closing — is preserved. page-e.md (control) is byte-identical. This matches the preservation-check.md narrative and the events.jsonl actions (create_stub for page-d, remove_broken_link for ghost.md)."
+    },
+    {
+      "text": "The fix action went through the wiki skill — events.jsonl records op='lint' AND op='fix' in order, each with target_page paths",
+      "passed": true,
+      "evidence": "events.jsonl line 1: ts 2026-04-14T18:18:48 op='lint' target_pages=[page-a.md, page-b.md, page-c.md, page-e.md]. Line 2: ts 2026-04-14T18:19:26 op='fix' target_pages=[page-a.md, page-b.md, page-c.md] with an `actions` array (create_stub page-d.md, add_frontmatter_fields on page-b, add_frontmatter_block on page-c, remove_broken_link ./ghost.md). Lint precedes fix by timestamp; both carry target_page paths."
+    },
+    {
+      "text": "Re-running /wiki-lint after the fix yields zero 'broken_links' and zero 'missing_frontmatter' violations",
+      "passed": true,
+      "evidence": "lint-report-after.md 'Category counts' table: broken_links = 0, missing_frontmatter = 0. Raw JSON shows summary.error = 0. Remaining issues are only warning-severity orphan_page and isolated_node rows, neither of which is in the assertion scope."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 9174,
+    "transcript_chars": null,
+    "note": "No metrics.json emitted by the executor; output_chars is the sum of the four markdown/jsonl artifacts in outputs/ (events.jsonl 1084 + lint-report-after.md 2000 + lint-report-before.md 3152 + preservation-check.md 2898)."
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "2 broken_links and 3 missing_frontmatter errors exist pre-fix (summary.error=5)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Counted directly in lint-report-before.md raw JSON."
+    },
+    {
+      "claim": "page-a body is byte-identical pre/post — stub creation, not page rewrite",
+      "type": "factual",
+      "verified": true,
+      "evidence": "My own `diff pre-fix-wiki/wiki/page-a.md post-fix-wiki/wiki/page-a.md` produced no output."
+    },
+    {
+      "claim": "page-c body changes are confined to the broken-link collapse (ghost.md link -> plain word 'missing')",
+      "type": "factual",
+      "verified": true,
+      "evidence": "My own diff of page-c pre-fix against post-fix body-only shows exactly two hunks: a leading blank line and the single link->text substitution. All other prose preserved byte-identically."
+    },
+    {
+      "claim": "post-fix page-d.md stub contains real frontmatter and a back-reference to page-a",
+      "type": "factual",
+      "verified": true,
+      "evidence": "page-d.md in post-fix-wiki has title, type, tags, sources, created, updated, quality, summary frontmatter and a body linking back to [Page A](./page-a.md)."
+    },
+    {
+      "claim": "Post-fix lint run reports zero errors (0 broken_links, 0 missing_frontmatter)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "lint-report-after.md summary {error: 0} and the explicit category count table."
+    },
+    {
+      "claim": "events.jsonl is a genuine structured event log with op=lint then op=fix",
+      "type": "process",
+      "verified": true,
+      "evidence": "Two JSON lines, ISO timestamps (lint at 18:18:48, fix at 18:19:26), op fields literal 'lint' and 'fix', target_pages arrays of absolute paths, and an actions array on the fix event describing create_stub / add_frontmatter_fields / add_frontmatter_block / remove_broken_link."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "The fix action went through the wiki skill — events.jsonl records op='lint' AND op='fix' in order, each with target_page paths",
+        "reason": "The assertion only requires the two op rows exist with target_pages. A hand-written events.jsonl with no real fix would also pass. Consider tightening to require that for each fix action in the second row, the corresponding file on disk reflects that action (e.g. actions[i].page's frontmatter/body matches actions[i].action) — which the eval implicitly checks but not via this assertion."
+      },
+      {
+        "assertion": "Auto-fix applies the frontmatter fields required by the linter (title, type, tags, sources, created, updated, summary) — running the linter again after fix reports zero errors",
+        "reason": "'Zero errors' is satisfied by deleting the offending pages entirely. Adding an explicit 'no pages deleted; post-fix page count >= pre-fix page count' check, or requiring that every pre-fix page still exists post-fix with its heading intact, would close that loophole. In this run the executor did the right thing, but the assertion alone wouldn't catch a destructive fix."
+      }
+    ],
+    "overall": "The six assertions are well-targeted and collectively discriminating — preservation + events log + before/after counts together make surface-level or destructive fakes hard to pass. The two suggestions above are small hardening opportunities, not gaps that affected this run."
+  }
+}

@@ -1,0 +1,5 @@
+{"from": "auth.md", "to": "jwt.md", "type": "extends", "provenance": "EXTRACTED", "evidence": "", "source_file": "", "date": "2026-04-12"}
+{"from": "jwt.md", "to": "session.md", "type": "supports", "provenance": "EXTRACTED", "evidence": "", "source_file": "", "date": "2026-04-12"}
+{"from": "session.md", "to": "database.md", "type": "extends", "provenance": "INFERRED", "evidence": "", "source_file": "", "date": "2026-04-12"}
+{"from": "auth.md", "to": "oauth.md", "type": "extends", "provenance": "EXTRACTED", "evidence": "", "source_file": "", "date": "2026-04-12"}
+{"from": "oauth.md", "to": "database.md", "type": "supports", "provenance": "AMBIGUOUS", "evidence": "", "source_file": "", "date": "2026-04-12"}

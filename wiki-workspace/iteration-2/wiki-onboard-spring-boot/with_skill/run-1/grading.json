@@ -1,0 +1,110 @@
+{
+  "expectations": [
+    {
+      "text": "Detects Java/Spring Boot from pom.xml or build.gradle",
+      "passed": true,
+      "evidence": "wiki.config.yaml sets `language: java`, `build_tool: maven`, `framework: spring-boot`. detection-trace.md Phase 1 table row: `/tmp/eval-onboard-sb/pom.xml | yes | ... -> Java, Maven build tool`, and content scan cites `<artifactId>spring-boot-starter-parent</artifactId>` (line 12) -> framework: Spring Boot, concluding `Java 17 / Maven / Spring Boot 3.2`."
+    },
+    {
+      "text": "Detects JPA annotations (@Entity, @Table)",
+      "passed": true,
+      "evidence": "wiki.config.yaml shows `ecosystem.orm.profiles: [jpa]` and `ecosystem.agents.integration.wiki-orm-agent.profile: jpa`. detection-trace.md Phase 2 lists `JPA detection markers: @Entity, @Table, extends JpaRepository`, with table rows for User.java line 6 `@Entity`, line 7 `@Table(name = \"users\", schema = \"public\")`, Order.java line 5 `@Entity`, line 6 `@Table(name = \"orders\")`; concludes `ORM profile selected: jpa`."
+    },
+    {
+      "text": "Configures database agent for PostgreSQL",
+      "passed": true,
+      "evidence": "wiki.config.yaml line 17 `driver: postgresql` under `ecosystem.agents.integration.wiki-db-agent` (enabled: true), and line 32 `driver: postgresql` under `ecosystem.database` (enabled: true) with dev environment host=localhost, port=5432, database=mydb and secret-keyed creds WIKI_DB_DEV_USER/WIKI_DB_DEV_PASSWORD. Phase 3 of trace confirms via JDBC URL `jdbc:postgresql://localhost:5432/mydb`, `org.postgresql.Driver`, and `PostgreSQLDialect`."
+    },
+    {
+      "text": "Creates wiki.config.yaml with correct settings",
+      "passed": true,
+      "evidence": "wiki.config.yaml (3928 bytes) parses as valid YAML. Top-level keys include wiki, ecosystem, autonomy, sources, credentials, lint, claims, security, code_locality, refresh, graph, cache, logging, hooks, hooks_always_on, multimodal. Spot-checks: wiki.domain=spring-boot-backend, wiki.name=myapp, ecosystem.database.driver=postgresql (enabled), ecosystem.orm.profiles=[jpa] with cross_validate_against_db=true, ecosystem.agents.integration has wiki-db-agent and wiki-orm-agent enabled plus maintenance agents wiki-claude-md-agent and wiki-mermaid-agent enabled."
+    },
+    {
+      "text": "Creates wiki scaffold via /wiki-init",
+      "passed": true,
+      "evidence": "scaffold/ directory (note: eval metadata said wiki-scaffold/ but actual dir is scaffold/) contains all required subdirs: wiki/ (with index.md, overview.md, summaries.md, claims/, synthesis/, templates/), raw/, graph/ (with edges.jsonl), audit/ (open/, resolved/), log/ (events.jsonl, daily/), outputs/ (queries/, reports/). detection-trace.md Phase 6 documents `node init_wiki.js --path /tmp/eval-onboard-sb --domain spring-boot-backend --name myapp` as the scaffold command. events.jsonl logs the onboard op."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 10307,
+    "transcript_chars": null,
+    "note": "No metrics.json present; output_chars = sum of wiki.config.yaml (3928) + detection-trace.md (5992) + events.jsonl (387)."
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "grader_duration_seconds": null,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 65600
+  },
+  "claims": [
+    {
+      "claim": "Spring Boot 3.2 with Java 17 detected",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detection-trace.md line 28: 'Java 17 / Maven / Spring Boot 3.2 (verified via <java.version>17</java.version> + spring-boot-starter-parent 3.2.0)'."
+    },
+    {
+      "claim": "2 entities detected (User, Order), 1 repository (UserRepository)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "detection-trace.md line 53 states 'Entities detected: 2 (User, Order). Repositories: 1 (UserRepository).' events.jsonl corroborates with entities_detected=2, repositories_detected=1."
+    },
+    {
+      "claim": "No plaintext credentials in config (secret references only)",
+      "type": "quality",
+      "verified": true,
+      "evidence": "ecosystem.database.environments.dev uses user_secret: WIKI_DB_DEV_USER and password_secret: WIKI_DB_DEV_PASSWORD; no raw passwords in YAML."
+    },
+    {
+      "claim": "Source agents (jira, confluence, github, notion, gcp, aws) left disabled because no markers present",
+      "type": "process",
+      "verified": true,
+      "evidence": "wiki.config.yaml has `ecosystem.agents.source: {}`. detection-trace.md Phase 4 justifies: 'no .github/, no Jira/Confluence URLs in config, no aws/gcp SDK deps in pom.xml'."
+    },
+    {
+      "claim": "Scaffold directory created at outputs/scaffold/ (not wiki-scaffold/ as eval metadata suggests)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "ls outputs/ shows `scaffold/` directory; no `wiki-scaffold/`. Eval metadata text references wiki-scaffold/ but actual dir name is scaffold/. All required subdirs (wiki, raw, graph, audit, log, outputs) exist inside it, so the substantive expectation is satisfied."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Detects Java/Spring Boot from pom.xml or build.gradle",
+        "reason": "A config that hardcoded `framework: spring-boot` without reading pom.xml would also pass. Consider asserting a specific detected value that requires actual parsing (e.g., `framework_version: 3.2` or `java_version: 17`) so guessing cannot satisfy it."
+      },
+      {
+        "assertion": "Detects JPA annotations (@Entity, @Table)",
+        "reason": "Checking `profile: jpa` in config passes even if the detector never opened a .java file. A stronger assertion would require the trace to list the specific entity class names found (User, Order) and tie them to table names (users, orders), which this trace does do but no assertion verifies."
+      },
+      {
+        "assertion": "Configures database agent for PostgreSQL",
+        "reason": "Passes on driver name alone. Stronger: require host/port/database parsed from application.properties JDBC URL (localhost:5432/mydb) to appear in config — this would catch a skill that guessed 'postgresql' from the prompt without reading files."
+      },
+      {
+        "reason": "No assertion checks credential safety: config uses secret references (user_secret/password_secret), which is the correct Security Baseline behavior. A skill that wrote plaintext passwords would pass all 5 current assertions. Worth an explicit assertion."
+      },
+      {
+        "reason": "Eval metadata refers to `wiki-scaffold/` but the executor produced `scaffold/`. Either the skill or the eval metadata is inconsistent on the directory name — worth clarifying which is authoritative so an assertion can test it precisely."
+      }
+    ],
+    "overall": "All 5 assertions pass with strong corroborating evidence across three artifacts (config, trace, events). Assertions are presence-oriented though — they would tolerate a skill that echoed plausible defaults rather than actually parsing the target project. Trace is unusually detailed (cites line numbers from pom.xml and application.properties), which is what gives confidence here; without it the current assertions would be weak."
+  }
+}

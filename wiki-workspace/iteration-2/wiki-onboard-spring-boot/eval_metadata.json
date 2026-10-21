@@ -1,0 +1,13 @@
+{
+  "eval_id": 4,
+  "eval_name": "wiki-onboard-spring-boot",
+  "skill": "wiki",
+  "prompt": "Set up wiki for a Spring Boot + PostgreSQL project",
+  "assertions": [
+    {"text": "Detects Java/Spring Boot from pom.xml or build.gradle", "passed": null, "evidence": null},
+    {"text": "Detects JPA annotations (@Entity, @Table)", "passed": null, "evidence": null},
+    {"text": "Configures database agent for PostgreSQL", "passed": null, "evidence": null},
+    {"text": "Creates wiki.config.yaml with correct settings", "passed": null, "evidence": null},
+    {"text": "Creates wiki scaffold via /wiki-init", "passed": null, "evidence": null}
+  ]
+}

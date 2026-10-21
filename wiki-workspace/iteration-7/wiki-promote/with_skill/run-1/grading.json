@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {"text": "A new wiki page exists at wiki/auth/authentication-flow.md (or wiki/authentication-flow.md if no topic dir is configured) with frontmatter type='synthesis' OR type='concept', non-empty title, >=4 content-only tags, a sources array referencing the original query's source URLs/files", "passed": true, "evidence": "promoted-page.md frontmatter: type=synthesis, title='Authentication Flow', tags=[authentication,jwt,sessions,security] (4 tags), sources references the archive path + URLs. All conditions met."},
+    {"text": "The promoted page's body is derived from (not byte-identical to) the archive — citations to wiki pages in the archive are converted to working relative markdown links, and at least 80% of the archive's prose paragraphs survive into the page", "passed": true, "evidence": "paragraphs-survival.md: 5/5 = 100% paragraph survival. Archive link ../../wiki/auth.md rewritten to ../auth.md in promoted page (correct from wiki/auth/). Pages not byte-identical (frontmatter + link paths differ)."},
+    {"text": "The original archive at outputs/queries/2026-04-14-how-does-authentication-work.md still exists and is unmodified (mtime and contents preserved); promote MUST NOT move or delete the archive", "passed": true, "evidence": "archive-preservation.md: mtime before=after=2026-04-14T17:54:47; sha256 before=after=9e0a2373f1abb218fbeea22e9fff6988f335ad5318f09427330312ced4656d39. Archive untouched."},
+    {"text": "wiki/index.md (or summaries.md) has a new entry referencing the promoted page's path", "passed": true, "evidence": "index-after.md contains: [Authentication Flow](auth/authentication-flow.md) — promoted page path referenced."},
+    {"text": "graph/edges.jsonl gains at least one edge whose source or target is the new page, with a valid provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) and a typed-edge label (supports|extends|supersedes|contradicts)", "passed": true, "evidence": "edges-after.jsonl: {\"from\":\"wiki/auth/authentication-flow.md\",\"to\":\"wiki/auth.md\",\"type\":\"extends\",\"provenance\":\"INFERRED\",...}. Source is new page, type=extends (valid), provenance=INFERRED (valid)."},
+    {"text": "events.jsonl records exactly one entry with op='promote' including source_query (path to the archive), target_page (path to the new wiki page), and an ISO timestamp", "passed": true, "evidence": "events.jsonl has exactly 1 promote event with op=promote, target_page=wiki/auth/authentication-flow.md, source_query=outputs/queries/2026-04-14-how-does-authentication-work.md, ts=2026-04-15T00:55:19.507000+00:00 (ISO)."},
+    {"text": "Re-running /wiki-promote for the same archive is a no-op or surfaces a 'page already exists' warning — it does not duplicate the page or re-emit the promote event", "passed": true, "evidence": "idempotency-check.md: second run detected PAGE_EXISTS, emitted WARNING, skipped all side effects. After re-run: events.jsonl still 2 lines, edges.jsonl still 1 line."}
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {"reason": "Assertion 2's 80% paragraph survival threshold could be tightened or complemented with a 'prose NOT byte-identical' check — at 100% survival, the literal byte diff is just frontmatter + link path differences, which is quite thin."}
+    ],
+    "overall": "All 7 assertions pass with specific evidence. Promote contract is honored: archive preservation, idempotency, event + edge emission, and index update all demonstrated."
+  }
+}

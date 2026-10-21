@@ -1,0 +1,109 @@
+{
+  "expectations": [
+    {
+      "text": "Runs the wiki's event_logger stats subcommand (event_logger.js stats --since 7d) or equivalent",
+      "passed": true,
+      "evidence": "outputs/command.txt shows: `node /Users/narayan/src/doc-wiki/skills/wiki/scripts/event_logger.js stats --wiki-root /tmp/eval-i4-stats-wiki/ --since 7d`. stdout.txt contains the canonical stats JSON (total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost); stderr.txt is empty; exit code reported as 0."
+    },
+    {
+      "text": "Output lists counts for at least op='ingest', op='query', op='lint', op='fix' — one line per op",
+      "passed": true,
+      "evidence": "stdout.txt `ops_by_type` contains all four requested ops: {ingest:7, query:6, lint:2, fix:2}. stats-result.md and expected-vs-actual.md render one row per op."
+    },
+    {
+      "text": "Each op's count matches the number of corresponding entries in the fixture's events.jsonl within the 7-day window",
+      "passed": true,
+      "evidence": "expected-vs-actual.md enumerates expected vs. actual per op (ingest 7=7, query 6=6, lint 2=2, fix 2=2). Independently re-derived from outputs/events.jsonl: 17 entries have ts >= 2026-04-07; counting by op gives ingest=7, query=6, lint=2, fix=2 — byte-for-byte match with stdout.txt."
+    },
+    {
+      "text": "Output includes a total_tokens metric per op (summed from the events' token fields, or explicitly labeled zero when tokens weren't recorded)",
+      "passed": false,
+      "evidence": "The built-in event_logger.js stats subcommand does NOT emit total_tokens per op — stdout.txt reports only total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost (confirmed in event_logger.ts::getStats at lines 258-332, which has no tokens aggregation). The executor supplemented by computing tokens sums manually in stats-result.md (ingest 7500, query 4780, lint 0, fix 0) and validated in expected-vs-actual.md. Per the grading directive, a computed/supplemented value (rather than native emission) is marked FAIL — this is a product gap, not an executor error. The arithmetic is correct (1200+1500+800+700+950+1050+1300=7500; 900+1100+650+820+730+580=4780)."
+    },
+    {
+      "text": "Output includes an avg_duration_ms metric per op",
+      "passed": false,
+      "evidence": "Same product gap as total_tokens. The built-in stats subcommand does not emit per-op avg_duration_ms. The executor computed it manually in stats-result.md (ingest 332.14, query 192.50, lint 85.00, fix 142.50) with derivations in expected-vs-actual.md. The means are arithmetically correct (ingest: 2325/7=332.14; query: 1155/6=192.50; lint: 170/2=85; fix: 285/2=142.5), but the assertion asks that the stats output itself include the metric — it does not. Marked FAIL per grading directive for supplemented values."
+    },
+    {
+      "text": "The --since 7d window is honored — any event older than 7 days is excluded from the counts",
+      "passed": true,
+      "evidence": "since-filter-check.md documents 21 total fixture events vs. 17 reported by stats — the 4 excluded events (all dated 2026-04-06, ~8 days before 2026-04-14) are listed by ts, and the excluded-op breakdown (2 ingest + 2 query) reconciles 9→7 ingest and 8→6 query. event_logger.ts::_readEvents (line ~184) skips entries with entryMs < sinceMs before aggregation, and parseRelativeSince('7d') maps to Date.now() - 7*86_400_000."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 2,
+    "total": 6,
+    "pass_rate": 0.67
+  },
+  "execution_metrics": {
+    "output_files": 7,
+    "stdout_chars": 181,
+    "stderr_chars": 0,
+    "events_in_fixture": 21,
+    "events_within_7d_window": 17
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "The built-in event_logger.js stats subcommand emits total_ops, ops_by_type, total_cost_usd, reduction_ratio, per_agent_cost — and nothing else per-op",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Confirmed by reading skills/wiki/scripts/event_logger.ts::getStats (lines 258-332). The returned object has exactly those five keys. stdout.txt matches."
+    },
+    {
+      "claim": "17 fixture events fall within the 7-day window; 4 are excluded",
+      "type": "factual",
+      "verified": true,
+      "evidence": "outputs/events.jsonl has 21 entries; 4 are dated 2026-04-06 (>7 days before 2026-04-14). 21-4=17 matches total_ops in stdout.txt."
+    },
+    {
+      "claim": "Per-op token sums: ingest=7500, query=4780, lint=0, fix=0",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Recomputed from outputs/events.jsonl: ingest 1200+1500+800+700+950+1050+1300=7500; query 900+1100+650+820+730+580=4780; lint/fix have tokens:0 throughout."
+    },
+    {
+      "claim": "Per-op avg durations (ms): ingest=332.14, query=192.50, lint=85.00, fix=142.50",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Recomputed from outputs/events.jsonl: ingest (320+410+215+260+305+375+440)/7=332.14; query (180+240+165+195+205+170)/6=192.5; lint (95+75)/2=85; fix (150+135)/2=142.5."
+    },
+    {
+      "claim": "The tokens/duration aggregates were computed by the executor over the already-filtered window, not emitted by the stats subcommand",
+      "type": "process",
+      "verified": true,
+      "evidence": "stats-result.md states explicitly: 'The built-in CLI reports total_ops, ops_by_type, total_cost_usd, reduction_ratio, and per_agent_cost; the tokens/duration aggregates are computed directly over the already-filtered window.'"
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": [
+      "Executor computed total_tokens and avg_duration_ms per op manually from the fixture because the built-in event_logger.js stats subcommand does not emit these metrics. Result is arithmetically correct and the gap is disclosed in stats-result.md."
+    ]
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Output includes a total_tokens metric per op",
+        "reason": "Product gap, not skill gap: event_logger.ts::getStats does not aggregate tokens at all. This assertion can only pass if (a) the stats subcommand is extended to aggregate `tokens` per op, or (b) the assertion is reworded to accept executor-side derivation over the filtered events. Consider splitting into two assertions: one for `total_cost_usd`/`per_agent_cost` (native) and one that explicitly permits computed token sums when events carry `tokens` fields but the aggregator does not."
+      },
+      {
+        "assertion": "Output includes an avg_duration_ms metric per op",
+        "reason": "Same product gap: getStats never touches `duration_ms`. If the product goal is per-op duration telemetry (reasonable for /wiki-stats), file this as a feature request on event_logger.ts rather than a skill assertion. Currently passing would require the executor to compute it — which the grading directive explicitly flags as FAIL."
+      },
+      {
+        "reason": "No assertion checks that total_cost_usd and per_agent_cost are surfaced — the skill's current differentiator vs. raw event counting. Consider adding an assertion that the stats output includes total_cost_usd (even if 0.0 here because the fixture has no cost_usd field)."
+      },
+      {
+        "reason": "The 7-day boundary assertion passes trivially because the fixture's excluded events are 8 days old (a full day past the boundary). A tighter fixture (e.g., one event at 6d23h59m and another at 7d00h01m relative to 'now') would actually discriminate between correct and off-by-one filter implementations."
+      }
+    ],
+    "overall": "Counts/filter assertions are well-constructed and correctly caught the match. The tokens/duration assertions are misaligned with what the built-in stats subcommand actually emits — surface as a product gap (extend getStats to aggregate tokens and duration_ms) rather than relying on executor-side derivation."
+  }
+}

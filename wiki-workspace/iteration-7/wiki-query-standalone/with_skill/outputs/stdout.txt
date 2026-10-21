@@ -1,0 +1,11 @@
+{"status": "ok", "wiki_root": "/private/tmp/eval-i7-query-wiki", "created_dirs": ["wiki", "wiki/claims", "wiki/synthesis", "wiki/templates", "raw", "graph", "audit/open", "audit/resolved", "log/daily", "outputs/queries", "outputs/reports", ".wiki-cache"], "created_files": ["wiki.config.yaml", "wiki/index.md", "wiki/summaries.md", "wiki/overview.md", ".wiki-ignore", "log/events.jsonl", "graph/edges.jsonl", ".claude/settings.json"]}
+
+[query] search_phase=summaries reading wiki/summaries.md
+[query] reading wiki/auth.md
+[query] reading wiki/request-routing.md
+[query] reading wiki/app-server.md
+[query] reading wiki/db-write-path.md
+[query] reading wiki/audit-log.md
+[query] synthesising answer (tokens_in=2918, tokens_out=509, reduction_ratio=0.8256)
+[query] archived to outputs/queries/2026-04-14-request-lifecycle.md
+[query] event logged to log/events.jsonl

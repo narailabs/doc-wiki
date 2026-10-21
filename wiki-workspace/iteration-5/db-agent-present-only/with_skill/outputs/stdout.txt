@@ -1,0 +1,6 @@
+{
+  "status": "present_only",
+  "reason": "DML statements are displayed but not executed",
+  "formatted_sql": "INSERT INTO users (name, email) VALUES ('Test', 'test@example.com')",
+  "execution_time_ms": 0.17
+}

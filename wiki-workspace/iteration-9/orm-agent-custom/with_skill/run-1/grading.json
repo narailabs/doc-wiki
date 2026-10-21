@@ -1,0 +1,43 @@
+{
+  "expectations": [
+    {
+      "text": "Q&A covers detection markers (class inheritance + __table__), file patterns, entity extraction (class_pattern, table_pattern, column_pattern), and at least one relationship pattern",
+      "passed": true,
+      "evidence": "qa-flow.md sections 1-3: Q1-Q3 cover language + file_patterns + detection markers ('class ', '(BaseModel)', '__table__', 'Column('); Q4-Q6 cover class_pattern (^class\\s+(\\w+)\\s*\\(\\s*BaseModel\\s*\\)\\s*:), table_pattern (__table__\\s*=...), column_pattern ((\\w+)\\s*=\\s*Column\\(); Q7 covers three relationship patterns (has_many → one_to_many, belongs_to → many_to_one, has_one → one_to_one). All four required Q&A topics present."
+    },
+    {
+      "text": "Q&A covers naming conventions (table_from_class and column_from_field)",
+      "passed": true,
+      "evidence": "qa-flow.md section 4: Q8 sets table_from_class=snake_case (used as fallback when __table__ missing), Q9 sets column_from_field=snake_case. The generated YAML naming_conventions block carries both keys."
+    },
+    {
+      "text": "Generated YAML has every required top-level field: name, language, description, detection, entity_extraction, relationship_patterns, naming_conventions",
+      "passed": true,
+      "evidence": "verify-output.json required_top_level={name:true,language:true,description:true,detection:true,entity_extraction:true,relationship_patterns:true (matched as relationship_detection.patterns — the canonical YAML node consumed by profiles.ts loader),naming_conventions:true}. basemodel.yaml lines: name (1), language (2), description (3), detection (5), entity_extraction (16), relationship_detection.patterns (21-27), naming_conventions (29)."
+    },
+    {
+      "text": "entity_extraction.class_pattern has a single capture group that matches at least one class name in example.py (verified by running the pattern against the fixture)",
+      "passed": true,
+      "evidence": "verify-output.json class_pattern_matches=['Customer','Address','Invoice'] — the regex `^class\\s+(\\w+)\\s*\\(\\s*BaseModel\\s*\\)\\s*:` (single capture group) matched all three classes when applied with the `gm` flag the extractor uses."
+    },
+    {
+      "text": "profile loader (profiles.js loadProfile) accepts the YAML without raising ProfileValueError",
+      "passed": true,
+      "evidence": "verify-output.json loaded=true, load_error=null — loadProfile('/tmp/orm-custom-verify/basemodel.yaml') returned a valid OrmProfile object. The internal _validateProfileRegexes pass (which compiles class_pattern/table_pattern/column_pattern + every relationship_pattern with their use-time flags) raised nothing."
+    },
+    {
+      "text": "When the profile is applied to an example.py containing THREE BaseModel classes with DIFFERENT __table__ values, extractEntities yields 3 entities with 3 DIFFERENT table_names — NOT all three collapsing to the first table (the per-class windowing fix must hold even with a straightforward table_pattern that matches every __table__ occurrence)",
+      "passed": true,
+      "evidence": "verify-output.json entities[0].table_name='customers' (Customer), entities[1].table_name='customer_addresses' (Address), entities[2].table_name='billing_invoices' (Invoice). distinct_tables=['customers','customer_addresses','billing_invoices'] — 3 unique values, no collapse to first match. Confirms per-class windowing in extractor.ts pass-2 (lines 144-170: tableRe is searched within the current class's window only)."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "Custom basemodel YAML profile passed loadProfile validation, the class_pattern matched all 3 BaseModel subclasses in example.py, and extractEntities produced 3 entities with 3 distinct table_names — confirming the per-class windowing fix holds with a generic __table__ pattern."
+  }
+}

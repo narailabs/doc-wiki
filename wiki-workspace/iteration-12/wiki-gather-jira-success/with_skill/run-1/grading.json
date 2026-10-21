@@ -1,0 +1,61 @@
+{
+  "expectations": [
+    {
+      "text": "Wiki scaffold exists at the per-eval `work/` dir with the standard dirs (wiki/, raw/, graph/, audit/, log/, outputs/) — confirms /doc-wiki:init ran",
+      "passed": true,
+      "evidence": "init_wiki.js created the standard scaffold. `ls work/` yields: audit/, graph/, log/, outputs/, raw/, wiki/, wiki.config.yaml plus the .connectors/ overlay. All six required dirs are present."
+    },
+    {
+      "text": "events.jsonl records at least one op='ingest' entry whose details capture the dispatch — top-level `consumer: 'doc-wiki'` AND an embedded `dispatch_steps[]` array referencing the 'jira' connector with action='get_issue'",
+      "passed": true,
+      "evidence": "log/events.jsonl has two op='ingest' entries (run=1, run=2). Each entry carries top-level `consumer: 'doc-wiki'` AND an embedded `dispatch_steps: [{ step: 1, connector: 'jira', action: 'get_issue', status: 'success', ... }]`. Both signals present."
+    },
+    {
+      "text": "The jira dispatch step has a SUCCESS status — either status='success' (createConnector framework envelope) or status='ok' (legacy dispatcher envelope). No error_code on the success path. Proves the full credential-load -> connect -> read path executed end-to-end inside the connector subprocess against the stub",
+      "passed": true,
+      "evidence": "Both dispatch results in dispatch-result.json and dispatch-result-2.json carry `envelope.status: 'success'` for the jira/get_issue step. No `error_code`. Proves the createConnector framework envelope was produced after the credential-load -> Basic-auth GET -> stub response round trip."
+    },
+    {
+      "text": "The dispatch envelope's data references the stubbed issue — the issue key 'PROJ-1' and summary text 'Stub issue summary' (or fields.summary) appear in the data payload, confirming the JiraClient actually executed a GET against the stub (not a stub-of-the-stub)",
+      "passed": true,
+      "evidence": "envelope.data: { key: 'PROJ-1', summary: 'Stub issue summary', status: 'Open', assignee: null, labels: [], updated: null } — both 'PROJ-1' and 'Stub issue summary' (the strings the stub server returned) appear in the data. JiraClient actually fetched from the stub."
+    },
+    {
+      "text": "The jira connector ran in a separate Node process — verifiable via (a) the dispatch envelope matching narai-primitives' DispatchResult contract (envelope/data shape produced by createConnector), AND (b) the resolved CLI path under narai-primitives/dist/connectors/jira/cli.js appearing in the cli-resolution.json output (resolveAgentCli({name:'jira'}) returns source='bundled-self')",
+      "passed": true,
+      "evidence": "(a) The dispatch result's envelope shape exactly matches the success contract: { status, action, data } produced by createConnector. (b) cli-resolution.json: { command: 'node', args: ['/Users/.../node_modules/narai-primitives/dist/connectors/jira/cli.js'], source: 'bundled-self' }. The same CLI path is recorded in events.jsonl under resolved_cli on both runs."
+    },
+    {
+      "text": "No cleartext token leaked into the wiki tree — `grep -rE 'ATATT[A-Za-z0-9_-]{20,}' work/` returns zero matches even though the runner sets a fake JIRA_API_TOKEN; the token lives only in the runner's env",
+      "passed": true,
+      "evidence": "`grep -rE 'ATATT[A-Za-z0-9_-]{20,}' work/` exits 1 (no matches). The fake JIRA_API_TOKEN ATATTfaketoken000000000000 was set only in the runner's process env; the connector serialized it to a Basic-auth header, which lives in the stub's request log (in memory, not on disk in work/) but was never written to the wiki tree."
+    },
+    {
+      "text": "The stub server received exactly one (or two on re-run) authenticated GETs to /rest/api/3/issue/PROJ-1 — the runner's request log records the path AND a non-empty Authorization: Basic <…> header, proving the connector actually built and sent the Basic-auth round trip end-to-end",
+      "passed": true,
+      "evidence": "dispatch-result.json's `request_log` array has one entry per run: { method: 'GET', url: '/rest/api/3/issue/PROJ-1', auth_present: true } — the auth_present:true flag confirms the connector sent an Authorization: Basic <…> header. Across the two runs, the stub recorded one such GET each."
+    },
+    {
+      "text": "Re-running the dispatch produces an equivalent success envelope (idempotent success path) — same status, same data shape, same PROJ-1 reference. Both runs exit cleanly. The stub server tearing down at end-of-test releases its port (no leaked listeners)",
+      "passed": true,
+      "evidence": "dispatch-result.json and dispatch-result-2.json have byte-identical `result.results[0].envelope` payloads (status='success', same data fields). Both runs exited 0. The runner closes the stub server in a finally{} block, releasing the random port. Two consecutive runs at different ports succeeded with no port-reuse failures."
+    },
+    {
+      "text": "resolveAgentCli({name:'jira'}) succeeds against the published bundle — the resolved CLI lives at node_modules/narai-primitives/dist/connectors/jira/cli.js (with `source: 'bundled-self'` per the 2.1.1+ resolver). A null result here means the bundled-CLI resolver is broken and gather() can't actually dispatch",
+      "passed": true,
+      "evidence": "cli-resolution.json: { command: 'node', args: ['/Users/narayan/src/doc-wiki/node_modules/narai-primitives/dist/connectors/jira/cli.js'], source: 'bundled-self', resolvedPath: '/Users/narayan/src/doc-wiki/node_modules/narai-primitives/dist/connectors/jira/cli.js' }. Non-null result, source='bundled-self', resolvedPath under node_modules/narai-primitives/dist/connectors/jira/cli.js — exactly as the 2.1.1+ resolver promises."
+    },
+    {
+      "text": "Approach: A (local HTTP stub on a random free port pointing JIRA_SITE_URL at it). Picked because the jira connector reads JIRA_SITE_URL directly from process.env and validateUrl accepts http://127.0.0.1:<port>. No real Atlassian credentials required.",
+      "passed": true,
+      "evidence": "Approach A confirmed. run.mjs spawns `http.createServer().listen(0, '127.0.0.1')`, captures the assigned port, sets JIRA_SITE_URL=http://127.0.0.1:<port>, and the JiraClient (via toolkit/security_check.validateUrl which only checks scheme is http/https) accepts the localhost URL. JIRA_API_TOKEN is the fake string ATATTfaketoken000000000000."
+    }
+  ],
+  "summary": {"passed": 10, "failed": 0, "total": 10, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [],
+    "overall": "10/10. Approach A worked cleanly for jira. A local HTTP stub on a random free port impersonates the slice of Jira REST v3 the connector calls (GET /rest/api/3/issue/<key>); JIRA_SITE_URL points at the stub; gather() with a deterministic mock planner dispatches the jira subprocess; the connector resolves credentials via narai-primitives/credentials, builds a Basic-auth GET, hits the stub, and returns a success envelope with the stubbed PROJ-1 summary. Idempotent across re-runs. resolveAgentCli returns source='bundled-self'. No fake-token leak into the wiki tree."
+  }
+}

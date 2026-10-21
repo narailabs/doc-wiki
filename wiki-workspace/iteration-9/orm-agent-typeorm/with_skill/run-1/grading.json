@@ -1,0 +1,48 @@
+{
+  "expectations": [
+    {
+      "text": "All three entities (Author, Book, Publisher) are extracted into detected-entities.json as separate entries with table_names matching the @Entity('...') first arg (e.g., 'authors', 'books', 'publishers')",
+      "passed": true,
+      "evidence": "Fixture: Author.ts has @Entity(\"authors\"), Book.ts has @Entity(\"books\"), Publisher.ts has @Entity(\"publishers\"). detected-entities.json: 3 entries — Author.table_name='authors' (line 7), Book.table_name='books' (line 24), Publisher.table_name='publishers' (line 45)."
+    },
+    {
+      "text": "Each @OneToMany(() => Book, ...) and @ManyToOne(() => Author, ...) produces a relationship with target_entity resolved from the arrow-function call argument — never blank, never the literal string 'Book'/'Author' (the resolver must dereference to the imported class)",
+      "passed": true,
+      "evidence": "Author.@OneToMany(() => Book, ...) → Author.relationships[0]={type:'one_to_many', target_entity:'Book'} (lines 17-18). Book.@ManyToOne(() => Author, ...) → Book.relationships[0]={type:'many_to_one', target_entity:'Author'} (lines 33-35). Book.@OneToOne(() => Publisher) → Book.relationships[1]={type:'one_to_one', target_entity:'Publisher'} (lines 38-39). Targets are class identifiers (Author/Book/Publisher), not blank, captured via the arrow-fn resolver in extractor.ts (_resolveRelationshipTarget arrow-fn branch lines 284-288)."
+    },
+    {
+      "text": "Relationship type matches the decorator name (one_to_many for @OneToMany, many_to_one for @ManyToOne, one_to_one for @OneToOne)",
+      "passed": true,
+      "evidence": "Decorator → relationship.type mapping in detected-entities.json: @OneToMany → 'one_to_many' (Author line 17), @ManyToOne → 'many_to_one' (Book line 34), @OneToOne → 'one_to_one' (Book line 38). All three decorator types correctly classified by the typeorm profile's relationship_detection patterns."
+    },
+    {
+      "text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='typeorm'",
+      "passed": true,
+      "evidence": "database-mapping.md line 3 (`type: entity`) and line 6 (`orm_profile: typeorm`)."
+    },
+    {
+      "text": "Mermaid erDiagram contains nodes for all three table names and at least two edges (authors-books and books-publishers, or whatever the fixture declares) using cardinality glyphs that match the decorator (||--o{ for one_to_many, }o--|| for many_to_one)",
+      "passed": true,
+      "evidence": "database-mapping.md Mermaid block (lines 23-35) declares 3 nodes: authors, books, publishers (each with a string column block). Edges: `authors ||--o{ books : \"\"` (line 33) — A2 canonicalization correctly picked the one_to_many side over the many_to_one inverse, matching the expectation's ||--o{ for one_to_many. `books ||--|| publishers : \"\"` (line 34) — one_to_one cardinality from CARDINALITY['one_to_one']='||--||', matching the @OneToOne decorator. 2 edges, all 3 table-name nodes referenced. Fixture has no @ManyToOne to a non-paired entity, so the 'or whatever the fixture declares' clause covers the }o--|| absence."
+    },
+    {
+      "text": "Any external target referenced via @ManyToOne whose class file is NOT in the fixture set is emitted as a _external stub before the edge — never an edge to an undeclared node",
+      "passed": true,
+      "evidence": "Fixture has 3 .ts files (Author, Book, Publisher) — every @OneToMany / @ManyToOne / @OneToOne target (Book, Author, Publisher) has its corresponding class file in scope. No external targets in this fixture, so no _external stubs needed. The stronger invariant 'never an edge to an undeclared node' holds: all 3 edge endpoints (authors, books, publishers) are declared as nodes earlier in the diagram."
+    },
+    {
+      "text": "mermaid_lint.js passes on the generated page",
+      "passed": true,
+      "evidence": "Ran `node skills/doc-wiki/scripts/mermaid_lint.js --page <database-mapping.md>` — exit 0, output `[]`. Captured in mermaid-lint.txt."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "TypeORM detection extracted all 3 entities with @Entity('...') table names, the arrow-function resolver dereferenced @OneToMany/@ManyToOne/@OneToOne targets correctly to imported class identifiers, and the Mermaid diagram emitted clean edges with cardinality glyphs matching the decorators."
+  }
+}

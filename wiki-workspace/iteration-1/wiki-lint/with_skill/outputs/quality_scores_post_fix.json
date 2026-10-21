@@ -1,0 +1,122 @@
+[
+  {
+    "page": "wiki/auth.md",
+    "quality": 0.45,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.3
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "concept_tags",
+        "delta": 0.05
+      }
+    ]
+  },
+  {
+    "page": "wiki/orphan.md",
+    "quality": 0.35,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.3
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "concept_tags",
+        "delta": 0.05
+      },
+      {
+        "signal": "missing_mermaid",
+        "delta": -0.1
+      }
+    ]
+  },
+  {
+    "page": "wiki/nofm.md",
+    "quality": 0.25,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.3
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "no_sources",
+        "delta": -0.2
+      },
+      {
+        "signal": "concept_tags",
+        "delta": 0.05
+      }
+    ]
+  },
+  {
+    "page": "wiki/index.md",
+    "quality": 0.1,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.1
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "no_sources",
+        "delta": -0.2
+      },
+      {
+        "signal": "crossref_links",
+        "delta": 0.1
+      }
+    ]
+  },
+  {
+    "page": "wiki/overview.md",
+    "quality": 0.0,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.1
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "no_sources",
+        "delta": -0.2
+      }
+    ]
+  },
+  {
+    "page": "wiki/summaries.md",
+    "quality": 0.0,
+    "signals": [
+      {
+        "signal": "word_count",
+        "delta": 0.1
+      },
+      {
+        "signal": "complete_frontmatter",
+        "delta": 0.1
+      },
+      {
+        "signal": "no_sources",
+        "delta": -0.2
+      }
+    ]
+  }
+]

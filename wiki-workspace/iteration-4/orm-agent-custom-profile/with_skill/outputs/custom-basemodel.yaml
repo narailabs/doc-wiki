@@ -1,0 +1,37 @@
+name: custom-basemodel
+language: python
+description: "Custom BaseModel ORM using __table__ class attribute and __columns__ list"
+
+detection:
+  file_patterns: ["**/*.py"]
+  markers:
+    - pattern: "class BaseModel"
+      type: base_declaration
+    - pattern: "__table__"
+      type: table_mapping
+    - pattern: "__columns__"
+      type: column_definition
+    - pattern: "ForeignKey("
+      type: foreign_key_marker
+
+entity_extraction:
+  # Single capture group for the class name; only classes that inherit from
+  # BaseModel (directly) are treated as entities.
+  class_pattern: "class\\s+(\\w+)\\s*\\(\\s*BaseModel\\s*\\)"
+  # Straightforward: match every __table__ = "..." line in the file. The
+  # per-class windowing in extractor.ts (R3) is what scopes this to the
+  # current class — there is no bypass trick here.
+  table_pattern: "__table__\\s*=\\s*[\"'](\\w+)[\"']"
+  # Simple field = ... column declarations (e.g. `id = "integer primary key"`).
+  # Relies on a newline + 4-space indent; the extractor runs this with the
+  # `g` flag (no `m`), so we anchor via an explicit newline instead of `^`.
+  column_pattern: "\\n {4}(\\w+)\\s*="
+
+relationship_detection:
+  patterns:
+    - pattern: "ForeignKey\\("
+      type: foreign_key
+
+naming_conventions:
+  table_from_class: snake_case_plural
+  column_from_field: snake_case

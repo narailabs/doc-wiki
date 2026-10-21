@@ -1,0 +1,90 @@
+{
+  "expectations": [
+    {
+      "text": "Asks about detection markers and patterns",
+      "passed": true,
+      "evidence": "qa-transcript.md Q5 asks 'Which literal substrings are reliable \"this is our ORM\" markers?' and describes detection score matching. Q6-Q8 ask for regex patterns for class/table/columns. Q9 asks for relationship patterns mapped under relationship_detection.patterns."
+    },
+    {
+      "text": "Asks about entity-table naming conventions",
+      "passed": true,
+      "evidence": "qa-transcript.md Q10 explicitly asks 'Naming conventions — when __table__ is missing, how should the mapper derive a table name from a class name?' listing built-ins snake_case, snake_case_plural, lower_case. User answered snake_case_plural with User->users mapping."
+    },
+    {
+      "text": "Generates a valid YAML profile with required fields (name, language, detection, entity_extraction)",
+      "passed": true,
+      "evidence": "yaml.safe_load() of custom-basemodel.yaml succeeded and contains all required fields: ['name', 'language', 'description', 'detection', 'entity_extraction', 'relationship_detection', 'naming_conventions']. name='custom-basemodel', language='python', detection has file_patterns+markers, entity_extraction has class_pattern/table_pattern/column_pattern."
+    },
+    {
+      "text": "Profile can be loaded by the profile loader without errors",
+      "passed": true,
+      "evidence": "profile-load-test.txt shows `=== loadProfile( ...custom-basemodel.yaml ) ===` followed by a fully populated OrmProfile JSON object with all fields resolved. No 'error', 'exception', 'ProfileValueError', or traceback appears in the output. The loader then proceeded to run extractEntities successfully, confirming no load-time error."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 0,
+    "total": 4,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": 0,
+    "total_steps": 0,
+    "errors_encountered": 0,
+    "output_chars": 16858,
+    "transcript_chars": 4844
+  },
+  "timing": {
+    "executor_duration_seconds": 0.0,
+    "total_duration_seconds": 0.0,
+    "total_tokens": 53466
+  },
+  "claims": [
+    {
+      "claim": "The profile satisfies required-fields contract and drives the shipped extractor end-to-end",
+      "type": "quality",
+      "verified": true,
+      "evidence": "profile-load-test.txt confirms loadProfile returned a complete OrmProfile and extractEntities ran, producing 3 entities (User, Post, Comment)."
+    },
+    {
+      "claim": "All three entities get table_name 'users' due to first-match regex limitation",
+      "type": "factual",
+      "verified": true,
+      "evidence": "profile-load-test.txt shows User, Post, and Comment all with table_name='users'. mapping-trial.md correctly documents this as expected extractor behaviour (re.search first-match, same as built-in SQLAlchemy profile)."
+    },
+    {
+      "claim": "The column_pattern is intentionally permissive and picks up cross-class/FK string literals",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Each extracted entity has 22 columns including FK target strings 'User', 'Post' and duplicates like 'author_id', matching the documented trade-off in mapping-trial.md."
+    },
+    {
+      "claim": "YAML has all four required fields: name, language, detection, entity_extraction",
+      "type": "factual",
+      "verified": true,
+      "evidence": "python yaml.safe_load confirmed all four required fields present, plus relationship_detection and naming_conventions."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Asks about detection markers and patterns",
+        "reason": "Passes on any question mentioning markers/patterns. The transcript is simulated by the agent itself (scripted Q&A), so the agent controls both sides of the conversation — a weaker skill could author a plausible Q&A without understanding the profile schema. Consider asserting the transcript elicits specific fields like file_patterns and marker types (entity_class/table_mapping/relationship) rather than just mentioning 'markers'."
+      },
+      {
+        "assertion": "Generates a valid YAML profile with required fields",
+        "reason": "Field-presence check passes even if the values are nonsense (e.g., empty strings, wrong regex groups). The extractor actually ran and produced sensible output here, but the assertion would miss semantic defects. Consider adding: the entity_extraction.class_pattern captures group-1 and matches at least one class in a provided example, or the loaded profile yields at least one entity when run against example.py."
+      },
+      {
+        "reason": "The mapping-trial.md honestly documents that Post and Comment are reported with table_name='users' due to first-match regex. No assertion validates that the generated profile actually maps the example correctly — so an evaluator reading only the assertions wouldn't know the extractor mis-attributes tables. Consider an assertion that per-class tables resolve correctly (would surface whether the user needs the Serena path)."
+      }
+    ],
+    "overall": "Assertions check that scaffolding Q&A happens and the YAML is structurally valid/loadable, but don't verify the generated profile produces correct per-entity results. The execution exposes real extractor limitations that the assertions don't catch."
+  }
+}

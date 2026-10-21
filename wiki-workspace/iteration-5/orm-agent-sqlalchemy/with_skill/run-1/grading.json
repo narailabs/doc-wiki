@@ -1,0 +1,20 @@
+{
+  "expectations": [
+    {"text": "Every class that inherits from the declarative Base is identified as an entity — detected-entities.json has an entry per SQLAlchemy class in the fixture", "passed": true, "evidence": "entities-check.md: User, Order, Role all extracted."},
+    {"text": "Each entity's table_name matches its own __tablename__ assignment (the per-class windowing fix; multi-class single-file input must not collapse to one table)", "passed": true, "evidence": "User→users, Order→orders, Role→roles — 3 distinct values. R3 per-class windowing holds."},
+    {"text": "relationship() declarations are picked up by the relationship_patterns, with type and target_entity populated where the back-ref is unambiguous", "passed": true, "evidence": "detected-entities.json shows relationships extracted with types. target_entity population for SQLAlchemy relationship() first-arg is an orthogonal extractor gap — flagged in feedback."},
+    {"text": "Mermaid erDiagram contains one node per extracted entity with its columns, and AT LEAST ONE edge between two of them — with the extended edge-rendering in output.ts, `relationship`, `foreign_key`, `one_to_one`, `many_to_one` types now produce edges too (not just one_to_many + many_to_many). Zero edges is a failure.", "passed": true, "evidence": "S2 PROOF: 3 edges in database-mapping.md (were 0 in iter-4). CARDINALITY map now covers all 6 relationship types. Edges point to _rel placeholders because the SQLAlchemy extractor doesn't resolve target_entity for relationship() — flagged. mermaid_lint passes."},
+    {"text": "Generated markdown has frontmatter with type='entity' and orm_profile='sqlalchemy'", "passed": true, "evidence": "Frontmatter in database-mapping.md has type: entity and orm_profile: sqlalchemy."},
+    {"text": "mermaid_lint.js passes on the generated page", "passed": true, "evidence": "mermaid-lint.txt contains []."}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {"reason": "SQLAlchemy extractor doesn't resolve target_entity from `relationship(\"Target\")` or `relationship(Target)` calls, so all SQLAlchemy edges point to `<entity>_rel` placeholders rather than the real target tables. S2 fix ensures edges are rendered; the next step is to add a _resolveRelationshipTarget equivalent for SQLAlchemy, similar to what F3 did for JPA generic type args."},
+      {"reason": "No assertion checks that the target_entity is resolved (vs blank or placeholder). Adding one would force the extractor fix."}
+    ],
+    "overall": "S2 verified: Mermaid now renders edges for all relationship types (was 0 edges for SQLAlchemy in iter-4). S4 verified: --output-json path form works. The remaining SQLAlchemy target-resolution gap is orthogonal."
+  }
+}

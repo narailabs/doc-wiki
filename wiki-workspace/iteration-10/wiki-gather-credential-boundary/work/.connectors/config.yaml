@@ -1,0 +1,5 @@
+connectors:
+  github:
+    enabled: true
+    skill: github-agent-connector
+    token: env:GITHUB_TOKEN

@@ -1,0 +1,52 @@
+{
+  "status": "success",
+  "orm_detected": "prisma",
+  "entities": [
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "schema": "",
+      "columns": [],
+      "relationships": [
+        {
+          "type": "one_to_many",
+          "target_entity": ""
+        }
+      ]
+    },
+    {
+      "class_name": "Post",
+      "table_name": "posts",
+      "schema": "",
+      "columns": [],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": ""
+        },
+        {
+          "type": "one_to_many",
+          "target_entity": ""
+        }
+      ]
+    },
+    {
+      "class_name": "Comment",
+      "table_name": "comments",
+      "schema": "",
+      "columns": [],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": ""
+        }
+      ]
+    }
+  ],
+  "mapping_file": "/tmp/eval-i7-orm-prisma/database-mapping.md",
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Entity Relationships",
+    "code": "erDiagram\n    users ||--o{ users_rel : \"\"\n    posts ||--o{ posts_rel : \"\"\n    comments ||--o{ comments_rel : \"\"\n"
+  }
+}

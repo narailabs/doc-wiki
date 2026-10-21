@@ -1,0 +1,3 @@
+# stderr from wiki-promote eval execution
+
+(no errors — all commands completed without stderr output)

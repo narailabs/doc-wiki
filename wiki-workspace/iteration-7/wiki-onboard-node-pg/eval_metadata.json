@@ -1,0 +1,48 @@
+{
+  "eval_id": 13,
+  "eval_name": "wiki-onboard-node-pg",
+  "skill": "wiki",
+  "prompt": "Onboard a wiki for the Node project at /tmp/test-onboard-node-pg/. The fixture has package.json with express + pg dependencies; src/db.js opens a new Pool({ connectionString: process.env.DATABASE_URL }) against postgres://wikiuser@db.local:5432/appdb; src/models/user.js exports a plain JS object literal (no ORM library).",
+  "assertions": [
+    {
+      "text": "wiki.config.yaml has language: javascript (or nodejs) inferred from package.json",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "framework: express is set when express is in package.json dependencies; alternatively, framework: null (or absent) is acceptable ONLY if a detection-trace entry explicitly notes 'express detected but not configured as framework' — silent omission is a failure",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "ecosystem.database.driver: postgresql is set; host: db.local, port: 5432, database: appdb parsed from the connection string in src/db.js",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Credentials are referenced by secret name (user_secret: WIKI_DB_DEV_USER or similar) — no plaintext password OR username appears in wiki.config.yaml",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "ecosystem.orm.profiles is either an empty list [] OR contains exactly ['raw_sql'] — none of the shipped ORM profile names (jpa, sqlalchemy, django, prisma, typeorm, activerecord, entity_framework) appear, since the fixture has no ORM library",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated under the database section with safe defaults (block_ddl: true, block_privilege: true, dml_mode: 'escalate' or 'deny', audit.enabled: true)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root after onboard completes (auto-init triggered)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "events.jsonl contains one op='init' event AND one op='onboard' event (or equivalent), each with ISO timestamps",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

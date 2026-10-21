@@ -1,0 +1,16 @@
+{
+  "eval_id": 1,
+  "eval_name": "orm-agent-spring-boot-jpa",
+  "skill": "wiki-orm-agent",
+  "prompt": "Detect and map the ORM entities in this Spring Boot project that uses JPA with PostgreSQL",
+  "assertions": [
+    {"text": "User + Order identified as @Entity classes", "passed": null, "evidence": null},
+    {"text": "@Table(name) maps correctly; User has schema=public", "passed": null, "evidence": null},
+    {"text": "@OneToMany and @ManyToOne relationships captured", "passed": null, "evidence": null},
+    {"text": "Every relationship has non-empty target_entity (F3 + T2 serialization)", "passed": null, "evidence": null},
+    {"text": "Role stub block (R2) emitted BEFORE users↔role edge, no _rel phantoms", "passed": null, "evidence": null},
+    {"text": "Mermaid has BOTH directions of User↔Order (S2 many_to_one rendering)", "passed": null, "evidence": null},
+    {"text": "frontmatter type=entity, orm_profile=jpa", "passed": null, "evidence": null},
+    {"text": "mermaid_lint returns []", "passed": null, "evidence": null}
+  ]
+}

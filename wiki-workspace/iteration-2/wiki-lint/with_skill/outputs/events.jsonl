@@ -1,0 +1,3 @@
+{"ts": "2026-04-14T16:03:47.172000+00:00", "op": "lint", "phase": "before", "errors": 8, "warnings": 6, "info": 0}
+{"ts": "2026-04-14T16:03:47.200000+00:00", "op": "fix", "pages_touched": ["wiki/page-a.md", "wiki/page-b.md", "wiki/page-c.md", "wiki/page-d.md", "wiki/page-e.md"], "edges_added": 10, "created_pages": ["wiki/page-d.md"]}
+{"ts": "2026-04-14T16:03:47.227000+00:00", "op": "lint", "phase": "after", "errors": 0, "warnings": 0, "info": 0}

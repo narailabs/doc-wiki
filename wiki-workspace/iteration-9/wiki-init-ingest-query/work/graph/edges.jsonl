@@ -1,0 +1,3 @@
+{"from":"authentication","to":"session-management","type":"supports","provenance":"EXTRACTED","page":"wiki/authentication.md","created":"2026-05-03"}
+{"from":"jwt","to":"authentication","type":"supports","provenance":"EXTRACTED","page":"wiki/authentication.md","created":"2026-05-03"}
+{"from":"session-management","to":"refresh-token","type":"supports","provenance":"INFERRED","page":"wiki/authentication.md","created":"2026-05-03"}

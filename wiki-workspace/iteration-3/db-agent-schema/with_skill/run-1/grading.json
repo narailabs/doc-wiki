@@ -1,0 +1,105 @@
+{
+  "expectations": [
+    {
+      "text": "Uses schema introspection (PRAGMA table_info, information_schema, or the driver's classifyOperation READ path) rather than an ad-hoc SELECT *",
+      "passed": true,
+      "evidence": "schema-result.md line 3: 'Source: `sqlite3` PRAGMA table_info + `sqlite_master` (read-only introspection) via `SQLiteDriver.getSchema()` — the driver's `classifyOperation` READ path.' policy-decision.json reason field corroborates: 'Schema introspection via SQLiteDriver.getSchema() (PRAGMA table_info + sqlite_master). Read-path dispatch through driver.classifyOperation → OperationType.READ.' command.txt invokes action 'schema', not a SELECT. audit.jsonl contains zero 'query' events, confirming no ad-hoc SELECT was routed through executeQuery."
+    },
+    {
+      "text": "Result includes all four columns of the fixture (id, email, name, created_at) each paired with the expected type (INTEGER, TEXT, TEXT, TIMESTAMP) — missing or misnamed columns fail",
+      "passed": true,
+      "evidence": "stdout.txt lists exactly 4 columns: id/INTEGER, email/TEXT, name/TEXT, created_at/TIMESTAMP. schema-result.md table rows 1–4 mirror this: (`id`, `INTEGER`, ...), (`email`, `TEXT`, ...), (`name`, `TEXT`, ...), (`created_at`, `TIMESTAMP`, ...). Names and types match the fixture exactly."
+    },
+    {
+      "text": "id is identified as the primary key AND email is identified as NOT NULL — a generic placeholder schema that lists columns without constraints fails",
+      "passed": true,
+      "evidence": "stdout.txt: id has 'is_primary_key': true; email has 'nullable': false. schema-result.md row 1 marks id pk=true; row 2 marks email nullable=false. Mermaid block also annotates 'INTEGER id PK'. Constraints are concrete, not placeholders."
+    },
+    {
+      "text": "audit.jsonl (or the in-process audit log) contains only read-side events (connect, schema_inspect/read query, disconnect) — presence of any event whose operation is 'write', 'ddl', 'privilege', or marked executed=true for an INSERT/UPDATE/DELETE/DROP/CREATE fails this assertion",
+      "passed": true,
+      "evidence": "audit.jsonl contains a single event: {\"event_type\": \"pool_created\", ..., \"details\": {\"env\": \"dev\", \"driver\": \"sqlite\"}}. This is a connection-lifecycle event (read-side). audit-shape-check.md confirms via jq: 0 write/ddl/privilege/executed-mutation events, 0 policy_deny events, 0 query events. The assertion's fail conditions (write/ddl/privilege/executed-true mutations) are all absent, so the assertion passes on its literal terms. Note: the log is thin — it does not contain discrete schema_inspect or disconnect events; see eval_feedback below."
+    },
+    {
+      "text": "policy-decision.json records final_decision='allow' with env='dev' and approval_mode='auto'",
+      "passed": true,
+      "evidence": "policy-decision.json lines 2–4: \"final_decision\": \"allow\", \"env\": \"dev\", \"approval_mode\": \"auto\". All three fields match exactly."
+    },
+    {
+      "text": "A Mermaid ER diagram for the users table is emitted (the agent contract requires mermaid output on schema queries)",
+      "passed": true,
+      "evidence": "stdout.txt lines 40–44 include a `mermaid` key with type 'erDiagram' and code 'erDiagram\\n    users {\\n        INTEGER id PK\\n        TEXT email\\n        TEXT name\\n        TIMESTAMP created_at\\n    }'. schema-result.md lines 31–39 render the same fenced ```mermaid erDiagram``` block. Contract is satisfied."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 5264,
+    "transcript_chars": null
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "PRAGMA table_info + sqlite_master were used (no ad-hoc SELECT)",
+      "type": "process",
+      "verified": true,
+      "evidence": "schema-result.md and policy-decision.json both cite SQLiteDriver.getSchema() with PRAGMA table_info + sqlite_master; audit.jsonl has 0 query events, confirming no executeQuery dispatch."
+    },
+    {
+      "claim": "email has a UNIQUE constraint (via sqlite_autoindex_users_1)",
+      "type": "factual",
+      "verified": false,
+      "evidence": "schema-result.md notes the UNIQUE constraint 'lives in the accompanying auto-index `sqlite_autoindex_users_1`' but stdout.txt does not surface it; the Mermaid block marks only PK on id. Not checkable from the emitted artifacts — this is a side-note, not an assertion, so does not affect grading."
+    },
+    {
+      "claim": "id INTEGER PRIMARY KEY is nullable=true because it is a rowid alias",
+      "type": "factual",
+      "verified": true,
+      "evidence": "schema-result.md lines 20–22 correctly explain SQLite's INTEGER PRIMARY KEY rowid-alias semantics; stdout.txt row shows id with is_primary_key=true AND nullable=true, consistent with the PRAGMA output SQLite actually returns. Assertion #3 still passes because PK is identified."
+    },
+    {
+      "claim": "Approval mode 'auto' on env 'dev' auto-grants reads",
+      "type": "process",
+      "verified": true,
+      "evidence": "policy-decision.json reason: 'Approval mode auto on env dev grants the read automatically (Policy._checkRead → {decision: allow, reason: auto-approved})'. Consistent with the ALLOW / DENY / ESCALATE / PRESENT_ONLY guard-rail policy documented in CLAUDE.md."
+    },
+    {
+      "claim": "No write, DDL, privilege, or mutation events were recorded",
+      "type": "quality",
+      "verified": true,
+      "evidence": "audit-shape-check.md section 2 shows jq count=0 for write/ddl/privilege/executed-mutation filters over audit.jsonl; the single event is pool_created, a connection-lifecycle record."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "audit.jsonl (or the in-process audit log) contains only read-side events (connect, schema_inspect/read query, disconnect) — presence of any event whose operation is 'write', 'ddl', 'privilege', or marked executed=true for an INSERT/UPDATE/DELETE/DROP/CREATE fails this assertion",
+        "reason": "The assertion lists 'connect, schema_inspect/read query, disconnect' as the expected shape but is graded purely negatively (only fails on write/ddl/privilege). A run that emits zero audit events at all would still pass. The actual output here emits only pool_created — no schema_inspect event, no disconnect event. Consider adding a positive-shape check: at least one event whose type is connect/pool_created AND at least one schema_inspect (or explicit documentation that getSchema() intentionally bypasses executeQuery audit). Otherwise the assertion does not discriminate between 'agent correctly avoided writes' and 'agent logged almost nothing'."
+      },
+      {
+        "assertion": "id is identified as the primary key AND email is identified as NOT NULL",
+        "reason": "The fixture also has a UNIQUE constraint on email (per the schema-result.md note referencing sqlite_autoindex_users_1), but neither stdout.txt nor the Mermaid block surfaces it. No assertion checks this. If UNIQUE surfacing is part of the schema-agent contract, consider adding an assertion that at least flags UNIQUE constraints discoverable via sqlite_master or index introspection — otherwise skills that silently drop UNIQUE pass."
+      },
+      {
+        "reason": "No assertion verifies that the Mermaid erDiagram block is syntactically valid (parseable by mermaid_lint.ts, which is already in the repo's script set). The current Mermaid check is string-presence only — a malformed diagram would pass. Running the output through mermaid_lint.ts would make the 'mermaid emitted' assertion discriminating."
+      }
+    ],
+    "overall": "All 6 assertions pass on solid evidence. The schema result, Mermaid block, policy decision, and audit log are mutually consistent and come from the real introspection path. Main weakness in the eval itself: the audit-shape assertion is purely negative and accepts a near-empty log, and no check validates Mermaid syntax or UNIQUE-constraint surfacing."
+  }
+}

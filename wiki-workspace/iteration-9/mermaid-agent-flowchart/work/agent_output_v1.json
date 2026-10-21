@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "pipeline": ["build", "test", "stage", "prod"],
+  "mermaid": [
+    {
+      "type": "flowchart LR",
+      "title": "Deploy Pipeline",
+      "code": "    build[\"Build artifact\"] --> test[\"Run #quot;test#quot; suite (unit + integration)\"]\n    test --> stage[\"Deploy to stage\"]\n    stage --> prod[\"Deploy to prod (gated &lt;manual&gt;)\"]"
+    }
+  ]
+}

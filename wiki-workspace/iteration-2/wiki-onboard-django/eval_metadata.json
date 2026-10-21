@@ -1,0 +1,13 @@
+{
+  "eval_id": 5,
+  "eval_name": "wiki-onboard-django",
+  "skill": "wiki",
+  "prompt": "Set up wiki for a Django + MongoDB project",
+  "assertions": [
+    {"text": "Detects Python/Django from requirements.txt or pyproject.toml", "passed": null, "evidence": null},
+    {"text": "Detects Django ORM (models.Model)", "passed": null, "evidence": null},
+    {"text": "Configures database agent for MongoDB", "passed": null, "evidence": null},
+    {"text": "Creates wiki.config.yaml with correct settings", "passed": null, "evidence": null},
+    {"text": "Creates wiki scaffold via /wiki-init", "passed": null, "evidence": null}
+  ]
+}

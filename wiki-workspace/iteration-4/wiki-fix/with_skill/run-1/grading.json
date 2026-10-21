@@ -1,0 +1,60 @@
+{
+  "expectations": [
+    {
+      "text": "authentication.md content mentions RS256 and no longer mentions HS256 in the updated regions",
+      "passed": true,
+      "evidence": "authentication-diff.md shows HS256→RS256 swaps in summary + both body paragraphs. Grep confirms 0 HS256 and 3 RS256 in wiki-after/authentication.md."
+    },
+    {
+      "text": "The page's frontmatter 'updated' field is refreshed to the current date (differs from 'created')",
+      "passed": true,
+      "evidence": "wiki-after/authentication.md: updated=2026-04-14, created=2026-04-10 — differ as required."
+    },
+    {
+      "text": "No other wiki page is modified — a directory diff of wiki/ shows exactly one file touched",
+      "passed": true,
+      "evidence": "untouched-pages-check.md: sha256 of database.md and caching.md pre vs post match byte-identical (both sha256s unchanged)."
+    },
+    {
+      "text": "events.jsonl records op='fix' with target_page: 'wiki/authentication.md' (or equivalent), a reason/description field, and an ISO timestamp",
+      "passed": true,
+      "evidence": "events.jsonl contains {ts, op:'fix', target_page:'wiki/authentication.md', reason:'Signing algorithm changed HS256→RS256', quality_score:0.4, prev_quality:0.85, fields_updated:[...]} with ISO-8601 timestamp."
+    },
+    {
+      "text": "A re-run of /wiki-lint on the fixed page reports zero violations (quality is preserved)",
+      "passed": true,
+      "evidence": "lint-after.md: authentication.md-specific lint errors = 0. The 12 total lint issues in the report are pre-existing scaffolding concerns (empty index/overview/summaries, no edges.jsonl) — none attributable to the fix operation or to authentication.md."
+    },
+    {
+      "text": "The quality score of the page is recomputed and its value appears in the events.jsonl fix entry",
+      "passed": true,
+      "evidence": "quality-score.md + events.jsonl: quality_score=0.4 (recomputed), prev_quality=0.85."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "execution_metrics": {},
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Re-run lint reports zero violations",
+        "reason": "Wording is ambiguous — 'zero violations on the page' vs 'zero violations in the whole wiki'. The executor correctly interpreted as page-scoped (since scaffold has pre-existing violations). Clarify wording: 'zero NEW violations on the fixed page'."
+      },
+      {
+        "reason": "No assertion checks that /wiki-fix went through the skill's documented CLI rather than a direct Edit — a future implementation that bypasses the skill could still pass by producing the same on-disk result."
+      },
+      {
+        "reason": "Quality score dropped 0.85→0.4 after the fix, which is counter-intuitive. No assertion covers the direction of the quality change. Worth investigating whether the recomputation is correct."
+      }
+    ],
+    "overall": "Exactly one file edited; database.md and caching.md byte-identical; fix audited with structured event. /wiki-fix contract well-covered."
+  }
+}

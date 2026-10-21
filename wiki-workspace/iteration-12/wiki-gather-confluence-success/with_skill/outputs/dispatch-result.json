@@ -1,0 +1,42 @@
+{
+  "result": {
+    "plan": [
+      {
+        "connector": "confluence",
+        "action": "get_page",
+        "params": {
+          "page_id": "1"
+        }
+      }
+    ],
+    "results": [
+      {
+        "step": 1,
+        "connector": "confluence",
+        "action": "get_page",
+        "params": {
+          "page_id": "1"
+        },
+        "envelope": {
+          "status": "success",
+          "action": "get_page",
+          "data": {
+            "id": "1",
+            "title": "Stub page title",
+            "space_key": "PROJ",
+            "version": 3,
+            "body_markdown": "<p>Stub body content.</p>",
+            "last_modified": "2026-05-01T12:00:00Z"
+          }
+        }
+      }
+    ]
+  },
+  "request_log": [
+    {
+      "method": "GET",
+      "url": "/wiki/rest/api/content/1?expand=body.storage%2Cspace%2Cversion",
+      "auth_present": true
+    }
+  ]
+}

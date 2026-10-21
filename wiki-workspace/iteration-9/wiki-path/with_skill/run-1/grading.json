@@ -1,0 +1,46 @@
+{
+  "expectations": [
+    {
+      "text": "Runs graph_ops.js with the path subcommand",
+      "passed": true,
+      "evidence": "Invocation: `node skills/doc-wiki/scripts/graph_ops.js path --edges graph/edges.jsonl --from authentication --to database-schema`. Stdout returns the 2-edge JSON path."
+    },
+    {
+      "text": "Returned path starts at 'authentication' and ends at 'database-schema'",
+      "passed": true,
+      "evidence": "Path output: edge 1 from='authentication' → to='session-management'; edge 2 from='session-management' → to='database-schema'. First node is authentication, last is database-schema."
+    },
+    {
+      "text": "Every intermediate node appears as either the source or the target of an edge in the fixture's edges.jsonl",
+      "passed": true,
+      "evidence": "Intermediate node 'session-management' appears in edges.jsonl as both target (edge 'authentication→session-management') and source (edge 'session-management→database-schema')."
+    },
+    {
+      "text": "Every consecutive (from, to) pair in the returned path exists as an edge in edges.jsonl (no hallucinated links)",
+      "passed": true,
+      "evidence": "Both returned edges (authentication→session-management, session-management→database-schema) are direct line entries in graph/edges.jsonl — verified by grep."
+    },
+    {
+      "text": "The returned path is shortest — no alternative chain in edges.jsonl connects the same endpoints with fewer hops",
+      "passed": true,
+      "evidence": "Returned path has 2 hops. The only alternative (authentication→jwt→crypto-utils→key-rotation→database-schema) is 4 hops. No 1-hop edge from authentication to database-schema exists. 2 is the minimum."
+    },
+    {
+      "text": "Edge type (supports|contradicts|extends|supersedes) is reported for each hop",
+      "passed": true,
+      "evidence": "Edge 1 type='supports'; edge 2 type='extends'. Both fields present in JSON output."
+    },
+    {
+      "text": "Provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) is reported for each edge",
+      "passed": true,
+      "evidence": "Edge 1 provenance='EXTRACTED'; edge 2 provenance='INFERRED'. Both present in output."
+    },
+    {
+      "text": "A no-path query (unreachable or unknown target) returns an empty result with a human-readable explanation — not a stack trace or bare []",
+      "passed": false,
+      "evidence": "Invocation `graph_ops.js path --from authentication --to does-not-exist` exits 0 and prints bare `[]` to stdout with no human-readable explanation message. The CLI returns the empty array literally as the only output. (Source: graph_ops.js line 564-566 — `process.stdout.write(JSON.stringify(result, null, 2) + '\\n')`. The skill orchestrator could wrap that output, but the eval explicitly tests the script-level behavior and the script itself emits a bare `[]`.)"
+    }
+  ],
+  "summary": {"passed": 7, "failed": 1, "total": 8, "pass_rate": 0.875},
+  "eval_feedback": {"overall": "7 of 8 expectations pass. Path finding finds the correct shortest 2-hop path with edge types and provenance. The no-path case fails: graph_ops.js emits bare '[]' with no human-readable explanation when a node is unknown — the skill spec says path mode is 'no synthesis', so the script's bare [] is what the user sees."}
+}

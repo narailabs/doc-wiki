@@ -1,0 +1,36 @@
+{
+  "expectations": [
+    {
+      "text": "Generated block starts with the `sequenceDiagram` directive",
+      "passed": true,
+      "evidence": "Substring `\\`\\`\\`mermaid\\nsequenceDiagram` is present in request-flow.md (line 20-21)."
+    },
+    {
+      "text": "Block declares participants (or actors) for each of the four nodes (Client, Gateway, Auth, Database) using `participant` lines",
+      "passed": true,
+      "evidence": "Block contains four `participant` lines: `participant Client`, `participant Gateway`, `participant Auth`, `participant Database` (participant-count==4)."
+    },
+    {
+      "text": "Each message between participants is rendered with `->` (sync) or `->>` (async) and carries the label from the input JSON",
+      "passed": true,
+      "evidence": "Six message lines render: `Client->Gateway: GET /orders (Bearer token)`, `Gateway->>Auth: validate(token)`, `Auth->Gateway: user_id, scopes`, `Gateway->>Database: SELECT orders WHERE user_id=?`, `Database->Gateway: rows`, `Gateway->Client: 200 OK + JSON`. Async-arrow count (->>) = 2 (matches the two `kind: async` messages); the remaining 4 use the sync `->` form. Labels match input JSON byte-for-byte."
+    },
+    {
+      "text": "The block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on request-flow.md — no EOF append",
+      "passed": true,
+      "evidence": "start-marker-count=1, end-marker-count=1; mermaid fence sits between lines 18 and 33 (between the two markers); content after end marker (## Failure modes) preserved."
+    },
+    {
+      "text": "Content outside the markers is preserved byte-for-byte across the run",
+      "passed": true,
+      "evidence": "Python compare of pre-run and post-run files, slicing out the inter-marker region: outside-bytes-equal == True."
+    },
+    {
+      "text": "mermaid_lint.js passes on the resulting page",
+      "passed": true,
+      "evidence": "`node mermaid_lint.js --page request-flow.md` printed `[]`."
+    }
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "eval_feedback": {"overall": "Sequence diagram injection passed all 6 expectations: four participants declared, sync/async arrows match the input, marker preservation and byte-stable outside content, lint clean."}
+}

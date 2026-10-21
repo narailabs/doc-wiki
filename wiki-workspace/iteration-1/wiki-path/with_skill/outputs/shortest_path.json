@@ -1,0 +1,29 @@
+{
+  "query": {
+    "from": "auth.md",
+    "to": "database.md",
+    "max_hops": 6
+  },
+  "shortest_path": [
+    {
+      "from": "auth.md",
+      "to": "oauth.md",
+      "type": "extends",
+      "provenance": "EXTRACTED",
+      "evidence": "",
+      "source_file": "",
+      "date": "2026-04-12"
+    },
+    {
+      "from": "oauth.md",
+      "to": "database.md",
+      "type": "supports",
+      "provenance": "AMBIGUOUS",
+      "evidence": "",
+      "source_file": "",
+      "date": "2026-04-12"
+    }
+  ],
+  "hop_count": 2,
+  "path_summary": "auth.md --(extends)--> oauth.md --(supports)--> database.md"
+}

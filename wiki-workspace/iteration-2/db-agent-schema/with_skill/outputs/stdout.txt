@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "tables": [
+    {
+      "name": "users",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "INTEGER",
+          "nullable": true,
+          "is_primary_key": true,
+          "default": null
+        },
+        {
+          "name": "email",
+          "data_type": "TEXT",
+          "nullable": false,
+          "is_primary_key": false,
+          "default": null
+        },
+        {
+          "name": "name",
+          "data_type": "TEXT",
+          "nullable": true,
+          "is_primary_key": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "data_type": "TIMESTAMP",
+          "nullable": true,
+          "is_primary_key": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      ]
+    }
+  ],
+  "table_count": 1,
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Database Schema",
+    "code": "erDiagram\n    users {\n        INTEGER id PK\n        TEXT email\n        TEXT name\n        TIMESTAMP created_at\n    }"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "expectations": [
+    {"text": "Every class that inherits from the declarative Base is identified as an entity", "passed": true, "evidence": "detected-entities.json has User, Order, Role — all three Base-inheriting classes."},
+    {"text": "Each entity's table_name matches its own __tablename__ assignment (R3 per-class windowing)", "passed": true, "evidence": "User→users, Order→orders, Role→roles. R3 holds."},
+    {"text": "relationship() declarations have type AND target_entity populated (T1)", "passed": true, "evidence": "T1 PROOF: User.relationship('Order') → target_entity='Order'; User.relationship('Role') → target_entity='Role'; Order.relationship('User') → target_entity='User'. All populated."},
+    {"text": "ForeignKey() declarations resolve to a target table name (not 'table.column') (T1)", "passed": true, "evidence": "T1 PROOF: Order.ForeignKey('users.id') → target_entity='users' (collapsed to table part, not 'users.id')."},
+    {"text": "detected-entities.json serializes each relationship as {type, target_entity} (T2, not a bare kind string)", "passed": true, "evidence": "T2 PROOF: jq shows each relationship as {type: 'relationship'|'foreign_key', target_entity: 'Order'|'Role'|'User'|'users'}. Object shape, not flat kind strings."},
+    {"text": "Mermaid erDiagram has edges between real tables (users↔orders, users↔roles) with NO _rel placeholders", "passed": true, "evidence": "4 edges: users||--o{ orders, users||--o{ roles, orders||--o{ users, orders}o--|| users. No `_rel` in grep. Real tables at both endpoints."},
+    {"text": "mermaid_lint passes", "passed": true, "evidence": "mermaid-lint.txt contains []."}
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "overall": "T1 + T2 both verified on SQLAlchemy. Every relationship has a resolved target_entity; JSON serializes them; Mermaid references real tables. The iteration-5 'points to _rel placeholders' caveat is now gone."
+  }
+}

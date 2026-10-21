@@ -1,0 +1,17 @@
+{
+  "expectations": [
+    {"text": "All three entities (Author, Book, Publisher) are extracted into detected-entities.json as separate entries with table_names matching the @Entity('...') first arg (e.g., 'authors', 'books', 'publishers')", "passed": true, "evidence": "detected-entities.json: 3 entities, Author→authors, Book→books, Publisher→publishers. Unchanged from iter-7 (already passing)."},
+    {"text": "Each @OneToMany(() => Book, ...) and @ManyToOne(() => Author, ...) produces a relationship with target_entity resolved from the arrow-function call argument — never blank, never the literal string 'Book'/'Author' (the resolver must dereference to the imported class)", "passed": true, "evidence": "T3 VERIFIED. target_entity now resolved: Author.@OneToMany→Book, Book.@ManyToOne→Author, Book.@OneToOne→Publisher. FLIPPED from iter-7 FAIL. Root fix: new regex /^\\s*\\([^)]*\\)\\s*=>\\s*([A-Z][A-Za-z_]\\w*)\\s*[,)]/ ran BEFORE existing call-first-arg branch."},
+    {"text": "Relationship type matches the decorator name (one_to_many for @OneToMany, many_to_one for @ManyToOne, one_to_one for @OneToOne)", "passed": true, "evidence": "types unchanged from iter-7: Author.@OneToMany→one_to_many, Book.@ManyToOne→many_to_one, Book.@OneToOne→one_to_one."},
+    {"text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='typeorm'", "passed": true, "evidence": "frontmatter-check.md: type=entity, orm_profile=typeorm. Unchanged from iter-7."},
+    {"text": "Mermaid erDiagram contains nodes for all three table names and at least two edges (authors-books and books-publishers, or whatever the fixture declares) using cardinality glyphs that match the decorator (||--o{ for one_to_many, }o--|| for many_to_one)", "passed": true, "evidence": "FLIPPED from iter-7 FAIL. Mermaid now: authors ||--o{ books (one_to_many glyph), books ||--|| publishers (one_to_one glyph). Real entity table names, no _rel stubs. 3 nodes (authors/books/publishers) + edges connecting them directly. A2 fix cascaded here."},
+    {"text": "Any external target referenced via @ManyToOne whose class file is NOT in the fixture set is emitted as a _external stub before the edge — never an edge to an undeclared node", "passed": true, "evidence": "FLIPPED from iter-7 FAIL. No edges to undeclared nodes (no _rel fallback fires now). All fixture targets are in-scope so _external path isn't exercised, but the 'never edge to undeclared node' invariant is upheld by A2 fix."},
+    {"text": "mermaid_lint.js passes on the generated page", "passed": true, "evidence": "mermaid_lint.txt = [] (exit 0). Unchanged from iter-7."}
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "overall": "7/7 PASS (up from 4/7 in iter-7). T3 fix in `_resolveRelationshipTarget` lands: arrow-function syntax `() => ClassName` now resolves target_entity correctly. Three assertions flipped (A2, A5, A6) from one upstream change — high-leverage fix."
+  }
+}

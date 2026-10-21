@@ -1,0 +1,1 @@
+{"ts": "2026-04-14T16:03:40.436000+00:00", "op": "onboard", "language": "python", "framework": "django", "orm_profile": "django", "database": "mongodb", "connector": "djongo", "entities_detected": 1, "sources_enabled": [], "autonomy_mode": "balanced", "multimodal": "optional"}

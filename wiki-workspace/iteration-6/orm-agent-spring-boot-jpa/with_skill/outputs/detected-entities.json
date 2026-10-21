@@ -1,0 +1,40 @@
+{
+  "status": "success",
+  "orm_detected": "jpa",
+  "entities": [
+    {
+      "class_name": "Order",
+      "table_name": "orders",
+      "schema": "",
+      "columns": 1,
+      "relationships": [
+        {
+          "type": "many_to_one",
+          "target_entity": "User"
+        }
+      ]
+    },
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "schema": "public",
+      "columns": 2,
+      "relationships": [
+        {
+          "type": "one_to_many",
+          "target_entity": "Order"
+        },
+        {
+          "type": "many_to_many",
+          "target_entity": "Role"
+        }
+      ]
+    }
+  ],
+  "mapping_file": "./database-mapping.md",
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Entity Relationships",
+    "code": "erDiagram\n    orders {\n        string total_amount\n    }\n    users {\n        string username\n        string email\n    }\n    role {\n        string _external \"not-in-scan\"\n    }\n    orders }o--|| users : \"\"\n    users ||--o{ orders : \"\"\n    users }o--o{ role : \"\"\n"
+  }
+}

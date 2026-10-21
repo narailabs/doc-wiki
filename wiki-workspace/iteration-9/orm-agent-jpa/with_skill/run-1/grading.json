@@ -1,0 +1,53 @@
+{
+  "expectations": [
+    {
+      "text": "Both User AND Order are identified as @Entity classes — detected-entities.json lists class_name: 'User' and class_name: 'Order'",
+      "passed": true,
+      "evidence": "detected-entities.json contains entries with class_name='Order' (line 6) and class_name='User' (line 31); status='success', orm_detected='jpa'"
+    },
+    {
+      "text": "@Table(name) maps to table names 'users' and 'orders' respectively; User also carries schema='public' from @Table(schema=\"public\")",
+      "passed": true,
+      "evidence": "Order.table_name='orders' (line 7), User.table_name='users' (line 32), User.schema='public' (line 33). Source: User.java has @Table(name = \"users\", schema = \"public\"); Order.java has @Table(name = \"orders\")."
+    },
+    {
+      "text": "@OneToMany and @ManyToOne relationships are captured — detected-entities.json includes at least one one_to_many and one many_to_one relationship",
+      "passed": true,
+      "evidence": "Order.relationships[0].type='many_to_one' (line 25); User.relationships[0].type='one_to_many' (line 50)."
+    },
+    {
+      "text": "Every relationship in detected-entities.json has a non-empty target_entity that names another extracted class — no blank target_entity strings",
+      "passed": true,
+      "evidence": "Order.relationships[0].target_entity='User' (line 26) → references extracted class User. User.relationships[0].target_entity='Order' (line 51) → references extracted class Order. Neither is blank."
+    },
+    {
+      "text": "Mermaid erDiagram references real extracted tables at both endpoints; any external target (e.g., Role when Role.java isn't in scope) is emitted as a stub `table { _external ... }` block BEFORE the edge, so there is NEVER an edge to a node that isn't declared",
+      "passed": true,
+      "evidence": "Mermaid in database-mapping.md (lines 22-33) declares nodes 'orders' and 'users' both with column blocks, then renders edge `users ||--o{ orders : \"\"`. Both endpoints are declared; no external stubs needed (no targets outside scope)."
+    },
+    {
+      "text": "Mermaid erDiagram contains an edge between 'users' and 'orders' (either ||--o{ or }o--||) and uses 'users' and 'orders' as literal node names",
+      "passed": true,
+      "evidence": "database-mapping.md line 33: `    users ||--o{ orders : \"\"` — cardinality glyph ||--o{ between literal node names 'users' and 'orders'."
+    },
+    {
+      "text": "Generated markdown has frontmatter with type='entity' and orm_profile='jpa'",
+      "passed": true,
+      "evidence": "database-mapping.md frontmatter lines 3 (`type: entity`) and 6 (`orm_profile: jpa`)."
+    },
+    {
+      "text": "mermaid_lint.js reports no syntax issues on the generated page",
+      "passed": true,
+      "evidence": "Ran `node skills/doc-wiki/scripts/mermaid_lint.js --page wiki-workspace/iteration-9/orm-agent-jpa/with_skill/outputs/database-mapping.md` — exit 0, output `[]` (empty issue array). Captured in mermaid-lint.txt."
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "JPA detection produced correct entity-table mapping for both classes including User's schema='public', captured both one_to_many and many_to_one relationships with resolved target_entity values, and emitted a clean Mermaid erDiagram that lints without issues."
+  }
+}

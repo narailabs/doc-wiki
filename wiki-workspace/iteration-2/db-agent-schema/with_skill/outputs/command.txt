@@ -1,0 +1,14 @@
+# Primary command — schema introspection via the schema action:
+cd /tmp/eval-db-schema
+node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
+  --env dev \
+  --config ./wiki.config.yaml \
+  --action schema \
+  --filter 'users'
+
+# Secondary command — equivalent schema introspection via a bounded SELECT
+# (exercises the Policy gate end-to-end and produces the ALLOW decision):
+node /Users/narayan/src/doc-wiki/agents/wiki-db-agent/scripts/db_query.js \
+  --env dev \
+  --config ./wiki.config.yaml \
+  --sql "SELECT name, type, \"notnull\", dflt_value, pk FROM pragma_table_info('users') LIMIT 100"

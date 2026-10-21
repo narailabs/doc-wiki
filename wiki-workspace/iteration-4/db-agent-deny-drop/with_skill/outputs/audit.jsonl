@@ -1,0 +1,2 @@
+{"event_type": "pool_created", "timestamp": "2026-04-14T19:58:54.206Z", "session_id": "b667d013f0d6", "details": {"env": "production", "driver": "postgresql"}}
+{"event_type": "policy_deny", "timestamp": "2026-04-14T19:58:54.208Z", "session_id": "b667d013f0d6", "details": {"reason": "DDL statements are never allowed", "op": "ddl"}}

@@ -1,0 +1,43 @@
+{
+  "eval_id": 11,
+  "eval_name": "wiki-query-standalone",
+  "skill": "wiki",
+  "prompt": "In the wiki at /tmp/test-query-wiki/ (5 wiki pages spanning auth, request-routing, app-server, db-write-path, and audit-log), answer: what's the full request lifecycle from user authentication through DB write? Cite every page you read.",
+  "assertions": [
+    {
+      "text": "The answer cites at least 3 distinct wiki pages by relative markdown link, each link resolving to a real file under wiki/",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "events.jsonl records op='query' with details.search_phase: 'summaries' (or equivalent flag) preceding any per-page reads, evidencing summaries-first search — no op='query' whose first read is a full wiki page is acceptable",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "details.reduction_ratio in the events entry is >0.8 (final synthesis token count is <20% of total tokens read)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The answer ends with a '## Knowledge gaps' (or equivalent labeled) section listing at least one specific gap when the source pages don't cover (a) request-id propagation OR (b) error-path rollback — both of which the fixture intentionally omits",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The archive at outputs/queries/<YYYY-MM-DD>-<topic-slug>.md exists with frontmatter containing topic, tags, and created ISO date; filename slug derives from the question",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The synthesized answer mentions concrete artifacts from at least 3 of the 5 pages (e.g., JWT, nginx, pg connection pool, audit_log table) — a generic answer that doesn't surface page-specific terms fails",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The events entry includes tokens_in, tokens_out, and a non-zero pages_read[] array of length >=3",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

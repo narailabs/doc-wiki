@@ -1,0 +1,6 @@
+{
+  "status": "skipped",
+  "skip_reason": "TEST_LIVE_NOTION not set; success-path covered only via the live-API gate. Set TEST_LIVE_NOTION=1 plus a real NOTION_TOKEN in env to exercise.",
+  "approach": "B",
+  "rationale": "Notion API base URL (api.notion.com) is hardcoded inside @notionhq/client; a clean override requires DNS/hosts intercept or fetch monkey-patch in the connector subprocess — both higher-friction than this gate."
+}

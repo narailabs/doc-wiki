@@ -1,0 +1,53 @@
+{
+  "expectations": [
+    {
+      "text": "Runs graph_ops.js with the path subcommand",
+      "passed": true,
+      "evidence": "Invoked `node skills/doc-wiki/scripts/graph_ops.js path --edges <work>/graph/edges.jsonl --from authentication --to database-schema`; the binary printed the JSON edge array shown in outputs/path-result.json and exited 0."
+    },
+    {
+      "text": "Returned path starts at 'authentication' and ends at 'database-schema'",
+      "passed": true,
+      "evidence": "outputs/path-result.json[0].from == 'authentication' and outputs/path-result.json[2].to == 'database-schema'."
+    },
+    {
+      "text": "Every intermediate node appears as either the source or the target of an edge in the fixture's edges.jsonl",
+      "passed": true,
+      "evidence": "Intermediates in the returned path are 'session-store' and 'users-table'. edges.jsonl contains 'session-store' as both source (->users-table) and target (authentication->), and 'users-table' as both source (->database-schema) and target (session-store->, audit-log->)."
+    },
+    {
+      "text": "Every consecutive (from, to) pair in the returned path exists as an edge in edges.jsonl (no hallucinated links)",
+      "passed": true,
+      "evidence": "Three consecutive pairs in the result: (authentication,session-store), (session-store,users-table), (users-table,database-schema). Each pair maps directly to lines 1, 2, and 3 of edges.jsonl with matching type/provenance/evidence — no fabricated edges."
+    },
+    {
+      "text": "The returned path is shortest — no alternative chain in edges.jsonl connects the same endpoints with fewer hops",
+      "passed": true,
+      "evidence": "Re-ran with `--all-paths`: graph_ops enumerates exactly two simple paths between the endpoints — the 3-edge chain returned by `path` and a 4-edge alternative (authentication->jwt-signing->audit-log->users-table->database-schema). 3 < 4, so the returned path is the unique shortest."
+    },
+    {
+      "text": "Edge type (supports|contradicts|extends|supersedes) is reported for each hop",
+      "passed": true,
+      "evidence": "outputs/path-result.json hops have type='supports', type='supports', type='extends' respectively — every hop carries a `type` field from the closed enum."
+    },
+    {
+      "text": "Provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) is reported for each edge",
+      "passed": true,
+      "evidence": "Every hop in outputs/path-result.json has provenance='EXTRACTED'. All three values are members of the closed enum {EXTRACTED, INFERRED, AMBIGUOUS}."
+    },
+    {
+      "text": "A no-path query (unreachable or unknown target) returns an empty result with a human-readable explanation — not a stack trace or bare []",
+      "passed": true,
+      "evidence": "Two no-path runs were executed. (a) `--to does-not-exist` (unknown node) emitted `{\"path\": [], \"found\": false, \"reason\": \"No path from 'authentication' to 'does-not-exist' within 6 hops — either the target is unknown, unreachable from the source, or the shortest path exceeds --max-hops.\"}` (outputs/no-path-unknown.json). (b) `--to quarantined-feature` (isolated node) emitted the equivalent envelope with the same shape (outputs/no-path-isolated.json). Neither output is a bare `[]` and neither is a stack trace — both are structured JSON with `found: false` and a non-empty human-readable `reason` sentence. This was the previously-failing expectation; commit 4936536 in skills/doc-wiki/scripts/graph_ops.ts adds the empty-case envelope and it now passes."
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "pass_rate": 1.0
+  },
+  "eval_feedback": {
+    "overall": "All 8 expectations now pass (8/8). The previously-failing expectation #8 — no-path queries returning a structured empty result with a human-readable reason instead of a bare [] — is satisfied: both the unknown-target and isolated-target runs emit `{path: [], found: false, reason: \"…\"}` exactly as the commit 4936536 fix specifies."
+  }
+}

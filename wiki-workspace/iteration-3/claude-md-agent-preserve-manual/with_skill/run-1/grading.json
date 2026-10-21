@@ -1,0 +1,111 @@
+{
+  "expectations": [
+    {
+      "text": "Bytes above the `<!-- wiki-managed: start -->` marker are preserved — sha256 of the pre-marker region before vs after matches",
+      "passed": true,
+      "evidence": "Independently recomputed pre-region SHA-256 on CLAUDE-before.md and CLAUDE-after.md: both are b8dffa0c78a6d083e2189c920731db64b447f9a1a71931f0504bcb8f560b7ce7 (52 bytes, exactly `# My Custom Header\\n\\nUser's manual intro paragraph.\\n\\n`). Matches preservation-hashes.md."
+    },
+    {
+      "text": "Bytes below the `<!-- wiki-managed: end -->` marker are preserved — sha256 of the post-marker region before vs after matches",
+      "passed": true,
+      "evidence": "Independently recomputed post-region SHA-256 on both files: 2d83eb553a0c387f642c324f4f290f3aaae51c0335b699892441f933c1461556 (47 bytes, exactly `\\n\\n## Manual footer\\n\\nUser's manual footer note.\\n`). Matches preservation-hashes.md."
+    },
+    {
+      "text": "The managed section is refreshed from the current wiki state — its sha256 differs between before and after (proving the tool actually ran)",
+      "passed": true,
+      "evidence": "Independent hashes: before managed-region sha256=6662eeddc77b517de904883a0d458bd348d0b3dec7b02303ff2e81963d480cfe (79 bytes, stub `(old stale placeholder)`); after managed-region sha256=8f7a965ec8bba334ac97b041e75b0b84369c018960d6a4012e6ff3c28f2a0ca5 (366 bytes, 4 real sections). Hashes differ, confirming regeneration occurred."
+    },
+    {
+      "text": "The refreshed managed section contains substantive content: at least one heading AND either a link into wiki/ or a mention of the project's real name — a block of whitespace or an error stub fails this",
+      "passed": true,
+      "evidence": "Extraction found 4 level-2 headings (`## Overview`, `## Build & Run`, `## Service Dependencies`, `## Database References`) AND both disjuncts of the OR: a `[Wiki documentation](wiki/index.md)` link AND the project name `**eval-i3-cmd-preserve**`. Content is 366 bytes of structured markdown, no error stub."
+    },
+    {
+      "text": "After regeneration, the file still contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker (no marker duplication, no whitespace drift on the marker lines)",
+      "passed": true,
+      "evidence": "`grep -c` on CLAUDE-after.md returns 1 for each marker. `od -c` of the two marker lines shows exactly `<!-- wiki-managed: start -->\\n` and `<!-- wiki-managed: end -->\\n` at file lines 5 and 23 with no leading/trailing whitespace and no tabs. Matches marker-count-check.md."
+    },
+    {
+      "text": "A second run against the same wiki state produces a byte-identical file (idempotent)",
+      "passed": true,
+      "evidence": "idempotency-check.md shows `diff -q CLAUDE.md CLAUDE.md.pass1` produced no output and both files have SHA-256 60b5fa5188ce501052405978db940ee95ad7b2b65fa8806969962512fa27deb5. I independently hashed CLAUDE-after.md and got the same digest 60b5fa5188ce501052405978db940ee95ad7b2b65fa8806969962512fa27deb5."
+    }
+  ],
+  "summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "tool_calls": {},
+    "total_tool_calls": null,
+    "total_steps": null,
+    "errors_encountered": 0,
+    "output_chars": 6224,
+    "transcript_chars": 0
+  },
+  "timing": {
+    "total_duration_seconds": 0.0,
+    "executor_duration_seconds": 0.0
+  },
+  "claims": [
+    {
+      "claim": "The pre-marker region byte-content is `# My Custom Header\\n\\nUser's manual intro paragraph.\\n\\n` (52 bytes)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Independently confirmed via Python byte-level extraction of CLAUDE-before.md."
+    },
+    {
+      "claim": "The post-marker region byte-content is `\\n\\n## Manual footer\\n\\nUser's manual footer note.\\n` (47 bytes)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Independently confirmed via Python byte-level extraction."
+    },
+    {
+      "claim": "Idempotent regeneration SHA-256 is 60b5fa5188ce501052405978db940ee95ad7b2b65fa8806969962512fa27deb5",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Recomputed `shasum -a 256 CLAUDE-after.md` and matched the digest from idempotency-check.md."
+    },
+    {
+      "claim": "Managed section regeneration expanded the block from 79 to 366 bytes (a ~4.6x expansion), replacing a stale placeholder with 4 structured sections",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Byte counts and content independently verified."
+    },
+    {
+      "claim": "The agent command used was `node claude_md_gen.js --project-root /tmp/eval-i3-cmd-preserve --wiki-root /tmp/eval-i3-cmd-preserve/wiki --update /tmp/eval-i3-cmd-preserve/CLAUDE.md`",
+      "type": "process",
+      "verified": true,
+      "evidence": "Documented in idempotency-check.md; consistent with CLAUDE.md reference to `wiki-claude-md-agent` and recent commit d208468 'G-CLAUDE-MD-MARKER — validate balanced markers before rewrite'."
+    },
+    {
+      "claim": "The managed block is substantive, not an error stub or whitespace-only filler",
+      "type": "quality",
+      "verified": true,
+      "evidence": "366 bytes with 4 real `##` headings, a wiki link, and project-name interpolation."
+    }
+  ],
+  "user_notes_summary": {
+    "uncertainties": [],
+    "needs_review": [],
+    "workarounds": []
+  },
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "reason": "No assertion verifies that the file ends with exactly one trailing newline (or that the last line is not duplicated). The current suite would still pass if the regenerator introduced a phantom trailing newline or stripped one, because the post-region byte-equality assertion happens to cover only what's below the end marker — but this is correct here by coincidence. Consider an explicit `len(file) == len(pre)+len(managed)+len(post)` round-trip check, or a final-byte check."
+      },
+      {
+        "reason": "No assertion verifies that the pre/post regions' content, if they happened to also contain a literal `<!-- wiki-managed: start -->` string (e.g., inside a fenced code block), would not confuse the parser. The current input avoids this, so the test doesn't discriminate a naive substring-based implementation from a proper one. A more discriminating fixture would place the literal marker text inside a fenced code block in the user's manual header and confirm it's preserved verbatim.",
+        "assertion": "After regeneration, the file still contains exactly one `<!-- wiki-managed: start -->` and one `<!-- wiki-managed: end -->` marker"
+      },
+      {
+        "assertion": "The refreshed managed section contains substantive content: at least one heading AND either a link into wiki/ or a mention of the project's real name",
+        "reason": "The OR is satisfied trivially here because the generator emits both branches. Consider tightening to AND, or require a link target that actually resolves inside the wiki root (not just the literal substring `wiki/`). Current assertion would also pass for a hardcoded template that always says `[Wiki documentation](wiki/index.md)` regardless of wiki content."
+      }
+    ],
+    "overall": "Evals are strong and well-chosen: the 3-region SHA-256 split with byte-exact before/after equality on pre and post, plus a 'must differ' hash on managed, is a good discriminating design that genuinely exercises the preservation guarantee. The marker-count + whitespace-drift check and the idempotency check round out the suite well. The one real gap is that the OR in the content-substance check is trivially satisfied by a static template; tightening it to require a heading whose wiki-link target is actually a real file under `wiki/` would be more discriminating."
+  }
+}

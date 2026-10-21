@@ -1,0 +1,18 @@
+{
+  "expectations": [
+    {"text": "User + Order identified as @Entity classes", "passed": true, "evidence": "detected-entities.json: User, Order."},
+    {"text": "@Table(name) maps correctly; User has schema=public", "passed": true, "evidence": "Order→orders, User→public.users."},
+    {"text": "@OneToMany and @ManyToOne relationships captured", "passed": true, "evidence": "Order.many_to_one, User.one_to_many, User.many_to_many all present in JSON."},
+    {"text": "Every relationship has non-empty target_entity (F3 + T2 serialization)", "passed": true, "evidence": "T2 PROOF: jq extract → ['User', 'Order', 'Role']. blank_count=0. F3's target resolution is now visible in the JSON (wasn't before T2)."},
+    {"text": "Role stub block (R2) emitted BEFORE users↔role edge, no _rel phantoms", "passed": true, "evidence": "database-mapping.md line 30: `role {` stub; line 35: `users }o--o{ role`. grep -E '_rel' returns nothing."},
+    {"text": "Mermaid has BOTH directions of User↔Order (S2 many_to_one rendering)", "passed": true, "evidence": "Lines 33 + 34: `orders }o--|| users` (many_to_one) and `users ||--o{ orders` (one_to_many) — S2 extension makes many_to_one visible."},
+    {"text": "frontmatter type=entity, orm_profile=jpa", "passed": true, "evidence": "Frontmatter in database-mapping.md."},
+    {"text": "mermaid_lint returns []", "passed": true, "evidence": "mermaid-lint.txt contains []."}
+  ],
+  "summary": {"passed": 8, "failed": 0, "total": 8, "pass_rate": 1.0},
+  "timing": {"executor_duration_seconds": 0, "total_duration_seconds": 0},
+  "execution_metrics": {},
+  "eval_feedback": {
+    "overall": "JPA verified clean after T1+T2: target_entity now serialized in JSON (vacuous no more), existing F3/R2/S2 behaviors still hold."
+  }
+}

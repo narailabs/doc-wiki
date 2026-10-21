@@ -1,0 +1,43 @@
+{
+  "eval_id": 9,
+  "eval_name": "wiki-promote",
+  "skill": "wiki",
+  "prompt": "Promote the archived query answer at /tmp/test-promote-wiki/outputs/queries/2026-04-14-how-does-authentication-work.md to a permanent wiki page under wiki/auth/authentication-flow.md. Use topic 'authentication-flow'.",
+  "assertions": [
+    {
+      "text": "A new wiki page exists at wiki/auth/authentication-flow.md (or wiki/authentication-flow.md if no topic dir is configured) with frontmatter type='synthesis' OR type='concept', non-empty title, >=4 content-only tags, a sources array referencing the original query's source URLs/files",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The promoted page's body is derived from (not byte-identical to) the archive — citations to wiki pages in the archive are converted to working relative markdown links, and at least 80% of the archive's prose paragraphs survive into the page",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "The original archive at outputs/queries/2026-04-14-how-does-authentication-work.md still exists and is unmodified (mtime and contents preserved); promote MUST NOT move or delete the archive",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "wiki/index.md (or summaries.md) has a new entry referencing the promoted page's path",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "graph/edges.jsonl gains at least one edge whose source or target is the new page, with a valid provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) and a typed-edge label (supports|extends|supersedes|contradicts)",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "events.jsonl records exactly one entry with op='promote' including source_query (path to the archive), target_page (path to the new wiki page), and an ISO timestamp",
+      "passed": null,
+      "evidence": null
+    },
+    {
+      "text": "Re-running /wiki-promote for the same archive is a no-op or surfaces a 'page already exists' warning — it does not duplicate the page or re-emit the promote event",
+      "passed": null,
+      "evidence": null
+    }
+  ]
+}

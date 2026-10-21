@@ -1,0 +1,474 @@
+{
+  "metadata": {
+    "skill_name": "wiki",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-04-15T01:20:55Z",
+    "evals_run": [
+      4,
+      5,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 9,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 193.776,
+        "tokens": 39728,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "A new wiki page exists at wiki/auth/authentication-flow.md (or wiki/authentication-flow.md if no topic dir is configured) with frontmatter type='synthesis' OR type='concept', non-empty title, >=4 content-only tags, a sources array referencing the original query's source URLs/files",
+          "passed": true,
+          "evidence": "promoted-page.md frontmatter: type=synthesis, title='Authentication Flow', tags=[authentication,jwt,sessions,security] (4 tags), sources references the archive path + URLs. All conditions met."
+        },
+        {
+          "text": "The promoted page's body is derived from (not byte-identical to) the archive \u2014 citations to wiki pages in the archive are converted to working relative markdown links, and at least 80% of the archive's prose paragraphs survive into the page",
+          "passed": true,
+          "evidence": "paragraphs-survival.md: 5/5 = 100% paragraph survival. Archive link ../../wiki/auth.md rewritten to ../auth.md in promoted page (correct from wiki/auth/). Pages not byte-identical (frontmatter + link paths differ)."
+        },
+        {
+          "text": "The original archive at outputs/queries/2026-04-14-how-does-authentication-work.md still exists and is unmodified (mtime and contents preserved); promote MUST NOT move or delete the archive",
+          "passed": true,
+          "evidence": "archive-preservation.md: mtime before=after=2026-04-14T17:54:47; sha256 before=after=9e0a2373f1abb218fbeea22e9fff6988f335ad5318f09427330312ced4656d39. Archive untouched."
+        },
+        {
+          "text": "wiki/index.md (or summaries.md) has a new entry referencing the promoted page's path",
+          "passed": true,
+          "evidence": "index-after.md contains: [Authentication Flow](auth/authentication-flow.md) \u2014 promoted page path referenced."
+        },
+        {
+          "text": "graph/edges.jsonl gains at least one edge whose source or target is the new page, with a valid provenance tag (EXTRACTED|INFERRED|AMBIGUOUS) and a typed-edge label (supports|extends|supersedes|contradicts)",
+          "passed": true,
+          "evidence": "edges-after.jsonl: {\"from\":\"wiki/auth/authentication-flow.md\",\"to\":\"wiki/auth.md\",\"type\":\"extends\",\"provenance\":\"INFERRED\",...}. Source is new page, type=extends (valid), provenance=INFERRED (valid)."
+        },
+        {
+          "text": "events.jsonl records exactly one entry with op='promote' including source_query (path to the archive), target_page (path to the new wiki page), and an ISO timestamp",
+          "passed": true,
+          "evidence": "events.jsonl has exactly 1 promote event with op=promote, target_page=wiki/auth/authentication-flow.md, source_query=outputs/queries/2026-04-14-how-does-authentication-work.md, ts=2026-04-15T00:55:19.507000+00:00 (ISO)."
+        },
+        {
+          "text": "Re-running /wiki-promote for the same archive is a no-op or surfaces a 'page already exists' warning \u2014 it does not duplicate the page or re-emit the promote event",
+          "passed": true,
+          "evidence": "idempotency-check.md: second run detected PAGE_EXISTS, emitted WARNING, skipped all side effects. After re-run: events.jsonl still 2 lines, edges.jsonl still 1 line."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 10,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 309.108,
+        "tokens": 51968,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Re-computed content_hash for the source differs from the value stored in .wiki-cache/ from the original ingest \u2014 both values appear in the events.jsonl entry as stale_hash and fresh_hash",
+          "passed": true,
+          "evidence": "events.jsonl line 3 refresh event: stale_hash=e4bffe9b83d97b... fresh_hash=a5b1e0b7a9860a... Cache HIT on old hash, MISS on new hash \u2192 triggered refresh."
+        },
+        {
+          "text": "The corresponding wiki/architecture.md body is updated to reflect new content from the source (a phrase introduced in the modified source appears in the page body)",
+          "passed": true,
+          "evidence": "page-after.md body contains 'unified gateway ingress' (introduced in source-after.md, absent from source-before.md), appearing multiple times."
+        },
+        {
+          "text": "The page's frontmatter still contains reviewer: alice (manual field preserved); standard managed fields (updated, sources, summary) are refreshed; created is unchanged",
+          "passed": true,
+          "evidence": "frontmatter-diff.md: reviewer=alice preserved; created 2026-04-10T08:00:00 unchanged; updated refreshed to 2026-04-15T00:56:30; summary refreshed to redesigned platform."
+        },
+        {
+          "text": "raw/architecture.md is overwritten with the new source content (its file hash matches the new source)",
+          "passed": true,
+          "evidence": "raw/architecture.md post-refresh sha256 = a5b1e0b7a9860a4de368f2974bbc6b78438eb2af9fb7cb785d9c97755a674fde = fresh_hash in the refresh event. source-after.md confirms v2 content."
+        },
+        {
+          "text": "events.jsonl records op='refresh' with target_page, source, stale_hash, fresh_hash, and a delta_summary string of >=20 chars describing what changed",
+          "passed": true,
+          "evidence": "events.jsonl line 3: op=refresh, target_page=wiki/architecture.md, source=raw/architecture.md, stale_hash and fresh_hash present (64-char hex each), delta_summary = 149 chars describing gateway ingress + eBPF + Confluent + zero-trust changes."
+        },
+        {
+          "text": "graph/edges.jsonl is re-evaluated \u2014 at least one edge whose source is the refreshed page differs from the pre-refresh edge set (added, removed, or retyped). If no edges change, the events entry must explicitly note edges_unchanged: true",
+          "passed": true,
+          "evidence": "edges-before.jsonl: 1 edge (architecture\u2192auth). edges-after.jsonl: 2 edges (architecture\u2192auth + new architecture\u2192control-plane supports edge). Net change: 1 edge added."
+        },
+        {
+          "text": "A second /wiki-refresh run with no further source modification is a no-op: no new events, hash stays identical, page body unchanged byte-for-byte",
+          "passed": true,
+          "evidence": "noop-check.md: events.jsonl 3\u21923 lines (0 new events); wiki/architecture.md MD5 a24637158873d8ddf191db993e19432a identical before/after. CACHE_HIT=true on second run."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 11,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 289.148,
+        "tokens": 40422,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "The answer cites at least 3 distinct wiki pages by relative markdown link, each link resolving to a real file under wiki/",
+          "passed": true,
+          "evidence": "citations-check.md: 5 distinct markdown links in answer.md (auth, request-routing, app-server, db-write-path, audit-log) \u2014 all 5 target files exist under wiki/."
+        },
+        {
+          "text": "events.jsonl records op='query' with details.search_phase: 'summaries' (or equivalent flag) preceding any per-page reads, evidencing summaries-first search \u2014 no op='query' whose first read is a full wiki page is acceptable",
+          "passed": true,
+          "evidence": "events.jsonl query event has details.search_phase='summaries'. pages_read[0]=wiki/summaries.md precedes all 5 per-page reads. pages-read.md documents the ordering."
+        },
+        {
+          "text": "details.reduction_ratio in the events entry is >0.8 (final synthesis token count is <20% of total tokens read)",
+          "passed": true,
+          "evidence": "events.jsonl details.reduction_ratio=0.8256 (>0.8). reduction-ratio-calc.md: tokens_in=2918, tokens_out=509, 1 \u2212 509/2918 = 0.8256."
+        },
+        {
+          "text": "The answer ends with a '## Knowledge gaps' (or equivalent labeled) section listing at least one specific gap when the source pages don't cover (a) request-id propagation OR (b) error-path rollback \u2014 both of which the fixture intentionally omits",
+          "passed": true,
+          "evidence": "knowledge-gaps-check.md: answer ends with `## Knowledge gaps` section listing BOTH items (request-ID propagation AND error-path rollback behavior) \u2014 exceeds 'at least one' requirement."
+        },
+        {
+          "text": "The archive at outputs/queries/<YYYY-MM-DD>-<topic-slug>.md exists with frontmatter containing topic, tags, and created ISO date; filename slug derives from the question",
+          "passed": true,
+          "evidence": "Archive at outputs/queries/2026-04-14-request-lifecycle.md (YYYY-MM-DD + topic slug); frontmatter has topic=request-lifecycle, tags=[auth,jwt,nginx,routing,app-server,postgres,audit,lifecycle], created=2026-04-14T00:00:00Z (ISO)."
+        },
+        {
+          "text": "The synthesized answer mentions concrete artifacts from at least 3 of the 5 pages (e.g., JWT, nginx, pg connection pool, audit_log table) \u2014 a generic answer that doesn't surface page-specific terms fails",
+          "passed": true,
+          "evidence": "artifacts-check.md: all 4 named terms (JWT, nginx, pg connection pool, audit_log) surface in answer.md, plus bonus terms (sessions table, X-Forwarded-For, worker pool)."
+        },
+        {
+          "text": "The events entry includes tokens_in, tokens_out, and a non-zero pages_read[] array of length >=3",
+          "passed": true,
+          "evidence": "events.jsonl: tokens_in=2918, tokens_out=509 (both non-zero), pages_read array length=6 (\u22653)."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 12,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.714,
+        "passed": 5,
+        "failed": 2,
+        "total": 7,
+        "time_seconds": 191.893,
+        "tokens": 44027,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "--since 1h returns total_events=2 (both within the last 30 minutes)",
+          "passed": true,
+          "evidence": "stats-1h.json: total_ops=2. Both 30-minute-old events (2026-04-15T00:31:16Z and 00:31:22Z) pass the 1-hour filter; all other cohorts excluded."
+        },
+        {
+          "text": "--since 30d returns total_events=9 (the 2+3+4 events within 30 days; the 60-day-old ones excluded)",
+          "passed": true,
+          "evidence": "stats-30d.json: total_ops=9 (2 from 30min-ago + 3 from 5d + 4 from 20d; 60-day cohort excluded). ops_by_type: ingest=4, query=3, lint=1, fix=1 \u2014 sum=9."
+        },
+        {
+          "text": "--since 2026-04-01T00:00:00Z (today is 2026-04-14, so 13 days ago) returns total_events=9 (same set as 30d for the seeded fixture)",
+          "passed": false,
+          "evidence": "stats-iso.json: total_ops=5 (not 9). The 20-day cohort is dated 2026-03-26 (system date 2026-04-15 - 20 days), which precedes the 2026-04-01 cutoff, so those 4 events are excluded. Assertion is self-inconsistent: '20 days ago' from 2026-04-14 = 2026-03-25, also before 2026-04-01. Regardless of exact run date, --since 2026-04-01 excludes the 20d cohort \u2192 total_ops \u2264 5. Eval-prompt arithmetic error, not a code defect."
+        },
+        {
+          "text": "All three calls invoke the same event_logger.js stats subcommand \u2014 the prompt MUST NOT massage results client-side; counts come from the script's stdout",
+          "passed": true,
+          "evidence": "command.txt: every invocation is `node event_logger.js stats --wiki-root <path> --since <window>`. All JSON captured verbatim from node stdout, no post-processing."
+        },
+        {
+          "text": "Per-op breakdown (by_op) is present in every report \u2014 the count for each individual op (e.g., ingest, query, lint) appears separately and the sum across ops equals total_events",
+          "passed": true,
+          "evidence": "per-op-check.md: ops_by_type present in all 3 reports. Sums: 1+1=2 (1h), 4+3+1+1=9 (30d), 2+2+1=5 (iso) \u2014 all match total_ops."
+        },
+        {
+          "text": "An invalid granularity (e.g., --since 1z) is treated as a literal string by parseRelativeSince (returns the string unchanged), and parsePythonIsoformat then fails it, so the script either errors with a non-zero exit and a human-readable message OR returns total_events=0 with an explicit warning \u2014 silent fallback to 'no filter' is a failure",
+          "passed": false,
+          "evidence": "stats-invalid.json: exit=0, stderr empty, total_ops=12 (all events). _readEvents' `!Number.isNaN(sinceMs)` guard silently skips filtering when parsePythonIsoformat returns NaN. This is the 'silent fallback' explicitly flagged as a failure by the assertion. Genuine code gap \u2014 needs a stderr warning or non-zero exit. Target for iter-8."
+        },
+        {
+          "text": "Absolute ISO timestamp output (with +00:00 UTC offset) is accepted identically to its Z-suffix equivalent (2026-04-01T00:00:00+00:00 and 2026-04-01T00:00:00Z produce the same total_events)",
+          "passed": true,
+          "evidence": "offset-equivalence-check.md: diff stats-iso.json stats-utc-offset.json reports no differences. Both produce total_ops=5, identical ops_by_type. parsePythonIsoformat treats Z and +00:00 equivalently via Date.parse()."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 13,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 203.291,
+        "tokens": 51082,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "wiki.config.yaml has language: javascript (or nodejs) inferred from package.json",
+          "passed": true,
+          "evidence": "wiki-config.yaml line 7 ecosystem.language=javascript. detection-trace.jsonl entry: marker=package.json, detected=javascript."
+        },
+        {
+          "text": "framework: express is set when express is in package.json dependencies; alternatively, framework: null (or absent) is acceptable ONLY if a detection-trace entry explicitly notes 'express detected but not configured as framework' \u2014 silent omission is a failure",
+          "passed": true,
+          "evidence": "wiki-config.yaml line 8: ecosystem.framework=express. detection-trace.jsonl entry: phase=framework, key=express, found_in=package.json#dependencies, version_range=^4.18.0."
+        },
+        {
+          "text": "ecosystem.database.driver: postgresql is set; host: db.local, port: 5432, database: appdb parsed from the connection string in src/db.js",
+          "passed": true,
+          "evidence": "wiki-config.yaml database block: driver=postgresql, host=db.local, port=5432, database=appdb. Parsed from postgres://wikiuser@db.local:5432/appdb in src/db.js + .env.example."
+        },
+        {
+          "text": "Credentials are referenced via secret names (e.g., user_secret: WIKI_DB_DEV_USER) \u2014 plaintext passwords anywhere in wiki.config.yaml is a failure",
+          "passed": true,
+          "evidence": "wiki-config.yaml line 18: user_secret=WIKI_DB_DEV_USER. secret-scan.md: grep for password|passwd|wikiuser finds NO matches. Only secret reference key stored, no plaintext username."
+        },
+        {
+          "text": "ecosystem.orm.profiles is either an empty list [] OR contains exactly ['raw_sql'] \u2014 none of the shipped ORM profile names (jpa, sqlalchemy, django, prisma, typeorm, activerecord, entity_framework) appear, since the fixture has no ORM library",
+          "passed": true,
+          "evidence": "wiki-config.yaml orm.profiles=[]. orm-detection.json: orm_detected=null, entities=[] \u2014 auto-detect checked all 7 profiles and found zero matches. No shipped profile names in config."
+        },
+        {
+          "text": "Policy stanza (block_ddl, block_privilege, dml_mode, audit.enabled) is populated under the database section with safe defaults (block_ddl: true, block_privilege: true, dml_mode: 'escalate' or 'deny', audit.enabled: true)",
+          "passed": true,
+          "evidence": "wiki-config.yaml database.policy: block_ddl=true, block_privilege=true, dml_mode=escalate, audit.enabled=true, audit.path=audit/db.jsonl. All safe defaults present."
+        },
+        {
+          "text": "Wiki scaffold (wiki/, raw/, graph/, audit/, log/, outputs/) exists at the configured wiki_root after onboard completes (auto-init triggered)",
+          "passed": true,
+          "evidence": "scaffold-check.md: all 6 required dirs exist: wiki/ (with index.md, summaries.md, claims/, synthesis/, templates/), raw/, graph/ (with edges.jsonl), audit/ (open/, resolved/), log/ (daily/, events.jsonl), outputs/ (queries/, reports/). init_wiki.js stdout confirms creation."
+        },
+        {
+          "text": "events.jsonl contains one op='init' event AND one op='onboard' event (or equivalent), each with ISO timestamps",
+          "passed": true,
+          "evidence": "events.jsonl has 3 lines: 2 op=init entries (line 1 internal, line 2 explicit) + 1 op=onboard entry. All ts fields are ISO 8601 with +00:00 offset (e.g., 2026-04-15T01:02:04.467000+00:00). Assertion requires both present \u2014 both are."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 4,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.571,
+        "passed": 4,
+        "failed": 3,
+        "total": 7,
+        "time_seconds": 133.844,
+        "tokens": 37445,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "All three models (User, Post, Comment) are extracted into detected-entities.json as separate entries",
+          "passed": true,
+          "evidence": "detected-entities.json entities[] has 3 items: class_name=User, Post, Comment \u2014 each as separate entry."
+        },
+        {
+          "text": "Each entity's table_name matches the @@map(...) value in the fixture (e.g., User \u2192 'users', Post \u2192 'posts', Comment \u2192 'comments')",
+          "passed": true,
+          "evidence": "table_names match @@map values exactly: User\u2192users, Post\u2192posts, Comment\u2192comments. Entity.table_name overrides class-name default via @@map extraction."
+        },
+        {
+          "text": "Every @relation(fields: [...], references: [...]) field produces a relationship in detected-entities.json with a non-empty target_entity that names another extracted model \u2014 no blank target_entity strings",
+          "passed": false,
+          "evidence": "All relationships have target_entity='' (empty string). Root cause: prisma.yaml's relationship_detection.patterns matches @relation occurrence but doesn't capture the adjacent model-name token (e.g., from `author User @relation(...)`, no mechanism to extract 'User'). Genuine code gap \u2014 needs a capture-group pattern or post-processor. Target for iter-8."
+        },
+        {
+          "text": "One-to-many sides (e.g., posts Post[]) produce relationships of type one_to_many; their corresponding many-to-one inverse (e.g., author User @relation(...)) produces type many_to_one, both with the correct target_entity",
+          "passed": false,
+          "evidence": "Partial: Post[]/Comment[] correctly \u2192 one_to_many (type OK). But author User @relation(...) and post Post @relation(...) \u2192 type='relationship' (generic), not 'many_to_one'. All target_entity values empty. Two defects: type classification doesn't distinguish many_to_one from 'relationship', and target_entity extraction is absent. Target for iter-8."
+        },
+        {
+          "text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='prisma'",
+          "passed": true,
+          "evidence": "database-mapping.md frontmatter contains type: entity and orm_profile: prisma."
+        },
+        {
+          "text": "Mermaid erDiagram contains nodes named 'users', 'posts', 'comments' (the table names from @@map, not the model names) and at least one edge of cardinality ||--o{ linking users-posts AND another linking posts-comments",
+          "passed": false,
+          "evidence": "Mermaid has users/posts/comments as left-hand nodes, but right-hand targets are placeholder stubs (users_rel, posts_rel, comments_rel) because target_entity is empty. No real users\u2192posts or posts\u2192comments edge. Downstream symptom of A3/A4 code gap \u2014 fixing target_entity resolution will collapse to correct edges."
+        },
+        {
+          "text": "mermaid_lint.js reports no issues on the generated page",
+          "passed": true,
+          "evidence": "mermaid_lint.js output = [] (empty array, no issues). Placeholder _rel syntax is still structurally valid erDiagram."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 5,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.571,
+        "passed": 4,
+        "failed": 3,
+        "total": 7,
+        "time_seconds": 153.963,
+        "tokens": 47192,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "All three entities (Author, Book, Publisher) are extracted into detected-entities.json as separate entries with table_names matching the @Entity('...') first arg (e.g., 'authors', 'books', 'publishers')",
+          "passed": true,
+          "evidence": "detected-entities.json has 3 entities: Author\u2192authors, Book\u2192books, Publisher\u2192publishers. All class_names + table_names match the @Entity('...') decorator arguments."
+        },
+        {
+          "text": "Each @OneToMany(() => Book, ...) and @ManyToOne(() => Author, ...) produces a relationship with target_entity resolved from the arrow-function call argument \u2014 never blank, never the literal string 'Book'/'Author' (the resolver must dereference to the imported class)",
+          "passed": false,
+          "evidence": "All 3 relationships have target_entity='' (empty). Root cause: _resolveRelationshipTarget in extractor.ts does not handle TypeORM's `() => ClassName` arrow-function syntax \u2014 leading `(` breaks the existing call-arg regex; no fallback pattern matches. Genuine code gap. Fix: add `/^\\s*\\([^)]*\\)\\s*=>\\s*([A-Z][A-Za-z_]\\w*)\\s*[,)]/` before the existing patterns. iter-8 candidate T3."
+        },
+        {
+          "text": "Relationship type matches the decorator name (one_to_many for @OneToMany, many_to_one for @ManyToOne, one_to_one for @OneToOne)",
+          "passed": true,
+          "evidence": "detected-entities.json: Author.@OneToMany\u2192one_to_many, Book.@ManyToOne\u2192many_to_one, Book.@OneToOne\u2192one_to_one. All 3 decorator-to-type mappings correct."
+        },
+        {
+          "text": "Generated database-mapping.md frontmatter has type='entity' and orm_profile='typeorm'",
+          "passed": true,
+          "evidence": "database-mapping.md frontmatter contains type: entity and orm_profile: typeorm."
+        },
+        {
+          "text": "Mermaid erDiagram contains nodes for all three table names and at least two edges (authors-books and books-publishers, or whatever the fixture declares) using cardinality glyphs that match the decorator (||--o{ for one_to_many, }o--|| for many_to_one)",
+          "passed": false,
+          "evidence": "3 nodes declared (authors, books, publishers). 2 edges present but target synthetic stubs (authors_rel, books_rel) instead of real tables \u2014 downstream of A2 (empty target_entity). Required edges authors\u2194books and books\u2194publishers absent. publishers node is isolated. Cardinality ||--o{ appears (correct for one_to_many) but on wrong target."
+        },
+        {
+          "text": "Any external target referenced via @ManyToOne whose class file is NOT in the fixture set is emitted as a _external stub before the edge \u2014 never an edge to an undeclared node",
+          "passed": false,
+          "evidence": "All fixture targets are in-scope (Author/Book/Publisher), so the _external path isn't exercised. BUT the 'never an edge to an undeclared node' clause is violated: edges go to `authors_rel` and `books_rel` which are not declared as entity blocks and not _external stubs. The `_rel` fallback is a distinct code path from `_external`, and it produces phantom targets. Downstream of A2."
+        },
+        {
+          "text": "mermaid_lint.js passes on the generated page",
+          "passed": true,
+          "evidence": "mermaid_lint.js --page ... \u2192 [] (exit 0). Mermaid block is syntactically valid even though node references are semantically incorrect."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 14,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 102.128,
+        "tokens": 32656,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Generated block starts with the `classDiagram` directive",
+          "passed": true,
+          "evidence": "after.md line 8: `classDiagram` is the first token inside the ```mermaid fence (directly after optional %% Title comment on line 7's fence)."
+        },
+        {
+          "text": "All three classes (Animal, Dog, Cat) are declared as separate `class Foo { ... }` blocks",
+          "passed": true,
+          "evidence": "after.md lines 9, 13, 16 each open a distinct `class X {` block, each closed with `}`. Three separate declarations."
+        },
+        {
+          "text": "Each class's body lists its declared methods and attributes from the input (e.g., Animal: `name: string`, `eat()`; Dog: `bark()`; Cat: `meow()`); no method appears under the wrong class",
+          "passed": true,
+          "evidence": "Animal: `+name: string` (line 10), `+eat()` (line 11) \u2014 correct. Dog: `+bark()` (line 14) only. Cat: `+meow()` (line 17) only. No cross-contamination \u2014 grep confirms each method appears exactly once, under the correct class."
+        },
+        {
+          "text": "Inheritance is rendered as `Animal <|-- Dog` and `Animal <|-- Cat` (the `<|--` glyph specifically \u2014 `<--` or `--|>` are wrong directions and fail the assertion)",
+          "passed": true,
+          "evidence": "after.md lines 19-20: `Animal <|-- Dog` and `Animal <|-- Cat` \u2014 exact `<|--` glyph. Wrong glyphs (`<--`, `--|>`) absent per grep."
+        },
+        {
+          "text": "Block is injected BETWEEN `<!-- wiki-mermaid: start -->` and `<!-- wiki-mermaid: end -->` on class-hierarchy.md \u2014 no EOF append; content outside the markers preserved byte-for-byte",
+          "passed": true,
+          "evidence": "after.md: start marker at line 5, end marker at line 22 (each appears exactly once). Mermaid block on lines 6-21 is fully between markers. outside-markers-diff.md: diff of before.md vs after.md excluding inter-marker region \u2192 no differences, byte-identical."
+        },
+        {
+          "text": "mermaid_lint.js passes on the resulting page",
+          "passed": true,
+          "evidence": "`node mermaid_lint.js --page class-hierarchy.md` \u2192 stdout=`[]`, exit=0. No lint issues."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 0.857,
+        "stddev": 0.2022,
+        "min": 0.571,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 197.1439,
+        "stddev": 71.6907,
+        "min": 102.128,
+        "max": 309.108
+      },
+      "tokens": {
+        "mean": 43065.0,
+        "stddev": 6756.4358,
+        "min": 32656,
+        "max": 51968
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.86",
+      "time_seconds": "+197.1",
+      "tokens": "+43065"
+    }
+  },
+  "notes": []
+}

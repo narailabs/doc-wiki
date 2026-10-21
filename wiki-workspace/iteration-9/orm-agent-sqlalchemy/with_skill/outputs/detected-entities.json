@@ -1,0 +1,140 @@
+{
+  "status": "success",
+  "orm_detected": "sqlalchemy",
+  "entities": [
+    {
+      "class_name": "User",
+      "table_name": "users",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "email",
+          "source_field": "email"
+        },
+        {
+          "name": "full_name",
+          "source_field": "full_name"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": "Order"
+        },
+        {
+          "type": "relationship",
+          "target_entity": "Profile"
+        }
+      ]
+    },
+    {
+      "class_name": "Order",
+      "table_name": "orders",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "user_id",
+          "source_field": "user_id"
+        },
+        {
+          "name": "total_cents",
+          "source_field": "total_cents"
+        },
+        {
+          "name": "placed_at",
+          "source_field": "placed_at"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": "User"
+        },
+        {
+          "type": "relationship",
+          "target_entity": "OrderItem"
+        },
+        {
+          "type": "foreign_key",
+          "target_entity": "users"
+        }
+      ]
+    },
+    {
+      "class_name": "OrderItem",
+      "table_name": "order_items",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "order_id",
+          "source_field": "order_id"
+        },
+        {
+          "name": "sku",
+          "source_field": "sku"
+        },
+        {
+          "name": "quantity",
+          "source_field": "quantity"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": "Order"
+        },
+        {
+          "type": "foreign_key",
+          "target_entity": "orders"
+        }
+      ]
+    },
+    {
+      "class_name": "Profile",
+      "table_name": "profiles",
+      "schema": "",
+      "columns": [
+        {
+          "name": "id",
+          "source_field": "id"
+        },
+        {
+          "name": "user_id",
+          "source_field": "user_id"
+        },
+        {
+          "name": "bio",
+          "source_field": "bio"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "relationship",
+          "target_entity": "User"
+        },
+        {
+          "type": "foreign_key",
+          "target_entity": "users"
+        }
+      ]
+    }
+  ],
+  "mapping_file": "/Users/narayan/src/doc-wiki/wiki-workspace/iteration-9/orm-agent-sqlalchemy/with_skill/outputs/database-mapping.md",
+  "mermaid": {
+    "type": "erDiagram",
+    "title": "Entity Relationships",
+    "code": "erDiagram\n    users {\n        string id\n        string email\n        string full_name\n    }\n    orders {\n        string id\n        string user_id\n        string total_cents\n        string placed_at\n    }\n    order_items {\n        string id\n        string order_id\n        string sku\n        string quantity\n    }\n    profiles {\n        string id\n        string user_id\n        string bio\n    }\n    orders {\n        string _external \"not-in-scan\"\n    }\n    users {\n        string _external \"not-in-scan\"\n    }\n    users ||--o{ orders : \"\"\n    users ||--o{ profiles : \"\"\n    orders ||--o{ order_items : \"\"\n"
+  }
+}
