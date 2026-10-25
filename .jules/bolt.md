@@ -12,3 +12,7 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-10-25 - [Line Counting Optimization]
+**Learning:** In large strings read into memory (e.g., via `fs.readFileSync`), using `.slice(0, idx).split('\n').length` to find the line number for an index allocates multiple massive intermediate arrays and string copies, causing significant memory overhead and sluggishness.
+**Action:** Use an iterative `indexOf('\n')` loop to count the newlines without allocating intermediate objects when determining the line number for a specific index in a string.
