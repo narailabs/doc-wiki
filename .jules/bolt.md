@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-10-26 - Fast-path line counting
+
+**Learning:** When parsing large append-only log files (like `events.jsonl`), extracting substrings (like `slice()`) and then repeatedly splitting by newline (`split('\n')`) and computing length is extremely memory inefficient, synchronous, and causes huge arrays to be allocated on each iteration.
+**Action:** Use an iterative `indexOf('\n', pos)` loop to count lines directly instead of using `split('\n').length`.
