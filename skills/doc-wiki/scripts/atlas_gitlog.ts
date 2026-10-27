@@ -79,15 +79,19 @@ export interface ClassifyResult {
 export function getLastAtlasTimestamp(wikiRoot: string): string | null {
   const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
   if (!fs.existsSync(eventsPath)) return null;
-  let lines: string[];
+  let text: string;
   try {
-    lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+    text = fs.readFileSync(eventsPath, "utf-8");
   } catch {
     return null;
   }
   // Walk backwards — most recent atlas event wins.
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
+  let pos = text.length;
+  while (pos > 0) {
+    const nextNewline = pos === 0 ? -1 : text.lastIndexOf('\n', pos - 1);
+    const line = text.substring(nextNewline + 1, pos);
+    pos = nextNewline;
+
     if (!line) continue;
 
     // Fast-path: skip JSON parse overhead if this line cannot be an atlas event
