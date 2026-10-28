@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-10-28 - Fast-path backwards traversal of large string without allocation
+
+**Learning:** When parsing large append-only JSON logs backwards (e.g. `events.jsonl`), using `.split('\n')` or backwards splitting strategies can cause synchronous allocation of massive intermediate arrays and string copies which hurts performance.
+**Action:** Use an iterative `lastIndexOf('\n')` loop with `substring` extraction to safely traverse backwards without `.split('\n')` string allocation overhead. Make sure to properly handle the start of string edge case where `lastIndexOf` behaves unpredictably with negative positions by conditionally replacing it with `-1`.
