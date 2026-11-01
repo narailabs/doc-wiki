@@ -643,31 +643,34 @@ export function assembleTroubleshootingInputs(wikiRoot) {
     // Recent error events from events.jsonl
     const eventsPath = path.join(wikiRoot, "log", "events.jsonl");
     if (fs.existsSync(eventsPath)) {
-        let lines;
+        const errors = [];
         try {
-            lines = fs.readFileSync(eventsPath, "utf-8").split("\n");
+            const content = fs.readFileSync(eventsPath, "utf-8");
+            let pos = content.length;
+            while (pos > 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT) {
+                const newlineIdx = pos === 1 ? -1 : content.lastIndexOf("\n", pos - 2);
+                const endIdx = content[pos - 1] === "\n" ? pos - 1 : pos;
+                const line = content.substring(newlineIdx + 1, endIdx);
+                pos = newlineIdx + 1;
+                if (!line)
+                    continue;
+                let parsed;
+                try {
+                    parsed = JSON.parse(line);
+                }
+                catch {
+                    continue;
+                }
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+                    continue;
+                const rec = parsed;
+                if (_isErrorEvent(rec)) {
+                    errors.push({ raw: line, parsed: rec });
+                }
+            }
         }
         catch {
-            lines = [];
-        }
-        const errors = [];
-        for (let i = lines.length - 1; i >= 0 && errors.length < _TROUBLESHOOTING_EVENT_LIMIT; i--) {
-            const line = lines[i];
-            if (!line)
-                continue;
-            let parsed;
-            try {
-                parsed = JSON.parse(line);
-            }
-            catch {
-                continue;
-            }
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-                continue;
-            const rec = parsed;
-            if (_isErrorEvent(rec)) {
-                errors.push({ raw: line, parsed: rec });
-            }
+            // Ignore read errors
         }
         if (errors.length > 0) {
             sources.push("log/events.jsonl");
