@@ -14,5 +14,6 @@
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
 
 ## 2026-05-23 - Iterative reverse file reading
+
 **Learning:** For log parsing that requires walking a file backwards (e.g. searching for recent events), reading the entire file string into memory and using `String.split('\n')` is extremely slow and memory intensive, but using a backward loop with `.lastIndexOf('\n', pos)` avoids intermediate string and array allocations. Note that `lastIndexOf` with a negative position is treated as 0 in JavaScript, so `pos === 0 ? -1 : str.lastIndexOf('\n', pos - 1)` must be used to prevent infinite loops.
 **Action:** Use an iterative backward `lastIndexOf` search when reading events from the end of a log file rather than `.split('\n')`.
