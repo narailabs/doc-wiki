@@ -12,3 +12,8 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-11-04 - Fast-path log parsing without .split('\n')
+
+**Learning:** When processing large stringified JSON log files (e.g., via fs.readFileSync), using .split('\n') creates massive intermediate arrays and string copies, consuming huge amounts of memory and causing garbage collection pauses. Backward traversing also has issues using array methods.
+**Action:** Use an iterative indexOf('\n') or lastIndexOf('\n') with substring extraction to iterate over the strings directly, minimizing string allocations and memory overhead.
