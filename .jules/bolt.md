@@ -12,3 +12,11 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+## 2026-11-09 - Optimize large string and log parsing memory overhead
+
+**Learning:** When parsing large append-only JSON files like `_archive_history.jsonl` or computing line numbers for regex matches in large files (e.g., `atlas_inventory.ts`), avoid using `content.split('\n')` or `content.slice(0, idx).split('\n').length`. These operations synchronously allocate massive intermediate arrays and string copies, leading to significant memory overhead.
+
+**Action:**
+1. Use an iterative `indexOf('\n')` or `lastIndexOf('\n')` loop (and `substring()` to extract lines) for large text files.
+2. Use a simple character iteration (e.g., `for (let p = 0; p < idx; p++) { if (str[p] === '\n') lineNo++; }`) to count newlines up to an index.
+3. Pre-filter lines using fast substring checks like `String.includes()` before unconditionally calling `JSON.parse()` on every line.
