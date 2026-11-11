@@ -35,10 +35,10 @@ import { detectExternalSources, } from "./external_sources.js";
 import { loadConfiguredConnectorIds } from "./source_registry.js";
 function getLineNo(content, idx) {
     let lineNo = 1;
-    let pos = content.indexOf('\n');
+    let pos = content.indexOf("\n");
     while (pos !== -1 && pos < idx) {
         lineNo++;
-        pos = content.indexOf('\n', pos + 1);
+        pos = content.indexOf("\n", pos + 1);
     }
     return lineNo;
 }
