@@ -12,3 +12,18 @@
 
 **Learning:** Inner JSON fields might mistakenly contain match substrings like dates (e.g., inside the text of the event). Utilizing a strict, anchored regex check for extracting fields like timestamps directly (`/^{"ts":"([^"\\]+)"/`) avoids both `JSON.parse` overhead and incorrect partial string matches from `String.includes()`.
 **Action:** Use an anchored regex (`/^{"ts":"([^"\\]+)"/`) and check the captured group directly before falling back to full JSON parsing.
+
+## 2026-05-23 - Memory-efficient line number counting
+
+**Learning:** When parsing large files read into memory as a single string (e.g. via `fs.readFileSync`), using `content.slice(0, idx).split('\n').length` to find the 1-based line number of a match is a significant performance bottleneck because it synchronously allocates a massive intermediate array and string copies on every match.
+**Action:** Replace `.slice().split('\n').length` with an iterative `indexOf` loop to count newlines up to an index to significantly reduce memory overhead and speed up the code (e.g., using a while loop with `pos = content.indexOf('\n', pos + 1)` bounded by `< idx`).
+
+## 2026-05-23 - Memory-efficient line number counting
+
+**Learning:** When parsing large files read into memory as a single string (e.g. via `fs.readFileSync`), using `content.slice(0, idx).split('\n').length` to find the 1-based line number of a match is a significant performance bottleneck because it synchronously allocates a massive intermediate array and string copies on every match.
+**Action:** Replace `.slice().split('\n').length` with an iterative `indexOf` loop to count newlines up to an index to significantly reduce memory overhead and speed up the code (e.g., using a while loop with `pos = content.indexOf('\n', pos + 1)` bounded by `< idx`).
+
+## 2026-05-23 - Memory-efficient line number counting
+
+**Learning:** When parsing large files read into memory as a single string (e.g. via `fs.readFileSync`), using `content.slice(0, idx).split('\n').length` to find the 1-based line number of a match is a significant performance bottleneck because it synchronously allocates a massive intermediate array and string copies on every match.
+**Action:** Replace `.slice().split('\n').length` with an iterative `indexOf` loop to count newlines up to an index to significantly reduce memory overhead and speed up the code (e.g., using a while loop with `pos = content.indexOf('\n', pos + 1)` bounded by `< idx`).

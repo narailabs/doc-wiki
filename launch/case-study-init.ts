@@ -1,4 +1,5 @@
 #!/usr/bin/env -S npx tsx
+
 // case-study-init — scaffolds case-study-output/ in the current dir.
 // Auto-detects codebase shape (LOC, age, language, framework, ORM, DB);
 // prompts only for things that can't be detected (description, internal-tool name,
@@ -30,11 +31,24 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
+function getLineNo(content: string, idx: number): number {
+  let lineNo = 1;
+  let pos = content.indexOf("\n");
+  while (pos !== -1 && pos < idx) {
+    lineNo++;
+    pos = content.indexOf("\n", pos + 1);
+  }
+  return lineNo;
+}
+
 // When invoked as `curl ... | npx tsx -`, stdin is the pipe and stdin.isTTY is
 // false — every interactive prompt silently falls back to its default. Open
 // /dev/tty directly so the prompts still appear when the user can answer.
 // Returns null when no terminal is available (Windows, sandboxed CI, etc.).
-function openControllingTty(): { input: NodeJS.ReadableStream; output: NodeJS.WritableStream } | null {
+function openControllingTty(): {
+  input: NodeJS.ReadableStream;
+  output: NodeJS.WritableStream;
+} | null {
   if (stdin.isTTY && stdout.isTTY) {
     return { input: stdin, output: stdout };
   }
@@ -70,7 +84,11 @@ interface Parameters {
 
 function sh(cmd: string, cwd: string): string {
   try {
-    return execSync(cmd, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     return "";
   }
@@ -108,7 +126,9 @@ function detectProjectName(cwd: string): string {
       try {
         const j = JSON.parse(readFileSync(p, "utf-8")) as { name?: string };
         if (j.name) return j.name.replace(/^@[^/]+\//, "");
-      } catch {/* */ }
+      } catch {
+        /* */
+      }
     }
   }
   if (exists(join(cwd, "pyproject.toml"))) {
@@ -141,7 +161,9 @@ function detectLoc(cwd: string): number {
       try {
         const j = JSON.parse(out) as { Total?: { code?: number } };
         if (j.Total?.code) return j.Total.code;
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
     }
   }
   if (sh("which cloc", cwd)) {
@@ -150,7 +172,9 @@ function detectLoc(cwd: string): number {
       try {
         const j = JSON.parse(out) as { SUM?: { code?: number } };
         if (j.SUM?.code) return j.SUM.code;
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
     }
   }
   // Fallback: find + wc on common source extensions, skipping node_modules / venv / build
@@ -171,13 +195,16 @@ function detectAgeYears(cwd: string): number {
 function detectLanguages(cwd: string): string {
   const counts: Record<string, number> = {};
   const exts: Record<string, string> = {
-    ts: "TypeScript", tsx: "TypeScript",
-    js: "JavaScript", jsx: "JavaScript",
+    ts: "TypeScript",
+    tsx: "TypeScript",
+    js: "JavaScript",
+    jsx: "JavaScript",
     py: "Python",
     rb: "Ruby",
     go: "Go",
     rs: "Rust",
-    java: "Java", kt: "Kotlin",
+    java: "Java",
+    kt: "Kotlin",
     cs: "C#",
     php: "PHP",
     swift: "Swift",
@@ -190,20 +217,39 @@ function detectLanguages(cwd: string): string {
     if (lang) counts[lang] = (counts[lang] ?? 0) + 1;
   }
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return sorted.slice(0, 3).map(([l]) => l).join(", ") || "unknown";
+  return (
+    sorted
+      .slice(0, 3)
+      .map(([l]) => l)
+      .join(", ") || "unknown"
+  );
 }
 
 function detectFrameworks(cwd: string): string {
   const out: string[] = [];
   if (anyExists(cwd, ["manage.py", "django/__init__.py"])) out.push("Django");
-  if (fileExistsContaining(join(cwd, "package.json"), ["\"next\""])) out.push("Next.js");
-  if (fileExistsContaining(join(cwd, "package.json"), ["\"fastify\""])) out.push("Fastify");
-  if (fileExistsContaining(join(cwd, "package.json"), ["\"express\""])) out.push("Express");
-  if (anyExists(cwd, ["config.ru", "Gemfile"]) && fileExistsContaining(join(cwd, "Gemfile"), ["rails"])) out.push("Rails");
-  if (fileExistsContaining(join(cwd, "pyproject.toml"), ["fastapi"])) out.push("FastAPI");
-  if (fileExistsContaining(join(cwd, "requirements.txt"), ["fastapi"])) out.push("FastAPI");
-  if (fileExistsContaining(join(cwd, "requirements.txt"), ["flask"])) out.push("Flask");
-  if (anyExists(cwd, ["pom.xml", "build.gradle", "build.gradle.kts"]) && fileExistsContaining(join(cwd, "pom.xml"), ["spring-boot"])) out.push("Spring Boot");
+  if (fileExistsContaining(join(cwd, "package.json"), ['"next"']))
+    out.push("Next.js");
+  if (fileExistsContaining(join(cwd, "package.json"), ['"fastify"']))
+    out.push("Fastify");
+  if (fileExistsContaining(join(cwd, "package.json"), ['"express"']))
+    out.push("Express");
+  if (
+    anyExists(cwd, ["config.ru", "Gemfile"]) &&
+    fileExistsContaining(join(cwd, "Gemfile"), ["rails"])
+  )
+    out.push("Rails");
+  if (fileExistsContaining(join(cwd, "pyproject.toml"), ["fastapi"]))
+    out.push("FastAPI");
+  if (fileExistsContaining(join(cwd, "requirements.txt"), ["fastapi"]))
+    out.push("FastAPI");
+  if (fileExistsContaining(join(cwd, "requirements.txt"), ["flask"]))
+    out.push("Flask");
+  if (
+    anyExists(cwd, ["pom.xml", "build.gradle", "build.gradle.kts"]) &&
+    fileExistsContaining(join(cwd, "pom.xml"), ["spring-boot"])
+  )
+    out.push("Spring Boot");
   if (anyExists(cwd, ["nuxt.config.ts", "nuxt.config.js"])) out.push("Nuxt");
   if (anyExists(cwd, ["svelte.config.js"])) out.push("Svelte");
   return out.join(", ") || "unknown";
@@ -212,19 +258,31 @@ function detectFrameworks(cwd: string): string {
 function detectOrm(cwd: string): string {
   if (anyExists(cwd, ["prisma/schema.prisma"])) return "Prisma";
   if (anyExists(cwd, ["alembic.ini"])) return "SQLAlchemy + Alembic";
-  if (fileExistsContaining(join(cwd, "pyproject.toml"), ["sqlalchemy"])) return "SQLAlchemy";
-  if (fileExistsContaining(join(cwd, "requirements.txt"), ["sqlalchemy"])) return "SQLAlchemy";
+  if (fileExistsContaining(join(cwd, "pyproject.toml"), ["sqlalchemy"]))
+    return "SQLAlchemy";
+  if (fileExistsContaining(join(cwd, "requirements.txt"), ["sqlalchemy"]))
+    return "SQLAlchemy";
   if (anyExists(cwd, ["manage.py"])) return "Django ORM";
   if (anyExists(cwd, ["config/database.yml"])) return "ActiveRecord";
-  if (fileExistsContaining(join(cwd, "package.json"), ["\"typeorm\""])) return "TypeORM";
-  if (fileExistsContaining(join(cwd, "package.json"), ["\"drizzle-orm\""])) return "Drizzle";
-  if (fileExistsContaining(join(cwd, "pom.xml"), ["hibernate"])) return "Hibernate / JPA";
+  if (fileExistsContaining(join(cwd, "package.json"), ['"typeorm"']))
+    return "TypeORM";
+  if (fileExistsContaining(join(cwd, "package.json"), ['"drizzle-orm"']))
+    return "Drizzle";
+  if (fileExistsContaining(join(cwd, "pom.xml"), ["hibernate"]))
+    return "Hibernate / JPA";
   return "none-detected";
 }
 
 function detectDb(cwd: string): string {
   const found = new Set<string>();
-  const candidates = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", ".env", ".env.example", ".env.local"];
+  const candidates = [
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    ".env",
+    ".env.example",
+    ".env.local",
+  ];
   for (const c of candidates) {
     const p = join(cwd, c);
     if (!exists(p)) continue;
@@ -300,7 +358,9 @@ async function collect(cwd: string): Promise<Parameters> {
   };
 
   const tty = openControllingTty();
-  const rl = tty ? createInterface({ input: tty.input, output: tty.output }) : null;
+  const rl = tty
+    ? createInterface({ input: tty.input, output: tty.output })
+    : null;
   const interactive = rl !== null;
 
   if (interactive) {
@@ -320,7 +380,12 @@ async function collect(cwd: string): Promise<Parameters> {
     );
   }
 
-  const PROJECT_NAME = await maybePrompt("PROJECT_NAME", "Project name (short generic label):", auto.name, rl);
+  const PROJECT_NAME = await maybePrompt(
+    "PROJECT_NAME",
+    "Project name (short generic label):",
+    auto.name,
+    rl,
+  );
   const PROJECT_DESCRIPTION = await maybePrompt(
     "PROJECT_DESCRIPTION",
     "One sentence on what the codebase does:",
@@ -333,14 +398,15 @@ async function collect(cwd: string): Promise<Parameters> {
     "none",
     rl,
   );
-  const INTERNAL_TOOL_LOCATION = INTERNAL_TOOL_NAME === "none"
-    ? "none"
-    : await maybePrompt(
-        "INTERNAL_TOOL_LOCATION",
-        "Path or URL to the existing tool:",
-        "none",
-        rl,
-      );
+  const INTERNAL_TOOL_LOCATION =
+    INTERNAL_TOOL_NAME === "none"
+      ? "none"
+      : await maybePrompt(
+          "INTERNAL_TOOL_LOCATION",
+          "Path or URL to the existing tool:",
+          "none",
+          rl,
+        );
   const EXTERNAL_CONNECTORS_ENABLED = await maybePrompt(
     "EXTERNAL_CONNECTORS_ENABLED",
     "External connectors enabled (comma-separated from {jira,confluence,github,notion,aws,gcp,db}):",
@@ -530,9 +596,11 @@ Public-shareable. Replace company name with "${p.PRIVATE === "true" ? "<COMPANY_
 Same shape as portfolio but methodology-heavy. Includes 2 anecdotes, a sanitized Mermaid architecture diagram, and a reproducibility pointer to benchmark/PUBLISH.md.
 
 ### 5.3 \`$REPO_ROOT/case-study-output/internal-pitch.md\` (~800 words, NOT for external sharing)
-${p.PRIVATE === "true"
+${
+  p.PRIVATE === "true"
     ? `Real names, real numbers, full detail. Migration plan (which services first, decision-gate at end of 4-week pilot), cost projection at scale, the ask (sanctioned 4-week pilot). Keep this on your internal wiki only.`
-    : `SKIPPED — PRIVATE=false explicitly opts out of generating any artifact with real names. Only the sanitized public outputs (5.1, 5.2, 5.4) are produced. If you change your mind, re-run with PRIVATE=true.`}
+    : `SKIPPED — PRIVATE=false explicitly opts out of generating any artifact with real names. Only the sanitized public outputs (5.1, 5.2, 5.4) are produced. If you change your mind, re-run with PRIVATE=true.`
+}
 
 ### 5.4 \`$REPO_ROOT/case-study-output/social/\` — four ready-to-post files, all sanitized
 - linkedin.md (~300 words)
@@ -560,9 +628,11 @@ When in doubt, replace.
 - [ ] 01-inventory.json
 - [ ] 02-atlas.json
 - [ ] 02-pages-index.csv
-${p.INTERNAL_TOOL_NAME === "none"
+${
+  p.INTERNAL_TOOL_NAME === "none"
     ? "- [~] 03-comparison.json SKIPPED (INTERNAL_TOOL_NAME=none)\n"
-    : "- [ ] 03-comparison.json\n"}- [ ] 03-anecdotes.json
+    : "- [ ] 03-comparison.json\n"
+}- [ ] 03-anecdotes.json
 - [ ] 04-ticket-bench.csv
 - [ ] 04-summary.json
 - [ ] portfolio.md
@@ -582,10 +652,21 @@ function ensureGitignored(cwd: string, dirRel: string): void {
   const want = dirRel.endsWith("/") ? dirRel : `${dirRel}/`;
   if (exists(giPath)) {
     const c = readFileSync(giPath, "utf-8");
-    if (c.split("\n").some((l) => l.trim() === want.replace(/\/$/, "") || l.trim() === want)) return;
-    appendFileSync(giPath, `\n# scaffolded by doc-wiki/launch/case-study-init.ts\n${want}\n`);
+    if (
+      c
+        .split("\n")
+        .some((l) => l.trim() === want.replace(/\/$/, "") || l.trim() === want)
+    )
+      return;
+    appendFileSync(
+      giPath,
+      `\n# scaffolded by doc-wiki/launch/case-study-init.ts\n${want}\n`,
+    );
   } else {
-    writeFileSync(giPath, `# scaffolded by doc-wiki/launch/case-study-init.ts\n${want}\n`);
+    writeFileSync(
+      giPath,
+      `# scaffolded by doc-wiki/launch/case-study-init.ts\n${want}\n`,
+    );
   }
 }
 
@@ -594,7 +675,9 @@ async function main(): Promise<void> {
 
   // Sanity check: are we inside a git repo?
   if (!exists(join(cwd, ".git"))) {
-    console.error("✗ No .git here. Run this from the root of the codebase you want to document.");
+    console.error(
+      "✗ No .git here. Run this from the root of the codebase you want to document.",
+    );
     process.exit(1);
   }
 
@@ -602,7 +685,9 @@ async function main(): Promise<void> {
 
   const outDir = join(cwd, "case-study-output");
   if (exists(outDir)) {
-    console.warn(`! case-study-output/ already exists — overwriting PARAMETERS.json and PROMPT.md only`);
+    console.warn(
+      `! case-study-output/ already exists — overwriting PARAMETERS.json and PROMPT.md only`,
+    );
   }
   mkdirSync(outDir, { recursive: true });
 
@@ -629,18 +714,35 @@ async function main(): Promise<void> {
 
   // Final summary
   console.log("\n✓ Scaffolded:");
-  console.log(`   case-study-output/PARAMETERS.json   (${Object.keys(params).length - 1} fields)`);
-  console.log(`   case-study-output/PROMPT.md         (${prompt.split("\n").length} lines)`);
+  console.log(
+    `   case-study-output/PARAMETERS.json   (${Object.keys(params).length - 1} fields)`,
+  );
+  console.log(
+    `   case-study-output/PROMPT.md         (${getLineNo(prompt, prompt.length)} lines)`,
+  );
   console.log(`   case-study-output/.gitignore        (deny-all)`);
-  console.log(`   .gitignore                          (case-study-output/ added)`);
+  console.log(
+    `   .gitignore                          (case-study-output/ added)`,
+  );
   console.log("\nDetected for this codebase:");
-  console.log(`   ${params._detected.loc.toLocaleString()} LOC, ${params._detected.age_years} years old, ${params._detected.languages}`);
-  console.log(`   frameworks=${params._detected.frameworks}  orm=${params._detected.orm}  db=${params._detected.db}`);
-  console.log("\nNext: open case-study-output/PROMPT.md and paste its contents into a Claude Code");
-  console.log("session opened on this codebase. The 5 phases run sequentially (~5-15 hours total).\n");
+  console.log(
+    `   ${params._detected.loc.toLocaleString()} LOC, ${params._detected.age_years} years old, ${params._detected.languages}`,
+  );
+  console.log(
+    `   frameworks=${params._detected.frameworks}  orm=${params._detected.orm}  db=${params._detected.db}`,
+  );
+  console.log(
+    "\nNext: open case-study-output/PROMPT.md and paste its contents into a Claude Code",
+  );
+  console.log(
+    "session opened on this codebase. The 5 phases run sequentially (~5-15 hours total).\n",
+  );
 }
 
 main().catch((e) => {
-  console.error("✗ case-study-init failed:", e instanceof Error ? e.message : e);
+  console.error(
+    "✗ case-study-init failed:",
+    e instanceof Error ? e.message : e,
+  );
   process.exit(1);
 });
